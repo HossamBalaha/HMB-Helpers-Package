@@ -1,0 +1,299 @@
+'''
+========================================================================
+        ╦ ╦┌─┐┌─┐┌─┐┌─┐┌┬┐  ╔╦╗┌─┐┌─┐┌┬┐┬ ┬  ╔╗ ┌─┐┬  ┌─┐┬ ┬┌─┐
+        ╠═╣│ │└─┐└─┐├─┤│││  ║║║├─┤│ ┬ ││└┬┘  ╠╩╗├─┤│  ├─┤├─┤├─┤
+        ╩ ╩└─┘└─┘└─┘┴ ┴┴ ┴  ╩ ╩┴ ┴└─┘─┴┘ ┴   ╚═╝┴ ┴┴─┘┴ ┴┴ ┴┴ ┴
+========================================================================
+# Author: Hossam Magdy Balaha
+# Initial Creation Date: Jul 31th, 2025
+# Last Modification Date: Jul 31th, 2025
+# Permissions and Citation: Refer to the README file.
+'''
+
+import torch, tqdm
+import torch.nn as nn
+import torch.optim as optim
+from transformers import T5ForConditionalGeneration, T5Tokenizer
+
+
+class EmbeddingsToTextModel(nn.Module):
+  def __init__(
+    self,
+    tokenizeModelName="t5-small",  # Name of the pre-trained T5 model to use.
+    inputFeatureDim=6144,  # Dimension of the input feature vector.
+    hiddenDim=512,  # Hidden dimension for the feature projection layers.
+    generationMaxLength=512,  # Maximum length for the generated text.
+    dropoutRatio=0.1,  # Dropout ratio for regularization.
+    numPromptTokens=5,  # Number of learnable prompt tokens.
+  ):
+    '''
+    Initialize the EmbeddingsToTextModel for generating text from features.
+    This model uses a pre-trained T5 model and adds a feature projection layer
+    to transform input features into a format suitable for text generation.
+    Parameters:
+      tokenizeModelName (str): Name of the pre-trained T5 model to use (default: "t5-small").
+      inputFeatureDim (int): Dimension of the input feature vector (default: 6144).
+      hiddenDim (int): Hidden dimension for the feature projection layers (default: 512).
+      generationMaxLength (int): Maximum length for the generated text (default: 512).
+      dropoutRatio (float): Dropout ratio for regularization (default: 0.1).
+    '''
+
+    super(EmbeddingsToTextModel, self).__init__()
+
+    # Load pre-trained T5 model.
+    self.t5 = T5ForConditionalGeneration.from_pretrained(tokenizeModelName)
+    self.tokenizer = T5Tokenizer.from_pretrained(tokenizeModelName, legacy=True)
+
+    # Check if the tokenizer has no padding token set.
+    if (not self.tokenizer.pad_token):
+      # Set the padding token to be the same as end-of-sequence token for proper handling.
+      self.tokenizer.pad_token = self.tokenizer.eos_token
+    if (self.tokenizer.pad_token_id is None):
+      # Set the padding token ID to the end-of-sequence token ID if not set.
+      self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
+
+    # Feature projection layer.
+    self.featureProjection = nn.Sequential(
+      nn.Linear(inputFeatureDim, hiddenDim * 2),
+      nn.ReLU(),
+      nn.Dropout(dropoutRatio),
+      nn.Linear(hiddenDim * 2, hiddenDim),
+      nn.ReLU(),
+      nn.Dropout(dropoutRatio)
+    )
+
+    # Additional projection to match T5's hidden size.
+    self.toT5Hidden = nn.Linear(hiddenDim, self.t5.config.d_model)
+
+    # Learnable prompt embeddings
+    self.numPromptTokens = numPromptTokens
+    self.promptEmbeddings = nn.Parameter(torch.randn(numPromptTokens, self.t5.config.d_model))
+
+    self.generationMaxLength = generationMaxLength
+
+  def forward(
+    self,
+    features,  # Input features to be projected and processed.
+    input_ids=None,  # Input token IDs for the T5 model (optional).
+    attention_mask=None,  # Attention mask to indicate which tokens are valid (optional).
+    labels=None,  # Labels for the causal language modeling task (optional, default: None).
+  ):
+    '''
+    Forward pass through the EmbeddingsToTextModel.
+    This method processes the input features, projects them to T5's hidden dimension,
+    and generates text using the T5 model.
+    Parameters:
+      features (torch.Tensor): Input features to be projected and processed.
+      input_ids (torch.Tensor, optional): Input token IDs for the T5 model (default: None).
+      attentionMask (torch.Tensor, optional): Attention mask to indicate which tokens are valid (default: None).
+      labels (torch.Tensor, optional): Labels for the causal language modeling task (default: None).
+    Returns:
+      outputs: The output of the T5 model, which includes the generated text and loss if labels are provided.
+    '''
+
+    # Project features.
+    B = features.shape[0]
+    projected = self.featureProjection(features)  # (B, hiddenDim).
+    encoderHidden = self.toT5Hidden(projected)  # (B, d_model).
+
+    # Expand feature to sequence (e.g., repeat or use as single token)
+    # Here: treat as one token, repeat to match prompt length
+    encoderHidden = encoderHidden.unsqueeze(1).expand(-1, self.numPromptTokens, -1)  # (B, numPromptTokens, d_model).
+
+    # Combine with learnable prompt (could also add instead of replace)
+    # Option: use feature to modulate prompt (e.g., FiLM), but here we replace
+    inputsEmbeds = encoderHidden  # Or: self.prompt_embeddings.unsqueeze(0).expand(B, -1, -1) + encoder_hidden.
+
+    attentionMask = torch.ones(B, self.numPromptTokens, device=features.device)
+
+    # Forward pass through T5
+    outputs = self.t5(
+      inputs_embeds=inputsEmbeds,
+      attention_mask=attentionMask,
+      decoder_input_ids=input_ids,
+      labels=labels,
+    )
+
+    return outputs
+
+  def generate(
+    self,
+    features,  # Input features to be projected and processed.
+    **kwargs  # Additional keyword arguments for the generation method.
+  ):
+    '''
+    Generate text from input features using the T5 model.
+    This method projects the input features and generates text based on the provided parameters.
+    Parameters:
+      features (torch.Tensor): Input features to be projected and processed.
+      **kwargs: Additional keyword arguments for the generation method.
+    Returns:
+      torch.Tensor: Generated text token IDs.
+    '''
+    with torch.no_grad():
+      B = features.shape[0]
+
+      projected = self.featureProjection(features)
+      encoderHidden = self.toT5Hidden(projected)
+
+      # Expand to sequence
+      encoderHidden = encoderHidden.unsqueeze(1).expand(-1, self.numPromptTokens, -1)
+
+      attentionMask = torch.ones(B, self.numPromptTokens, device=features.device)
+
+      generatedIds = self.t5.generate(
+        inputs_embeds=encoderHidden,
+        attention_mask=attentionMask,
+        max_length=self.generationMaxLength,
+        pad_token_id=self.tokenizer.pad_token_id,
+        eos_token_id=self.tokenizer.eos_token_id,
+        **kwargs
+      )
+    return generatedIds
+
+
+def TrainModel(
+  model,  # Instance of the EmbeddingsToTextModel to be trained.
+  trainLoader,  # DataLoader for training data.
+  valLoader,  # DataLoader for validation data.
+  numEpochs=10,  # Number of epochs to train the model (default: 10).
+  learningRate=1e-4,  # Learning rate for the optimizer (default: 1e-4).
+  optimizerType="adamw",  # Type of optimizer to use (default: "adamw" for AdamW).
+  # Path to save the best model state (default: "BestModel.pth" in the current directory).
+  modelStoragePath="BestModel.pth",  # Path to save the best model state.
+  verbose=False  # Whether to print verbose output during training (default: False).
+):
+  '''
+  Train the EmbeddingsToTextModel using the provided training and validation data loaders.
+  This function performs the training loop, including forward and backward passes,
+  loss computation, and optimization steps. It also evaluates the model on the validation set
+  after each epoch to monitor performance and saves the best model state based on validation loss.
+  Parameters:
+    model (EmbeddingsToTextModel): Instance of the EmbeddingsToTextModel to be trained.
+    trainLoader (DataLoader): DataLoader for training data.
+    valLoader (DataLoader): DataLoader for validation data.
+    numEpochs (int): Number of epochs to train the model (default: 10).
+    learningRate (float): Learning rate for the optimizer (default: 1e-4).
+    optimizerType (str): Type of optimizer to use for training (default: "adamw").
+    modelStoragePath (str): Path to save the best model state (default: "BestModel.pth").
+  '''
+
+  device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+  model.to(device)
+
+  if (optimizerType.lower() == "adamw"):
+    # Use AdamW optimizer for training.
+    optimizer = optim.AdamW(model.parameters(), lr=learningRate)
+  elif (optimizerType.lower() == "adam"):
+    # Use Adam optimizer for training.
+    optimizer = optim.Adam(model.parameters(), lr=learningRate)
+  else:
+    raise ValueError(f"Unsupported optimizer type: {optimizerType}. Use 'adamw' or 'adam'.")
+
+  # Initialize variables to track the best validation loss and corresponding model state.
+  bestValLoss = float("inf")
+
+  # Main training loop for the specified number of epochs.
+  for epoch in range(numEpochs):
+    # Training phase.
+    model.train()
+
+    # Initialize variables to track training loss and number of batches.
+    totalTrainLoss = 0.0
+
+    # Create a progress bar for the training loop.
+    trainPbar = tqdm.tqdm(trainLoader, desc=f"Epoch {epoch + 1}/{numEpochs} [Train]")
+    for batch in trainPbar:
+      features = batch["features"].to(device)
+      inputIds = batch["input_ids"].to(device)  # decoder input.
+      attentionMask = batch["attention_mask"].to(device)
+      labels = inputIds.clone()
+
+      # Ignore padding in loss computation.
+      labels[labels == model.tokenizer.pad_token_id] = -100
+
+      # Apply zero grad to clear previous gradients.
+      optimizer.zero_grad()
+
+      # Forward pass through the model.
+      outputs = model(
+        features=features,
+        input_ids=inputIds,
+        attention_mask=attentionMask,
+        labels=labels,
+      )
+
+      # Compute the loss from the model outputs.
+      loss = outputs.loss
+      # Apply backward pass to compute gradients.
+      loss.backward()
+      # Update the model parameters using the optimizer.
+      optimizer.step()
+
+      # Update the progress bar with the current loss.
+      totalTrainLoss += loss.item()
+      trainPbar.set_postfix({"loss": f"{loss.item():.4f}"})
+
+    # Calculate the average training loss for the epoch.
+    avgTrainLoss = totalTrainLoss / len(trainLoader)
+    if (verbose):
+      print(f"Epoch {epoch + 1}/{numEpochs} - Average Training Loss: {avgTrainLoss:.4f}")
+
+    # Validation phase.
+    model.eval()
+
+    # Initialize variables to track validation loss and number of batches.
+    totalValLoss = 0.0
+
+    # Create a progress bar for the validation loop.
+    valPbar = tqdm.tqdm(valLoader, desc=f"Epoch {epoch + 1}/{numEpochs} [Val]")
+
+    # Disable gradient computation for validation to save memory and computation.
+    with torch.no_grad():
+      for batch in valPbar:
+        features = batch["features"].to(device)
+        inputIds = batch["input_ids"].to(device)
+        attentionMask = batch["attention_mask"].to(device)
+        labels = inputIds.clone()
+
+        # Ignore padding in loss computation.
+        labels[labels == model.tokenizer.pad_token_id] = -100
+
+        # Forward pass through the model.
+        outputs = model(
+          features=features,
+          input_ids=inputIds,
+          attention_mask=attentionMask,
+          labels=labels,
+        )
+
+        # Compute the loss from the model outputs.
+        loss = outputs.loss
+        totalValLoss += loss.item()
+        valPbar.set_postfix({"loss": loss.item()})
+
+    # Calculate the average validation loss for the epoch.
+    avgValLoss = totalValLoss / len(valLoader)
+    if (verbose):
+      print(f"Epoch {epoch + 1}/{numEpochs} - Average Validation Loss: {avgValLoss:.4f}")
+
+    # Check if the current validation loss is the best so far.
+    if (avgValLoss < bestValLoss):
+      # If it is, save the model state as the best model.
+      bestValLoss = avgValLoss
+      if (verbose):
+        print(f"New best validation loss: {bestValLoss:.4f}. Saving model state...")
+      torch.save(model.state_dict(), modelStoragePath)
+
+      # Generate sample text from the model using the first batch of features.
+      sampleFeatures = features[:1]  # Take the first feature from the batch.
+      generated = model.generate(sampleFeatures)
+      # Decode the generated text to a human-readable format.
+      decodedText = model.tokenizer.decode(generated[0], skip_special_tokens=True)
+      if (verbose):
+        print(f"Sample generated text: {decodedText}")
+        print(model.tokenizer.batch_decode(generated, skip_special_tokens=True))
+
+  if (verbose):
+    print(f"Training completed. Best validation loss: {bestValLoss:.4f}.")
+    print(f"Model saved to {modelStoragePath}.")
