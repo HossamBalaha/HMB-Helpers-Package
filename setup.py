@@ -14,6 +14,8 @@ setup(
       "tests.*",
     ]
   ),
+  zip_safe=False, # To allow package data inclusion.
+  install_package_data=True, # To include package data.
 )
 
 # To install the package, run: pip install .
