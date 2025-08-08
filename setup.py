@@ -15,3 +15,6 @@ setup(
     ]
   ),
 )
+
+# To install the package, run: pip install .
+# To uninstall the package, run: pip uninstall HMB

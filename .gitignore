@@ -4,3 +4,7 @@ __pycache__
 **/__pycache__/
 **/*.py[cod]
 **/*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
