@@ -10,7 +10,7 @@
 # Permissions and Citation: Refer to the README file.
 '''
 
-import torch, re, nltk, textstat
+import torch, re, nltk, textstat, sys
 import numpy as np
 import torch.nn as nn
 from rouge import Rouge
@@ -18,6 +18,9 @@ from collections import Counter
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from nltk.translate.chrf_score import sentence_chrf
 from sklearn.metrics import accuracy_score, f1_score
+
+# Increase recursion limit to handle deep recursive calls in some metrics.
+sys.setrecursionlimit(10 ** 6)
 
 
 # Download necessary NLTK resources for tokenization and POS tagging.

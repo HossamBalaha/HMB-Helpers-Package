@@ -6,7 +6,7 @@
 ========================================================================
 # Author: Hossam Magdy Balaha
 # Initial Creation Date: Jul 31th, 2025
-# Last Modification Date: Jul 31th, 2025
+# Last Modification Date: Aug 7th, 2025
 # Permissions and Citation: Refer to the README file.
 '''
 
@@ -92,3 +92,30 @@ def ReadPickleFile(filePath):
   with open(filePath, "rb") as f:
     data = pickle.load(f)
   return data
+
+
+def WriteTextFile(filePath, text):
+  """
+  Write text to a file.
+
+  Parameters:
+    filePath (str): Path to the text file.
+    text (str): Text to be written to the file.
+  """
+  with open(filePath, "w") as f:
+    f.write(text)
+
+
+def ReadTextFile(filePath):
+  """
+  Read text from a file.
+
+  Parameters:
+    filePath (str): Path to the text file.
+
+  Returns:
+    str: The text read from the file.
+  """
+  with open(filePath, "r") as f:
+    text = f.read()
+  return text
