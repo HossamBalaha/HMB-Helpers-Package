@@ -6,7 +6,7 @@
 ========================================================================
 # Author: Hossam Magdy Balaha
 # Initial Creation Date: Jul 31th, 2025
-# Last Modification Date: Jul 31th, 2025
+# Last Modification Date: Aug 16th, 2025
 # Permissions and Citation: Refer to the README file.
 '''
 
@@ -366,3 +366,43 @@ def FreeFormDeformationImproved(
 
   # Return the original source image, target image, deformed image, and deformation field array.
   return image1, image2, deformed.astype(np.uint8), deformationFieldArray
+
+
+def IgnoreICCFile(imgPath):
+  """
+  Reads an image file and ignores ICC profile information.
+  This is useful for ensuring consistent color representation across different platforms.
+  """
+  img = PIL.Image.open(imgPath)
+  img.info.pop("icc_profile", None)  # Remove ICC profile if it exists.
+  img.save(imgPath, quality=100)  # Save the image without ICC profile.
+
+
+def CheckIfPNGImageIsNotTruncated(imgPath):
+  """
+  Check if a PNG image is not truncated by reading its header.
+  This is useful for validating the integrity of PNG files.
+  """
+  try:
+    with open(imgPath, "rb") as f:
+      header = f.read(8)  # Read the first 8 bytes of the PNG file.
+      # Check if the header matches the PNG signature.
+      if (header != b"\x89PNG\r\n\x1a\n"):
+        return False
+      return True
+  except Exception as e:
+    print(f"Error reading PNG file: {e}")
+    return False
+
+
+def FixTruncatedPNGImage(imgPath):
+  """
+  Fix a truncated PNG image by appending a valid PNG end chunk.
+  This is useful for recovering partially downloaded or corrupted PNG files.
+  """
+  try:
+    with open(imgPath, "ab") as f:  # Open the file in append mode.
+      f.write(b"\x00\x00\x00\x00IEND\xaeB`\x82")  # Append the PNG end chunk.
+      print(f"Fixed truncated PNG image: {imgPath}")
+  except Exception as e:
+    print(f"Error fixing truncated PNG image: {e}")
