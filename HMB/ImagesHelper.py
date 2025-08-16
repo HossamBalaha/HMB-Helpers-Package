@@ -16,7 +16,7 @@ import numpy as np
 
 
 def GetEmptyPercentage(img, shape=(256, 256), inverse=False):
-  """
+  '''
   Calculate the percentage of empty (black or white) regions in an image.
 
   Parameters:
@@ -26,7 +26,7 @@ def GetEmptyPercentage(img, shape=(256, 256), inverse=False):
 
   Returns:
     float: Ratio of empty regions to the total area.
-  """
+  '''
 
   # Convert the input image to grayscale.
   imgGray = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2GRAY)
@@ -58,7 +58,7 @@ def GetEmptyPercentage(img, shape=(256, 256), inverse=False):
 
 
 def GetEmptyPercentageHistogram(img, shape=(256, 256), inverse=False, thresholdLow=10, thresholdHigh=245):
-  """
+  '''
   Calculate the percentage of empty (black or white) regions in an image using histogram analysis.
 
   Parameters:
@@ -70,7 +70,7 @@ def GetEmptyPercentageHistogram(img, shape=(256, 256), inverse=False, thresholdL
 
   Returns:
     float: Ratio of empty regions to the total area.
-  """
+  '''
 
   # Convert the input image to grayscale.
   imgGray = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2GRAY)
@@ -104,7 +104,7 @@ def GetEmptyPercentageHistogram(img, shape=(256, 256), inverse=False, thresholdL
 
 
 def ExtractLargestContour(img):
-  """
+  '''
   Extract the largest contour from an image and create a mask.
 
   Parameters:
@@ -112,7 +112,7 @@ def ExtractLargestContour(img):
 
   Returns:
       tuple: Masked image, contour, mask, and visualization.
-  """
+  '''
 
   imgGray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)  # Convert the input RGB image to grayscale.
   imgGray = cv2.GaussianBlur(imgGray, (5, 5), 0)  # Apply Gaussian blur to reduce noise using a 5x5 kernel.
@@ -139,7 +139,7 @@ def MatchTwoImagesViaSIFT(
   shape=(1024, 1024),  # Desired output shape for the aligned images.
   tolerance=0.50,  # Ratio threshold for filtering good matches (default is 0.50).
 ):
-  """
+  '''
   Match two images using SIFT (Scale-Invariant Feature Transform) feature detection.
   This function detects keypoints and computes descriptors for both images,
   then matches them using a brute-force matcher with a ratio test to filter good matches.
@@ -154,7 +154,7 @@ def MatchTwoImagesViaSIFT(
 
   Returns:
       tuple: Aligned images, matches, homography matrix, and output shape.
-  """
+  '''
 
   if (shape is None):  # If no shape is provided, use the maximum dimensions of the input images.
     shape = (
@@ -195,7 +195,7 @@ def MatchTwoImagesViaORB(
   maxNumFeatures=5000,  # Maximum number of features to detect.
   maxGoodMatches=50,  # Maximum number of good matches to consider for alignment.
 ):
-  """
+  '''
   Match two images using ORB (Oriented FAST and Rotated BRIEF) feature detection.
 
   Parameters:
@@ -207,7 +207,7 @@ def MatchTwoImagesViaORB(
 
   Returns:
       tuple: Aligned images, matches, homography matrix, and output shape.
-  """
+  '''
   # If no shape is provided, use the maximum dimensions of the input images.
   if (shape is None):
     shape = (
@@ -262,7 +262,7 @@ def FreeFormDeformationImproved(
   convergenceMinimumValue=1e-6,  # Convergence threshold.
   convergenceWindowSize=10,  # Window size for convergence determination.
 ):
-  """
+  '''
   Perform Free Form Deformation (FFD) using B-spline transformation to align two images.
 
   Parameters:
@@ -278,7 +278,7 @@ def FreeFormDeformationImproved(
 
   Returns:
     tuple: A tuple containing the original source image, target image, and deformed image.
-  """
+  '''
   import SimpleITK as sitk
 
   # Load the source and target images using PIL.
@@ -369,20 +369,30 @@ def FreeFormDeformationImproved(
 
 
 def IgnoreICCFile(imgPath):
-  """
+  '''
   Reads an image file and ignores ICC profile information.
   This is useful for ensuring consistent color representation across different platforms.
-  """
+  Parameters:
+    imgPath (str): Path to the image file.
+  '''
+
   img = PIL.Image.open(imgPath)
   img.info.pop("icc_profile", None)  # Remove ICC profile if it exists.
   img.save(imgPath, quality=100)  # Save the image without ICC profile.
 
 
 def CheckIfPNGImageIsNotTruncated(imgPath):
-  """
+  '''
   Check if a PNG image is not truncated by reading its header.
   This is useful for validating the integrity of PNG files.
-  """
+  Returns True if the image is a valid PNG, False otherwise.
+  If the file cannot be read, it returns False and prints an error message.
+  Parameters:
+    imgPath (str): Path to the PNG image file.
+  Returns:
+    bool: True if the image is a valid PNG, False otherwise.
+  '''
+
   try:
     with open(imgPath, "rb") as f:
       header = f.read(8)  # Read the first 8 bytes of the PNG file.
@@ -396,10 +406,13 @@ def CheckIfPNGImageIsNotTruncated(imgPath):
 
 
 def FixTruncatedPNGImage(imgPath):
-  """
+  '''
   Fix a truncated PNG image by appending a valid PNG end chunk.
   This is useful for recovering partially downloaded or corrupted PNG files.
-  """
+  Parameters:
+    imgPath (str): Path to the PNG image file to be fixed.
+  '''
+
   try:
     with open(imgPath, "ab") as f:  # Open the file in append mode.
       f.write(b"\x00\x00\x00\x00IEND\xaeB`\x82")  # Append the PNG end chunk.
