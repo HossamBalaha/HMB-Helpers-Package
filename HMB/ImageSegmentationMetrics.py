@@ -26,8 +26,8 @@ def ComputeIoU(preds, targets, smooth=1.0):
   Returns:
     IoU value.
 
-  Formula (LaTeX):
-    IoU = \frac{|Prediction \cap Ground\ Truth| + smooth}{|Prediction \cup Ground\ Truth| + smooth}
+  .. math::
+    IoU = \frac{|\mathrm{Prediction} \cap \mathrm{Ground\ Truth}| + \mathrm{smooth}}{|\mathrm{Prediction} \cup \mathrm{Ground\ Truth}| + \mathrm{smooth}}
   '''
 
   # Convert logits to binary predictions.
@@ -55,7 +55,7 @@ def ComputeDice(preds, targets, smooth=1.0):
   Returns:
     Dice coefficient value.
 
-  Formula (LaTeX):
+  .. math::
     Dice = \frac{2 \times |Prediction \cap Ground\ Truth| + smooth}{|Prediction| + |Ground\ Truth| + smooth}
   '''
 
@@ -85,7 +85,7 @@ def ComputeF1Score(preds, targets, smooth=1.0):
   Returns:
     F1 score value.
 
-  Formula (LaTeX):
+  .. math::
     F1 = \frac{2 \times Precision \times Recall + smooth}{Precision + Recall + smooth}
   '''
 
@@ -118,7 +118,7 @@ def ComputePixelAccuracy(preds, targets):
   Returns:
     Pixel accuracy value.
 
-  Formula (LaTeX):
+  .. math::
     Pixel\ Accuracy = \frac{Number\ of\ Correct\ Pixels}{Total\ Number\ of\ Pixels}
   '''
 
@@ -145,7 +145,7 @@ def ComputePrecision(preds, targets, smooth=1.0):
   Returns:
     Precision value.
 
-  Formula (LaTeX):
+  .. math::
     Precision = \frac{TP + smooth}{TP + FP + smooth}
   '''
 
@@ -172,7 +172,7 @@ def ComputeRecall(preds, targets, smooth=1.0):
   Returns:
     Recall value.
 
-  Formula (LaTeX):
+  .. math::
     Recall = \frac{TP + smooth}{TP + FN + smooth}
   '''
 
@@ -199,7 +199,7 @@ def ComputeSpecificity(preds, targets, smooth=1.0):
   Returns:
     Specificity value.
 
-  Formula (LaTeX):
+  .. math::
     Specificity = \frac{TN + smooth}{TN + FP + smooth}
   '''
 
@@ -226,7 +226,7 @@ def ComputeFPR(preds, targets, smooth=1.0):
   Returns:
     FPR value.
 
-  Formula (LaTeX):
+  .. math::
     FPR = \frac{FP + smooth}{FP + TN + smooth}
   '''
 
@@ -253,7 +253,7 @@ def ComputeFNR(preds, targets, smooth=1.0):
   Returns:
     FNR value.
 
-  Formula (LaTeX):
+  .. math::
     FNR = \frac{FN + smooth}{FN + TP + smooth}
   '''
 
@@ -280,7 +280,7 @@ def ComputeMeanAveragePrecision(preds, targets, smooth=1.0):
   Returns:
     mAP value.
 
-  Formula (LaTeX):
+  .. math::
     mAP = \frac{1}{N} \sum_{i=1}^{N} Precision_i
   '''
 
@@ -309,7 +309,7 @@ def ComputeHausdorffDistance(preds, targets):
   Returns:
     Hausdorff distance value.
 
-  Formula (LaTeX):
+  .. math::
     H(A, B) = \max\{\sup_{a \in A} \inf_{b \in B} d(a, b), \sup_{b \in B} \inf_{a \in A} d(a, b)\}
   '''
 
@@ -348,7 +348,7 @@ def ComputeBoundaryF1Score(preds, targets, dilationRatio=0.02):
   Returns:
     Boundary F1 Score value.
 
-  Formula (LaTeX):
+  .. math::
     BF = \frac{2 \times Precision_{boundary} \times Recall_{boundary}}{Precision_{boundary} + Recall_{boundary}}
   '''
 
@@ -389,7 +389,7 @@ def ComputeMatthewsCorrelationCoefficient(preds, targets, smooth=1.0):
   Returns:
     MCC value.
 
-  Formula (LaTeX):
+  .. math::
     MCC = \frac{TP \times TN - FP \times FN}{\sqrt{(TP + FP)(TP + FN)(TN + FP)(TN + FN)}}
   '''
 
@@ -423,7 +423,7 @@ def ComputeCohensKappa(preds, targets, smooth=1.0):
   Returns:
     Cohen's Kappa value.
 
-  Formula (LaTeX):
+  .. math::
     \kappa = \frac{p_o - p_e}{1 - p_e}
   '''
 
@@ -457,7 +457,7 @@ def ComputeBalancedAccuracy(preds, targets, smooth=1.0):
   Returns:
     Balanced accuracy value.
 
-  Formula (LaTeX):
+  .. math::
     Balanced\ Accuracy = \frac{Recall + Specificity}{2}
   '''
 
@@ -480,7 +480,7 @@ def ComputeMeanSurfaceDistance(preds, targets):
   Returns:
     MSD value.
 
-  Formula (LaTeX):
+  .. math::
     MSD = \frac{1}{|S_P|} \sum_{p \in S_P} \min_{q \in S_T} d(p, q)
   '''
 
@@ -522,7 +522,7 @@ def ComputeAverageSymmetricSurfaceDistance(preds, targets):
   Returns:
     ASSD value.
 
-  Formula (LaTeX):
+  .. math::
     ASSD = \frac{MSD(P, T) + MSD(T, P)}{2}
   '''
 
@@ -546,7 +546,7 @@ def ComputeVolumetricOverlapError(preds, targets, smooth=1.0):
   Returns:
     VOE value.
 
-  Formula (LaTeX):
+  .. math::
     VOE = 1 - IoU
   '''
 
@@ -567,7 +567,7 @@ def ComputeGlobalConsistencyError(preds, targets):
   Returns:
     GCE value.
 
-  Formula (LaTeX):
+  .. math::
     GCE = \frac{1}{N} \sum_{i=1}^{N} \min(E(S_1, S_2, p_i), E(S_2, S_1, p_i))
   '''
 

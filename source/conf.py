@@ -80,8 +80,8 @@ todo_include_todos = True
 # "sphinx_book_theme", "alabaster", "classic", etc.
 html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
-html_logo = "_static/logo.png"  # Add your logo file to _static.
-html_favicon = "_static/favicon.ico"  # Add your favicon file to _static.
+html_logo = "_static/Logo.png"  # Add your logo file to _static.
+html_favicon = "_static/Favicons/favicon.ico"  # Add your favicon file to _static.
 html_theme_options = {
   "description"    : "HMB Helpers Package Documentation",
   "fixed_sidebar"  : True,
