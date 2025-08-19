@@ -36,6 +36,12 @@ extensions = [
   "sphinx.ext.autosummary",  # Generate summary tables.
   "sphinx.ext.coverage",  # Check documentation coverage.
   "sphinx.ext.mathjax",  # Render math formulas.
+  "sphinx.ext.ifconfig",  # Include content based on configuration.
+  "myst_parser",  # Support for Markdown files.
+  "sphinx_copybutton",  # Add copy buttons to code blocks.
+  "sphinx_design",  # Enhanced design elements.
+  # "sphinxcontrib.bibtex",  # Support for bibliographies.
+  "sphinx_autodoc_typehints",  # Better handling of type hints.
 ]
 
 templates_path = ["_templates"]
@@ -78,7 +84,7 @@ todo_include_todos = True
 
 # Other options: "sphinx_rtd_theme", "furo", "pydata_sphinx_theme",
 # "sphinx_book_theme", "alabaster", "classic", etc.
-html_theme = "sphinx_rtd_theme"
+html_theme = "sphinx_book_theme"
 html_static_path = ["_static"]
 html_logo = "_static/Logo.png"  # Add your logo file to _static.
 html_favicon = "_static/Favicons/favicon.ico"  # Add your favicon file to _static.

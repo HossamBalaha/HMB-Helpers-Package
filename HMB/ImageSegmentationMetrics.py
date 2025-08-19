@@ -15,7 +15,7 @@ import numpy as np
 
 # Define a function to compute Intersection over Union (IoU) metric.
 def ComputeIoU(preds, targets, smooth=1.0):
-  '''
+  r'''
   Compute the Intersection over Union (IoU) metric.
 
   Parameters:
@@ -27,7 +27,7 @@ def ComputeIoU(preds, targets, smooth=1.0):
     IoU value.
 
   .. math::
-    IoU = \frac{|\mathrm{Prediction} \cap \mathrm{Ground\ Truth}| + \mathrm{smooth}}{|\mathrm{Prediction} \cup \mathrm{Ground\ Truth}| + \mathrm{smooth}}
+    IoU=\frac{|\mathrm{Prediction}\cap \mathrm{Ground\ Truth}|+\mathrm{smooth}}{|\mathrm{Prediction}\cup\mathrm{Ground\ Truth}|+\mathrm{smooth}}
   '''
 
   # Convert logits to binary predictions.
@@ -44,7 +44,7 @@ def ComputeIoU(preds, targets, smooth=1.0):
 
 # Define a function to compute the Dice coefficient.
 def ComputeDice(preds, targets, smooth=1.0):
-  '''
+  r'''
   Compute the Dice coefficient.
 
   Parameters:
@@ -74,7 +74,7 @@ def ComputeDice(preds, targets, smooth=1.0):
 
 # Define a function to compute the F1 score.
 def ComputeF1Score(preds, targets, smooth=1.0):
-  '''
+  r'''
   Compute the F1 score.
 
   Parameters:
@@ -108,7 +108,7 @@ def ComputeF1Score(preds, targets, smooth=1.0):
 
 # Define a function to compute Pixel Accuracy.
 def ComputePixelAccuracy(preds, targets):
-  '''
+  r'''
   Compute the pixel accuracy metric.
 
   Parameters:
@@ -134,7 +134,7 @@ def ComputePixelAccuracy(preds, targets):
 
 # Define a function to compute Precision.
 def ComputePrecision(preds, targets, smooth=1.0):
-  '''
+  r'''
   Compute the precision metric.
 
   Parameters:
@@ -161,7 +161,7 @@ def ComputePrecision(preds, targets, smooth=1.0):
 
 # Define a function to compute Recall.
 def ComputeRecall(preds, targets, smooth=1.0):
-  '''
+  r'''
   Compute the recall metric.
 
   Parameters:
@@ -188,7 +188,7 @@ def ComputeRecall(preds, targets, smooth=1.0):
 
 # Define a function to compute Specificity.
 def ComputeSpecificity(preds, targets, smooth=1.0):
-  '''
+  r'''
   Compute the specificity metric.
 
   Parameters:
@@ -215,7 +215,7 @@ def ComputeSpecificity(preds, targets, smooth=1.0):
 
 # Define a function to compute False Positive Rate (FPR).
 def ComputeFPR(preds, targets, smooth=1.0):
-  '''
+  r'''
   Compute the false positive rate (FPR).
 
   Parameters:
@@ -242,7 +242,7 @@ def ComputeFPR(preds, targets, smooth=1.0):
 
 # Define a function to compute False Negative Rate (FNR).
 def ComputeFNR(preds, targets, smooth=1.0):
-  '''
+  r'''
   Compute the false negative rate (FNR).
 
   Parameters:
@@ -269,7 +269,7 @@ def ComputeFNR(preds, targets, smooth=1.0):
 
 # Define a function to compute mean Average Precision (mAP) for binary masks.
 def ComputeMeanAveragePrecision(preds, targets, smooth=1.0):
-  '''
+  r'''
   Compute the mean average precision (mAP) for binary masks.
 
   Parameters:
@@ -299,7 +299,7 @@ def ComputeMeanAveragePrecision(preds, targets, smooth=1.0):
 
 
 def ComputeHausdorffDistance(preds, targets):
-  '''
+  r'''
   Compute the Hausdorff distance between predicted and ground truth masks.
 
   Parameters:
@@ -337,7 +337,7 @@ def ComputeHausdorffDistance(preds, targets):
 
 # Define a function to compute Boundary F1 Score (BF Score).
 def ComputeBoundaryF1Score(preds, targets, dilationRatio=0.02):
-  '''
+  r'''
   Compute the Boundary F1 Score (BF Score).
 
   Parameters:
@@ -378,7 +378,7 @@ def ComputeBoundaryF1Score(preds, targets, dilationRatio=0.02):
 
 
 def ComputeMatthewsCorrelationCoefficient(preds, targets, smooth=1.0):
-  '''
+  r'''
   Compute the Matthews Correlation Coefficient (MCC).
 
   Parameters:
@@ -412,7 +412,7 @@ def ComputeMatthewsCorrelationCoefficient(preds, targets, smooth=1.0):
 
 
 def ComputeCohensKappa(preds, targets, smooth=1.0):
-  '''
+  r'''
   Compute Cohen's Kappa metric.
 
   Parameters:
@@ -446,7 +446,7 @@ def ComputeCohensKappa(preds, targets, smooth=1.0):
 
 
 def ComputeBalancedAccuracy(preds, targets, smooth=1.0):
-  '''
+  r'''
   Compute the balanced accuracy metric.
 
   Parameters:
@@ -470,7 +470,7 @@ def ComputeBalancedAccuracy(preds, targets, smooth=1.0):
 
 
 def ComputeMeanSurfaceDistance(preds, targets):
-  '''
+  r'''
   Compute the Mean Surface Distance (MSD) between predicted and ground truth masks.
 
   Parameters:
@@ -512,7 +512,7 @@ def ComputeMeanSurfaceDistance(preds, targets):
 
 
 def ComputeAverageSymmetricSurfaceDistance(preds, targets):
-  '''
+  r'''
   Compute the Average Symmetric Surface Distance (ASSD) between predicted and ground truth masks.
 
   Parameters:
@@ -535,7 +535,7 @@ def ComputeAverageSymmetricSurfaceDistance(preds, targets):
 
 
 def ComputeVolumetricOverlapError(preds, targets, smooth=1.0):
-  '''
+  r'''
   Compute the Volumetric Overlap Error (VOE).
 
   Parameters:
@@ -557,7 +557,7 @@ def ComputeVolumetricOverlapError(preds, targets, smooth=1.0):
 
 
 def ComputeGlobalConsistencyError(preds, targets):
-  '''
+  r'''
   Compute the Global Consistency Error (GCE).
 
   Parameters:
