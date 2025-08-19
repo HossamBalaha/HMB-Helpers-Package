@@ -6,24 +6,23 @@
 ========================================================================
 # Author: Hossam Magdy Balaha
 # Initial Creation Date: Jul 31th, 2025
-# Last Modification Date: Aug 16th, 2025
+# Last Modification Date: Aug 19th, 2025
 # Permissions and Citation: Refer to the README file.
 '''
 
 # Import the required libraries.
-import cv2, PIL
-import numpy as np
+import cv2, PIL  # Import OpenCV and PIL for image processing.
+import numpy as np  # Import numpy for numerical operations.
 
 
+# Calculate the percentage of empty (black or white) regions in an image.
 def GetEmptyPercentage(img, shape=(256, 256), inverse=False):
   '''
   Calculate the percentage of empty (black or white) regions in an image.
-
   Parameters:
     img (numpy.ndarray): Input RGB image.
     shape (tuple): Desired shape for calculating the percentage.
     inverse (bool): If True, calculates the percentage of non-empty regions instead.
-
   Returns:
     float: Ratio of empty regions to the total area.
   '''
@@ -31,21 +30,17 @@ def GetEmptyPercentage(img, shape=(256, 256), inverse=False):
   # Convert the input image to grayscale.
   imgGray = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2GRAY)
 
-  # Resize the grayscale image to the specified shape.
+  # Resize the grayscale image to the specified shape if needed.
   if ((shape is not None) and (imgGray.shape[0] != shape[0]) or (imgGray.shape[1] != shape[1])):
     imgGray = cv2.resize(imgGray, shape, interpolation=cv2.INTER_CUBIC)
 
+  # If inverse is True, calculate non-empty regions instead.
   if (inverse):
-    imgGray = 255 - imgGray  # Invert the grayscale image if inverse is True.
+    imgGray = 255 - imgGray
 
   # Apply Otsu's thresholding to binarize the image.
   # THRESH_BINARY_INV means background will be white (255) and foreground black (0).
   _, thresh = cv2.threshold(imgGray, 0, 255, cv2.THRESH_OTSU + cv2.THRESH_BINARY_INV)
-
-  # # Create a binary image where black regions are identified.
-  # img1BinBlack = cv2.threshold(img1Gray, 10, 255, cv2.THRESH_BINARY_INV)[1]
-  # # Create a binary image where white regions are identified.
-  # img1BinWhite = cv2.threshold(img1Gray, 245, 255, cv2.THRESH_BINARY)[1]
 
   # Count non-zero pixels (which represent the background in this case).
   backgroundPixels = cv2.countNonZero(thresh)
@@ -57,17 +52,16 @@ def GetEmptyPercentage(img, shape=(256, 256), inverse=False):
   return ratio
 
 
+# Calculate the percentage of empty regions using histogram analysis.
 def GetEmptyPercentageHistogram(img, shape=(256, 256), inverse=False, thresholdLow=10, thresholdHigh=245):
   '''
   Calculate the percentage of empty (black or white) regions in an image using histogram analysis.
-
   Parameters:
     img (numpy.ndarray): Input RGB image.
     shape (tuple): Desired shape for calculating the percentage.
     inverse (bool): If True, calculates the percentage of non-empty regions instead.
     thresholdLow (int): Threshold for detecting dark regions (default: 10).
     thresholdHigh (int): Threshold for detecting bright regions (default: 245).
-
   Returns:
     float: Ratio of empty regions to the total area.
   '''
@@ -75,10 +69,11 @@ def GetEmptyPercentageHistogram(img, shape=(256, 256), inverse=False, thresholdL
   # Convert the input image to grayscale.
   imgGray = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2GRAY)
 
-  # Resize the grayscale image to the specified shape.
+  # Resize the grayscale image to the specified shape if needed.
   if ((shape is not None) and (imgGray.shape[0] != shape[0]) or (imgGray.shape[1] != shape[1])):
     imgGray = cv2.resize(imgGray, shape, interpolation=cv2.INTER_CUBIC)
 
+  # If inverse is True, invert the grayscale image.
   if (inverse):
     imgGray = 255 - imgGray  # Invert the grayscale image if inverse is True.
 
@@ -103,36 +98,47 @@ def GetEmptyPercentageHistogram(img, shape=(256, 256), inverse=False, thresholdL
   return min(max(ratio, 0), 100)
 
 
+# Extract the largest contour from an image and create a mask.
 def ExtractLargestContour(img):
   '''
   Extract the largest contour from an image and create a mask.
-
   Parameters:
       img (numpy.ndarray): Input RGB image.
-
   Returns:
       tuple: Masked image, contour, mask, and visualization.
   '''
 
-  imgGray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)  # Convert the input RGB image to grayscale.
-  imgGray = cv2.GaussianBlur(imgGray, (5, 5), 0)  # Apply Gaussian blur to reduce noise using a 5x5 kernel.
+  # Convert the input RGB image to grayscale.
+  imgGray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+  # Apply Gaussian blur to reduce noise using a 5x5 kernel.
+  imgGray = cv2.GaussianBlur(imgGray, (5, 5), 0)
   # Apply Otsu's thresholding to create a binary image.
   imgThresh = cv2.threshold(imgGray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+  # Find contours in the binary image using external retrieval mode and simple chain approximation.
   contours, _ = cv2.findContours(
     imgThresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-  )  # Find contours in the binary image using external retrieval mode and simple chain approximation.
-  contours = sorted(contours, key=cv2.contourArea, reverse=True)[:]  # Sort the contours by area in descending order.
-  contour = contours[0]  # Select the largest contour.
-  mask = np.zeros(imgGray.shape, np.uint8)  # Create a mask for the largest contour.
-  cv2.drawContours(mask, [contour], -1, 255, -1)  # Draw the contour on the mask.
-  img = cv2.bitwise_and(img, img, mask=mask)  # Apply the mask to the original image.
-  img[img == 0] = 255  # Fill any black regions in the masked image with white.
+  )
+  # Sort the contours by area in descending order.
+  contours = sorted(contours, key=cv2.contourArea, reverse=True)[:]
+  # Select the largest contour.
+  contour = contours[0]
+  # Create a mask for the largest contour.
+  mask = np.zeros(imgGray.shape, np.uint8)
+  # Draw the contour on the mask.
+  cv2.drawContours(mask, [contour], -1, 255, -1)
+  # Apply the mask to the original image.
+  img = cv2.bitwise_and(img, img, mask=mask)
+  # Fill any black regions in the masked image with white.
+  img[img == 0] = 255
+  # Draw the contour on a copy of the image for visualization.
   draw = cv2.drawContours(
     img.copy(), [contour], -1, (0, 255, 0), 2
-  )  # Draw the contour on a copy of the image for visualization.
-  return img, contour, mask, draw  # Return the masked image, the contour, the mask, and the visualization.
+  )
+  # Return the masked image, the contour, the mask, and the visualization.
+  return img, contour, mask, draw
 
 
+# Match two images using SIFT feature detection and alignment.
 def MatchTwoImagesViaSIFT(
   img1,  # First input RGB image.
   img2,  # Second input RGB image.
@@ -145,29 +151,35 @@ def MatchTwoImagesViaSIFT(
   then matches them using a brute-force matcher with a ratio test to filter good matches.
   The function returns the aligned images, matches, homography matrix, and output shape.
   This is useful for aligning images that may have different perspectives or scales.
-
   Parameters:
       img1 (numpy.ndarray): First input RGB image.
       img2 (numpy.ndarray): Second input RGB image.
       shape (tuple): Desired output shape for the aligned images.
       tolerance (float): Ratio threshold for filtering good matches.
-
   Returns:
       tuple: Aligned images, matches, homography matrix, and output shape.
   '''
 
-  if (shape is None):  # If no shape is provided, use the maximum dimensions of the input images.
+  # If no shape is provided, use the maximum dimensions of the input images.
+  if (shape is None):
     shape = (
       max(img1.shape[1], img2.shape[1]),
       max(img1.shape[0], img2.shape[0]),
     )
-  sift = cv2.SIFT_create()  # Create a SIFT detector.
-  kp1, des1 = sift.detectAndCompute(img1, None)  # Detect keypoints and compute descriptors for the first image.
-  kp2, des2 = sift.detectAndCompute(img2, None)  # Detect keypoints and compute descriptors for the second image.
-  bf = cv2.BFMatcher()  # Create a Brute-Force Matcher.
-  matches = bf.knnMatch(des1, des2, k=2)  # Match the descriptors using k-nearest neighbors (k=2).
-  good = []  # Initialize a list to store good matches.
-  for (m, n) in matches:  # Apply the ratio test to filter out poor matches.
+  # Create a SIFT detector.
+  sift = cv2.SIFT_create()
+  # Detect keypoints and compute descriptors for the first image.
+  kp1, des1 = sift.detectAndCompute(img1, None)
+  # Detect keypoints and compute descriptors for the second image.
+  kp2, des2 = sift.detectAndCompute(img2, None)
+  # Create a Brute-Force Matcher.
+  bf = cv2.BFMatcher()
+  # Match the descriptors using k-nearest neighbors (k=2).
+  matches = bf.knnMatch(des1, des2, k=2)
+  # Initialize a list to store good matches.
+  good = []
+  # Apply the ratio test to filter out poor matches.
+  for (m, n) in matches:
     if (m.distance < tolerance * n.distance):
       good.append([m])
   # Extract the coordinates of the matched keypoints in the first image.
@@ -178,16 +190,21 @@ def MatchTwoImagesViaSIFT(
   homography, _ = cv2.findHomography(srcPoints, dstPoints, cv2.RANSAC, 5.0)
   # Warp the first image to align with the second image using the homography.
   img1Trans = cv2.warpPerspective(img1, homography, shape)
-  img1Trans[img1Trans == 0] = 255  # Fill any black regions in the warped image with white.
-  imgMatches = cv2.drawMatchesKnn(img1, kp1, img2, kp2, good, None, flags=2)  # Draw the matches on a new image.
+  # Fill any black regions in the warped image with white.
+  img1Trans[img1Trans == 0] = 255
+  # Draw the matches on a new image.
+  imgMatches = cv2.drawMatchesKnn(img1, kp1, img2, kp2, good, None, flags=2)
   # Crop the images to the minimum dimensions to ensure they are the same size.
   minShape = (min(img1.shape[1], img2.shape[1]), min(img1.shape[0], img2.shape[0]))
-  img1Trans = img1Trans[:minShape[1], :minShape[0], :]  # Crop the warped image.
-  img2 = img2[:minShape[1], :minShape[0], :]  # Crop the second image.
+  # Crop the warped image.
+  img1Trans = img1Trans[:minShape[1], :minShape[0], :]
+  # Crop the second image.
+  img2 = img2[:minShape[1], :minShape[0], :]
   # Return the aligned images, the matches, the homography, and the shape.
   return img1Trans, img2, imgMatches, homography, shape
 
 
+# Match two images using ORB feature detection and alignment.
 def MatchTwoImagesViaORB(
   img1,  # First input RGB image.
   img2,  # Second input RGB image.
@@ -197,14 +214,12 @@ def MatchTwoImagesViaORB(
 ):
   '''
   Match two images using ORB (Oriented FAST and Rotated BRIEF) feature detection.
-
   Parameters:
       img1 (numpy.ndarray): First input RGB image.
       img2 (numpy.ndarray): Second input RGB image.
       shape (tuple): Desired output shape for the aligned images.
       maxNumFeatures (int): Maximum number of features to detect.
       maxGoodMatches (int): Maximum number of good matches to use.
-
   Returns:
       tuple: Aligned images, matches, homography matrix, and output shape.
   '''
@@ -251,6 +266,7 @@ def MatchTwoImagesViaORB(
   # and the shape.
 
 
+# Perform Free Form Deformation (FFD) using B-spline transformation to align two images.
 def FreeFormDeformationImproved(
   imagePath1,  # Path to the source image (HE image).
   imagePath2,  # Path to the target image (MT image).
@@ -264,7 +280,6 @@ def FreeFormDeformationImproved(
 ):
   '''
   Perform Free Form Deformation (FFD) using B-spline transformation to align two images.
-
   Parameters:
     imagePath1 (str): Path to the source image.
     imagePath2 (str): Path to the target image.
@@ -275,11 +290,10 @@ def FreeFormDeformationImproved(
     numberOfIterations (int): Maximum number of iterations for the optimizer (default is 500).
     convergenceMinimumValue (float): Convergence threshold for the optimizer (default is 1e-6).
     convergenceWindowSize (int): Window size for convergence determination (default is 10).
-
   Returns:
     tuple: A tuple containing the original source image, target image, and deformed image.
   '''
-  import SimpleITK as sitk
+  import SimpleITK as sitk  # Import SimpleITK for image registration and transformation.
 
   # Load the source and target images using PIL.
   image1 = PIL.Image.open(imagePath1)  # Open the source image from the given file path.
@@ -368,6 +382,7 @@ def FreeFormDeformationImproved(
   return image1, image2, deformed.astype(np.uint8), deformationFieldArray
 
 
+# Reads an image file and ignores ICC profile information.
 def IgnoreICCFile(imgPath):
   '''
   Reads an image file and ignores ICC profile information.
@@ -376,11 +391,15 @@ def IgnoreICCFile(imgPath):
     imgPath (str): Path to the image file.
   '''
 
+  # Open the image using PIL.
   img = PIL.Image.open(imgPath)
-  img.info.pop("icc_profile", None)  # Remove ICC profile if it exists.
-  img.save(imgPath, quality=100)  # Save the image without ICC profile.
+  # Remove ICC profile if it exists.
+  img.info.pop("icc_profile", None)
+  # Save the image without ICC profile.
+  img.save(imgPath, quality=100)
 
 
+# Check if a PNG image is not truncated by reading its header.
 def CheckIfPNGImageIsNotTruncated(imgPath):
   '''
   Check if a PNG image is not truncated by reading its header.
@@ -394,8 +413,10 @@ def CheckIfPNGImageIsNotTruncated(imgPath):
   '''
 
   try:
+    # Open the file in binary read mode.
     with open(imgPath, "rb") as f:
-      header = f.read(8)  # Read the first 8 bytes of the PNG file.
+      # Read the first 8 bytes of the PNG file.
+      header = f.read(8)
       # Check if the header matches the PNG signature.
       if (header != b"\x89PNG\r\n\x1a\n"):
         return False
@@ -405,6 +426,7 @@ def CheckIfPNGImageIsNotTruncated(imgPath):
     return False
 
 
+# Fix a truncated PNG image by appending a valid PNG end chunk.
 def FixTruncatedPNGImage(imgPath):
   '''
   Fix a truncated PNG image by appending a valid PNG end chunk.
@@ -414,8 +436,10 @@ def FixTruncatedPNGImage(imgPath):
   '''
 
   try:
-    with open(imgPath, "ab") as f:  # Open the file in append mode.
-      f.write(b"\x00\x00\x00\x00IEND\xaeB`\x82")  # Append the PNG end chunk.
+    # Open the file in append mode.
+    with open(imgPath, "ab") as f:
+      # Append the PNG end chunk.
+      f.write(b"\x00\x00\x00\x00IEND\xaeB`\x82")
       print(f"Fixed truncated PNG image: {imgPath}")
   except Exception as e:
     print(f"Error fixing truncated PNG image: {e}")

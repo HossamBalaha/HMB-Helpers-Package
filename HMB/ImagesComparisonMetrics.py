@@ -6,7 +6,7 @@
 ========================================================================
 # Author: Hossam Magdy Balaha
 # Initial Creation Date: Jul 31th, 2025
-# Last Modification Date: Jul 31th, 2025
+# Last Modification Date: Aug 19th, 2025
 # Permissions and Citation: Refer to the README file.
 '''
 
@@ -35,7 +35,7 @@ def MutualInformation(image1, image2, bins=100):
   # Convert the second input image into a NumPy array.
   image2 = np.asarray(image2)
 
-  # Validate input dimensions.
+  # Validate input dimensions for both images.
   if (image1.shape != image2.shape):
     # Raise an error if the two images do not have the same dimensions.
     raise ValueError("Both images must have the same dimensions.")

@@ -6,29 +6,31 @@
 ========================================================================
 # Author: Hossam Magdy Balaha
 # Initial Creation Date: Aug 2nd, 2025
-# Last Modification Date: Aug 2nd, 2025
+# Last Modification Date: Aug 19th, 2025
 # Permissions and Citation: Refer to the README file.
 '''
 
-import torch, re, nltk, textstat, sys
-import numpy as np
-import torch.nn as nn
-from rouge import Rouge
-from collections import Counter
-from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
-from nltk.translate.chrf_score import sentence_chrf
-from sklearn.metrics import accuracy_score, f1_score
+# Import all required libraries for metrics computation.
+import torch, re, nltk, textstat, sys  # Core and NLP libraries.
+import numpy as np  # For numerical operations.
+import torch.nn as nn  # For deep learning metrics (if needed).
+from rouge import Rouge  # For ROUGE metric computation.
+from collections import Counter  # For token counting.
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction  # BLEU metric.
+from nltk.translate.chrf_score import sentence_chrf  # CHRF metric.
+from sklearn.metrics import accuracy_score, f1_score  # For accuracy and F1 metrics.
 
 # Increase recursion limit to handle deep recursive calls in some metrics.
-sys.setrecursionlimit(10 ** 6)
-
+sys.setrecursionlimit(10 ** 6)  # Prevents RecursionError in deep metrics.
 
 # Download necessary NLTK resources for tokenization and POS tagging.
-# nltk.download("punkt_tab")
-# nltk.download("averaged_perceptron_tagger_eng")
+nltk.download("punkt_tab")  # For tokenization.
+nltk.download("averaged_perceptron_tagger_eng")  # For POS tagging.
 
 
+# Define a class to encapsulate all text generation metrics.
 class TextGenerationMetrics(object):
+  # Initialize the metrics class with optional tokenizer.
   def __init__(self, tokenizer=None):
     self.tokenizer = tokenizer  # If provided, will be used for tokenization.
     self.rouge = Rouge()  # Initialize ROUGE metric.
@@ -514,51 +516,72 @@ class TextGenerationMetrics(object):
 
 if __name__ == "__main__":
   # Initialize metrics calculator.
-  metrics = TextGenerationMetrics()
+  metrics = TextGenerationMetrics()  # Create an instance of the metrics class.
 
+  # Define example pairs of generated and reference texts for evaluation.
   results = [
-    ("Invasive ductal carcinoma grade 2", "Invasive ductal carcinoma grade 2"),
-    ("Invasive ductal carcinoma grade 2", "Invasive ductal carcinoma grade 3"),
+    ("Invasive ductal carcinoma grade 2", "Invasive ductal carcinoma grade 2"),  # Identical texts.
+    ("Invasive ductal carcinoma grade 2", "Invasive ductal carcinoma grade 3"),  # Slightly different texts.
     ("The quick brown fox jumps over the lazy dog.", "The quick brown fox jumps over the lazy dog."),
+    # Identical texts.
   ]
 
+  # Iterate over each pair and compute all metrics.
   for genText, refText in results:
+    # Compute BLEU score.
     bleuScore = metrics.CalculateBLEU(genText, refText)
+    # Compute ROUGE scores.
     rougeScores = metrics.CalculateROUGE(genText, refText)
+    # Compute METEOR score.
     meteorScore = metrics.CalculateMETEOR(genText, refText)
+    # Compute edit distance similarity.
     editDistance = metrics.CalculateEditDistance(genText, refText)
+    # Compute semantic similarity.
     semanticSimilarity = metrics.CalculateSemanticSimilarity(genText, refText)
+    # Compute length ratio.
     lengthRatio = metrics.CalculateLengthRatio(genText, refText)
+    # Compute perplexity.
     perplexity = metrics.CalculatePerplexity(genText.split(), refText.split())
+    # Compute accuracy.
     accuracy = metrics.CalculateAccuracy(genText, refText)
+    # Compute F1 score.
     f1Score = metrics.CalculateF1Score(genText, refText)
+    # Compute CHRF score.
     chrfScore = metrics.CalculateCHRF(genText, refText)
+    # Compute repetition rate.
     repetitionRate = metrics.CalculateRepetitionRate(genText)
+    # Compute lexical diversity.
     lexicalDiversity = metrics.CalculateLexicalDiversity(genText)
+    # Compute readability score.
     readabilityScore = metrics.CalculateReadabilityScore(genText)
+    # Compute information density.
     informationDensity = metrics.CalculateInformationDensity(genText)
+    # Compute hallucination rate.
     hallucinationRate = metrics.CalculateHallucinationRate(genText, refText)
+    # Compute omission rate.
     omissionRate = metrics.CalculateOmissionRate(genText, refText)
+    # Compute factuality score.
     factualityScore = metrics.CalculateFactualityScore(genText, refText)
 
-    print(f"BLEU Score: {bleuScore:.4f}")
+    # Print all computed metrics for the current text pair.
+    print(f"BLEU Score: {bleuScore:.4f}")  # BLEU metric output.
     print(
       f"ROUGE-1: {rougeScores['rouge-1']:.4f}, ROUGE-2: {rougeScores['rouge-2']:.4f}, "
       f"ROUGE-L: {rougeScores['rouge-l']:.4f}"
-    )
-    print(f"METEOR Score: {meteorScore:.4f}")
-    print(f"Edit Distance Similarity: {editDistance:.4f}")
-    print(f"Semantic Similarity: {semanticSimilarity:.4f}")
-    print(f"Length Ratio: {lengthRatio:.4f}")
-    print(f"Perplexity: {perplexity:.4f}")
-    print(f"Accuracy: {accuracy:.4f}")
-    print(f"F1 Score: {f1Score:.4f}")
-    print(f"CHRF Score: {chrfScore:.4f}")
-    print(f"Repetition Rate: {repetitionRate:.4f}")
-    print(f"Lexical Diversity: {lexicalDiversity:.4f}")
-    print(f"Readability Score: {readabilityScore:.4f}")
-    print(f"Information Density: {informationDensity:.4f}")
-    print(f"Hallucination Rate: {hallucinationRate:.4f}")
-    print(f"Omission Rate: {omissionRate:.4f}")
-    print(f"Factuality Score: {factualityScore:.4f}")
-    print("=" * 80)
+    )  # ROUGE metrics output.
+    print(f"METEOR Score: {meteorScore:.4f}")  # METEOR metric output.
+    print(f"Edit Distance Similarity: {editDistance:.4f}")  # Edit distance output.
+    print(f"Semantic Similarity: {semanticSimilarity:.4f}")  # Semantic similarity output.
+    print(f"Length Ratio: {lengthRatio:.4f}")  # Length ratio output.
+    print(f"Perplexity: {perplexity:.4f}")  # Perplexity output.
+    print(f"Accuracy: {accuracy:.4f}")  # Accuracy output.
+    print(f"F1 Score: {f1Score:.4f}")  # F1 score output.
+    print(f"CHRF Score: {chrfScore:.4f}")  # CHRF metric output.
+    print(f"Repetition Rate: {repetitionRate:.4f}")  # Repetition rate output.
+    print(f"Lexical Diversity: {lexicalDiversity:.4f}")  # Lexical diversity output.
+    print(f"Readability Score: {readabilityScore:.4f}")  # Readability score output.
+    print(f"Information Density: {informationDensity:.4f}")  # Information density output.
+    print(f"Hallucination Rate: {hallucinationRate:.4f}")  # Hallucination rate output.
+    print(f"Omission Rate: {omissionRate:.4f}")  # Omission rate output.
+    print(f"Factuality Score: {factualityScore:.4f}")  # Factuality score output.
+    print("=" * 80)  # Separator for readability.

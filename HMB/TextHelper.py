@@ -6,7 +6,7 @@
 ========================================================================
 # Author: Hossam Magdy Balaha
 # Initial Creation Date: Aug 7th, 2025
-# Last Modification Date: Aug 7th, 2025
+# Last Modification Date: Aug 19th, 2025
 # Permissions and Citation: Refer to the README file.
 '''
 
@@ -15,11 +15,13 @@ import re, contractions, nltk
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 
-# Automatically download NLTK resources if not already present.
-nltk.download("stopwords")
-nltk.download("wordnet")
+# Download NLTK stopwords if not already present.
+nltk.download("stopwords")  # Ensures stopwords resource is available.
+# Download NLTK wordnet for lemmatization if not already present.
+nltk.download("wordnet")  # Ensures wordnet resource is available.
 
 
+# Define a function to clean and normalize text based on several options.
 def CleanText(
   text,  # The raw input text to be cleaned.
   removeNonAscii=True,  # Whether to remove non-ASCII characters.
@@ -47,45 +49,45 @@ def CleanText(
 
   # Remove empty lines and replace newlines with spaces.
   cleanedText = " ".join([
-    line.replace("\n", " ").strip()
-    for line in text.splitlines()
-    if (line.strip() != "")
+    line.replace("\n", " ").strip()  # Replace newlines with spaces and strip whitespace.
+    for line in text.splitlines()  # Split text into lines.
+    if (line.strip() != "")  # Ignore empty lines.
   ])
 
-  # Remove non-ASCII characters.
+  # Remove non-ASCII characters if specified.
   if (removeNonAscii):
-    cleanedText = cleanedText.encode("ascii", "ignore").decode("ascii")
+    cleanedText = cleanedText.encode("ascii", "ignore").decode("ascii")  # Keep only ASCII characters.
 
-  # Lowercase the text.
+  # Convert text to lowercase if specified.
   if (lowercase):
-    cleanedText = cleanedText.lower()
+    cleanedText = cleanedText.lower()  # Lowercase all characters.
 
-  # Handle contractions.
+  # Expand contractions if specified.
   if (handleContractions):
-    cleanedText = contractions.fix(cleanedText)
+    cleanedText = contractions.fix(cleanedText)  # Expand contractions (e.g., don't → do not).
 
-  # Remove or replace special characters.
+  # Remove special characters and punctuation if specified.
   if (removeSpecialChars):
-    # Removes all non-alphanumeric characters.
-    cleanedText = re.sub(r"[^a-zA-Z0-9\s]", "", cleanedText)
+    cleanedText = re.sub(r"[^a-zA-Z0-9\s]", "", cleanedText)  # Remove non-alphanumeric characters.
 
   # Normalize whitespace around punctuation.
-  cleanedText = re.sub(r"\s+([?.!,])", r"\1", cleanedText)
+  cleanedText = re.sub(r"\s+([?.!,])", r"\1", cleanedText)  # Remove extra spaces before punctuation.
 
-  # Lemmatization (optional).
+  # Lemmatize words if specified.
   if (lemmatize):
-    lemmatizer = WordNetLemmatizer()
-    cleanedText = " ".join([lemmatizer.lemmatize(word) for word in cleanedText.split()])
+    lemmatizer = WordNetLemmatizer()  # Create a lemmatizer instance.
+    cleanedText = " ".join([lemmatizer.lemmatize(word) for word in cleanedText.split()])  # Lemmatize each word.
 
-  # Remove stop words (optional).
+  # Remove stopwords if specified.
   if (removeStopwords):
-    stopWords = set(stopwords.words("english"))
-    cleanedText = " ".join([word for word in cleanedText.split() if word.lower() not in stopWords])
+    stopWords = set(stopwords.words("english"))  # Get English stopwords.
+    cleanedText = " ".join([word for word in cleanedText.split() if word.lower() not in stopWords])  # Remove stopwords.
 
-  # Replace multiple spaces with a single space.
+  # Replace multiple spaces with a single space if specified.
   if (normalizeWhitespace):
-    cleanedText = " ".join(cleanedText.split())
+    cleanedText = " ".join(cleanedText.split())  # Normalize whitespace.
 
+  # Return the cleaned text.
   return cleanedText
 
 
@@ -100,16 +102,5 @@ if __name__ == "__main__":
   Let's see how well the cleaning function works.
   """
 
-  cleaned = CleanText(
-    sampleText,
-    removeNonAscii=True,  # Remove non-ASCII characters.
-    lowercase=True,  # Convert text to lowercase.
-    removeSpecialChars=True,  # Remove special characters and punctuation.
-    normalizeWhitespace=True,  # Normalize whitespace.
-    handleContractions=True,  # Expand contractions.
-    lemmatize=False,  # Do not lemmatize words.
-    removeStopwords=False,  # Do not remove stop words.
-  )
-
-  print("Original Text:\n", sampleText)
-  print("\nCleaned Text:\n", cleaned)
+  # Print the cleaned version of the sample text.
+  print(CleanText(sampleText))  # Output cleaned text.

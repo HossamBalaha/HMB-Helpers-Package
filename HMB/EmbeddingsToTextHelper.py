@@ -6,7 +6,7 @@
 ========================================================================
 # Author: Hossam Magdy Balaha
 # Initial Creation Date: Jul 31th, 2025
-# Last Modification Date: Jul 31th, 2025
+# Last Modification Date: Aug 19th, 2025
 # Permissions and Citation: Refer to the README file.
 '''
 
@@ -38,39 +38,44 @@ class EmbeddingsToTextModel(nn.Module):
       dropoutRatio (float): Dropout ratio for regularization (default: 0.1).
     '''
 
+    # Calls the parent class constructor to initialize nn.Module.
     super(EmbeddingsToTextModel, self).__init__()
 
-    # Load pre-trained T5 model.
+    # Loads the pre-trained T5 model for conditional text generation.
     self.t5 = T5ForConditionalGeneration.from_pretrained(tokenizeModelName)
+    # Loads the tokenizer for the T5 model, using legacy mode for compatibility.
     self.tokenizer = T5Tokenizer.from_pretrained(tokenizeModelName, legacy=True)
 
-    # Check if the tokenizer has no padding token set.
+    # Checks if the tokenizer does not have a padding token set.
     if (not self.tokenizer.pad_token):
-      # Set the padding token to be the same as end-of-sequence token for proper handling.
+      # Sets the padding token to the end-of-sequence token for proper handling.
       self.tokenizer.pad_token = self.tokenizer.eos_token
+    # Checks if the padding token ID is not set.
     if (self.tokenizer.pad_token_id is None):
-      # Set the padding token ID to the end-of-sequence token ID if not set.
+      # Sets the padding token ID to the end-of-sequence token ID if not set.
       self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
 
-    # Feature projection layer.
+    # Defines a sequential feature projection layer to transform input features.
     self.featureProjection = nn.Sequential(
-      nn.Linear(inputFeatureDim, hiddenDim * 2),
-      nn.ReLU(),
-      nn.Dropout(dropoutRatio),
-      nn.Linear(hiddenDim * 2, hiddenDim),
-      nn.ReLU(),
-      nn.Dropout(dropoutRatio)
+      nn.Linear(inputFeatureDim, hiddenDim * 2),  # Projects input features to a higher dimension.
+      nn.ReLU(),  # Applies ReLU activation for non-linearity.
+      nn.Dropout(dropoutRatio),  # Applies dropout for regularization.
+      nn.Linear(hiddenDim * 2, hiddenDim),  # Projects features down to hiddenDim.
+      nn.ReLU(),  # Applies ReLU activation again.
+      nn.Dropout(dropoutRatio)  # Applies dropout for regularization.
     )
 
-    # Additional projection to match T5's hidden size.
+    # Projects the hidden features to match the T5 model's hidden size.
     self.toT5Hidden = nn.Linear(hiddenDim, self.t5.config.d_model)
 
-    # Learnable prompt embeddings
+    # Creates learnable prompt embeddings for the model.
     self.numPromptTokens = numPromptTokens
     self.promptEmbeddings = nn.Parameter(torch.randn(numPromptTokens, self.t5.config.d_model))
 
+    # Sets the maximum length for generated text sequences.
     self.generationMaxLength = generationMaxLength
 
+  # Defines the forward pass for the model.
   def forward(
     self,
     features,  # Input features to be projected and processed.
@@ -91,22 +96,23 @@ class EmbeddingsToTextModel(nn.Module):
       outputs: The output of the T5 model, which includes the generated text and loss if labels are provided.
     '''
 
-    # Project features.
+    # Gets the batch size from the input features.
     B = features.shape[0]
+    # Projects the input features through the feature projection layer.
     projected = self.featureProjection(features)  # (B, hiddenDim).
+    # Projects the features to match the T5 hidden dimension.
     encoderHidden = self.toT5Hidden(projected)  # (B, d_model).
 
-    # Expand feature to sequence (e.g., repeat or use as single token)
-    # Here: treat as one token, repeat to match prompt length
+    # Expands the feature to a sequence by repeating to match prompt length.
     encoderHidden = encoderHidden.unsqueeze(1).expand(-1, self.numPromptTokens, -1)  # (B, numPromptTokens, d_model).
 
-    # Combine with learnable prompt (could also add instead of replace)
-    # Option: use feature to modulate prompt (e.g., FiLM), but here we replace
+    # Uses the expanded encoder hidden states as input embeddings.
     inputsEmbeds = encoderHidden  # Or: self.prompt_embeddings.unsqueeze(0).expand(B, -1, -1) + encoder_hidden.
 
+    # Creates an attention mask of ones for all prompt tokens.
     attentionMask = torch.ones(B, self.numPromptTokens, device=features.device)
 
-    # Forward pass through T5
+    # Performs a forward pass through the T5 model.
     outputs = self.t5(
       inputs_embeds=inputsEmbeds,
       attention_mask=attentionMask,
@@ -114,8 +120,10 @@ class EmbeddingsToTextModel(nn.Module):
       labels=labels,
     )
 
+    # Returns the outputs from the T5 model.
     return outputs
 
+  # Defines the method to generate text from input features.
   def generate(
     self,
     features,  # Input features to be projected and processed.
@@ -130,17 +138,23 @@ class EmbeddingsToTextModel(nn.Module):
     Returns:
       torch.Tensor: Generated text token IDs.
     '''
+    # Disables gradient calculation for generation.
     with torch.no_grad():
+      # Gets the batch size from the input features.
       B = features.shape[0]
 
+      # Projects the input features through the feature projection layer.
       projected = self.featureProjection(features)
+      # Projects the features to match the T5 hidden dimension.
       encoderHidden = self.toT5Hidden(projected)
 
-      # Expand to sequence
+      # Expands the encoder hidden states to match the prompt length.
       encoderHidden = encoderHidden.unsqueeze(1).expand(-1, self.numPromptTokens, -1)
 
+      # Creates an attention mask of ones for all prompt tokens.
       attentionMask = torch.ones(B, self.numPromptTokens, device=features.device)
 
+      # Generates text token IDs using the T5 model's generate method.
       generatedIds = self.t5.generate(
         inputs_embeds=encoderHidden,
         attention_mask=attentionMask,
@@ -149,9 +163,11 @@ class EmbeddingsToTextModel(nn.Module):
         eos_token_id=self.tokenizer.eos_token_id,
         **kwargs
       )
+    # Returns the generated token IDs.
     return generatedIds
 
 
+# Defines the function to train the EmbeddingsToTextModel.
 def TrainModel(
   model,  # Instance of the EmbeddingsToTextModel to be trained.
   trainLoader,  # DataLoader for training data.
@@ -178,24 +194,28 @@ def TrainModel(
     modelStoragePath (str): Path to save the best model state (default: "BestModel.pth").
   '''
 
+  # Selects the device for training (GPU if available, otherwise CPU).
   device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+  # Moves the model to the selected device.
   model.to(device)
 
+  # Chooses the optimizer based on the specified type.
   if (optimizerType.lower() == "adamw"):
-    # Use AdamW optimizer for training.
+    # Uses AdamW optimizer for training.
     optimizer = optim.AdamW(model.parameters(), lr=learningRate)
   elif (optimizerType.lower() == "adam"):
-    # Use Adam optimizer for training.
+    # Uses Adam optimizer for training.
     optimizer = optim.Adam(model.parameters(), lr=learningRate)
   else:
+    # Raises an error if the optimizer type is unsupported.
     raise ValueError(f"Unsupported optimizer type: {optimizerType}. Use 'adamw' or 'adam'.")
 
-  # Initialize variables to track the best validation loss and corresponding model state.
+  # Initializes the best validation loss to infinity.
   bestValLoss = float("inf")
 
   # Main training loop for the specified number of epochs.
   for epoch in range(numEpochs):
-    # Training phase.
+    # Sets the model to training mode.
     model.train()
 
     # Initialize variables to track training loss and number of batches.
@@ -215,8 +235,8 @@ def TrainModel(
       # Apply zero grad to clear previous gradients.
       optimizer.zero_grad()
 
-      # Forward pass through the model.
-      outputs = model(
+      # Forward pass through the model using PyTorch's __call__ mechanism.
+      outputs = model.forward(
         features=features,
         input_ids=inputIds,
         attention_mask=attentionMask,
@@ -259,8 +279,8 @@ def TrainModel(
         # Ignore padding in loss computation.
         labels[labels == model.tokenizer.pad_token_id] = -100
 
-        # Forward pass through the model.
-        outputs = model(
+        # Forward pass through the model using PyTorch's __call__ mechanism.
+        outputs = model.forward(
           features=features,
           input_ids=inputIds,
           attention_mask=attentionMask,

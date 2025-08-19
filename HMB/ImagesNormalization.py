@@ -6,7 +6,7 @@
 ========================================================================
 # Author: Hossam Magdy Balaha
 # Initial Creation Date: Jul 31th, 2025
-# Last Modification Date: Jul 31th, 2025
+# Last Modification Date: Aug 19th, 2025
 # Permissions and Citation: Refer to the README file.
 '''
 
@@ -17,7 +17,7 @@ import tqdm  # TQDM for progress bars.
 
 
 def RGB2LAB(img, isNorm=True):
-  """
+  '''
   Convert an RGB image to the LAB color space and normalize the channels.
 
   Parameters:
@@ -26,19 +26,28 @@ def RGB2LAB(img, isNorm=True):
 
   Returns:
       tuple: Normalized LAB channels (L, A, B).
-  """
+  '''
+
+  # Convert the input RGB image to LAB color space using OpenCV.
   I = cv2.cvtColor(img, cv2.COLOR_RGB2LAB)  # Convert RGB to LAB color space.
+  # Convert the LAB image to float32 for further processing.
   I = I.astype(np.float32)  # Convert to float32 for further processing.
+  # Split the LAB image into its three channels: L, A, and B.
   I1, I2, I3 = cv2.split(I)  # Split the LAB image into its three channels: L, A, and B.
+  # If normalization is requested, normalize each channel accordingly.
   if (isNorm):  # Normalize the LAB channels.
+    # Normalize the L channel to the range [0, 100].
     I1 = I1 / 2.55  # Normalize the L channel to the range [0, 100].
+    # Normalize the A channel to the range [-128, 127].
     I2 = I2 - 128.0  # Normalize the A channel to the range [-128, 127].
+    # Normalize the B channel to the range [-128, 127].
     I3 = I3 - 128.0  # Normalize the B channel to the range [-128, 127].
+  # Return the normalized LAB channels as a tuple.
   return I1, I2, I3  # Return the normalized LAB channels.
 
 
 def LAB2RGB(I1, I2, I3, isNorm=True):
-  """
+  '''
   Convert normalized LAB channels back to the RGB color space.
 
   Parameters:
@@ -48,19 +57,28 @@ def LAB2RGB(I1, I2, I3, isNorm=True):
 
   Returns:
       numpy.ndarray: RGB image.
-  """
+  '''
+
+  # If denormalization is requested, reverse the normalization for each channel.
   if (isNorm):
+    # Denormalize the L channel back to the range [0, 255].
     I1 = I1 * 2.55  # Denormalize the L channel back to the range [0, 255].
+    # Denormalize the A channel back to the range [0, 255].
     I2 = I2 + 128.0  # Denormalize the A channel back to the range [0, 255].
+    # Denormalize the B channel back to the range [0, 255].
     I3 = I3 + 128.0  # Denormalize the B channel back to the range [0, 255].
+  # Merge the LAB channels back into a single image.
   I = cv2.merge((I1, I2, I3))  # Merge the LAB channels back into a single image.
+  # Clip the pixel values to ensure they are within the valid range [0, 255].
   I = np.clip(I, 0, 255).astype(np.uint8)  # Clip the pixel values to ensure they are within the valid range [0, 255].
+  # Convert the LAB image back to the RGB color space using OpenCV.
   I = cv2.cvtColor(I, cv2.COLOR_LAB2RGB)  # Convert the LAB image back to the RGB color space.
+  # Return the resulting RGB image.
   return I  # Return the resulting RGB image.
 
 
 def LabSplitMeanStd(img):
-  """
+  '''
   Compute the mean and standard deviation of the LAB channels of an RGB image.
 
   Parameters:
@@ -68,50 +86,70 @@ def LabSplitMeanStd(img):
 
   Returns:
       tuple: Means and standard deviations of the LAB channels.
-  """
+  '''
+
+  # Convert the input RGB image to LAB and split into channels.
   I1, I2, I3 = RGB2LAB(img)  # Convert the input RGB image to LAB and split into channels.
+  # Calculate the mean and standard deviation of the L channel.
   m1, s1 = cv2.meanStdDev(I1)  # Calculate the mean and standard deviation of the L channel.
+  # Calculate the mean and standard deviation of the A channel.
   m2, s2 = cv2.meanStdDev(I2)  # Calculate the mean and standard deviation of the A channel.
+  # Calculate the mean and standard deviation of the B channel.
   m3, s3 = cv2.meanStdDev(I3)  # Calculate the mean and standard deviation of the B channel.
+  # Store the means in a list.
   means = [m1, m2, m3]  # Store the means in a list.
+  # Store the standard deviations in a list.
   stds = [s1, s2, s3]  # Store the standard deviations in a list.
+  # Return the means and standard deviations.
   return means, stds  # Return the means and standard deviations.
 
 
 class ReinhardColorNormalization(object):
-  """
-  A class for performing Reinhard color normalization on images.
-  """
+  '''
+
+  '''
 
   def __init__(self):
-    """
+    '''
     Initialize the ReinhardColorNormalization object.
-    """
+    '''
+
+    # Initialize target means as None.
     self.targetMeans = None  # Initialize target means as None.
+    # Initialize target standard deviations as None.
     self.targetStds = None  # Initialize target standard deviations as None.
+    # Flag to check if the model has been fitted.
     self.isFit = False  # Flag to check if the model has been fitted.
 
+  # Fit the model to a target image by calculating its LAB means and standard deviations.
   def Fit(self, img):
-    """
+    '''
     Fit the model to a target image by calculating its LAB means and standard deviations.
 
     Parameters:
         img (numpy.ndarray): Target RGB image.
-    """
+    '''
+
+    # Standardize the brightness of the input image.
     target = StandarizeBrightness(img)  # Standardize the brightness of the input image.
+    # Convert the input RGB image to LAB and split into channels.
     L, A, B = RGB2LAB(target)  # Convert the input RGB image to LAB and split into channels.
 
     # Calculate mean and standard deviation.
+    # Store the target means.
     self.targetMeans = [np.mean(L), np.mean(A), np.mean(B)]
+    # Store the target standard deviations.
     self.targetStds = [np.std(L), np.std(A), np.std(B)]
 
     # means, stds = LabSplitMeanStd(target)  # Calculate the mean and standard deviation of the LAB channels.
     # self.targetMeans = means  # Store the target means.
     # self.targetStds = stds  # Store the target standard deviations.
+    # Set the flag to indicate the model has been fitted.
     self.isFit = True  # Set the flag to indicate the model has been fitted.
 
+  # Normalize an input image using the fitted target means and standard deviations.
   def Normalize(self, img):
-    """
+    '''
     Normalize an input image using the fitted target means and standard deviations.
 
     Parameters:
@@ -119,7 +157,9 @@ class ReinhardColorNormalization(object):
 
     Returns:
         numpy.ndarray: Normalized RGB image.
-    """
+    '''
+
+    # Check if the model has been fitted.
     if (not self.isFit):
       raise RuntimeError("Model has not been fitted. Call Fit() first.")
 
@@ -127,7 +167,9 @@ class ReinhardColorNormalization(object):
     if ((len(img.shape) != 3) or (img.shape[2] != 3)):
       raise ValueError("Input image must be a 3-channel RGB image.")
 
+    # Standardize the brightness of the input image.
     target = StandarizeBrightness(img)  # Standardize the brightness of the input image.
+    # Convert the input RGB image to LAB and split into channels.
     L, A, B = RGB2LAB(target)  # Convert the input RGB image to LAB and split into channels.
 
     # Calculate mean and standard deviation.
@@ -138,29 +180,36 @@ class ReinhardColorNormalization(object):
     # I1, I2, I3 = RGB2LAB(target)  # Convert the RGB image to LAB and split into channels.
     # means, stds = LabSplitMeanStd(target)  # Calculate the mean and standard deviation of the LAB channels.
 
+    # Subtract the mean from each LAB channel.
     f1 = [
       L - means[0],  # Subtract the mean from the L channel.
       A - means[1],  # Subtract the mean from the A channel.
       B - means[2]  # Subtract the mean from the B channel.
     ]
+    # Scale each LAB channel by the ratio of target std to source std.
     f2 = [
       self.targetStds[0] / stds[0],  # Scale the L channel by the ratio of target std to source std.
       self.targetStds[1] / stds[1],  # Scale the A channel by the ratio of target std to source std.
       self.targetStds[2] / stds[2]  # Scale the B channel by the ratio of target std to source std.
     ]
+    # Add the target mean to each LAB channel.
     f3 = [
       self.targetMeans[0],  # Add the target mean to the L channel.
       self.targetMeans[1],  # Add the target mean to the A channel.
       self.targetMeans[2]  # Add the target mean to the B channel.
     ]
+    # Apply the normalization transformation to each LAB channel.
     I1 = f1[0] * f2[0] + f3[0]  # Apply the normalization transformation to the L channel.
     I2 = f1[1] * f2[1] + f3[1]  # Apply the normalization transformation to the A channel.
     I3 = f1[2] * f2[2] + f3[2]  # Apply the normalization transformation to the B channel.
+    # Convert the normalized LAB image back to RGB.
     I = LAB2RGB(I1, I2, I3)  # Convert the normalized LAB image back to RGB.
+    # Return the normalized RGB image.
     return I  # Return the normalized RGB image.
 
 
 # Create the normalizers
+# Define a function to create and fit a Reinhard normalizer for a given slide.
 def GetFitNormalizer(
   slide,  # The OpenSlide object for the slide.
   normSize=(1024 * 8, 1024 * 8),  # The size of the region to fit the normalizer.
@@ -188,7 +237,7 @@ def GetFitNormalizer(
 
 
 def CreateAverageHistogram(refImages, noChannels=4):
-  """
+  '''
   Create an average histogram from a list of reference images.
 
   Parameters:
@@ -197,30 +246,39 @@ def CreateAverageHistogram(refImages, noChannels=4):
 
   Returns:
       list: Average histogram for each channel.
-  """
+  '''
+
+  # Number of reference images.
   noImages = len(refImages)  # Number of reference images.
+  # Initialize list to store histograms for each channel.
   channelHist = [[] for _ in range(noChannels)]  # Initialize list to store histograms for each channel.
 
+  # Iterate over each image with a progress bar.
   for i in tqdm.tqdm(range(noImages)):  # Iterate over each image with a progress bar.
+    # Iterate over each channel.
     for channel in range(noChannels):  # Iterate over each channel.
+      # Compute histogram for the current channel.
       hist = np.histogram(
         np.array(refImages[i])[..., channel],  # Compute histogram for the current channel.
         bins=256,  # Number of bins for the histogram.
         range=(0, 255),  # Range of pixel values.
         density=True,  # Normalize the histogram.
       )[0]
+      # Append the histogram to the list.
       channelHist[channel].append(hist)  # Append the histogram to the list.
 
+  # Compute the average histogram for each channel.
   avgHist = [
     np.mean(channelHist[i], axis=0)  # Compute the average histogram for each channel.
     for i in tqdm.tqdm(range(noChannels))
   ]
 
+  # Return the average histogram.
   return avgHist  # Return the average histogram.
 
 
 def CreateLUTFromHistogram(avgHist):
-  """
+  '''
   Create a Look-Up Table (LUT) from an average histogram.
 
   Parameters:
@@ -228,26 +286,33 @@ def CreateLUTFromHistogram(avgHist):
 
   Returns:
       list: LUT for each channel.
-  """
+  '''
+
+  # Compute the cumulative distribution function (CDF) for each histogram.
   cdf = [np.cumsum(hist) for hist in avgHist]  # Compute the cumulative distribution function (CDF) for each histogram.
+  # Find the minimum value of each CDF.
   cdfMin = [np.min(c) for c in cdf]  # Find the minimum value of each CDF.
+  # Find the maximum value of each CDF.
   cdfMax = [np.max(c) for c in cdf]  # Find the maximum value of each CDF.
 
+  # Normalize the CDF to the range [0, 255].
   cdfNorm = [
     ((cdf[i] - cdfMin[i]) * 255 / (cdfMax[i] - cdfMin[i]))  # Normalize the CDF to the range [0, 255].
     for i in tqdm.tqdm(range(len(cdf)))
   ]
 
+  # Create the LUT using linear interpolation.
   lut = [
     np.interp(range(256), range(256), cdfNorm[i])  # Create the LUT using linear interpolation.
     for i in tqdm.tqdm(range(len(cdfNorm)))
   ]
 
+  # Return the LUT.
   return lut  # Return the LUT.
 
 
 def ApplyLUT(image, lut, noChannels=4):
-  """
+  '''
   Apply a Look-Up Table (LUT) to an image.
 
   Parameters:
@@ -257,17 +322,23 @@ def ApplyLUT(image, lut, noChannels=4):
 
   Returns:
       numpy.ndarray: Image with LUT applied.
-  """
+  '''
+
+  # Iterate over each channel.
   for channel in range(noChannels):  # Iterate over each channel.
+    # Apply the LUT to the channel.
     image[..., channel] = lut[channel][image[..., channel]]  # Apply the LUT to the channel.
+    # Clip values to the range [0, 255].
     image[..., channel] = np.clip(image[..., channel], 0, 255)  # Clip values to the range [0, 255].
+    # Convert to unsigned 8-bit integer.
     image[..., channel] = image[..., channel].astype(np.uint8)  # Convert to unsigned 8-bit integer.
 
+  # Return the modified image.
   return image  # Return the modified image.
 
 
 def LABSplit2RGB(I1, I2, I3):
-  """
+  '''
   Convert LAB channels back to RGB color space.
 
   Parameters:
@@ -277,19 +348,28 @@ def LABSplit2RGB(I1, I2, I3):
 
   Returns:
       numpy.ndarray: RGB image.
-  """
+  '''
+
+  # Denormalize L channel.
   I1 *= 2.55  # Denormalize L channel.
+  # Denormalize A channel.
   I2 += 128.0  # Denormalize A channel.
+  # Denormalize B channel.
   I3 += 128.0  # Denormalize B channel.
+  # Merge channels back into an image.
   I = cv2.merge((I1, I2, I3))  # Merge channels back into an image.
+  # Clip values to the range [0, 255].
   I = np.clip(I, 0, 255)  # Clip values to the range [0, 255].
+  # Convert to unsigned 8-bit integer.
   I = I.astype(np.uint8)  # Convert to unsigned 8-bit integer.
+  # Convert LAB to RGB color space using OpenCV.
   I = cv2.cvtColor(I, cv2.COLOR_LAB2RGB)  # Convert LAB to RGB color space.
+  # Return the RGB image.
   return I  # Return the RGB image.
 
 
 def RGB2OD(img):
-  """
+  '''
   Convert an RGB image to Optical Density (OD) space.
 
   Parameters:
@@ -297,7 +377,8 @@ def RGB2OD(img):
 
   Returns:
       numpy.ndarray: Image in OD space.
-  """
+  '''
+
   # Ensure the input is in the range [0, 255].
   img = np.clip(img, 0, 255).astype(np.float64)
 
@@ -307,11 +388,12 @@ def RGB2OD(img):
 
   # Compute optical density.
   odImage = -np.log(image)
+  # Return the image in OD space.
   return odImage
 
 
 def OD2RGB(img):
-  """
+  '''
   Convert an image from Optical Density (OD) space back to RGB.
 
   Parameters:
@@ -319,7 +401,8 @@ def OD2RGB(img):
 
   Returns:
       numpy.ndarray: RGB image (range [0, 255]).
-  """
+  '''
+
   # Ensure the input is valid (non-negative).
   if (np.any(img < 0)):
     raise ValueError("Input OD values must be non-negative.")
@@ -327,11 +410,12 @@ def OD2RGB(img):
   # Convert OD back to RGB.
   image = np.exp(-img) * 255.0
   image = np.clip(image, 0, 255).astype(np.uint8)  # Clip and convert to uint8.
+  # Return the RGB image.
   return image
 
 
 def StandarizeBrightness(img):
-  """
+  '''
   Standardize the brightness of an image using the 90th percentile.
 
   Parameters:
@@ -339,13 +423,16 @@ def StandarizeBrightness(img):
 
   Returns:
       numpy.ndarray: Brightness-standardized image.
-  """
+  '''
+
   # Ensure the image is in the range [0, 255].
   img = np.clip(img, 0, 255).astype(np.float32)
 
   # Calculate the 90th percentile for each channel independently.
   if (len(img.shape) == 3):  # Multi-channel image (e.g., RGB).
+    # Percentile for each channel.
     p = np.percentile(img, 90, axis=(0, 1))  # Percentile for each channel.
+    # Scale each channel independently.
     I = img * 255.0 / p[None, None, :]  # Scale each channel independently.
   else:  # Single-channel image (e.g., grayscale).
     p = np.percentile(img, 90)
@@ -353,11 +440,12 @@ def StandarizeBrightness(img):
 
   # Clip values to ensure they are within the valid range [0, 255].
   I = np.clip(I, 0, 255).astype(np.uint8)
+  # Return the brightness-standardized image.
   return I  # Return the brightness-standardized image.
 
 
 def NormalizeRows(A):
-  """
+  '''
   Normalize the rows of a matrix.
 
   Parameters:
@@ -365,13 +453,16 @@ def NormalizeRows(A):
 
   Returns:
       numpy.ndarray: Matrix with normalized rows.
-  """
+  '''
+
+  # Normalize each row.
   aNorm = A / np.linalg.norm(A, axis=1)[:, np.newaxis]  # Normalize each row.
+  # Return the normalized matrix.
   return aNorm  # Return the normalized matrix.
 
 
 def FindStainMatrixMacenko(img, beta=0.15, alpha=1.0):
-  """
+  '''
   Find the stain matrix using Macenko's method.
 
   Parameters:
@@ -381,7 +472,8 @@ def FindStainMatrixMacenko(img, beta=0.15, alpha=1.0):
 
   Returns:
       numpy.ndarray: Stain matrix (2x3).
-  """
+  '''
+
   # Ensure the input is a 3-channel RGB image.
   if ((len(img.shape) != 3) or (img.shape[2] != 3)):
     raise ValueError("Input image must be a 3-channel RGB image.")
@@ -427,11 +519,12 @@ def FindStainMatrixMacenko(img, beta=0.15, alpha=1.0):
   # Normalize the stain matrix.
   stainMatrix = stainMatrix / np.linalg.norm(stainMatrix, axis=1, keepdims=True)
 
+  # Return the stain matrix.
   return stainMatrix.astype(np.float64)  # Return the stain matrix.
 
 
 def ConcentrateStainMatrixMacenko(img, stainMatrix, lambdaVal=0.01):
-  """
+  '''
   Concentrate the stain matrix using LASSO.
 
   Parameters:
@@ -441,7 +534,8 @@ def ConcentrateStainMatrixMacenko(img, stainMatrix, lambdaVal=0.01):
 
   Returns:
       numpy.ndarray: Concentrated stain matrix (2x3).
-  """
+  '''
+
   # Ensure the input is a 3-channel RGB image.
   if ((len(img.shape) != 3) or (img.shape[2] != 3)):
     raise ValueError("Input image must be a 3-channel RGB image.")
@@ -467,11 +561,12 @@ def ConcentrateStainMatrixMacenko(img, stainMatrix, lambdaVal=0.01):
   # Normalize the concentrated stain matrix.
   # value = value / np.linalg.norm(value, axis=1, keepdims=True)
 
+  # Return the concentrated stain matrix.
   return value.astype(np.float64)  # Return the concentrated stain matrix.
 
 
 def ApplyReinhard(img, targetMeans, targetStds):
-  """
+  '''
   Apply Reinhard color normalization to an image.
 
   Parameters:
@@ -481,14 +576,16 @@ def ApplyReinhard(img, targetMeans, targetStds):
 
   Returns:
       numpy.ndarray: Normalized image.
-  """
+  '''
 
   # Ensure the input is a valid RGB image.
   if ((len(img.shape) != 3) or (img.shape[2] != 3)):
     raise ValueError("Input image must be a 3-channel RGB image.")
 
+  # Standardize the brightness of the image.
   imgMod = StandarizeBrightness(img)  # Standardize the brightness of the image.
 
+  # Convert the input RGB image to LAB and split into channels.
   L, A, B = RGB2LAB(imgMod)  # Convert the input RGB image to LAB and split into channels.
 
   # Calculate mean and standard deviation.
@@ -498,9 +595,14 @@ def ApplyReinhard(img, targetMeans, targetStds):
   # I1, I2, I3 = RGB2LAB(imgMod)  # Convert to LAB color space.
   # means, stds = LabSplitMeanStd(imgMod)  # Compute the mean and standard deviation of LAB channels.
 
+  # Normalize L channel.
   I1 = (L - means[0]) * (targetStds[0] / stds[0]) + targetMeans[0]  # Normalize L channel.
+  # Normalize A channel.
   I2 = (A - means[1]) * (targetStds[1] / stds[1]) + targetMeans[1]  # Normalize A channel.
+  # Normalize B channel.
   I3 = (B - means[2]) * (targetStds[2] / stds[2]) + targetMeans[2]  # Normalize B channel.
 
+  # Convert back to RGB color space.
   merged = LABSplit2RGB(I1, I2, I3)  # Convert back to RGB color space.
+  # Return the normalized image.
   return merged  # Return the normalized image.

@@ -6,7 +6,7 @@
 ========================================================================
 # Author: Hossam Magdy Balaha
 # Initial Creation Date: Aug 13th, 2025
-# Last Modification Date: Aug 13th, 2025
+# Last Modification Date: Aug 19th, 2025
 # Permissions and Citation: Refer to the README file.
 '''
 
@@ -19,7 +19,7 @@ def CalculatePerformanceMetrics(
   eps=1e-10,
   addWeightedAverage=False,
 ):
-  """
+  '''
   Calculate performance metrics from a confusion matrix.
 
   Parameters:
@@ -29,32 +29,34 @@ def CalculatePerformanceMetrics(
 
   Returns:
   dict: A dictionary containing performance metrics including:
-        - True Positives (TP)
-        - False Positives (FP)
-        - False Negatives (FN)
-        - True Negatives (TN)
-        - Macro Precision
-        - Macro Recall
-        - Macro F1
-        - Macro Accuracy
-        - Macro Specificity
-        - Micro Precision
-        - Micro Recall
-        - Micro F1
-        - Micro Accuracy
-        - Micro Specificity
-        - Weights
-        - Weighted Precision
-        - Weighted Recall
-        - Weighted F1
-        - Weighted Accuracy
-        - Weighted Specificity
-  """
+    - True Positives (TP)
+    - False Positives (FP)
+    - False Negatives (FN)
+    - True Negatives (TN)
+    - Macro Precision
+    - Macro Recall
+    - Macro F1
+    - Macro Accuracy
+    - Macro Specificity
+    - Micro Precision
+    - Micro Recall
+    - Micro F1
+    - Micro Accuracy
+    - Micro Specificity
+    - Weights
+    - Weighted Precision
+    - Weighted Recall
+    - Weighted F1
+    - Weighted Accuracy
+    - Weighted Specificity
+  '''
+
   # Convert the confusion matrix to a NumPy array for easier manipulation.
   confMatrix = np.array(confMatrix)
 
-  # Check if the confusion matrix is for binary classification.
+  # Get the number of classes from the shape of the confusion matrix.
   noOfClasses = confMatrix.shape[0]
+  # Check if the confusion matrix is for binary classification or multiclass.
   if (noOfClasses > 2):
     # Calculate True Positives (TP) as the diagonal elements of the confusion matrix.
     TP = np.diag(confMatrix)
@@ -66,18 +68,16 @@ def CalculatePerformanceMetrics(
     TN = np.sum(confMatrix) - (TP + FP + FN)
   else:
     # For binary classification, the confusion matrix is a 2x2 matrix.
-    # Unravel the confusion matrix to get the TP, FP, FN, and TN.
-    # The order of the elements is TN, FP, FN, TP.
+    # Unravel the confusion matrix to get the TN, FP, FN, and TP.
     TN, FP, FN, TP = confMatrix.ravel()
 
-  # Avoid division by zero by adding a small epsilon value.
+  # Add a small epsilon value to avoid division by zero in metric calculations.
   TP = TP + eps
   FP = FP + eps
   FN = FN + eps
   TN = TN + eps
 
-  # Create a dictionary to hold the calculated performance metrics and
-  # the TP, FP, FN, TN vectors.
+  # Create a dictionary to hold the calculated performance metrics and the TP, FP, FN, TN vectors.
   metrics = {
     "TP": TP,
     "FP": FP,
@@ -85,17 +85,14 @@ def CalculatePerformanceMetrics(
     "TN": TN,
   }
 
-  # Calculate precision using macro averaging: mean of TP / (TP + FP) for each class.
+  # Calculate macro-averaged precision, recall, F1, accuracy, and specificity.
   precision = np.mean(TP / (TP + FP))
-  # Calculate recall using macro averaging: mean of TP / (TP + FN) for each class.
   recall = np.mean(TP / (TP + FN))
-  # Calculate F1 score using macro averaging: harmonic mean of precision and recall.
   f1 = 2 * precision * recall / (precision + recall)
-  # Calculate accuracy using macro averaging: sum of TP and TN divided by the total sum of the matrix.
   accuracy = np.mean(TP + TN) / np.sum(confMatrix)
-  # Calculate specificity using macro averaging: mean of TN / (TN + FP) for each class.
   specificity = np.mean(TN / (TN + FP))
 
+  # Add macro metrics to the dictionary.
   metrics.update({
     "Macro Precision"  : precision,
     "Macro Recall"     : recall,
@@ -111,17 +108,14 @@ def CalculatePerformanceMetrics(
       "Macro Average": avg,
     })
 
-  # Calculate precision using micro averaging: sum of TP divided by the sum of TP and FP.
+  # Calculate micro-averaged precision, recall, F1, accuracy, and specificity.
   precision = np.sum(TP) / np.sum(TP + FP)
-  # Calculate recall using micro averaging: sum of TP divided by the sum of TP and FN.
   recall = np.sum(TP) / np.sum(TP + FN)
-  # Calculate F1 score using micro averaging: harmonic mean of precision and recall.
   f1 = 2 * precision * recall / (precision + recall)
-  # Calculate accuracy using micro averaging: sum of TP and TN divided by TP, TN, FP, and FN.
   accuracy = np.sum(TP + TN) / np.sum(TP + TN + FP + FN)
-  # Calculate specificity using micro averaging: sum of TN divided by the sum of TN and FP.
   specificity = np.sum(TN) / np.sum(TN + FP)
 
+  # Add micro metrics to the dictionary.
   metrics.update({
     "Micro Precision"  : precision,
     "Micro Recall"     : recall,
@@ -143,17 +137,14 @@ def CalculatePerformanceMetrics(
   # Calculate the weights for each class as the proportion of samples in that class.
   weights = samples / np.sum(confMatrix)
 
-  # Calculate precision using weighted averaging: sum of precision per class multiplied by weights.
+  # Calculate weighted-averaged precision, recall, F1, accuracy, and specificity.
   precision = np.sum(TP / (TP + FP) * weights)
-  # Calculate recall using weighted averaging: sum of recall per class multiplied by weights.
   recall = np.sum(TP / (TP + FN) * weights)
-  # Calculate F1 score using weighted averaging: harmonic mean of weighted precision and recall.
   f1 = 2 * precision * recall / (precision + recall)
-  # Calculate accuracy using weighted averaging: sum of TP and TN divided by the total sum of the matrix.
   accuracy = np.sum((TP + TN) * weights) / np.sum(confMatrix)
-  # Calculate specificity using weighted averaging: sum of specificity per class multiplied by weights.
   specificity = np.sum(TN / (TN + FP) * weights)
 
+  # Add weights and weighted metrics to the dictionary.
   metrics.update({
     "Weights"             : weights,
     "Weighted Precision"  : precision,
@@ -170,18 +161,21 @@ def CalculatePerformanceMetrics(
       "Weighted Average": avg,
     })
 
+  # Return the dictionary containing all calculated metrics.
   return metrics
 
 
 if __name__ == "__main__":
-  # Example usage of the CalculatePerformanceMetrics function.
+  # Example confusion matrix for a 3-class classification problem.
   confMatrix = [
     [50, 2, 1],
     [5, 45, 0],
     [0, 3, 47]
   ]
 
+  # Calculate metrics and include weighted averages in the output.
   metrics = CalculatePerformanceMetrics(confMatrix, addWeightedAverage=True)
 
+  # Print each metric name and its rounded value.
   for key, value in metrics.items():
     print(f"{key}: {np.round(value, 4)}")
