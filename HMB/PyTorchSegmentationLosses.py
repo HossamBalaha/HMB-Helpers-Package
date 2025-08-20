@@ -40,7 +40,7 @@ class DiceLoss(nn.Module):
     '''
 
     # Apply sigmoid activation to convert logits to probabilities.
-    inputs = torch.sigmoid(inputs)
+    inputs = F.sigmoid(inputs)
     # Flatten the input tensor to 1D for calculation.
     inputs = inputs.view(-1)
     # Flatten the target tensor to 1D for calculation.
@@ -82,7 +82,7 @@ class DiceBCELoss(nn.Module):
     # Compute BCE loss directly from logits for autocasting safety.
     bce = F.binary_cross_entropy_with_logits(inputs, targets, reduction="mean")
     # Apply sigmoid activation to convert logits to probabilities.
-    inputs = torch.sigmoid(inputs)
+    inputs = F.sigmoid(inputs)
     # Flatten the input tensor to 1D for calculation.
     inputs = inputs.view(-1)
     # Flatten the target tensor to 1D for calculation.
@@ -120,7 +120,7 @@ class JaccardLoss(nn.Module):
     '''
 
     # Apply sigmoid activation to convert logits to probabilities.
-    inputs = torch.sigmoid(inputs)
+    inputs = F.sigmoid(inputs)
     # Flatten the input tensor to 1D for calculation.
     inputs = inputs.view(-1)
     # Flatten the target tensor to 1D for calculation.
@@ -173,7 +173,7 @@ class TverskyLoss(nn.Module):
     # Calculate true positives.
     truePos = (inputs * targets).sum()
     # Calculate false negatives.
-    falseNeg = ((1 - inputs) * targets).sum()
+    falseNeg = ((1.0 - inputs) * targets).sum()
     # Calculate false positives.
     falsePos = (inputs * (1 - targets)).sum()
     # Compute Tversky index and loss.
@@ -209,7 +209,7 @@ class FocalLoss(nn.Module):
     '''
 
     # Apply sigmoid activation to convert logits to probabilities.
-    probs = torch.sigmoid(inputs)
+    probs = F.sigmoid(inputs)
     # Flatten tensors for calculation.
     probs = probs.view(-1)
     targets = targets.view(-1)
@@ -251,18 +251,18 @@ class GeneralizedDiceLoss(nn.Module):
     '''
 
     # Apply softmax activation to convert logits to probabilities.
-    inputs = torch.softmax(inputs, dim=1)
+    inputs = F.softmax(inputs, dim=1)
     # Flatten spatial dimensions.
     inputs = inputs.contiguous().view(inputs.shape[0], inputs.shape[1], -1)
     targets = targets.contiguous().view(targets.shape[0], targets.shape[1], -1)
     # Compute class weights inversely proportional to ground truth volume.
-    w = 1.0 / (torch.sum(targets, dim=2) ** 2 + self.epsilon)
+    w = 1.0 / (F.sum(targets, dim=2) ** 2 + self.epsilon)
     # Compute intersection and union for each class.
-    intersection = torch.sum(inputs * targets, dim=2)
-    union = torch.sum(inputs + targets, dim=2)
+    intersection = F.sum(inputs * targets, dim=2)
+    union = F.sum(inputs + targets, dim=2)
     # Compute generalized dice score.
-    numerator = torch.sum(w * intersection, dim=1)
-    denominator = torch.sum(w * union, dim=1)
+    numerator = F.sum(w * intersection, dim=1)
+    denominator = F.sum(w * union, dim=1)
     diceScore = 2.0 * numerator / (denominator + self.epsilon)
     # Return the mean dice loss over the batch.
     return 1.0 - diceScore.mean()
