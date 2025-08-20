@@ -1,23 +1,37 @@
 # Import the required libraries.
-import cv2, yaml, pickle
+import cv2, yaml, pickle, json
 import numpy as np
 
 
 def ReadProjectConfig(configFilePath):
   '''
-  Read the project configuration from a YAML file.
+  Read the project configuration from the file.
 
   Parameters:
-    configFilePath (str): Path to the YAML configuration file.
+    configFilePath (str): Path to the configuration file.
 
   Returns:
     dict: Parsed configuration dictionary.
   '''
 
-  # Open the YAML configuration file in read mode.
-  with open(configFilePath, "r") as file:
-    # Parse the YAML file and load its contents into a dictionary.
-    config = yaml.safe_load(file)
+  extension = configFilePath.split(".")[-1]
+  # Check if the file extension is YAML or JSON.
+  if (extension not in ["yaml", "yml", "json"]):
+    # Raise an error if the file is not a YAML or JSON file.
+    raise ValueError(f"Unsupported configuration file format: {extension}. Supported formats are YAML and JSON.")
+
+  # If the file is a YAML file, import the yaml module.
+  if (extension in ["yaml", "yml"]):
+    # Open the YAML configuration file in read mode.
+    with open(configFilePath, "r") as file:
+      # Parse the YAML file and load its contents into a dictionary.
+      config = yaml.safe_load(file)
+  # If the file is a JSON file, import the json module.
+  elif (extension == "json"):
+    # Open the JSON configuration file in read mode.
+    with open(configFilePath, "r") as file:
+      # Parse the JSON file and load its contents into a dictionary.
+      config = json.load(file)
   # Return the parsed configuration dictionary.
   return config
 
