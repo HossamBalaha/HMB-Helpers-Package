@@ -4,7 +4,7 @@ setup(
   name="HMB",
   version="0.1.0",
   author="Hossam Magdy Balaha",
-  author_email="hmbala01@louisville.edu",
+  author_email="h3ossam@gmail.com",
   description="A Python package for various utilities.",
   packages=find_packages(
     exclude=[
