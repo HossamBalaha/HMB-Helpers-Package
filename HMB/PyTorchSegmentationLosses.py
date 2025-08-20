@@ -19,6 +19,7 @@ class DiceLoss(nn.Module):
   '''
   Implements Dice Loss for binary segmentation tasks.
   Dice loss measures the overlap between predicted and ground truth masks.
+
   Parameters:
     weight (optional): Not used, for compatibility.
     size_average (optional): Not used, for compatibility.
@@ -31,16 +32,18 @@ class DiceLoss(nn.Module):
   def forward(self, inputs, targets, smooth=1):
     '''
     Computes the Dice loss between predictions and targets for binary segmentation.
+
     Parameters:
       inputs (torch.Tensor): Model outputs (logits or probabilities).
       targets (torch.Tensor): Ground truth binary mask.
       smooth (float, optional): Smoothing constant to avoid division by zero. Default is 1.
+
     Returns:
       torch.Tensor: Dice loss value.
     '''
 
     # Apply sigmoid activation to convert logits to probabilities.
-    inputs = F.sigmoid(inputs)
+    inputs = torch.sigmoid(inputs)
     # Flatten the input tensor to 1D for calculation.
     inputs = inputs.view(-1)
     # Flatten the target tensor to 1D for calculation.
@@ -57,9 +60,11 @@ class DiceBCELoss(nn.Module):
   '''
   Implements Dice + BCE Loss for binary segmentation tasks.
   Combines Dice loss and binary cross-entropy loss for improved performance on imbalanced data.
+
   Parameters:
     weight (optional): Not used, for compatibility.
     size_average (optional): Not used, for compatibility.
+
   Note:
     For best practice and autocasting safety, use raw logits as inputs.
   '''
@@ -71,10 +76,12 @@ class DiceBCELoss(nn.Module):
   def forward(self, inputs, targets, smooth=1):
     '''
     Computes the sum of Dice loss and BCE loss for binary segmentation.
+
     Parameters:
       inputs (torch.Tensor): Model outputs (raw logits).
       targets (torch.Tensor): Ground truth binary mask.
       smooth (float, optional): Smoothing constant to avoid division by zero. Default is 1.
+
     Returns:
       torch.Tensor: Combined Dice + BCE loss value.
     '''
@@ -82,7 +89,7 @@ class DiceBCELoss(nn.Module):
     # Compute BCE loss directly from logits for autocasting safety.
     bce = F.binary_cross_entropy_with_logits(inputs, targets, reduction="mean")
     # Apply sigmoid activation to convert logits to probabilities.
-    inputs = F.sigmoid(inputs)
+    inputs = torch.sigmoid(inputs)
     # Flatten the input tensor to 1D for calculation.
     inputs = inputs.view(-1)
     # Flatten the target tensor to 1D for calculation.
@@ -99,6 +106,7 @@ class JaccardLoss(nn.Module):
   '''
   Implements Jaccard Loss (IoU Loss) for binary segmentation tasks.
   Jaccard loss measures the intersection over union between predicted and ground truth masks.
+
   Parameters:
     weight (optional): Not used, for compatibility.
     size_average (optional): Not used, for compatibility.
@@ -111,16 +119,18 @@ class JaccardLoss(nn.Module):
   def forward(self, inputs, targets, smooth=1):
     '''
     Computes the Jaccard loss (1 - IoU) between predictions and targets for binary segmentation.
+
     Parameters:
       inputs (torch.Tensor): Model outputs (logits or probabilities).
       targets (torch.Tensor): Ground truth binary mask.
       smooth (float, optional): Smoothing constant to avoid division by zero. Default is 1.
+
     Returns:
       torch.Tensor: Jaccard loss value.
     '''
 
     # Apply sigmoid activation to convert logits to probabilities.
-    inputs = F.sigmoid(inputs)
+    inputs = torch.sigmoid(inputs)
     # Flatten the input tensor to 1D for calculation.
     inputs = inputs.view(-1)
     # Flatten the target tensor to 1D for calculation.
@@ -140,6 +150,7 @@ class TverskyLoss(nn.Module):
   '''
   Implements Tversky Loss for binary segmentation tasks.
   Tversky loss generalizes Dice loss by allowing control over penalties for false positives and false negatives.
+
   Parameters:
     alpha (float): Weight for false positives.
     beta (float): Weight for false negatives.
@@ -156,16 +167,18 @@ class TverskyLoss(nn.Module):
   def forward(self, inputs, targets, smooth=1):
     '''
     Computes the Tversky loss between predictions and targets for binary segmentation.
+
     Parameters:
       inputs (torch.Tensor): Model outputs (logits or probabilities).
       targets (torch.Tensor): Ground truth binary mask.
       smooth (float, optional): Smoothing constant to avoid division by zero. Default is 1.
+
     Returns:
       torch.Tensor: Tversky loss value.
     '''
 
     # Apply sigmoid activation to convert logits to probabilities.
-    inputs = F.sigmoid(inputs)
+    inputs = torch.sigmoid(inputs)
     # Flatten the input tensor to 1D for calculation.
     inputs = inputs.view(-1)
     # Flatten the target tensor to 1D for calculation.
@@ -186,6 +199,7 @@ class FocalLoss(nn.Module):
   '''
   Implements Focal Loss for binary segmentation tasks.
   Focal loss focuses training on hard examples and addresses class imbalance.
+
   Parameters:
     alpha (float): Weighting factor for the rare class. Default is 0.25.
     gamma (float): Focusing parameter for modulating factor (1 - p_t). Default is 2.0.
@@ -201,15 +215,17 @@ class FocalLoss(nn.Module):
   def forward(self, inputs, targets):
     '''
     Computes the Focal loss between predictions and targets for binary segmentation.
+
     Parameters:
       inputs (torch.Tensor): Model outputs (logits).
       targets (torch.Tensor): Ground truth binary mask.
+
     Returns:
       torch.Tensor: Focal loss value.
     '''
 
     # Apply sigmoid activation to convert logits to probabilities.
-    probs = F.sigmoid(inputs)
+    probs = torch.sigmoid(inputs)
     # Flatten tensors for calculation.
     probs = probs.view(-1)
     targets = targets.view(-1)
@@ -233,6 +249,9 @@ class GeneralizedDiceLoss(nn.Module):
   '''
   Implements Generalized Dice Loss for multi-class segmentation tasks.
   Weights each class inversely to its frequency to address class imbalance.
+
+  Parameters:
+    epsilon (float): Small constant to avoid division by zero. Default is 1e-6.
   '''
 
   def __init__(self, epsilon=1e-6):
@@ -243,26 +262,28 @@ class GeneralizedDiceLoss(nn.Module):
   def forward(self, inputs, targets):
     '''
     Computes the Generalized Dice loss for multi-class segmentation.
+
     Parameters:
       inputs (torch.Tensor): Model outputs (logits) of shape (N, C, ...).
       targets (torch.Tensor): Ground truth one-hot mask of shape (N, C, ...).
+
     Returns:
       torch.Tensor: Generalized Dice loss value.
     '''
 
     # Apply softmax activation to convert logits to probabilities.
-    inputs = F.softmax(inputs, dim=1)
+    inputs = torch.softmax(inputs, dim=1)
     # Flatten spatial dimensions.
     inputs = inputs.contiguous().view(inputs.shape[0], inputs.shape[1], -1)
     targets = targets.contiguous().view(targets.shape[0], targets.shape[1], -1)
     # Compute class weights inversely proportional to ground truth volume.
-    w = 1.0 / (F.sum(targets, dim=2) ** 2 + self.epsilon)
+    w = 1.0 / (torch.sum(targets, dim=2) ** 2 + self.epsilon)
     # Compute intersection and union for each class.
-    intersection = F.sum(inputs * targets, dim=2)
-    union = F.sum(inputs + targets, dim=2)
+    intersection = torch.sum(inputs * targets, dim=2)
+    union = torch.sum(inputs + targets, dim=2)
     # Compute generalized dice score.
-    numerator = F.sum(w * intersection, dim=1)
-    denominator = F.sum(w * union, dim=1)
+    numerator = torch.sum(w * intersection, dim=1)
+    denominator = torch.sum(w * union, dim=1)
     diceScore = 2.0 * numerator / (denominator + self.epsilon)
     # Return the mean dice loss over the batch.
     return 1.0 - diceScore.mean()
