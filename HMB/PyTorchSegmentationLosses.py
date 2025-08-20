@@ -10,21 +10,37 @@
 # Permissions and Citation: Refer to the README file.
 '''
 
-# Import the required libraries for tensor operations and neural network components.
 import torch
-import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 
 
 class DiceLoss(nn.Module):
+  '''
+  Dice Loss for binary segmentation.
+  Parameters:
+    smooth (float): Smoothing constant to avoid division by zero.
+  '''
+
   def __init__(self, weight=None, size_average=True):
     # Initialize the DiceLoss class by calling the parent class constructor.
     super(DiceLoss, self).__init__()
 
   def forward(self, inputs, targets, smooth=1):
-    # Apply a sigmoid activation function to the inputs if the model does not include one.
-    inputs = F.sigmoid(inputs)
+    '''
+    Computes the Dice loss between predictions and targets for binary segmentation.
+
+    Parameters:
+      inputs (torch.Tensor): Model outputs (logits or probabilities).
+      targets (torch.Tensor): Ground truth binary mask.
+      smooth (float, optional): Smoothing constant to avoid division by zero. Default is 1.
+
+    Returns:
+      torch.Tensor: Dice loss value.
+    '''
+
+    # Use sigmoid activation if inputs are logits
+    inputs = torch.sigmoid(inputs)
 
     # Flatten the input and target tensors into 1D arrays for computation.
     inputs = inputs.view(-1)
@@ -41,13 +57,36 @@ class DiceLoss(nn.Module):
 
 
 class DiceBCELoss(nn.Module):
+  '''
+  Dice + BCE Loss for binary segmentation.
+  Parameters:
+    smooth (float): Smoothing constant to avoid division by zero.
+  Note:
+    For best practice and autocasting safety, use raw logits as inputs.
+  '''
+
   def __init__(self, weight=None, size_average=True):
     # Initialize the DiceBCELoss class by calling the parent class constructor.
     super(DiceBCELoss, self).__init__()
 
   def forward(self, inputs, targets, smooth=1):
+    '''
+    Computes the sum of Dice loss and BCE loss for binary segmentation.
+
+    Parameters:
+      inputs (torch.Tensor): Model outputs (raw logits).
+      targets (torch.Tensor): Ground truth binary mask.
+      smooth (float, optional): Smoothing constant to avoid division by zero. Default is 1.
+
+    Returns:
+      torch.Tensor: Combined Dice + BCE loss value.
+    '''
+
+    # Use BCE with logits for safe autocasting.
+    bce = F.binary_cross_entropy_with_logits(inputs, targets, reduction="mean")
+
     # Apply a sigmoid activation function to the inputs if the model does not include one.
-    inputs = F.sigmoid(inputs)
+    inputs = torch.sigmoid(inputs)
 
     # Flatten the input and target tensors into 1D arrays for computation.
     inputs = inputs.view(-1)
@@ -59,38 +98,8 @@ class DiceBCELoss(nn.Module):
     # Calculate the Dice loss component using the formula.
     diceLoss = 1.0 - (2.0 * intersection + smooth) / (inputs.sum() + targets.sum() + smooth)
 
-    # Calculate the binary cross-entropy (BCE) loss component.
-    BCE = F.binary_cross_entropy(inputs, targets, reduction="mean")
-
     # Combine the Dice loss and BCE loss to form the final loss value.
-    DiceBCE = BCE + diceLoss
+    DiceBCE = bce + diceLoss
 
     # Return the combined loss value.
     return DiceBCE
-
-
-if __name__ == "__main__":
-  # Simulate a model output tensor with random values (e.g., logits).
-  predictions = torch.randn(1, 1, 256, 256).float()  # Simulated model output.
-  # Normalize the predictions to the range [-1, 1].
-  # predictions = (predictions - predictions.min()) / (predictions.max() - predictions.min()) * 2 - 1
-  # Normalize the predictions to the range [0, 1].
-  predictions = (predictions - predictions.min()) / (predictions.max() - predictions.min())
-
-  # Simulate a ground truth mask tensor with binary values (0 or 1).
-  targets = torch.randint(0, 2, (1, 1, 256, 256)).float()  # Simulated ground truth mask.
-
-  print(f"Maximum value in predictions: {predictions.max().item()}")
-  print(f"Minimum value in predictions: {predictions.min().item()}")
-  print(f"Maximum value in targets: {targets.max().item()}")
-  print(f"Minimum value in targets: {targets.min().item()}")
-  print(f"Shape of predictions: {predictions.shape}")
-  print(f"Shape of targets: {targets.shape}")
-
-  # Instantiate the classes.
-  diceLoss = DiceLoss()
-  diceBCELoss = DiceBCELoss()
-
-  # Compute the losses between the simulated inputs and targets.
-  print(f"Dice Loss: {diceLoss(predictions, targets).item()}")
-  print(f"Dice + BCE Loss: {diceBCELoss(predictions, targets).item()}")
