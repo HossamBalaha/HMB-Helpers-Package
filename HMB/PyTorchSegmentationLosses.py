@@ -1,15 +1,3 @@
-'''
-========================================================================
-        ╦ ╦┌─┐┌─┐┌─┐┌─┐┌┬┐  ╔╦╗┌─┐┌─┐┌┬┐┬ ┬  ╔╗ ┌─┐┬  ┌─┐┬ ┬┌─┐
-        ╠═╣│ │└─┐└─┐├─┤│││  ║║║├─┤│ ┬ ││└┬┘  ╠╩╗├─┤│  ├─┤├─┤├─┤
-        ╩ ╩└─┘└─┘└─┘┴ ┴┴ ┴  ╩ ╩┴ ┴└─┘─┴┘ ┴   ╚═╝┴ ┴┴─┘┴ ┴┴ ┴┴ ┴
-========================================================================
-# Author: Hossam Magdy Balaha
-# Initial Creation Date: Aug 16th, 2025
-# Last Modification Date: Aug 19th, 2025
-# Permissions and Citation: Refer to the README file.
-'''
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -20,12 +8,12 @@ class DiceLoss(nn.Module):
   Implements Dice Loss for binary segmentation tasks.
   Dice loss measures the overlap between predicted and ground truth masks.
 
+  .. math::
+    \text{Dice}=1-\frac{2 \times |X \cap Y| + \text{smooth}}{|X| + |Y| + \text{smooth}}
+
   Parameters:
     weight (optional): Not used, for compatibility.
     size_average (optional): Not used, for compatibility.
-
-  .. math::
-    \text{Dice}=1-\frac{2 \times |X \cap Y| + \text{smooth}}{|X| + |Y| + \text{smooth}}
   '''
 
   def __init__(self, weight=None, size_average=True):
@@ -64,15 +52,15 @@ class DiceBCELoss(nn.Module):
   Implements Dice + BCE Loss for binary segmentation tasks.
   Combines Dice loss and binary cross-entropy loss for improved performance on imbalanced data.
 
+  .. math::
+    \text{Loss} = \text{BCE}(X, Y) + \left[1 - \frac{2 \times |X \cap Y| + \text{smooth}}{|X| + |Y| + \text{smooth}}\right]
+
   Parameters:
     weight (optional): Not used, for compatibility.
     size_average (optional): Not used, for compatibility.
 
   Note:
     For best practice and autocasting safety, use raw logits as inputs.
-
-  .. math::
-    \text{Loss} = \text{BCE}(X, Y) + \left[1 - \frac{2 \times |X \cap Y| + \text{smooth}}{|X| + |Y| + \text{smooth}}\right]
   '''
 
   def __init__(self, weight=None, size_average=True):
@@ -113,12 +101,12 @@ class JaccardLoss(nn.Module):
   Implements Jaccard Loss (IoU Loss) for binary segmentation tasks.
   Jaccard loss measures the intersection over union between predicted and ground truth masks.
 
+  .. math::
+    \text{Jaccard} = 1 - \frac{|X \cap Y| + \text{smooth}}{|X \cup Y| + \text{smooth}}
+
   Parameters:
     weight (optional): Not used, for compatibility.
     size_average (optional): Not used, for compatibility.
-
-  .. math::
-    \text{Jaccard} = 1 - \frac{|X \cap Y| + \text{smooth}}{|X \cup Y| + \text{smooth}}
   '''
 
   def __init__(self, weight=None, size_average=True):
@@ -160,14 +148,14 @@ class TverskyLoss(nn.Module):
   Implements Tversky Loss for binary segmentation tasks.
   Tversky loss generalizes Dice loss by allowing control over penalties for false positives and false negatives.
 
+  .. math::
+    \text{Tversky} = 1 - \frac{|X \cap Y| + \text{smooth}}{|X \cap Y| + \alpha \times |X \setminus Y| + \beta \times |Y \setminus X| + \text{smooth}}
+
   Parameters:
     alpha (float): Weight for false positives.
     beta (float): Weight for false negatives.
     weight (optional): Not used, for compatibility.
     size_average (optional): Not used, for compatibility.
-
-  .. math::
-    \text{Tversky} = 1 - \frac{|X \cap Y| + \text{smooth}}{|X \cap Y| + \alpha \times |X \setminus Y| + \beta \times |Y \setminus X| + \text{smooth}}
   '''
 
   def __init__(self, alpha=0.5, beta=0.5, weight=None, size_average=True):
@@ -212,12 +200,12 @@ class FocalLoss(nn.Module):
   Implements Focal Loss for binary segmentation tasks.
   Focal loss focuses training on hard examples and addresses class imbalance.
 
+  .. math::
+    \text{Focal}(p_t) = -\alpha \times (1 - p_t)^{\gamma} \times \log(p_t)
+
   Parameters:
     alpha (float): Weighting factor for the rare class. Default is 0.25.
     gamma (float): Focusing parameter for modulating factor (1 - p_t). Default is 2.0.
-
-  .. math::
-    \text{Focal}(p_t) = -\alpha \times (1 - p_t)^{\gamma} \times \log(p_t)
   '''
 
   def __init__(self, alpha=0.25, gamma=2.0, reduction="mean"):

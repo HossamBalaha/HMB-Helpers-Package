@@ -1,15 +1,3 @@
-'''
-========================================================================
-        ╦ ╦┌─┐┌─┐┌─┐┌─┐┌┬┐  ╔╦╗┌─┐┌─┐┌┬┐┬ ┬  ╔╗ ┌─┐┬  ┌─┐┬ ┬┌─┐
-        ╠═╣│ │└─┐└─┐├─┤│││  ║║║├─┤│ ┬ ││└┬┘  ╠╩╗├─┤│  ├─┤├─┤├─┤
-        ╩ ╩└─┘└─┘└─┘┴ ┴┴ ┴  ╩ ╩┴ ┴└─┘─┴┘ ┴   ╚═╝┴ ┴┴─┘┴ ┴┴ ┴┴ ┴
-========================================================================
-# Author: Hossam Magdy Balaha
-# Initial Creation Date: Jul 31th, 2025
-# Last Modification Date: Aug 19th, 2025
-# Permissions and Citation: Refer to the README file.
-'''
-
 import cv2  # OpenCV for image processing.
 import numpy as np  # NumPy for numerical operations.
 import spams  # SPAMS for sparse matrix computations.

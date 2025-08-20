@@ -1,15 +1,3 @@
-'''
-========================================================================
-        ╦ ╦┌─┐┌─┐┌─┐┌─┐┌┬┐  ╔╦╗┌─┐┌─┐┌┬┐┬ ┬  ╔╗ ┌─┐┬  ┌─┐┬ ┬┌─┐
-        ╠═╣│ │└─┐└─┐├─┤│││  ║║║├─┤│ ┬ ││└┬┘  ╠╩╗├─┤│  ├─┤├─┤├─┤
-        ╩ ╩└─┘└─┘└─┘┴ ┴┴ ┴  ╩ ╩┴ ┴└─┘─┴┘ ┴   ╚═╝┴ ┴┴─┘┴ ┴┴ ┴┴ ┴
-========================================================================
-# Author: Hossam Magdy Balaha
-# Initial Creation Date: Aug 17th, 2025
-# Last Modification Date: Aug 19th, 2025
-# Permissions and Citation: Refer to the README file.
-'''
-
 import numpy as np
 
 
@@ -18,6 +6,13 @@ def ComputeIoU(preds, targets, smooth=1.0):
   r'''
   Compute the Intersection over Union (IoU) metric.
 
+  .. math::
+    IoU=\frac{|\mathrm{Prediction}\cap \mathrm{Ground\ Truth}|+\mathrm{smooth}}{|\mathrm{Prediction}\cup\mathrm{Ground\ Truth}|+\mathrm{smooth}}
+
+  where:
+    - :math:`|\mathrm{Prediction}\cap \mathrm{Ground\ Truth}|` is the intersection of the predicted and ground truth tensors.
+    - :math:`|\mathrm{Prediction}\cup\mathrm{Ground\ Truth}|` is the union of the predicted and ground truth tensors.
+
   Parameters:
     preds: Predicted tensor (logits).
     targets: Ground truth tensor (binary mask).
@@ -25,10 +20,7 @@ def ComputeIoU(preds, targets, smooth=1.0):
 
   Returns:
     IoU value.
-
-  .. math::
-    IoU=\frac{|\mathrm{Prediction}\cap \mathrm{Ground\ Truth}|+\mathrm{smooth}}{|\mathrm{Prediction}\cup\mathrm{Ground\ Truth}|+\mathrm{smooth}}
-  '''
+   '''
 
   # Convert logits to binary predictions.
   preds = np.float32(preds > 0.5)
@@ -47,6 +39,14 @@ def ComputeDice(preds, targets, smooth=1.0):
   r'''
   Compute the Dice coefficient.
 
+  .. math::
+    Dice = \frac{2 \times |Prediction \cap Ground\ Truth| + smooth}{|Prediction| + |Ground\ Truth| + smooth}
+
+  where:
+    - :math:`|Prediction \cap Ground\ Truth|` is the intersection of the predicted and ground truth tensors.
+    - :math:`|Prediction|` is the sum of the predicted tensor.
+    - :math:`|Ground\ Truth|` is the sum of the ground truth tensor.
+
   Parameters:
     preds: Predicted tensor (logits).
     targets: Ground truth tensor (binary mask).
@@ -54,9 +54,6 @@ def ComputeDice(preds, targets, smooth=1.0):
 
   Returns:
     Dice coefficient value.
-
-  .. math::
-    Dice = \frac{2 \times |Prediction \cap Ground\ Truth| + smooth}{|Prediction| + |Ground\ Truth| + smooth}
   '''
 
   # Threshold predictions at 0.5 to obtain binary mask.
@@ -77,6 +74,13 @@ def ComputeF1Score(preds, targets, smooth=1.0):
   r'''
   Compute the F1 score.
 
+  .. math::
+    F1 = \frac{2 \times Precision \times Recall + smooth}{Precision + Recall + smooth}
+
+  where:
+    - Precision is the ratio of true positives to the sum of true positives and false positives.
+    - Recall is the ratio of true positives to the sum of true positives and false negatives.
+
   Parameters:
     preds: Predicted tensor (logits).
     targets: Ground truth tensor (binary mask).
@@ -84,9 +88,6 @@ def ComputeF1Score(preds, targets, smooth=1.0):
 
   Returns:
     F1 score value.
-
-  .. math::
-    F1 = \frac{2 \times Precision \times Recall + smooth}{Precision + Recall + smooth}
   '''
 
   # Convert logits to binary predictions.
@@ -111,15 +112,19 @@ def ComputePixelAccuracy(preds, targets):
   r'''
   Compute the pixel accuracy metric.
 
+  .. math::
+    Pixel\ Accuracy = \frac{Number\ of\ Correct\ Pixels}{Total\ Number\ of\ Pixels}
+
+  where:
+    - Number of Correct Pixels is the sum of pixels where predictions match targets.
+    - Total Number of Pixels is the product of the dimensions of the predicted tensor.
+
   Parameters:
     preds: Predicted tensor (logits).
     targets: Ground truth tensor (binary mask).
 
   Returns:
     Pixel accuracy value.
-
-  .. math::
-    Pixel\ Accuracy = \frac{Number\ of\ Correct\ Pixels}{Total\ Number\ of\ Pixels}
   '''
 
   # Convert logits to binary predictions.
@@ -137,6 +142,14 @@ def ComputePrecision(preds, targets, smooth=1.0):
   r'''
   Compute the precision metric.
 
+  .. math::
+    Precision = \frac{TP + smooth}{TP + FP + smooth}
+
+  where:
+    - :math:`TP` is the number of true positives (predicted positive and actually positive).
+    - :math:`FP` is the number of false positives (predicted positive but actually negative).
+    - :math:`smooth` is a small constant to avoid division by zero.
+
   Parameters:
     preds: Predicted tensor (logits).
     targets: Ground truth tensor (binary mask).
@@ -144,9 +157,6 @@ def ComputePrecision(preds, targets, smooth=1.0):
 
   Returns:
     Precision value.
-
-  .. math::
-    Precision = \frac{TP + smooth}{TP + FP + smooth}
   '''
 
   # Convert logits to binary predictions.
@@ -164,6 +174,14 @@ def ComputeRecall(preds, targets, smooth=1.0):
   r'''
   Compute the recall metric.
 
+  .. math::
+    Recall = \frac{TP + smooth}{TP + FN + smooth}
+
+  where:
+    - :math:`TP` is the number of true positives (predicted positive and actually positive).
+    - :math:`FN` is the number of false negatives (predicted negative but actually positive).
+    - :math:`smooth` is a small constant to avoid division by zero.
+
   Parameters:
     preds: Predicted tensor (logits).
     targets: Ground truth tensor (binary mask).
@@ -171,9 +189,6 @@ def ComputeRecall(preds, targets, smooth=1.0):
 
   Returns:
     Recall value.
-
-  .. math::
-    Recall = \frac{TP + smooth}{TP + FN + smooth}
   '''
 
   # Convert logits to binary predictions.
@@ -191,6 +206,14 @@ def ComputeSpecificity(preds, targets, smooth=1.0):
   r'''
   Compute the specificity metric.
 
+  .. math::
+    Specificity = \frac{TN + smooth}{TN + FP + smooth}
+
+  where:
+    - :math:`TN` is the number of true negatives (predicted negative and actually negative).
+    - :math:`FP` is the number of false positives (predicted positive but actually negative).
+    - :math:`smooth` is a small constant to avoid division by zero.
+
   Parameters:
     preds: Predicted tensor (logits).
     targets: Ground truth tensor (binary mask).
@@ -198,9 +221,6 @@ def ComputeSpecificity(preds, targets, smooth=1.0):
 
   Returns:
     Specificity value.
-
-  .. math::
-    Specificity = \frac{TN + smooth}{TN + FP + smooth}
   '''
 
   # Convert logits to binary predictions.
@@ -218,6 +238,14 @@ def ComputeFPR(preds, targets, smooth=1.0):
   r'''
   Compute the false positive rate (FPR).
 
+  .. math::
+    FPR = \frac{FP + smooth}{FP + TN + smooth}
+
+  where:
+    - :math:`FP` is the number of false positives (predicted positive but actually negative).
+    - :math:`TN` is the number of true negatives (predicted negative and actually negative).
+    - :math:`smooth` is a small constant to avoid division by zero.
+
   Parameters:
     preds: Predicted tensor (logits).
     targets: Ground truth tensor (binary mask).
@@ -225,9 +253,6 @@ def ComputeFPR(preds, targets, smooth=1.0):
 
   Returns:
     FPR value.
-
-  .. math::
-    FPR = \frac{FP + smooth}{FP + TN + smooth}
   '''
 
   # Convert logits to binary predictions.
@@ -245,6 +270,14 @@ def ComputeFNR(preds, targets, smooth=1.0):
   r'''
   Compute the false negative rate (FNR).
 
+  .. math::
+    FNR = \frac{FN + smooth}{FN + TP + smooth}
+
+  where:
+    - :math:`FN` is the number of false negatives (predicted negative but actually positive).
+    - :math:`TP` is the number of true positives (predicted positive and actually positive).
+    - :math:`smooth` is a small constant to avoid division by zero.
+
   Parameters:
     preds: Predicted tensor (logits).
     targets: Ground truth tensor (binary mask).
@@ -252,9 +285,6 @@ def ComputeFNR(preds, targets, smooth=1.0):
 
   Returns:
     FNR value.
-
-  .. math::
-    FNR = \frac{FN + smooth}{FN + TP + smooth}
   '''
 
   # Convert logits to binary predictions.
@@ -272,6 +302,13 @@ def ComputeMeanAveragePrecision(preds, targets, smooth=1.0):
   r'''
   Compute the mean average precision (mAP) for binary masks.
 
+  .. math::
+    mAP = \frac{1}{N} \times \sum_{i=1}^{N} Precision_i
+
+  where:
+    - :math:`Precision_i` is the precision for the i-th image in the batch.
+    - :math:`N` is the total number of images in the batch.
+
   Parameters:
     preds: Predicted tensor (logits).
     targets: Ground truth tensor (binary mask).
@@ -279,9 +316,6 @@ def ComputeMeanAveragePrecision(preds, targets, smooth=1.0):
 
   Returns:
     mAP value.
-
-  .. math::
-    mAP = \frac{1}{N} \sum_{i=1}^{N} Precision_i
   '''
 
   # Convert logits to binary predictions.
@@ -302,15 +336,20 @@ def ComputeHausdorffDistance(preds, targets):
   r'''
   Compute the Hausdorff distance between predicted and ground truth masks.
 
+  .. math::
+    H(A, B) = \max\{\sup_{a \in A} \inf_{b \in B} d(a, b), \sup_{b \in B} \inf_{a \in A} d(a, b)\}
+
+  where:
+    - :math:`A` is the set of points in the predicted mask.
+    - :math:`B` is the set of points in the ground truth mask.
+    - :math:`d(a, b)` is the Euclidean distance between points `a` and `b`.
+
   Parameters:
     preds: Predicted tensor (logits).
     targets: Ground truth tensor (binary mask).
 
   Returns:
     Hausdorff distance value.
-
-  .. math::
-    H(A, B) = \max\{\sup_{a \in A} \inf_{b \in B} d(a, b), \sup_{b \in B} \inf_{a \in A} d(a, b)\}
   '''
 
   from scipy.spatial.distance import directed_hausdorff
@@ -340,6 +379,13 @@ def ComputeBoundaryF1Score(preds, targets, dilationRatio=0.02):
   r'''
   Compute the Boundary F1 Score (BF Score).
 
+  .. math::
+    BF = \frac{2 \times Precision_{boundary} \times Recall_{boundary}}{Precision_{boundary} + Recall_{boundary}}
+
+  where:
+    - :math:`Precision_{boundary}` is the precision of the predicted boundary.
+    - :math:`Recall_{boundary}` is the recall of the predicted boundary.
+
   Parameters:
     preds: Predicted tensor (logits).
     targets: Ground truth tensor (binary mask).
@@ -347,9 +393,6 @@ def ComputeBoundaryF1Score(preds, targets, dilationRatio=0.02):
 
   Returns:
     Boundary F1 Score value.
-
-  .. math::
-    BF = \frac{2 \times Precision_{boundary} \times Recall_{boundary}}{Precision_{boundary} + Recall_{boundary}}
   '''
 
   from scipy.ndimage import binary_dilation
@@ -381,6 +424,15 @@ def ComputeMatthewsCorrelationCoefficient(preds, targets, smooth=1.0):
   r'''
   Compute the Matthews Correlation Coefficient (MCC).
 
+  .. math::
+    MCC = \frac{TP \times TN - FP \times FN}{\sqrt{(TP + FP)(TP + FN)(TN + FP)(TN + FN)}}
+
+  where
+    - :math:`TP` is the number of true positives (predicted positive and actually positive).
+    - :math:`TN` is the number of true negatives (predicted negative and actually negative).
+    - :math:`FP` is the number of false positives (predicted positive but actually negative).
+    - :math:`FN` is the number of false negatives (predicted negative but actually positive).
+
   Parameters:
     preds: Predicted tensor (logits).
     targets: Ground truth tensor (binary mask).
@@ -388,9 +440,6 @@ def ComputeMatthewsCorrelationCoefficient(preds, targets, smooth=1.0):
 
   Returns:
     MCC value.
-
-  .. math::
-    MCC = \frac{TP \times TN - FP \times FN}{\sqrt{(TP + FP)(TP + FN)(TN + FP)(TN + FN)}}
   '''
 
   # Convert logits to binary predictions.
@@ -415,6 +464,13 @@ def ComputeCohensKappa(preds, targets, smooth=1.0):
   r'''
   Compute Cohen's Kappa metric.
 
+  .. math::
+    \kappa = \frac{p_o - p_e}{1 - p_e}
+
+  where:
+    - :math:`p_o` is the observed agreement between predictions and targets.
+    - :math:`p_e` is the expected agreement by chance.
+
   Parameters:
     preds: Predicted tensor (logits).
     targets: Ground truth tensor (binary mask).
@@ -422,9 +478,6 @@ def ComputeCohensKappa(preds, targets, smooth=1.0):
 
   Returns:
     Cohen's Kappa value.
-
-  .. math::
-    \kappa = \frac{p_o - p_e}{1 - p_e}
   '''
 
   # Convert logits to binary predictions.
@@ -449,6 +502,13 @@ def ComputeBalancedAccuracy(preds, targets, smooth=1.0):
   r'''
   Compute the balanced accuracy metric.
 
+  .. math::
+    Balanced\ Accuracy = \frac{Recall + Specificity}{2}
+
+  where:
+    - :math:`Recall` is the true positive rate.
+    - :math:`Specificity` is the true negative rate.
+
   Parameters:
     preds: Predicted tensor (logits).
     targets: Ground truth tensor (binary mask).
@@ -456,9 +516,6 @@ def ComputeBalancedAccuracy(preds, targets, smooth=1.0):
 
   Returns:
     Balanced accuracy value.
-
-  .. math::
-    Balanced\ Accuracy = \frac{Recall + Specificity}{2}
   '''
 
   # Calculate recall.
@@ -473,15 +530,20 @@ def ComputeMeanSurfaceDistance(preds, targets):
   r'''
   Compute the Mean Surface Distance (MSD) between predicted and ground truth masks.
 
+  .. math::
+    MSD = \frac{1}{|S_P|} \sum_{p \in S_P} \min_{q \in S_T} d(p, q)
+
+  where:
+    - :math:`S_P` is the set of points on the predicted mask boundary.
+    - :math:`S_T` is the set of points on the ground truth mask boundary
+    - :math:`d(p, q)` is the Euclidean distance between points `p` and `q`.
+
   Parameters:
     preds: Predicted tensor (logits).
     targets: Ground truth tensor (binary mask).
 
   Returns:
     MSD value.
-
-  .. math::
-    MSD = \frac{1}{|S_P|} \sum_{p \in S_P} \min_{q \in S_T} d(p, q)
   '''
 
   from scipy.ndimage import binary_erosion
@@ -515,15 +577,19 @@ def ComputeAverageSymmetricSurfaceDistance(preds, targets):
   r'''
   Compute the Average Symmetric Surface Distance (ASSD) between predicted and ground truth masks.
 
+  .. math::
+    ASSD = \frac{MSD(P, T) + MSD(T, P)}{2}
+
+  where:
+    - :math:`MSD(P, T)` is the Mean Surface Distance from prediction to target.
+    - :math:`MSD(T, P)` is the Mean Surface Distance from target to prediction.
+
   Parameters:
     preds: Predicted tensor (logits).
     targets: Ground truth tensor (binary mask).
 
   Returns:
     ASSD value.
-
-  .. math::
-    ASSD = \frac{MSD(P, T) + MSD(T, P)}{2}
   '''
 
   # Calculate MSD from prediction to target.
@@ -538,6 +604,12 @@ def ComputeVolumetricOverlapError(preds, targets, smooth=1.0):
   r'''
   Compute the Volumetric Overlap Error (VOE).
 
+  .. math::
+    VOE = 1 - IoU
+
+  where:
+    - :math:`IoU` is the Intersection over Union value.
+
   Parameters:
     preds: Predicted tensor (logits).
     targets: Ground truth tensor (binary mask).
@@ -545,9 +617,6 @@ def ComputeVolumetricOverlapError(preds, targets, smooth=1.0):
 
   Returns:
     VOE value.
-
-  .. math::
-    VOE = 1 - IoU
   '''
 
   # Calculate IoU value.
@@ -560,15 +629,19 @@ def ComputeGlobalConsistencyError(preds, targets):
   r'''
   Compute the Global Consistency Error (GCE).
 
+  .. math::
+    GCE = \frac{1}{N} \times \sum_{i=1}^{N} \min(E(S_1, S_2, p_i), E(S_2, S_1, p_i))
+
+  where:
+    - :math:`E(S_1, S_2, p_i)` is the error for pixel `p_i` in the predicted mask compared to the ground truth mask.
+    - :math:`N` is the total number of pixels in the mask.
+
   Parameters:
     preds: Predicted tensor (logits).
     targets: Ground truth tensor (binary mask).
 
   Returns:
     GCE value.
-
-  .. math::
-    GCE = \frac{1}{N} \sum_{i=1}^{N} \min(E(S_1, S_2, p_i), E(S_2, S_1, p_i))
   '''
 
   # Convert logits to binary predictions.

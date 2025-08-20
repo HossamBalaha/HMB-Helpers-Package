@@ -70,10 +70,19 @@ napoleon_use_rtype = True
 
 # Intersphinx mapping for popular Python projects.
 intersphinx_mapping = {
-  "python": ("https://docs.python.org/3", None),
-  "numpy" : ("https://numpy.org/doc/stable/", None),
-  "opencv": ("https://docs.opencv.org/master/", None),
-  "torch" : ("https://pytorch.org/docs/stable/", None),
+  "python"         : ("https://docs.python.org/3", None),
+  "numpy"          : ("https://numpy.org/doc/stable/", None),
+  "torch"          : ("https://pytorch.org/docs/stable/", None),
+  "torchvision"    : ("https://pytorch.org/vision/stable/", None),
+  "transformers"   : ("https://huggingface.co/docs/transformers/main/en/", None),
+  "scikit-learn"   : ("https://scikit-learn.org/stable/", None),
+  "matplotlib"     : ("https://matplotlib.org/stable/", None),
+  "pandas"         : ("https://pandas.pydata.org/pandas-docs/stable/", None),
+  "seaborn"        : ("https://seaborn.pydata.org/", None),
+  "scipy"          : ("https://docs.scipy.org/doc/scipy/", None),
+  "nltk"           : ("https://www.nltk.org/", None),
+  "datasets"       : ("https://huggingface.co/docs/datasets/main/en/", None),
+  "pydantic"       : ("https://docs.pydantic.dev/latest/", None),
 }
 
 # Todo extension settings.

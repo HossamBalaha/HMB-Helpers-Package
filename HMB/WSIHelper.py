@@ -1,30 +1,3 @@
-'''
-========================================================================
-        ╦ ╦┌─┐┌─┐┌─┐┌─┐┌┬┐  ╔╦╗┌─┐┌─┐┌┬┐┬ ┬  ╔╗ ┌─┐┬  ┌─┐┬ ┬┌─┐
-        ╠═╣│ │└─┐└─┐├─┤│││  ║║║├─┤│ ┬ ││└┬┘  ╠╩╗├─┤│  ├─┤├─┤├─┤
-        ╩ ╩└─┘└─┘└─┘┴ ┴┴ ┴  ╩ ╩┴ ┴└─┘─┴┘ ┴   ╚═╝┴ ┴┴─┘┴ ┴┴ ┴┴ ┴
-========================================================================
-# Author: Hossam Magdy Balaha
-# Initial Creation Date: Jul 31th, 2025
-# Last Modification Date: Jul 31th, 2025
-# Permissions and Citation: Refer to the README file.
-'''
-
-# # -------------------------------------------------- #
-# # https://openslide.org/api/python/#installing
-# OPENSLIDE_PATH = r"openslide-bin-4.0.0.8-windows-x64\bin"  # Path to OpenSlide binaries.
-#
-# import os  # Import the os module for operating system interactions.
-#
-# # Add OpenSlide DLL directory to the system path if the OS supports it.
-# if (hasattr(os, "add_dll_directory")):
-#   with os.add_dll_directory(os.path.join(os.path.dirname(__file__), OPENSLIDE_PATH)):
-#     import openslide  # Import OpenSlide after adding the DLL directory.
-# else:
-#   import openslide  # Import OpenSlide directly if the OS does not support add_dll_directory.
-# # -------------------------------------------------- #
-
-
 # Import the required libraries.
 import PIL, cv2, os, openslide
 from HMB.Utils import *
@@ -613,3 +586,17 @@ def FreeFormDeformationHandler(
     except Exception as e:
       # Handle any exceptions that occur during processing.
       print(f"Error processing {heFile}: {e}")
+
+# # -------------------------------------------------- #
+# # https://openslide.org/api/python/#installing
+# OPENSLIDE_PATH = r"openslide-bin-4.0.0.8-windows-x64\bin"  # Path to OpenSlide binaries.
+#
+# import os  # Import the os module for operating system interactions.
+#
+# # Add OpenSlide DLL directory to the system path if the OS supports it.
+# if (hasattr(os, "add_dll_directory")):
+#   with os.add_dll_directory(os.path.join(os.path.dirname(__file__), OPENSLIDE_PATH)):
+#     import openslide  # Import OpenSlide after adding the DLL directory.
+# else:
+#   import openslide  # Import OpenSlide directly if the OS does not support add_dll_directory.
+# # -------------------------------------------------- #

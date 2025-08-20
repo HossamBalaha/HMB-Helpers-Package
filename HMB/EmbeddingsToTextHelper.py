@@ -1,15 +1,3 @@
-'''
-========================================================================
-        ╦ ╦┌─┐┌─┐┌─┐┌─┐┌┬┐  ╔╦╗┌─┐┌─┐┌┬┐┬ ┬  ╔╗ ┌─┐┬  ┌─┐┬ ┬┌─┐
-        ╠═╣│ │└─┐└─┐├─┤│││  ║║║├─┤│ ┬ ││└┬┘  ╠╩╗├─┤│  ├─┤├─┤├─┤
-        ╩ ╩└─┘└─┘└─┘┴ ┴┴ ┴  ╩ ╩┴ ┴└─┘─┴┘ ┴   ╚═╝┴ ┴┴─┘┴ ┴┴ ┴┴ ┴
-========================================================================
-# Author: Hossam Magdy Balaha
-# Initial Creation Date: Jul 31th, 2025
-# Last Modification Date: Aug 19th, 2025
-# Permissions and Citation: Refer to the README file.
-'''
-
 import torch, tqdm
 import torch.nn as nn
 import torch.optim as optim

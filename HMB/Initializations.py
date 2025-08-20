@@ -1,15 +1,3 @@
-'''
-========================================================================
-        ╦ ╦┌─┐┌─┐┌─┐┌─┐┌┬┐  ╔╦╗┌─┐┌─┐┌┬┐┬ ┬  ╔╗ ┌─┐┬  ┌─┐┬ ┬┌─┐
-        ╠═╣│ │└─┐└─┐├─┤│││  ║║║├─┤│ ┬ ││└┬┘  ╠╩╗├─┤│  ├─┤├─┤├─┤
-        ╩ ╩└─┘└─┘└─┘┴ ┴┴ ┴  ╩ ╩┴ ┴└─┘─┴┘ ┴   ╚═╝┴ ┴┴─┘┴ ┴┴ ┴┴ ┴
-========================================================================
-# Author: Hossam Magdy Balaha
-# Initial Creation Date: Sep 2024
-# Last Modification Date: Aug 16th, 2025
-# Permissions and Citation: Refer to the README file.
-'''
-
 import os, time, signal, multiprocessing
 import numpy as np
 from threading import Thread
@@ -176,11 +164,43 @@ def PrintGPUSpecs():
 
 # -------------------------------------------------- #
 
+# -------------------------------------------------- #
+def DownloadNLTKPackages():
+  import nltk
+
+  # Download necessary NLTK resources for tokenization and POS tagging.
+  # This is useful for natural language processing tasks.
+  nltk.download("punkt")  # Tokenizer for splitting text into sentences and words.
+  nltk.download("stopwords")  # List of common stop words in various languages.
+  nltk.download("wordnet")  # WordNet lexical database for English.
+  nltk.download("averaged_perceptron_tagger")  # Part-of-speech tagger.
+  nltk.download("omw-1.4")  # Open Multilingual WordNet.
+  nltk.download("punkt_tab")  # For tokenization.
+  nltk.download("averaged_perceptron_tagger_eng")  # For POS tagging.
+  print("NLTK packages downloaded successfully.")
+
+
+def IncreaseSysRecursionLimit(limit=10000):
+  '''
+  Increase the system recursion limit to allow deeper recursive calls.
+  This is useful for algorithms that require deep recursion, such as certain tree or graph algorithms.
+  '''
+
+  import sys
+
+  # Set the maximum recursion depth to a higher value.
+  # This allows for deeper recursive calls without hitting the recursion limit.
+  sys.setrecursionlimit(int(limit))
+  print(f"System recursion limit increased to {limit}.")
+
 
 # -------------------------------------------------- #
 # Suppress all warnings globally.
 IgnoreWarnings()
 print("All warnings should be suppressed.")
+print("Downloading NLTK packages...")
+# Download necessary NLTK packages for text processing.
+DownloadNLTKPackages()
 # Maximum integer value for 32-bit integers.
 maxInt = np.iinfo(np.int32).max
 # Set the random seed for reproducibility.
