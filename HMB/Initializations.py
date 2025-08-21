@@ -61,6 +61,9 @@ def MaximizeThreads():
 def IgnoreWarnings():
   import warnings, shutup, os
 
+  # Suppress all warnings using the `shutup` library.
+  shutup.please()
+
   # Suppress all warnings globally.
   warnings.filterwarnings("ignore")
 
@@ -74,14 +77,14 @@ def IgnoreWarnings():
   # Override the default warning function with the custom function.
   warnings.warn = warn
 
-  # Suppress all warnings using the `shutup` library.
-  shutup.please()
-
   # Disable the TF warnings.
   # This is useful for TensorFlow users to suppress warnings related to TensorFlow.
   # Set the logging level to ERROR to suppress all warnings.
   os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  # Suppress TensorFlow warnings.
   os.environ["TF_CPP_MIN_VLOG_LEVEL"] = "3"  # Suppress TensorFlow verbose logging.
+
+  # Suppress all warnings using the `shutup` library.
+  shutup.please()
 
 
 # -------------------------------------------------- #
