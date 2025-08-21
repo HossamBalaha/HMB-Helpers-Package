@@ -1,4 +1,4 @@
-import os, time, signal, multiprocessing
+import time, signal, multiprocessing
 import numpy as np
 from threading import Thread
 from PIL import PngImagePlugin
@@ -59,7 +59,7 @@ def MaximizeThreads():
 
 # -------------------------------------------------- #
 def IgnoreWarnings():
-  import warnings, shutup
+  import warnings, shutup, os
 
   # Suppress all warnings globally.
   warnings.filterwarnings("ignore")
