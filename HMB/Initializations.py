@@ -128,7 +128,7 @@ def DoRandomSeeding():
   maxInt = np.iinfo(np.int32).max
   rndNumber = np.random.randint(0, maxInt)
   SeedEverything(seed=rndNumber)
-  print(f"Random seed set to: {seed}")
+  print(f"Random seed set to: {rndNumber}")
 
 
 # -------------------------------------------------- #
