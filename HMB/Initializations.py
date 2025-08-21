@@ -72,6 +72,7 @@ def IgnoreWarnings():
     Custom function to suppress warnings.
     This function overrides the default warning behavior to suppress all warnings.
     '''
+
     pass
 
   # Override the default warning function with the custom function.

@@ -206,18 +206,28 @@ class FocalLoss(nn.Module):
   Parameters:
     alpha (float): Weighting factor for the rare class. Default is 0.25.
     gamma (float): Focusing parameter for modulating factor (1 - p_t). Default is 2.0.
+    reduction (str): Specifies the reduction to apply to the output. Default is "mean".
+
+  Note:
+    For autocasting safety, this implementation uses binary_cross_entropy_with_logits directly on logits.
   '''
 
   def __init__(self, alpha=0.25, gamma=2.0, reduction="mean"):
-    # Store alpha, gamma, and reduction parameters for loss calculation.
-    super(FocalLoss, self).__init__()
+    # Store alpha parameter for weighting the rare class.
     self.alpha = alpha
+    # Store gamma parameter for focusing on hard examples.
     self.gamma = gamma
+    # Store reduction method for output aggregation.
     self.reduction = reduction
+    # Call the parent class constructor to initialize the module.
+    super(FocalLoss, self).__init__()
 
   def forward(self, inputs, targets):
     '''
     Computes the Focal loss between predictions and targets for binary segmentation.
+
+    .. math::
+      \text{Focal}(p_t) = -\alpha \times (1 - p_t)^{\gamma} \times \log(p_t)
 
     Parameters:
       inputs (torch.Tensor): Model outputs (logits).
@@ -227,24 +237,29 @@ class FocalLoss(nn.Module):
       torch.Tensor: Focal loss value.
     '''
 
+    # Compute the binary cross-entropy loss with logits for autocasting safety.
+    bceLoss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
     # Apply sigmoid activation to convert logits to probabilities.
     probs = torch.sigmoid(inputs)
-    # Flatten tensors for calculation.
+    # Flatten the probability tensor for calculation.
     probs = probs.view(-1)
+    # Flatten the target tensor for calculation.
     targets = targets.view(-1)
-    # Compute the binary cross-entropy loss.
-    bceLoss = F.binary_cross_entropy(probs, targets, reduction="none")
-    # Compute the modulating factor.
+    # Compute pt, the probability of the true class for each element.
     pt = torch.where(targets == 1, probs, 1 - probs)
+    # Compute the modulating factor for focal loss.
     focalFactor = self.alpha * (1 - pt) ** self.gamma
-    # Compute the focal loss.
-    loss = focalFactor * bceLoss
-    # Return the reduced loss value.
+    # Compute the focal loss by multiplying the modulating factor with BCE loss.
+    loss = focalFactor * bceLoss.view(-1)
+    # Return the reduced loss value according to the specified reduction method.
     if (self.reduction == "mean"):
+      # Return the mean of the loss values.
       return loss.mean()
     elif (self.reduction == "sum"):
+      # Return the sum of the loss values.
       return loss.sum()
     else:
+      # Return the unreduced loss values.
       return loss
 
 
