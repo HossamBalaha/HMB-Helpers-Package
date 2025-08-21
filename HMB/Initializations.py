@@ -42,6 +42,19 @@ def SetEnvironmentVariables(defaultThreads=6):
   os.environ["NUMEXPR_NUM_THREADS"] = f"{defaultThreads}"
 
 
+def MaximizeThreads():
+  '''
+  Maximize the number of threads used by libraries like OpenBLAS, MKL, and OMP.
+  This is useful for optimizing performance on multi-core CPUs.
+  '''
+
+  # Get the maximum number of threads available on the system.
+  # This is useful for optimizing performance on multi-core CPUs.
+  maxThreads = multiprocessing.cpu_count() - 1
+  # Set the number of threads for OpenBLAS, MKL, and OMP to the maximum value.
+  SetEnvironmentVariables(defaultThreads=maxThreads)
+
+
 # -------------------------------------------------- #
 
 # -------------------------------------------------- #
@@ -103,6 +116,19 @@ def SeedEverything(seed=42, deterministic=True, benchmark=True):
     # especially if the input sizes change frequently.
     # If you want to ensure reproducibility, set it to False.
     # torch.backends.cudnn.benchmark = False
+
+
+def DoRandomSeeding():
+  '''
+  Perform random seeding for reproducibility.
+  This function sets the random seed for various libraries to ensure consistent results across runs.
+  '''
+
+  # Set the random seed for reproducibility.
+  maxInt = np.iinfo(np.int32).max
+  rndNumber = np.random.randint(0, maxInt)
+  SeedEverything(seed=rndNumber)
+  print(f"Random seed set to: {seed}")
 
 
 # -------------------------------------------------- #
@@ -195,27 +221,38 @@ def IncreaseSysRecursionLimit(limit=10000):
 
 
 # -------------------------------------------------- #
-# Suppress all warnings globally.
-IgnoreWarnings()
-print("All warnings should be suppressed.")
-print("Downloading NLTK packages...")
-# Download necessary NLTK packages for text processing.
-DownloadNLTKPackages()
-# Maximum integer value for 32-bit integers.
-maxInt = np.iinfo(np.int32).max
-# Set the random seed for reproducibility.
-rndNumber = np.random.randint(0, maxInt)
-SeedEverything(seed=rndNumber)
-print("Random seed set to:", rndNumber)
-# Set the maximum size for text chunks in PNG images.
-SetMaxTextChunkSize(maxChunkSize=100 * (1024 ** 2))
-print("Maximum text chunk size set to 100 MB.")
-# Get the maximum number of threads available on the system.
-# Leave one thread free for the OS.
-defaultThreads = multiprocessing.cpu_count() - 1
-print("Setting default threads to:", defaultThreads)
-# Set environment variables for thread control.
-SetEnvironmentVariables(defaultThreads=defaultThreads)
-# Show GPU utilization at the start.
-# ShowGPUUtilization()
-# -------------------------------------------------- #
+
+
+# To initialize the environment, call the functions:
+# IgnoreWarnings()  # Suppress all warnings globally.
+# DownloadNLTKPackages()  # Download necessary NLTK packages for text processing.
+# SetMaxTextChunkSize(maxChunkSize=100 * (1024 ** 2))  # Set the maximum size for text chunks in PNG images.
+# MaximizeThreads()  # Set the maximum number of threads available on the system.
+# DoRandomSeeding()  # Set the random seed for reproducibility.
+# ShowGPUUtilization()  # Show GPU utilization at the start.
+
+# # -------------------------------------------------- #
+# # Suppress all warnings globally.
+# IgnoreWarnings()
+# print("All warnings should be suppressed.")
+# print("Downloading NLTK packages...")
+# # Download necessary NLTK packages for text processing.
+# DownloadNLTKPackages()
+# # Maximum integer value for 32-bit integers.
+# maxInt = np.iinfo(np.int32).max
+# # Set the random seed for reproducibility.
+# rndNumber = np.random.randint(0, maxInt)
+# SeedEverything(seed=rndNumber)
+# print("Random seed set to:", rndNumber)
+# # Set the maximum size for text chunks in PNG images.
+# SetMaxTextChunkSize(maxChunkSize=100 * (1024 ** 2))
+# print("Maximum text chunk size set to 100 MB.")
+# # Get the maximum number of threads available on the system.
+# # Leave one thread free for the OS.
+# defaultThreads = multiprocessing.cpu_count() - 1
+# print("Setting default threads to:", defaultThreads)
+# # Set environment variables for thread control.
+# SetEnvironmentVariables(defaultThreads=defaultThreads)
+# # Show GPU utilization at the start.
+# # ShowGPUUtilization()
+# # -------------------------------------------------- #
