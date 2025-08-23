@@ -78,7 +78,6 @@ Quickstart
    :maxdepth: 1
    :caption: Contents:
 
-   modules
    EmbeddingsToTextHelper
    ImagesComparisonMetrics
    ImageSegmentationMetrics
@@ -93,6 +92,7 @@ Quickstart
    TorchHelper
    Utils
    WSIHelper
+   HandCraftedFeatures
 
 Getting Help
 ------------

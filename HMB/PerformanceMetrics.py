@@ -1,42 +1,43 @@
 # Import the required libraries.
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 def CalculatePerformanceMetrics(
-  confMatrix,
-  eps=1e-10,
-  addWeightedAverage=False,
+  confMatrix,  # Confusion matrix (2D list or numpy array).
+  eps=1e-10,  # Small value to avoid division by zero.
+  addWeightedAverage=False,  # Whether to include weighted averages in the output.
 ):
   '''
   Calculate performance metrics from a confusion matrix.
 
   Parameters:
-  confMatrix (list of list): Confusion matrix as a nested list.
-  eps (float): Small value to avoid division by zero.
-  addWeightedAverage (bool): Whether to include weighted averages in the output.
+    confMatrix (list or numpy.ndarray): Confusion matrix representing the classification results.
+    eps (float): Small value to avoid division by zero. Default is 1e-10.
+    addWeightedAverage (bool): Whether to include weighted averages in the output. Default is False.
 
   Returns:
-  dict: A dictionary containing performance metrics including:
-    - True Positives (TP)
-    - False Positives (FP)
-    - False Negatives (FN)
-    - True Negatives (TN)
-    - Macro Precision
-    - Macro Recall
-    - Macro F1
-    - Macro Accuracy
-    - Macro Specificity
-    - Micro Precision
-    - Micro Recall
-    - Micro F1
-    - Micro Accuracy
-    - Micro Specificity
-    - Weights
-    - Weighted Precision
-    - Weighted Recall
-    - Weighted F1
-    - Weighted Accuracy
-    - Weighted Specificity
+    dict: A dictionary containing performance metrics including:
+      - True Positives (TP)
+      - False Positives (FP)
+      - False Negatives (FN)
+      - True Negatives (TN)
+      - Macro Precision
+      - Macro Recall
+      - Macro F1
+      - Macro Accuracy
+      - Macro Specificity
+      - Micro Precision
+      - Micro Recall
+      - Micro F1
+      - Micro Accuracy
+      - Micro Specificity
+      - Weights
+      - Weighted Precision
+      - Weighted Recall
+      - Weighted F1
+      - Weighted Accuracy
+      - Weighted Specificity
   '''
 
   # Convert the confusion matrix to a NumPy array for easier manipulation.
@@ -76,7 +77,7 @@ def CalculatePerformanceMetrics(
   # Calculate macro-averaged precision, recall, F1, accuracy, and specificity.
   precision = np.mean(TP / (TP + FP))
   recall = np.mean(TP / (TP + FN))
-  f1 = 2 * precision * recall / (precision + recall)
+  f1 = 2.0 * precision * recall / (precision + recall)
   accuracy = np.mean(TP + TN) / np.sum(confMatrix)
   specificity = np.mean(TN / (TN + FP))
 
@@ -99,7 +100,7 @@ def CalculatePerformanceMetrics(
   # Calculate micro-averaged precision, recall, F1, accuracy, and specificity.
   precision = np.sum(TP) / np.sum(TP + FP)
   recall = np.sum(TP) / np.sum(TP + FN)
-  f1 = 2 * precision * recall / (precision + recall)
+  f1 = 2.0 * precision * recall / (precision + recall)
   accuracy = np.sum(TP + TN) / np.sum(TP + TN + FP + FN)
   specificity = np.sum(TN) / np.sum(TN + FP)
 
@@ -128,7 +129,7 @@ def CalculatePerformanceMetrics(
   # Calculate weighted-averaged precision, recall, F1, accuracy, and specificity.
   precision = np.sum(TP / (TP + FP) * weights)
   recall = np.sum(TP / (TP + FN) * weights)
-  f1 = 2 * precision * recall / (precision + recall)
+  f1 = 2.0 * precision * recall / (precision + recall)
   accuracy = np.sum((TP + TN) * weights) / np.sum(confMatrix)
   specificity = np.sum(TN / (TN + FP) * weights)
 
@@ -153,6 +154,121 @@ def CalculatePerformanceMetrics(
   return metrics
 
 
+def PlotConfusionMatrix(
+  cm,  # Confusion matrix (2D list or numpy array).
+  classes,  # List of class labels.
+  normalize=False,  # Whether to normalize the confusion matrix.
+  title="Confusion Matrix",  # Title of the plot.
+  cmap=plt.cm.Blues,  # Colormap for the plot.
+  display=True,  # Whether to display the plot.
+  save=False,  # Whether to save the plot.
+  fileName="ConfusionMatrix.pdf",  # File name to save the plot.
+  fontSize=15,  # Font size for labels and annotations.
+  annotate=True,  # Whether to annotate cells with values.
+  figSize=(8, 8),  # Figure size in inches.
+  colorbar=True,  # Whether to show colorbar.
+  returnFig=False,  # Whether to return the figure object.
+):
+  r'''
+  Plot a confusion matrix with options for normalization, annotation, saving, and display.
+
+  Parameters:
+    cm (list or numpy.ndarray): Confusion matrix representing the classification results.
+    classes (list): List of class labels to display on axes.
+    normalize (bool): Whether to normalize the confusion matrix by row sums. Default is False.
+    title (str): Title of the plot. Default is "Confusion Matrix".
+    cmap (matplotlib.colors.Colormap): Colormap for the plot. Default is plt.cm.Blues.
+    display (bool): Whether to display the plot. Default is True.
+    save (bool): Whether to save the plot to fileName. Default is False.
+    fileName (str): File name to save the plot. Default is "ConfusionMatrix.pdf".
+    fontSize (int): Font size for labels and annotations. Default is 15.
+    annotate (bool): Whether to annotate cells with values. Default is True.
+    figSize (tuple): Figure size in inches. Default is (8, 8).
+    colorbar (bool): Whether to show colorbar. Default is True.
+    returnFig (bool): Whether to return the matplotlib figure object. Default is False.
+
+  Returns:
+    matplotlib.figure.Figure or None: The matplotlib figure object if returnFig is True, otherwise None.
+
+  Notes:
+    - The confusion matrix can be normalized by row sums for better interpretability.
+    - Annotated values in each cell help visualize the distribution of predictions.
+    - Saving and displaying the plot are optional and controlled by parameters.
+
+  .. math::
+      \text{Normalized CM}_{i,j} = \frac{CM_{i,j}}{\sum_j CM_{i,j}}
+  .. math::
+      \text{Precision} = \frac{TP}{TP + FP}
+      \qquad
+      \text{Recall} = \frac{TP}{TP + FN}
+      \qquad
+      \text{Accuracy} = \frac{TP + TN}{TP + TN + FP + FN}
+  '''
+
+  # Check if normalization is requested.
+  if (normalize):  # Normalize the confusion matrix.
+    # Normalize the confusion matrix by row sums.
+    cm = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]
+
+  # Create a new figure with the specified size.
+  fig = plt.figure(figsize=figSize)  # Create a new figure.
+  # Display the confusion matrix as an image.
+  plt.imshow(cm, interpolation="nearest", cmap=cmap)
+  # Set the plot title with the specified font size.
+  plt.title(title, fontsize=fontSize)  # Set the title.
+  # Add the color bar and change the color bar font size.
+  if (colorbar):
+    # Set colorbar tick label size.
+    plt.colorbar().ax.tick_params(labelsize=fontSize)
+
+  # Create tick marks for each class label.
+  tickMarks = np.arange(len(classes))  # Create a range of values.
+  # Set x-axis tick labels with rotation and font size.
+  plt.xticks(tickMarks, classes, rotation=45, fontsize=fontSize)
+  # Set y-axis tick labels with font size.
+  plt.yticks(tickMarks, classes, fontsize=fontSize)
+
+  # Choose format for cell annotation based on normalization.
+  fmt = ".2f" if normalize else "d"  # Set the format.
+  # Calculate threshold for text color contrast.
+  thresh = cm.max() / 2.0  # Threshold.
+
+  # Annotate cells with values if requested.
+  if (annotate):
+    for i in range(cm.shape[0]):
+      for j in range(cm.shape[1]):
+        # Place text annotation in each cell.
+        plt.text(
+          j,
+          i,
+          format(cm[i, j], fmt),
+          horizontalalignment="center",
+          color="white" if cm[i, j] > thresh else "black",
+          fontsize=fontSize,
+        )
+
+  # Set y-axis label.
+  plt.ylabel("True Label", fontsize=fontSize)
+  # Set x-axis label.
+  plt.xlabel("Predicted Label", fontsize=fontSize)
+  # Tight the layout to ignore wasted spaces.
+  plt.tight_layout()
+
+  # Save the plot if requested.
+  if (save):  # Save the plot.
+    fig.savefig(fileName, dpi=720, bbox_inches="tight")
+
+  # Display the plot if requested.
+  if (display):  # Display the plot.
+    plt.show()
+
+  plt.close()  # Close the plot.
+
+  # Return the figure object if requested.
+  if (returnFig):
+    return fig
+
+
 if __name__ == "__main__":
   # Example confusion matrix for a 3-class classification problem.
   confMatrix = [
@@ -167,3 +283,21 @@ if __name__ == "__main__":
   # Print each metric name and its rounded value.
   for key, value in metrics.items():
     print(f"{key}: {np.round(value, 4)}")
+
+  # Define class labels for the confusion matrix.
+  classLabels = ["Class 0", "Class 1", "Class 2"]
+  # Plot and display the confusion matrix with annotations.
+  # To save the figure, set save=True and provide a fileName.
+  # To get the figure object, set returnFig=True.
+  PlotConfusionMatrix(
+    confMatrix,  # Confusion matrix to plot.
+    classes=classLabels,  # Class labels for the axes.
+    normalize=False,  # Set to True to normalize the matrix.
+    title="Confusion Matrix",  # Title of the plot.
+    annotate=True,  # Annotate cells with values.
+    fontSize=12,  # Font size for labels and annotations.
+    figSize=(6, 6),  # Size of the figure.
+    colorbar=True,  # Show colorbar.
+    display=True,  # Display the figure.
+    save=False,  # Set to True to save the figure.
+  )

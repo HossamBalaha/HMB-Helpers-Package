@@ -5,7 +5,7 @@ from HMB.ImagesHelper import *
 
 
 def ReadWSIViaOpenSlide(slidePath):
-  """
+  '''
   Reads a whole slide image (WSI) using OpenSlide and returns an OpenSlide object.
 
   Parameters:
@@ -13,18 +13,15 @@ def ReadWSIViaOpenSlide(slidePath):
 
   Returns:
     openslide.OpenSlide: OpenSlide object for the slide.
-  """
+
+  Raises:
+    AssertionError: If the slide path does not exist.
+  '''
+
   assert os.path.exists(slidePath), f"Slide path does not exist: {slidePath}"
   return openslide.OpenSlide(slidePath)
 
 
-# -------------------------------------------------------------------------------------------------------------------- #
-# Tiles Extraction and Alignment Algorithm.
-# TileExtractionAlignmentHandler
-# =====> R15_F1_Tiles_Extraction_Alignment_Revisited.py
-# ExtractLargestContour, MatchTwoImagesViaSIFT, ExtractPatch, GetEmptyPercentage, IsSimilarityAccepted
-# =====> TileExtractionAlignmentHandler
-# -------------------------------------------------------------------------------------------------------------------- #
 def TileExtractionAlignmentHandler(
   heSlidePath,  # Path to the HE slide.
   mtSlidePath,  # Path to the MT slide.
@@ -41,26 +38,29 @@ def TileExtractionAlignmentHandler(
   doPlotting=True,  # Whether to generate and save plots for visualization.
   verbose=False,  # Whether to print verbose output during processing.
 ):
-  """
+  '''
   Extracts and aligns patches from HE (Hematoxylin-Eosin) and MT (Masson's Trichrome) slides,
   processes them, and saves the results.
 
   Parameters:
-    - heSlidePath: Path to the HE slide.
-    - mtSlidePath: Path to the MT slide.
-    - storageDir: Directory to store extracted patches and visualizations.
-    - patchesPerSlide: Total number of patches to extract per slide.
-    - targetSize: Size of each patch in pixels.
-    - regionSize: Size of the region used for processing.
-    - overlapSize: Overlap between adjacent patches.
-    - thumbnailSize: Size of the thumbnail for visualization.
-    - toleranceSIFT: Tolerance for SIFT matching (default is 0.50).
-    - maxNumFeaturesORB: Maximum number of features to detect for matching.
-    - maxGoodMatchesORB: Maximum number of good matches to consider for alignment.
-    - emptyPercentageThreshold: Threshold for empty percentage in patches (default is 80%).
-    - doPlotting: Whether to generate and save plots for visualization.
-    - verbose: Whether to print verbose output during processing.
-  """
+    heSlidePath (str): Path to the HE slide.
+    mtSlidePath (str): Path to the MT slide.
+    storageDir (str): Directory to store extracted patches and visualizations.
+    patchesPerSlide (int): Total number of patches to extract per slide.
+    targetSize (tuple): Size of each patch to extract (width, height).
+    regionSize (tuple): Size of the region used for processing.
+    overlapSize (tuple): Overlap between adjacent patches.
+    thumbnailSize (tuple): Size of the thumbnail for visualization.
+    toleranceSIFT (float): Tolerance for SIFT matching (default is 0.50).
+    maxNumFeaturesORB (int): Maximum number of features to detect for matching.
+    maxGoodMatchesORB (int): Maximum number of good matches to consider for alignment.
+    emptyPercentageThreshold (int): Threshold for empty percentage in patches (default is 80%).
+    doPlotting (bool): Whether to generate and save plots for visualization.
+    verbose (bool): Whether to print verbose output during processing.
+
+  Raises:
+    AssertionError: If the HE or MT slide paths do not exist.
+  '''
 
   # Ensure the HE and MT slide paths exist. If not, raise an assertion error with a descriptive message.
   assert os.path.exists(heSlidePath), f"HE path does not exist: {heSlidePath}"
@@ -126,12 +126,13 @@ def TileExtractionAlignmentHandler(
     ax5.set_title("Matched")
     ax5.axis("off")
     plt.tight_layout()
-    # Save the plot as PNG.
+    # Save the plot as PNG only if thumbStoragePath is defined.
     plt.savefig(
       os.path.join(thumbStoragePath, f"Slide_{os.path.basename(heSlidePath)}.png"),
       dpi=720,
       bbox_inches="tight",
     )
+    plt.close() # Close the plot to free up memory.
 
   # Calculate the bounding box of the HE contour.
   # The bounding box defines the rectangular region enclosing the contour.
@@ -277,7 +278,7 @@ def ExtractPatch(
   maxNumFeaturesORB=5000,  # Maximum number of features to detect for matching.
   maxGoodMatchesORB=25,  # Maximum number of good matches to consider for alignment.
 ):
-  """
+  '''
   Extracts and processes patches from HE (Hematoxylin & Eosin) and MT (Trichrome) slides.
   The function applies transformations, matches regions using ORB, and computes differences
   between the two slide types. It also generates binary masks and weighted combinations.
@@ -303,7 +304,7 @@ def ExtractPatch(
       - diff (numpy.ndarray): Absolute difference between the binary masks.
       - weighted (numpy.ndarray): Weighted combination of the HE and MT regions.
       - topLeftFlag (bool): Flag indicating if the top-left point is inside both contours.
-  """
+  '''
 
   # Calculate the maximum downsampling factor for the HE slide.
   maxSampling = int(heSlide.level_downsamples[heSlide.level_count - 1])
@@ -320,7 +321,7 @@ def ExtractPatch(
   # Check if the downsampled point lies within both the MT and HE contours.
   topLeftFlag = (
     IsPointInsideContour(topLeftDownsampled, mtContour) and
-    IsPointInsideContour(topLeftDownsampled, heContour)
+    IsPointInsideContour(topLeftDownSampled, heContour)
   )
 
   # Apply the homography transformation to the downsampled point.
@@ -426,14 +427,6 @@ def ExtractPatch(
   )
 
 
-# -------------------------------------------------------------------------------------------------------------------- #
-# Free Form Deformation (FFD) using B-Splines
-# FreeFormDeformationHandler
-# =====> R15_F2_Tiles_FFD_Revisited.py
-# FreeFormDeformationImproved
-# =====> FreeFormDeformationHandler
-# -------------------------------------------------------------------------------------------------------------------- #
-
 def FreeFormDeformationHandler(
   heFolderPath,  # Path to the folder containing HE images.
   mtFolderPath,  # Path to the folder containing corresponding MT images.
@@ -449,8 +442,19 @@ def FreeFormDeformationHandler(
   convergenceWindowSize=10,  # Window size for convergence determination.
   verbose=False,  # Whether to print verbose output during processing.
 ):
-  """
+  r'''
   Apply Free Form Deformation (FFD) to HE images and save the deformed results.
+  This function applies B-spline based Free Form Deformation to each HE image, 
+  optimizing the deformation to align with the corresponding MT image. 
+  The optimization is performed using a metric computed from sampled pixels and histogram bins, 
+  and the process is controlled by a learning rate and convergence criteria.
+
+  .. math::
+    \text{FFD}(x, y) = \sum_{i=0}^{n} \sum_{j=0}^{m} B_i(u) \cdot B_j(v) \cdot P_{i,j}
+
+  where
+    - :math:`B_i(u)` and :math:`B_j(v)` are B-spline basis functions.
+    - :math:`P_{i,j}` are control points.
 
   Parameters:
     heFolderPath (str): Path to the folder containing HE images.
@@ -466,7 +470,15 @@ def FreeFormDeformationHandler(
     convergenceMinimumValue (float): Convergence threshold (default is 1e-6).
     convergenceWindowSize (int): Window size for convergence determination (default is 10).
     verbose (bool): Whether to print verbose output during processing (default is False).
-  """
+
+  Raises:
+    AssertionError: If the HE or MT folder paths do not exist.
+  '''
+
+  # Ensure the HE folder path exists. If not, raise an assertion error with a descriptive message.
+  assert os.path.exists(heFolderPath), f"HE folder path does not exist: {heFolderPath}"
+  # Ensure the MT folder path exists. If not, raise an assertion error with a descriptive message.
+  assert os.path.exists(mtFolderPath), f"MT folder path does not exist: {mtFolderPath}"
 
   # List all files in the HE directory to process each image.
   heFiles = os.listdir(heFolderPath)  # Retrieve all filenames in the HE folder.
@@ -586,17 +598,3 @@ def FreeFormDeformationHandler(
     except Exception as e:
       # Handle any exceptions that occur during processing.
       print(f"Error processing {heFile}: {e}")
-
-# # -------------------------------------------------- #
-# # https://openslide.org/api/python/#installing
-# OPENSLIDE_PATH = r"openslide-bin-4.0.0.8-windows-x64\bin"  # Path to OpenSlide binaries.
-#
-# import os  # Import the os module for operating system interactions.
-#
-# # Add OpenSlide DLL directory to the system path if the OS supports it.
-# if (hasattr(os, "add_dll_directory")):
-#   with os.add_dll_directory(os.path.join(os.path.dirname(__file__), OPENSLIDE_PATH)):
-#     import openslide  # Import OpenSlide after adding the DLL directory.
-# else:
-#   import openslide  # Import OpenSlide directly if the OS does not support add_dll_directory.
-# # -------------------------------------------------- #

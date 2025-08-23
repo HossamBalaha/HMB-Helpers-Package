@@ -1,12 +1,5 @@
 # Import the required libraries.
-import re, contractions, nltk
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
-
-# Download NLTK stopwords if not already present.
-nltk.download("stopwords")  # Ensures stopwords resource is available.
-# Download NLTK wordnet for lemmatization if not already present.
-nltk.download("wordnet")  # Ensures wordnet resource is available.
+import re, contractions
 
 
 # Define a function to clean and normalize text based on several options.
@@ -20,8 +13,11 @@ def CleanText(
   lemmatize=False,  # Whether to lemmatize words (reduce to base form).
   removeStopwords=False,  # Whether to remove common stop words.
 ):
-  '''
-  Cleans the input text based on specified options.
+  r'''
+  Cleans the input text based on specified options. It applies multiple text normalization techniques including (1)
+  removing non-ASCII characters, (2) converting to lowercase, (3) removing special characters and punctuation,
+  (4) normalizing whitespace, (5) expanding contractions, (6) lemmatizing words, and (7) removing stopwords.
+
   Parameters:
     text (str): The raw input text to be cleaned.
     removeNonAscii (bool): Whether to remove non-ASCII characters.
@@ -31,6 +27,7 @@ def CleanText(
     handleContractions (bool): Whether to expand contractions (e.g., "don't" → "do not").
     lemmatize (bool): Whether to lemmatize words (reduce to base form).
     removeStopwords (bool): Whether to remove common stop words.
+
   Returns:
     str: The cleaned text.
   '''

@@ -5,7 +5,9 @@ import torch, os
 # Function to save a PyTorch model's state dictionary to a file.
 def SaveModel(model, filename="model.pth"):
   '''
-  Save the model state to a file.
+  Save the model state to a file for later use. You can load it later
+  using LoadModel() function from this module.
+
   Parameters:
     model (torch.nn.Module): The model to save.
     filename (str): The name of the file to save the model to.
@@ -21,7 +23,8 @@ def SaveModel(model, filename="model.pth"):
 # Function to load a PyTorch model's state dictionary from a file and move it to a device.
 def LoadModel(model, filename="model.pth", device="gpu"):
   '''
-  Load the model state from a file.
+  Load the model state from a file and move it to the specified device.
+
   Parameters:
     model (torch.nn.Module): The model to load the state into.
     filename (str): The name of the file to load the model from.
@@ -46,6 +49,9 @@ def SaveCheckpoint(model, optimizer, filename="chk.pth.tar"):
   '''
   Save model and optimizer state to a checkpoint file.
   Useful for resuming training or inference later.
+  This function saves the model's state dictionary and the optimizer's state dictionary
+  to a specified file. You can load it later using LoadCheckpoint() function from this module.
+
   Parameters:
     model (torch.nn.Module): The model to save.
     optimizer (torch.optim.Optimizer): The optimizer to save.
@@ -68,6 +74,9 @@ def LoadCheckpoint(checkpointFile, model, optimizer, lr, device):
   '''
   Load model and optimizer state from a checkpoint file.
   Updates the learning rate of the optimizer if provided.
+  This function loads the model's state dictionary and the optimizer's state dictionary
+  from a specified checkpoint file. It also updates the learning rate of the optimizer.
+
   Parameters:
     checkpointFile (str): The path to the checkpoint file.
     model (torch.nn.Module): The model to load the state into.

@@ -1,16 +1,266 @@
 # Import the required libraries.
+import os  # Import os for file path operations.
 import cv2, PIL  # Import OpenCV and PIL for image processing.
 import numpy as np  # Import numpy for numerical operations.
 
 
-# Calculate the percentage of empty (black or white) regions in an image.
+
+def ReadVolume(caseImgPaths, caseSegPaths, raiseErrors=True):
+  '''
+  Read and preprocess a 3D volume from a set of 2D slices and their corresponding segmentation masks.
+
+  Parameters:
+    caseImgPaths (list): List of paths to the 2D slices of the volume.
+    caseSegPaths (list): List of paths to the segmentation masks of the slices.
+
+  Returns:
+    numpy.ndarray: A 3D NumPy array representing the preprocessed volume.
+
+  Raises:
+    FileNotFoundError: If any of the image or segmentation files are not found.
+    ValueError: If a cropped image is empty and raiseErrors is set to True.
+  '''
+
+  # Initialize a list to store the cropped slices.
+  volumeCropped = []
+
+  # Loop through each slice and its corresponding segmentation mask.
+  for i in range(len(caseImgPaths)):
+    # Check if the files exist.
+    if (not os.path.exists(caseImgPaths[i])) or (not os.path.exists(caseSegPaths[i])):
+      raise FileNotFoundError("One or more files were not found. Please check the file paths.")
+
+    # Load the slice and segmentation mask in grayscale mode.
+    caseImg = cv2.imread(caseImgPaths[i], cv2.IMREAD_GRAYSCALE)  # Load the slice.
+    caseSeg = cv2.imread(caseSegPaths[i], cv2.IMREAD_GRAYSCALE)  # Load the segmentation mask.
+
+    # Extract the Region of Interest (ROI) using the segmentation mask.
+    roi = cv2.bitwise_and(caseImg, caseSeg)  # Apply bitwise AND operation to extract the ROI.
+
+    # Crop the ROI to remove unnecessary background.
+    x, y, w, h = cv2.boundingRect(roi)  # Get the bounding box coordinates of the ROI.
+    cropped = roi[y:y + h, x:x + w]  # Crop the ROI using the bounding box coordinates.
+
+    if (np.sum(cropped) <= 0):
+      # Raise an error if the cropped image is empty and raiseErrors is True.
+      if (raiseErrors):
+        raise ValueError("The cropped image is empty. Please check the segmentation mask.")
+      else:
+        # If raiseErrors is False, skip the empty slice and continue processing.
+        continue
+
+    # Append the cropped slice to the list.
+    volumeCropped.append(cropped)
+
+  # Determine the maximum width and height across all cropped slices.
+  maxWidth = np.max([cropped.shape[1] for cropped in volumeCropped])  # Maximum width.
+  maxHeight = np.max([cropped.shape[0] for cropped in volumeCropped])  # Maximum height.
+
+  # Pad each cropped slice to match the maximum width and height.
+  for i in range(len(volumeCropped)):
+    # Calculate the padding size.
+    deltaWidth = maxWidth - volumeCropped[i].shape[1]  # Horizontal padding.
+    deltaHeight = maxHeight - volumeCropped[i].shape[0]  # Vertical padding.
+
+    # Add padding to the cropped image and place the image in the center.
+    padded = cv2.copyMakeBorder(
+      volumeCropped[i],  # Image to pad.
+      deltaHeight // 2,  # Top padding.
+      deltaHeight - deltaHeight // 2,  # Bottom padding.
+      deltaWidth // 2,  # Left padding.
+      deltaWidth - deltaWidth // 2,  # Right padding.
+      cv2.BORDER_CONSTANT,  # Padding type.
+      value=0  # Padding value.
+    )
+
+    # Replace the cropped slice with the padded slice.
+    volumeCropped[i] = padded.copy()
+
+  # Convert the list of slices to a 3D NumPy array.
+  volumeCropped = np.array(volumeCropped)
+
+  return volumeCropped  # Return the preprocessed 3D volume.
+
+
+def ReadVolumeSpecificClasses(caseImgPaths, caseSegPaths, specificClasses=[]):
+  '''
+  Read and preprocess a 3D volume from a set of 2D slices and their corresponding segmentation masks.
+
+  Parameters:
+    caseImgPaths (list): List of file paths to medical image slices in BMP format.
+    caseSegPaths (list): List of file paths to segmentation masks matching the slices.
+    specificClasses (list): List of specific classes to include in the segmentation. If empty, all classes are included.
+
+  Returns:
+    numpy.ndarray: 3D array of preprocessed and aligned medical imaging data.
+
+  Raises:
+    FileNotFoundError: If any of the image or segmentation files are not found.
+    ValueError: If no slices were successfully processed.
+  '''
+
+  # Initialize empty list to store processed slices.
+  volumeCropped = []
+
+  # Process each image-segmentation pair in the input lists.
+  for i in range(len(caseImgPaths)):
+    # Verify both image and segmentation files exist before processing.
+    if (not os.path.exists(caseImgPaths[i])) or (not os.path.exists(caseSegPaths[i])):
+      raise FileNotFoundError("One or more files were not found. Please check the file paths.")
+
+    # Load grayscale medical image slice (8-bit depth).
+    caseImg = cv2.imread(caseImgPaths[i], cv2.IMREAD_GRAYSCALE)
+    # Load corresponding binary segmentation mask.
+    caseSeg = cv2.imread(caseSegPaths[i], cv2.IMREAD_GRAYSCALE)
+
+    # Check if specific classes are provided for segmentation.
+    if (specificClasses):
+      # Create a mask for the specific classes.
+      mask = np.zeros_like(caseSeg)
+      for classId in specificClasses:
+        mask[caseSeg == classId] = 255
+      caseSeg = mask
+
+    # Extract region of interest using bitwise AND operation between image and mask.
+    roi = cv2.bitwise_and(caseImg, caseSeg)
+
+    # Calculate bounding box coordinates of non-zero region in ROI.
+    x, y, w, h = cv2.boundingRect(roi)
+    # Crop image to tight bounding box around segmented area.
+    cropped = roi[y:y + h, x:x + w]
+
+    # Validate cropped slice contains actual data (not just background).
+    if (np.sum(cropped) <= 0):
+      continue  # Skip empty slices.
+
+    # Add processed slice to volume list.
+    volumeCropped.append(cropped)
+
+  # Check if any slices were successfully processed.
+  if (len(volumeCropped) == 0):
+    raise ValueError("No slices were successfully processed. Please check the input data.")
+
+  # Determine maximum dimensions across all slices for padding alignment.
+  maxWidth = np.max([cropped.shape[1] for cropped in volumeCropped])
+  maxHeight = np.max([cropped.shape[0] for cropped in volumeCropped])
+
+  # Standardize slice dimensions through symmetric padding.
+  for i in range(len(volumeCropped)):
+    # Calculate required padding for width and height dimensions.
+    deltaWidth = maxWidth - volumeCropped[i].shape[1]
+    deltaHeight = maxHeight - volumeCropped[i].shape[0]
+
+    # Apply padding to create uniform slice dimensions.
+    padded = cv2.copyMakeBorder(
+      volumeCropped[i],
+      deltaHeight // 2,  # Top padding (integer division)
+      deltaHeight - deltaHeight // 2,  # Bottom padding (remainder)
+      deltaWidth // 2,  # Left padding
+      deltaWidth - deltaWidth // 2,  # Right padding
+      cv2.BORDER_CONSTANT,  # Padding style (constant zero values)
+      value=0
+    )
+
+    # Update volume with padded slice.
+    volumeCropped[i] = padded.copy()
+
+  # Convert list of 2D slices into 3D numpy array (z, y, x).
+  volumeCropped = np.array(volumeCropped)
+
+  return volumeCropped
+
+
+def ExtractMultipleObjectsFromROI(
+  caseImg,
+  caseSeg,
+  targetSize=(256, 256),
+  cntAreaThreshold=0,
+  sortByX=True,
+):
+  '''
+  Extracts multiple objects from a region of interest (ROI) in a medical image.
+
+  Parameters:
+    caseImg (numpy.ndarray): The input medical image.
+    caseSeg (numpy.ndarray): The segmentation mask indicating regions of interest.
+    targetSize (tuple): The target size for resizing images.
+    cntAreaThreshold (int): Minimum contour area to consider for extraction.
+    sortByX (bool): Whether to sort extracted regions by their x-coordinate.
+
+  Returns:
+    list: A list of extracted regions from the image.
+
+  Raises:
+    ValueError: If the segmentation mask is completely black/empty.
+  '''
+
+  # Resize images to standard dimensions using cubic interpolation for quality.
+  caseImg = cv2.resize(caseImg, targetSize, interpolation=cv2.INTER_CUBIC)  # Resize scan image.
+  caseSeg = cv2.resize(caseSeg, targetSize, interpolation=cv2.INTER_CUBIC)  # Resize mask image.
+
+  # Binarize segmentation mask by thresholding to ensure only 0/255 values.
+  caseSeg[caseSeg > 0] = 255  # Convert any positive values to pure white.
+
+  # or you can apply:
+  # caseSeg = cv2.threshold(caseSeg, 127, 255, cv2.THRESH_BINARY)[1]  # Binarize mask.
+
+  # Perform sanity check on the segmentation mask to ensure valid content.
+  if (np.sum(caseSeg) <= 0):  # Calculate sum of all pixel values in mask.
+    # Raise error if mask contains no white pixels to prevent empty processing.
+    raise ValueError("The mask is completely black/empty. Please check the segmentation mask.")
+
+  # Detect contours in the segmentation mask using simple approximation method.
+  contours = cv2.findContours(caseSeg, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+  if (sortByX):  # Check if sorting by x-coordinate is requested.
+    # Sort detected contours from left-to-right based on their x-coordinate.
+    contours = sorted(contours[0], key=lambda x: cv2.boundingRect(x)[0], reverse=False)
+  else:
+    # If not sorting, just extract contours without sorting.
+    contours = contours[0] if (len(contours) == 2) else contours[1]
+
+  # Initialize empty list to store extracted region-of-interest (ROI) images.
+  regions = []
+
+  # Process each detected contour to extract individual anatomical structures.
+  for i in range(len(contours)):
+    # Calculate the area of the current contour for size filtering.
+    cntArea = cv2.contourArea(contours[i])
+    # Skip contours smaller than threshold to ignore noise/artifacts.
+    if (cntArea <= cntAreaThreshold):
+      continue
+
+    # Create blank mask matching image dimensions for current ROI.
+    regionMask = np.zeros_like(caseSeg)
+    # Select current contour from the list of detected contours.
+    regionCnt = contours[i]
+    # Fill contour area in the mask to create binary ROI representation.
+    cv2.fillPoly(regionMask, [regionCnt], 255)
+    # Apply mask to original image to isolate the anatomical structure.
+    roi = cv2.bitwise_and(caseImg, regionMask)
+    # Calculate bounding box coordinates around the masked region.
+    x, y, w, h = cv2.boundingRect(roi)
+    # Crop the region from the original image using bounding box coordinates.
+    cropped = roi[y:y + h, x:x + w]
+    # Add cropped ROI to the collection of extracted regions.
+    regions.append(cropped)
+
+  if (sortByX):  # Check if sorting by x-coordinate is requested.
+    # Sort extracted regions by their x-coordinate to maintain left-to-right order.
+    regions = sorted(regions, key=lambda x: cv2.boundingRect(x)[0], reverse=False)
+
+  # Return the list of extracted regions for further processing.
+  return regions
+
+
 def GetEmptyPercentage(img, shape=(256, 256), inverse=False):
   '''
   Calculate the percentage of empty (black or white) regions in an image.
+
   Parameters:
     img (numpy.ndarray): Input RGB image.
     shape (tuple): Desired shape for calculating the percentage.
     inverse (bool): If True, calculates the percentage of non-empty regions instead.
+
   Returns:
     float: Ratio of empty regions to the total area.
   '''
@@ -40,16 +290,17 @@ def GetEmptyPercentage(img, shape=(256, 256), inverse=False):
   return ratio
 
 
-# Calculate the percentage of empty regions using histogram analysis.
 def GetEmptyPercentageHistogram(img, shape=(256, 256), inverse=False, thresholdLow=10, thresholdHigh=245):
   '''
   Calculate the percentage of empty (black or white) regions in an image using histogram analysis.
+
   Parameters:
     img (numpy.ndarray): Input RGB image.
     shape (tuple): Desired shape for calculating the percentage.
     inverse (bool): If True, calculates the percentage of non-empty regions instead.
     thresholdLow (int): Threshold for detecting dark regions (default: 10).
     thresholdHigh (int): Threshold for detecting bright regions (default: 245).
+
   Returns:
     float: Ratio of empty regions to the total area.
   '''
@@ -86,14 +337,15 @@ def GetEmptyPercentageHistogram(img, shape=(256, 256), inverse=False, thresholdL
   return min(max(ratio, 0), 100)
 
 
-# Extract the largest contour from an image and create a mask.
 def ExtractLargestContour(img):
   '''
   Extract the largest contour from an image and create a mask.
+
   Parameters:
-      img (numpy.ndarray): Input RGB image.
+    img (numpy.ndarray): Input RGB image.
+
   Returns:
-      tuple: Masked image, contour, mask, and visualization.
+    tuple: Masked image, contour, mask, and visualization.
   '''
 
   # Convert the input RGB image to grayscale.
@@ -126,26 +378,38 @@ def ExtractLargestContour(img):
   return img, contour, mask, draw
 
 
-# Match two images using SIFT feature detection and alignment.
 def MatchTwoImagesViaSIFT(
   img1,  # First input RGB image.
   img2,  # Second input RGB image.
   shape=(1024, 1024),  # Desired output shape for the aligned images.
   tolerance=0.50,  # Ratio threshold for filtering good matches (default is 0.50).
 ):
-  '''
+  r'''
   Match two images using SIFT (Scale-Invariant Feature Transform) feature detection.
   This function detects keypoints and computes descriptors for both images,
   then matches them using a brute-force matcher with a ratio test to filter good matches.
   The function returns the aligned images, matches, homography matrix, and output shape.
   This is useful for aligning images that may have different perspectives or scales.
+
+  .. math::
+    H = \begin{bmatrix}
+    h_{11} & h_{12} & h_{13} \\
+    h_{21} & h_{22} & h_{23} \\
+    h_{31} & h_{32} & h_{33}
+    \end{bmatrix}
+
+  where:
+    - :math: `H` is the homography matrix.
+    - :math: `h_{ij}` are the elements of the homography matrix.
+
   Parameters:
-      img1 (numpy.ndarray): First input RGB image.
-      img2 (numpy.ndarray): Second input RGB image.
-      shape (tuple): Desired output shape for the aligned images.
-      tolerance (float): Ratio threshold for filtering good matches.
+    img1 (numpy.ndarray): First input RGB image.
+    img2 (numpy.ndarray): Second input RGB image.
+    shape (tuple): Desired output shape for the aligned images.
+    tolerance (float): Ratio threshold for filtering good matches.
+
   Returns:
-      tuple: Aligned images, matches, homography matrix, and output shape.
+    tuple: Aligned images, matches, homography matrix, and output shape.
   '''
 
   # If no shape is provided, use the maximum dimensions of the input images.
@@ -202,15 +466,33 @@ def MatchTwoImagesViaORB(
 ):
   '''
   Match two images using ORB (Oriented FAST and Rotated BRIEF) feature detection.
+  This function detects keypoints and computes descriptors for both images using ORB,
+  then matches them using a brute-force matcher. The function filters the matches to retain
+  the best ones and computes a homography matrix to align the images.
+  The function returns the aligned images, matches, homography matrix, and output shape.
+
+  .. math::
+    H = \begin{bmatrix}
+    h_{11} & h_{12} & h_{13} \\
+    h_{21} & h_{22} & h_{23} \\
+    h_{31} & h_{32} & h_{33}
+    \end{bmatrix}
+
+  where:
+    - :math: `H` is the homography matrix.
+    - :math: `h_{ij}` are the elements of the homography matrix.
+
   Parameters:
-      img1 (numpy.ndarray): First input RGB image.
-      img2 (numpy.ndarray): Second input RGB image.
-      shape (tuple): Desired output shape for the aligned images.
-      maxNumFeatures (int): Maximum number of features to detect.
-      maxGoodMatches (int): Maximum number of good matches to use.
+    img1 (numpy.ndarray): First input RGB image.
+    img2 (numpy.ndarray): Second input RGB image.
+    shape (tuple): Desired output shape for the aligned images.
+    maxNumFeatures (int): Maximum number of features to detect.
+    maxGoodMatches (int): Maximum number of good matches to use.
+
   Returns:
-      tuple: Aligned images, matches, homography matrix, and output shape.
+    tuple: Aligned images, matches, homography matrix, and output shape.
   '''
+
   # If no shape is provided, use the maximum dimensions of the input images.
   if (shape is None):
     shape = (
@@ -249,9 +531,8 @@ def MatchTwoImagesViaORB(
   img1Trans = img1Trans[:minShape[1], :minShape[0], :]
   # Crop the second image.
   img2 = img2[:minShape[1], :minShape[0], :]
-  # Return the aligned images, the matches, the homography,
+  # Return the aligned images, the matches, the homography, and the shape.
   return img1Trans, img2, imgMatches, homography, shape
-  # and the shape.
 
 
 # Perform Free Form Deformation (FFD) using B-spline transformation to align two images.
@@ -268,6 +549,7 @@ def FreeFormDeformationImproved(
 ):
   '''
   Perform Free Form Deformation (FFD) using B-spline transformation to align two images.
+
   Parameters:
     imagePath1 (str): Path to the source image.
     imagePath2 (str): Path to the target image.
@@ -278,9 +560,11 @@ def FreeFormDeformationImproved(
     numberOfIterations (int): Maximum number of iterations for the optimizer (default is 500).
     convergenceMinimumValue (float): Convergence threshold for the optimizer (default is 1e-6).
     convergenceWindowSize (int): Window size for convergence determination (default is 10).
+
   Returns:
     tuple: A tuple containing the original source image, target image, and deformed image.
   '''
+
   import SimpleITK as sitk  # Import SimpleITK for image registration and transformation.
 
   # Load the source and target images using PIL.
@@ -375,6 +659,7 @@ def IgnoreICCFile(imgPath):
   '''
   Reads an image file and ignores ICC profile information.
   This is useful for ensuring consistent color representation across different platforms.
+
   Parameters:
     imgPath (str): Path to the image file.
   '''
@@ -394,8 +679,10 @@ def CheckIfPNGImageIsNotTruncated(imgPath):
   This is useful for validating the integrity of PNG files.
   Returns True if the image is a valid PNG, False otherwise.
   If the file cannot be read, it returns False and prints an error message.
+
   Parameters:
     imgPath (str): Path to the PNG image file.
+
   Returns:
     bool: True if the image is a valid PNG, False otherwise.
   '''
@@ -419,6 +706,7 @@ def FixTruncatedPNGImage(imgPath):
   '''
   Fix a truncated PNG image by appending a valid PNG end chunk.
   This is useful for recovering partially downloaded or corrupted PNG files.
+
   Parameters:
     imgPath (str): Path to the PNG image file to be fixed.
   '''

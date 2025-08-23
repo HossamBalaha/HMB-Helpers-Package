@@ -41,7 +41,7 @@ class TextGenerationMetrics(object):
     BLEU measures n-gram precision with optional smoothing.
 
     .. math::
-      BLEU = BP \cdot \exp\left(\sum_{n=1}^N w_n \log p_n\right)
+      BLEU = BP \times \exp\left(\sum_{n=1}^N w_n \times \log (p_n)\right)
 
     where:
       - :math:`BP` is the brevity penalty.
