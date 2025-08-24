@@ -22,6 +22,14 @@ def ReadProjectConfig(configFilePath):
     ValueError: If the file format is not supported (not YAML or JSON).
   Raises:
     AssertionError: If the configuration file does not exist.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import HMB.Utils as utils
+    config = utils.ReadProjectConfig('config.yaml')
+    print(config['project_name'])
   '''
 
   # Check if the configuration file exists.

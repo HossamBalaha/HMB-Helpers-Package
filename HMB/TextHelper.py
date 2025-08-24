@@ -29,7 +29,16 @@ def CleanText(
     removeStopwords (bool): Whether to remove common stop words.
 
   Returns:
-    str: The cleaned text.
+    str: The cleaned and normalized text.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import HMB.TextHelper as th
+    raw = "I can't believe it's not butter!   "
+    cleaned = th.CleanText(raw)
+    print(cleaned)
   '''
 
   # Remove empty lines and replace newlines with spaces.

@@ -38,6 +38,19 @@ def CalculatePerformanceMetrics(
       - Weighted F1
       - Weighted Accuracy
       - Weighted Specificity
+
+  Examples
+  --------
+  Here is how to use this function in a script:
+
+  .. code-block:: python
+
+    import numpy as np
+    import HMB.PerformanceMetrics as pm
+    confMatrix = [[50, 2, 1], [5, 45, 0], [0, 3, 47]]
+    metrics = pm.CalculatePerformanceMetrics(confMatrix, addWeightedAverage=True)
+    for key, value in metrics.items():
+      print(f"{key}: {np.round(value, 4)}")
   '''
 
   # Convert the confusion matrix to a NumPy array for easier manipulation.
@@ -196,13 +209,36 @@ def PlotConfusionMatrix(
     - Saving and displaying the plot are optional and controlled by parameters.
 
   .. math::
-      \text{Normalized CM}_{i,j} = \frac{CM_{i,j}}{\sum_j CM_{i,j}}
+    \text{Normalized CM}_{i,j} = \frac{CM_{i,j}}{\sum_j CM_{i,j}}
   .. math::
-      \text{Precision} = \frac{TP}{TP + FP}
-      \qquad
-      \text{Recall} = \frac{TP}{TP + FN}
-      \qquad
-      \text{Accuracy} = \frac{TP + TN}{TP + TN + FP + FN}
+    \text{Precision} = \frac{TP}{TP + FP}
+    \qquad
+    \text{Recall} = \frac{TP}{TP + FN}
+    \qquad
+    \text{Accuracy} = \frac{TP + TN}{TP + TN + FP + FN}
+
+  Examples
+  --------
+  Here is how to use this function in a script:
+
+  .. code-block:: python
+
+    import numpy as np
+    import HMB.PerformanceMetrics as pm
+    confMatrix = [[50, 2, 1], [5, 45, 0], [0, 3, 47]]
+    classLabels = ["Class 0", "Class 1", "Class 2"]
+    pm.PlotConfusionMatrix(
+      confMatrix,
+      classes=classLabels,
+      normalize=False,
+      title="Confusion Matrix",
+      annotate=True,
+      fontSize=12,
+      figSize=(6, 6),
+      colorbar=True,
+      display=True,
+      save=False,
+    )
   '''
 
   # Check if normalization is requested.
@@ -266,6 +302,347 @@ def PlotConfusionMatrix(
 
   # Return the figure object if requested.
   if (returnFig):
+    return fig
+
+
+def PlotROCAUCCurve(
+  yTrue,  # True labels (one-hot or binary).
+  yPred,  # Predicted labels (one-hot or binary).
+  classes,  # List of class names.
+  areProbabilities=False,  # Whether yPred are probabilities.
+  title="ROC Curve & AUC",  # Plot title.
+  figSize=(5, 5),  # Figure size.
+  cmap=None,  # Colormap for ROC curves.
+  display=True,  # Display the plot.
+  save=False,  # Save the plot.
+  fileName="ROC_AUC.pdf",  # File name.
+  fontSize=15,  # Font size.
+  plotDiagonal=True,  # Plot diagonal reference line.
+  annotateAUC=True,  # Annotate AUC value on plot.
+  showLegend=True,  # Show legend.
+  returnFig=False,  # Return figure object.
+  dpi=720,  # DPI for saving the figure.
+):
+  r'''
+  Plot ROC curves and calculate AUC for each class, with options for annotation, saving, and display.
+
+  Parameters:
+    yTrue (array-like or numpy.ndarray): True labels (one-hot encoded or binary).
+    yPred (array-like or numpy.ndarray): Predicted labels or probabilities
+      (one-hot encoded, binary, or probabilities).
+    classes (list): List of class names for labeling curves.
+    areProbabilities (bool): Whether yPred contains probabilities. Default is False.
+    title (str): Title of the plot. Default is "ROC Curve & AUC".
+    figSize (tuple): Figure size in inches. Default is (5, 5).
+    cmap (matplotlib.colors.Colormap or None): Colormap for ROC curves. Default is None.
+    display (bool): Whether to display the plot. Default is True.
+    save (bool): Whether to save the plot to fileName. Default is False.
+    fileName (str): File name to save the plot. Default is "ROC_AUC.pdf".
+    fontSize (int): Font size for labels and annotations. Default is 15.
+    plotDiagonal (bool): Whether to plot the diagonal reference line. Default is True.
+    annotateAUC (bool): Whether to annotate AUC value on each curve. Default is True.
+    showLegend (bool): Whether to show legend. Default is True.
+    returnFig (bool): Whether to return the matplotlib figure object. Default is False.
+    dpi (int): DPI for saving the figure. Default is 720.
+
+  Returns:
+    matplotlib.figure.Figure or None: The matplotlib figure object if returnFig is True, otherwise None.
+
+  Notes:
+    - ROC curves visualize the trade-off between true positive rate and false positive rate for each class.
+    - AUC (Area Under Curve) quantifies the overall ability of the classifier to distinguish between classes.
+    - Saving and displaying the plot are optional and controlled by parameters.
+
+  .. math::
+    \text{TPR} = \frac{TP}{TP + FN}
+    \qquad
+    \text{FPR} = \frac{FP}{FP + TN}
+  .. math::
+    \text{AUC} = \int_0^1 \text{TPR}(\text{FPR}) \, d\text{FPR}
+
+  Examples
+  --------
+  Here is how to use this function in a script:
+
+  .. code-block:: python
+
+    import numpy as np
+    import HMB.PerformanceMetrics as pm
+    yTrue = [0, 1, 2, 0, 1, 2]
+    yPred = [
+      [0.8, 0.1, 0.1],
+      [0.2, 0.7, 0.1],
+      [0.1, 0.2, 0.7],
+      [0.9, 0.05, 0.05],
+      [0.1, 0.8, 0.1],
+      [0.05, 0.1, 0.85]
+    ]
+    classLabels = ["Class 0", "Class 1", "Class 2"]
+    pm.PlotROCAUCCurve(
+      np.array(yTrue),
+      np.array(yPred),
+      classes=classLabels,
+      areProbabilities=True,
+      title="ROC Curve & AUC",
+      display=True,
+      save=False
+    )
+  '''
+
+  from sklearn.metrics import roc_auc_score, roc_curve
+
+  # Get the number of classes.
+  numClasses = len(classes)
+
+  if (not areProbabilities):
+    # One-hot encode the true and predicted labels.
+    yTrue = np.eye(numClasses)[yTrue]
+    yPred = np.eye(numClasses)[yPred]
+
+  # Get colors for each class from colormap.
+  colors = (
+    cmap(np.linspace(0, 1, numClasses))
+    if cmap else [None] * numClasses
+  )
+
+  # Create a figure.
+  fig = plt.figure(figsize=figSize)
+
+  # Calculate the ROC curve and AUC for each class.
+  for i in range(numClasses):
+    yTrueC = (
+      yTrue[:, i]
+      if (not areProbabilities)
+      else ((yTrue == i).astype(np.float32))
+    )
+    # Calculate ROC curve and AUC.
+    aucRoc = roc_auc_score(
+      yTrueC,  # True labels for class i.
+      yPred[:, i],  # Predicted labels for class i.
+    )
+    FPR, TPR, _ = roc_curve(
+      yTrueC,  # True labels for class i.
+      yPred[:, i],  # Predicted labels for class i.
+    )
+
+    # Plot ROC curve for each class.
+    plt.plot(
+      FPR, TPR,
+      label=(
+        f"{classes[i]} (AUC={aucRoc:.3f})"
+        if (annotateAUC) else f"{classes[i]}"
+      ),
+      color=colors[i] if (colors[i] is not None) else None
+    )
+
+  if (plotDiagonal):
+    # Plot the diagonal line.
+    plt.plot([0, 1], [0, 1], "k--")
+
+  # Set the plot title with the specified font size.
+  plt.title(title, fontsize=fontSize)
+  # Set x-axis label.
+  plt.xlabel("False Positive Rate", fontsize=fontSize)
+  # Set y-axis label.
+  plt.ylabel("True Positive Rate", fontsize=fontSize)
+
+  # Add grid lines to the plot.
+  plt.grid(True)
+
+  # Update the font of tick labels.
+  plt.xticks(fontsize=fontSize * 0.75)
+  plt.yticks(fontsize=fontSize * 0.75)
+
+  if (showLegend):
+    # Show legend if requested.
+    plt.legend(fontsize=fontSize * 0.75)
+
+  # Tight the layout to ignore wasted spaces.
+  plt.tight_layout()
+
+  if (save):
+    # Save the plot if requested.
+    fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+
+  if (display):
+    # Display the plot if requested.
+    plt.show()
+
+  plt.close()  # Close the plot.
+
+  if (returnFig):
+    # Return the figure object if requested.
+    return fig
+
+
+def PlotPRCCurve(
+  yTrue,  # True labels (one-hot or binary).
+  yPred,  # Predicted labels (one-hot or binary).
+  classes,  # List of class names.
+  areProbabilities=False,  # Whether yPred are probabilities.
+  title="PRC Curve",  # Plot title.
+  figSize=(5, 5),  # Figure size.
+  cmap=None,  # Colormap for PRC curves.
+  display=True,  # Display the plot.
+  save=False,  # Save the plot.
+  fileName="PRC.pdf",  # File name.
+  fontSize=15,  # Font size.
+  annotateAvg=True,  # Annotate average precision value on plot.
+  showLegend=True,  # Show legend.
+  returnFig=False,  # Return figure object.
+  dpi=720,  # DPI for saving the figure.
+):
+  r'''
+  Plot Precision-Recall curves (PRC) and calculate average precision for each class, with options for annotation, saving, and display.
+
+  Parameters:
+    yTrue (array-like or numpy.ndarray): True labels (one-hot encoded or binary).
+    yPred (array-like or numpy.ndarray): Predicted labels or probabilities (one-hot encoded, binary, or probabilities).
+    classes (list): List of class names for labeling curves.
+    areProbabilities (bool): Whether yPred contains probabilities. Default is False.
+    title (str): Title of the plot. Default is "PRC Curve".
+    figSize (tuple): Figure size in inches. Default is (5, 5).
+    cmap (matplotlib.colors.Colormap or None): Colormap for PRC curves. Default is None.
+    display (bool): Whether to display the plot. Default is True.
+    save (bool): Whether to save the plot to fileName. Default is False.
+    fileName (str): File name to save the plot. Default is "PRC.pdf".
+    fontSize (int): Font size for labels and annotations. Default is 15.
+    annotateAvg (bool): Whether to annotate average precision value on each curve. Default is True.
+    showLegend (bool): Whether to show legend. Default is True.
+    returnFig (bool): Whether to return the matplotlib figure object. Default is False.
+    dpi (int): DPI for saving the figure. Default is 720.
+
+  Returns:
+    matplotlib.figure.Figure or None: The matplotlib figure object if returnFig is True, otherwise None.
+
+  Notes:
+    - Precision-Recall curves visualize the trade-off between precision (PPV) and recall (TPR) for each class.
+    - Average precision quantifies the overall ability of the classifier to balance precision and recall.
+    - Saving and displaying the plot are optional and controlled by parameters.
+
+  .. math::
+    \text{Precision} = \frac{TP}{TP + FP}
+    \qquad
+    \text{Recall} = \frac{TP}{TP + FN}
+  .. math::
+    \text{Average Precision} = \int_0^1 \text{Precision}(\text{Recall}) \, d\text{Recall}
+
+  Examples
+  --------
+  Here is how to use this function in a script:
+
+  .. code-block:: python
+
+    import numpy as np
+    import HMB.PerformanceMetrics as pm
+    yTrue = [0, 1, 2, 0, 1, 2]
+    yPred = [
+      [0.8, 0.1, 0.1],
+      [0.2, 0.7, 0.1],
+      [0.1, 0.2, 0.7],
+      [0.9, 0.05, 0.05],
+      [0.1, 0.8, 0.1],
+      [0.05, 0.1, 0.85]
+    ]
+    classLabels = ["Class 0", "Class 1", "Class 2"]
+    pm.PlotPRCCurve(
+      np.array(yTrue),
+      np.array(yPred),
+      classes=classLabels,
+      areProbabilities=True,
+      title="PRC Curve",
+      display=True,
+      save=False
+    )
+  '''
+
+  from sklearn.metrics import (
+    average_precision_score,
+    precision_recall_curve,
+  )
+
+  # Get the number of classes.
+  numClasses = len(classes)
+
+  if (not areProbabilities):
+    # One-hot encode the true and predicted labels.
+    yTrue = np.eye(numClasses)[yTrue]
+    yPred = np.eye(numClasses)[yPred]
+
+  # Get colors for each class from colormap.
+  colors = (
+    cmap(np.linspace(0, 1, numClasses))
+    if cmap else [None] * numClasses
+  )
+
+  # Create a figure.
+  fig = plt.figure(figsize=figSize)
+
+  # Calculate the PRC curve and Avg. for each class.
+  for i in range(numClasses):
+    yTrueC = (
+      yTrue[:, i]
+      if (not areProbabilities)
+      else ((yTrue == i).astype(np.float32))
+    )
+    # Calculate the average precision score.
+    avgScore = average_precision_score(
+      yTrueC,  # True labels for class i.
+      yPred[:, i],  # Predicted labels for class i.
+    )
+    # Extract the PPV and TPR values.
+    PPV, TPR, _ = precision_recall_curve(
+      yTrueC,  # True labels for class i.
+      yPred[:, i],  # Predicted labels for class i.
+    )
+
+    # Plot the PPV and TPR values.
+    plt.step(
+      TPR, PPV,  # TPR and PPV values.
+      where="post",
+      label=(
+        f"{classes[i]} (AVG={avgScore:.3f})"
+        if (annotateAvg) else f"{classes[i]}"
+      ),
+      color=colors[i] if (colors[i] is not None) else None
+    )
+
+  # Set the plot title with the specified font size.
+  plt.title(title, fontsize=fontSize)
+  # Set the x- and y-labels.
+  plt.xlabel("Recall", fontsize=fontSize)
+  plt.ylabel("Precision", fontsize=fontSize)
+
+  # Set the x- and y-limits.
+  plt.ylim([0.0, 1.05])
+  plt.xlim([0.0, 1.0])
+
+  # Update the font of tick labels.
+  plt.xticks(fontsize=fontSize * 0.75)
+  plt.yticks(fontsize=fontSize * 0.75)
+
+  # Add grid lines to the plot.
+  plt.grid(True)
+
+  if (showLegend):
+    # Show legend if requested.
+    plt.legend(fontsize=fontSize * 0.75)
+
+  # Tight the layout to ignore wasted spaces.
+  plt.tight_layout()
+
+  if (save):
+    # Save the plot if requested.
+    fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+
+  if (display):
+    # Display the plot if requested.
+    plt.show()
+
+  plt.close()  # Close the plot.
+
+  if (returnFig):
+    # Return the figure object if requested.
     return fig
 
 
