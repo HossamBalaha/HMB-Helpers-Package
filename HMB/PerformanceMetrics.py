@@ -171,6 +171,7 @@ def PlotConfusionMatrix(
   cm,  # Confusion matrix (2D list or numpy array).
   classes,  # List of class labels.
   normalize=False,  # Whether to normalize the confusion matrix.
+  roundDigits=3,  # Number of decimal places to round normalized values.
   title="Confusion Matrix",  # Title of the plot.
   cmap=plt.cm.Blues,  # Colormap for the plot.
   display=True,  # Whether to display the plot.
@@ -189,8 +190,9 @@ def PlotConfusionMatrix(
     cm (list or numpy.ndarray): Confusion matrix representing the classification results.
     classes (list): List of class labels to display on axes.
     normalize (bool): Whether to normalize the confusion matrix by row sums. Default is False.
+    roundDigits (int): Number of decimal places to round normalized values. Default is 3.
     title (str): Title of the plot. Default is "Confusion Matrix".
-    cmap (matplotlib.colors.Colormap): Colormap for the plot. Default is plt.cm.Blues.
+    cmap (matplotlib.colors.Colormap or None): Colormap for the plot. Default is plt.cm.Blues.
     display (bool): Whether to display the plot. Default is True.
     save (bool): Whether to save the plot to fileName. Default is False.
     fileName (str): File name to save the plot. Default is "ConfusionMatrix.pdf".
@@ -233,7 +235,7 @@ def PlotConfusionMatrix(
       normalize=False,
       title="Confusion Matrix",
       annotate=True,
-      fontSize=12,
+      fontSize=15,
       figSize=(6, 6),
       colorbar=True,
       display=True,
@@ -246,12 +248,20 @@ def PlotConfusionMatrix(
     # Normalize the confusion matrix by row sums.
     cm = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]
 
+  if (cmap is None):
+    cmap = plt.cm.Blues  # Default colormap.
+
   # Create a new figure with the specified size.
   fig = plt.figure(figsize=figSize)  # Create a new figure.
+
   # Display the confusion matrix as an image.
   plt.imshow(cm, interpolation="nearest", cmap=cmap)
-  # Set the plot title with the specified font size.
-  plt.title(title, fontsize=fontSize)  # Set the title.
+
+  # Set the plot title if provided.
+  if (title and len(title) > 0):
+    # Set the plot title with the specified font size.
+    plt.title(title, fontsize=fontSize)  # Set the title.
+
   # Add the color bar and change the color bar font size.
   if (colorbar):
     # Set colorbar tick label size.
@@ -265,7 +275,7 @@ def PlotConfusionMatrix(
   plt.yticks(tickMarks, classes, fontsize=fontSize)
 
   # Choose format for cell annotation based on normalization.
-  fmt = ".2f" if normalize else "d"  # Set the format.
+  fmt = f"0.{roundDigits}f" if normalize else "d"  # Set the format.
   # Calculate threshold for text color contrast.
   thresh = cm.max() / 2.0  # Threshold.
 

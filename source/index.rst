@@ -93,6 +93,7 @@ Quickstart
    Utils
    WSIHelper
    HandCraftedFeatures
+   MachineLearningHelper
 
 Getting Help
 ------------

@@ -84,6 +84,7 @@ intersphinx_mapping = {
   "datasets"    : ("https://huggingface.co/docs/datasets/main/en/", None),
   "pydantic"    : ("https://docs.pydantic.dev/latest/", None),
   "openslide"   : ("https://openslide.org/api/python/", None),
+  "optuna"      : ("https://optuna.readthedocs.io/en/stable/", None),
 }
 
 # Todo extension settings.
