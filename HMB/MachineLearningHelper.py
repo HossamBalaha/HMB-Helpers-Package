@@ -17,11 +17,13 @@ def GetScalerObject(scalerName):
     - "Robust": Robust Scaler (Robust to outliers)
     - "MaxAbs": Max Absolute Scaler (Scales each feature by its maximum absolute value)
     - "QT": Quantile Transformer (Transforms features to follow a uniform or normal distribution)
-    - "Normalizer": Normalizer (Scales individual samples to have unit norm)
+    - "Normalizer": Max normalizer (Scales samples individually to unit norm)
+    - "L1": L1 Normalizer (Scales samples to have L1 norm equal to 1)
+    - "L2": L2 Normalizer (Scales samples to have L2 norm equal to 1)
 
   Parameters:
     scalerName (str): Name of the scaler to retrieve.
-      Supported values: "Standard", "MinMax", "Robust", "MaxAbs", "QT", "Normalizer".
+      Supported values: "Standard", "MinMax", "Robust", "MaxAbs", "QT", "Normalizer", "L1", "L2".
 
   Returns:
     object: An instance of the requested scaler class from scikit-learn.
@@ -81,7 +83,13 @@ def GetScalerObject(scalerName):
     return QuantileTransformer()
   elif (scalerName == "Normalizer"):
     from sklearn.preprocessing import Normalizer
-    return Normalizer()
+    return Normalizer(norm="max", copy=True)
+  elif (scalerName == "L1"):
+    from sklearn.preprocessing import Normalizer
+    return Normalizer(norm="l1", copy=True)
+  elif (scalerName == "L2"):
+    from sklearn.preprocessing import Normalizer
+    return Normalizer(norm="l2", copy=True)
   # You can add more scalers as needed.
   else:
     raise ValueError(f"Invalid scaler name: {scalerName}.")
@@ -138,6 +146,150 @@ def ListScikitMachineLearningClassifiers():
 
   # Return the dictionary containing classifier names and their class objects.
   return classifiersDict
+
+
+def GetFilteredClassifiers(clsList=[]):
+  r'''
+  Retrieve a filtered list of scikit-learn classifier classes.
+
+  This function returns a list of classifier classes from scikit-learn, excluding those that require
+  special arguments (such as "base_estimator" or "estimators") or are known to fail with certain inputs.
+  If a specific list of classifier names is provided, only those classifiers are returned.
+
+  Parameters:
+    clsList (list, optional): List of classifier names to include. If empty or None, all available classifiers are considered.
+
+  Returns:
+    list: List of tuples containing classifier names and their corresponding class objects.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import HMB.MachineLearningHelper as mlh
+    # Get all filtered classifiers.
+    classifiers = mlh.GetFilteredClassifiers()
+    for name, cls in classifiers:
+      print(f"Classifier Name: {name}, Class: {cls}")
+    # Get only specific classifiers.
+    classifiers = mlh.GetFilteredClassifiers(["RandomForestClassifier", "LogisticRegression"])
+    for name, cls in classifiers:
+      print(f"Classifier Name: {name}, Class: {cls}")
+  '''
+
+  from sklearn.utils import all_estimators
+
+  # If no specific classifiers are provided, retrieve all classifiers from scikit-learn.
+  if ((clsList is None) or (len(clsList) <= 0)):
+    # Get all available classifiers in scikit-learn.
+    estimators = all_estimators(type_filter="classifier")
+    # Select only the classifiers that don't have the arguments:
+    # "base_estimator" and "estimators".
+    args = ["base_estimator", "estimators"]
+
+    # Classifier: CategoricalNB failed with error: Negative values in data passed to CategoricalNB (input X)
+    # Classifier: ComplementNB failed with error: Negative values in data passed to ComplementNB (input X)
+    # Classifier: MultiOutputClassifier failed with error: __init__() missing 1 required positional argument: 'estimator'
+    # Classifier: MultinomialNB failed with error: Negative values in data passed to MultinomialNB (input X)
+    # Classifier: NuSVC failed with error: specified nu is infeasible
+    # Classifier: OneVsOneClassifier failed with error: __init__() missing 1 required positional argument: 'estimator'
+    # Classifier: OneVsRestClassifier failed with error: __init__() missing 1 required positional argument: 'estimator'
+    # Classifier: OutputCodeClassifier failed with error: __init__() missing 1 required positional argument: 'estimator'
+    # Classifier: RadiusNeighborsClassifier failed with error: No neighbors found for test samples array(...),
+    #   you can try using larger radius, giving a label for outliers, or considering removing them from your dataset.
+    # Classifier: StackingClassifier failed with error: __init__() missing 1 required positional argument: 'estimators'
+    # Classifier: VotingClassifier failed with error: __init__() missing 1 required positional argument: 'estimators
+    # Classifier: ClassifierChain failed with error: __init__() missing 1 required positional argument: 'base_estimator'
+
+    toIgnore = [
+      est
+      for est in estimators
+      for varName in est[1].__init__.__code__.co_varnames
+      if (varName in args)
+    ]
+
+    # Classifier: ComplementNB failed with error: Negative values in data passed to ComplementNB (input X)
+    toIgnore = toIgnore + [
+      "CategoricalNB",
+      "ComplementNB",
+      "MultiOutputClassifier",
+      "MultinomialNB",
+      "NuSVC",
+      "OneVsOneClassifier",
+      "OneVsRestClassifier",
+      "OutputCodeClassifier",
+      "RadiusNeighborsClassifier",
+      "StackingClassifier",
+      "VotingClassifier",
+      "ClassifierChain",
+    ]
+
+    estimators = [
+      est
+      for est in estimators
+      if (est[0] not in toIgnore)
+    ]
+
+    for i in range(len(estimators)):
+      # Print the classifier name and class and function arguments.
+      print(f"{i + 1}: {estimators[i][0]}")
+
+  else:
+    # If a specific list of classifiers is provided, filter the classifiers based on the provided list.
+    estimators = []
+    for cls in clsList:
+      estimators.append(
+        [
+          cls,
+          [
+            est for est in all_estimators(type_filter="classifier")
+            if (est[0] == cls)
+          ][0][1]
+        ]
+      )
+
+  # Return the list of classifiers.
+  return estimators
+
+
+def GetClassifierClassByName(clsName):
+  r'''
+  Retrieve a scikit-learn classifier class by its name.
+
+  This function returns the classifier class object corresponding to the specified name from scikit-learn.
+  If the classifier is not found, None is returned.
+
+  Parameters:
+    clsName (str): Name of the classifier to retrieve.
+
+  Returns:
+    class: Classifier class object corresponding to the specified name, or None if not found.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import HMB.MachineLearningHelper as mlh
+    # Get the RandomForestClassifier class.
+    rfCls = mlh.GetClassifierClassByName("RandomForestClassifier")
+    print(rfCls)
+    # Get a non-existent classifier.
+    noneCls = mlh.GetClassifierClassByName("NonExistentClassifier")
+    print(noneCls)  # None.
+  '''
+
+  from sklearn.utils import all_estimators
+
+  # Retrieve all available classifiers in scikit-learn.
+  estimators = all_estimators(type_filter="classifier")
+
+  # Filter the classifiers based on the provided name.
+  for est in estimators:
+    if (est[0] == clsName):
+      return est[1]
+
+  # Return None if the classifier is not found.
+  return None
 
 
 def GetMLClassificationModelObject(modelName, hyperparameters={}):
@@ -1132,6 +1284,8 @@ class OptunaTuning(object):
     dropNAColumns=True,  # Whether to drop columns with any null values.
     saveFigures=True,  # Whether to save the performance plots.
     eps=1e-8,  # Small value to avoid division by zero (if needed).
+    loadStudy=True,  # Whether to load an existing study if available.
+    verbose=False,  # Whether to print verbose output.
   ):
     '''
     Initializes the OptunaTuning class with the provided hyperparameters.
@@ -1157,6 +1311,8 @@ class OptunaTuning(object):
       dropNAColumns (bool): Whether to drop columns with any null values.
       saveFigures (bool): Whether to save the performance plots.
       eps (float): Small value to avoid division by zero (if needed).
+      loadStudy (bool): Whether to load an existing study if available.
+      verbose (bool): Whether to print verbose output.
     '''
 
     self.scalers = scalers  # List of scalers to be used in the tuning process.
@@ -1173,6 +1329,8 @@ class OptunaTuning(object):
     self.dropNAColumns = dropNAColumns  # Whether to drop columns with any null values.
     self.saveFigures = saveFigures  # Whether to save the performance plots.
     self.eps = eps  # Small value to avoid division by zero (if needed).
+    self.loadStudy = loadStudy  # Whether to load an existing study if available.
+    self.verbose = verbose  # Whether to print verbose output.
 
     # Path to the test dataset file, if provided.
     if (testFilename is not None):
@@ -1187,11 +1345,17 @@ class OptunaTuning(object):
     self.dropFirstColumn = dropFirstColumn  # Whether to drop the first column (usually an index or ID).
 
     if (samplerTech == "TPE"):
-      self.sampler = optuna.samplers.TPESampler(seed=np.random.randint(0, 10000))
+      self.sampler = optuna.samplers.TPESampler(
+        seed=np.random.randint(0, 10000),
+      )
     elif (samplerTech == "Random"):
-      self.sampler = optuna.samplers.RandomSampler(seed=np.random.randint(0, 10000))
+      self.sampler = optuna.samplers.RandomSampler(
+        seed=np.random.randint(0, 10000),
+      )
     elif (samplerTech == "CmaEs"):
-      self.sampler = optuna.samplers.CmaEsSampler(seed=np.random.randint(0, 10000))
+      self.sampler = optuna.samplers.CmaEsSampler(
+        seed=np.random.randint(0, 10000),
+      )
     elif (samplerTech == "NSGAIISampler"):
       self.sampler = optuna.samplers.NSGAIISampler(
         seed=np.random.randint(0, 10000),
@@ -1200,7 +1364,10 @@ class OptunaTuning(object):
         mutation_prob=0.1,  # Mutation probability.
       )
     else:
-      raise ValueError(f"Unknown sampler technique: {samplerTech}. Please choose from 'TPE', 'Random', or 'CmaEs'.")
+      raise ValueError(
+        f"Unknown sampler technique: {samplerTech}. "
+        f"Please choose from 'TPE', 'Random', 'NSGAIISampler', or 'CmaEs'."
+      )
 
     # Apply random shuffling to the lists to ensure randomness in the selection of hyperparameters.
     np.random.shuffle(self.scalers)  # Shuffle the scalers for randomness.
@@ -1326,7 +1493,7 @@ class OptunaTuning(object):
       direction="maximize",  # To maximize the objective function.
       study_name=f"{self.prefix}_Study",  # The study name.
       storage=f"sqlite:///{self.storageFolderPath}/{self.prefix}_Study.db",  # The database file.
-      load_if_exists=True,  # To load the study if it exists.
+      load_if_exists=self.loadStudy,  # To load the study if it exists.
       # https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/003_efficient_optimization_algorithms.html
       sampler=self.sampler,  # Setting the sampler.
     )
@@ -1339,7 +1506,7 @@ class OptunaTuning(object):
       objectiveFunction,  # Objective function.
       n_trials=self.numTrials,  # Number of trials.
       n_jobs=1,  # To use all available CPUs for parallel execution. 1: Use one CPU.
-      show_progress_bar=True,  # To show the progress bar.
+      show_progress_bar=self.verbose,  # To show the progress bar.
     )
 
     # Save the performance metrics in a CSV file for future reference.
