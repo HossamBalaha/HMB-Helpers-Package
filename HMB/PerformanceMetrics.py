@@ -401,6 +401,10 @@ def PlotROCAUCCurve(
 
   from sklearn.metrics import roc_auc_score, roc_curve
 
+  # Ensure that yTrue and yPred are numpy arrays.
+  yTrue = np.array(yTrue)
+  yPred = np.array(yPred)
+
   # Get the number of classes.
   numClasses = len(classes)
 
@@ -570,6 +574,10 @@ def PlotPRCCurve(
     average_precision_score,
     precision_recall_curve,
   )
+
+  # Ensure that yTrue and yPred are numpy arrays.
+  yTrue = np.array(yTrue)
+  yPred = np.array(yPred)
 
   # Get the number of classes.
   numClasses = len(classes)
