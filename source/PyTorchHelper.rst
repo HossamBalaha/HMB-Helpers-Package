@@ -1,7 +1,7 @@
-PytorchHelper Module
+PyTorchHelper Module
 ================
 
-.. automodule:: HMB.PytorchHelper
+.. automodule:: HMB.PyTorchHelper
    :members:
    :undoc-members:
    :show-inheritance:

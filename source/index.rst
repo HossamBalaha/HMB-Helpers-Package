@@ -94,7 +94,7 @@ Quickstart
    WSIHelper
    HandCraftedFeatures
    MachineLearningHelper
-   PytorchHelper
+   PyTorchHelper
 
 Getting Help
 ------------

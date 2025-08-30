@@ -42,7 +42,7 @@ class CustomDataset(torch.utils.data.Dataset):
     for idx, cls in enumerate(self.classes):
       self.classToIdx[cls] = idx
       clsDir = os.path.join(dataDir, cls)
-      if (not os.path.isdir(classDir)):
+      if (not os.path.isdir(clsDir)):
         continue
       for fname in os.listdir(clsDir):
         if (fname.lower().endswith(allowedExtensions)):
