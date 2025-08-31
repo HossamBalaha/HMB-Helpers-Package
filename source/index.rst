@@ -89,7 +89,6 @@ Quickstart
    PyTorchSegmentationLosses
    TextGenerationMetrics
    TextHelper
-   TorchHelper
    Utils
    WSIHelper
    HandCraftedFeatures

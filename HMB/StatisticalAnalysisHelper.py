@@ -459,7 +459,7 @@ def PlotMetrics(
   showFigures=False,  # Whether to display the plots or not.
   storeInsideNewFolder=False,  # Whether to store the plots inside a new folder.
   newFolderName="PerformanceMetricsPlots",  # Name of the folder to store the plots.
-
+  noOfPlotsPerRow=3,  # Number of plots per row in the subplot grid.
 ):
   '''
   Plot boxplots, violin plots, Q-Q plots, histograms, density plots, scatter plots,
@@ -479,6 +479,7 @@ def PlotMetrics(
     showFigures (bool, optional): Whether to display the plots or not.
     storeInsideNewFolder (bool, optional): Whether to store the plots inside a new folder.
     newFolderName (str, optional): Name of the folder to store the plots.
+    noOfPlotsPerRow (int, optional): Number of plots per row in the subplot grid.
 
   Raises:
     ValueError: If the input data is not in the expected format.
@@ -510,12 +511,27 @@ def PlotMetrics(
   noOfMetrics = len(metrics)
   noOfDatasets = len(data)
 
-  # Determine the number of rows and columns for subplots.
-  if (noOfMetrics <= 5):
+  # # Determine the number of rows and columns for subplots.
+  # if (noOfMetrics <= 5):
+  #   noRows = 1
+  #   noCols = noOfMetrics
+  # else:
+  #   noRows = 2 if (noOfMetrics < 8) else (3 if (noOfMetrics < 12) else 4)
+  #   noCols = (noOfMetrics // noRows + 1) if (noOfMetrics % noRows != 0) else (noOfMetrics // noRows)
+
+  # Determine the number of rows and columns for subplots based on noOfPlotsPerRow.
+  if (noOfMetrics <= noOfPlotsPerRow):
     noRows = 1
+  elif (noOfMetrics <= noOfPlotsPerRow * 2):
+    noRows = 2
+  elif (noOfMetrics <= noOfPlotsPerRow * 3):
+    noRows = 3
+  else:
+    noRows = 4
+
+  if (noRows == 1):
     noCols = noOfMetrics
   else:
-    noRows = 2 if (noOfMetrics < 8) else (3 if (noOfMetrics < 12) else 4)
     noCols = (noOfMetrics // noRows + 1) if (noOfMetrics % noRows != 0) else (noOfMetrics // noRows)
 
   if (len(whichToPlot) == 0):
