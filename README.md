@@ -27,6 +27,9 @@ providing ready-to-use, well-tested utility modules.
 - **Initializations**: Model and layer initialization helpers.
 - **Utils**: Miscellaneous utilities.
 - **WSIHelper**: Whole Slide Image (WSI) processing tools.
+- **HandCraftedFeatures**: Feature extraction utilities for images and data.
+- **MachineLearningHelper**: General machine learning workflow helpers.
+- **StatisticalAnalysisHelper**: Statistical analysis and data exploration tools.
 
 ## Installation
 

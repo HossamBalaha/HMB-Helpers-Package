@@ -460,6 +460,7 @@ def PlotMetrics(
   storeInsideNewFolder=False,  # Whether to store the plots inside a new folder.
   newFolderName="PerformanceMetricsPlots",  # Name of the folder to store the plots.
   noOfPlotsPerRow=3,  # Number of plots per row in the subplot grid.
+  cmap="viridis",  # Color map for the plots.
 ):
   '''
   Plot boxplots, violin plots, Q-Q plots, histograms, density plots, scatter plots,
@@ -480,6 +481,7 @@ def PlotMetrics(
     storeInsideNewFolder (bool, optional): Whether to store the plots inside a new folder.
     newFolderName (str, optional): Name of the folder to store the plots.
     noOfPlotsPerRow (int, optional): Number of plots per row in the subplot grid.
+    cmap (str, optional): Color map to use for the plots (default: 'viridis').
 
   Raises:
     ValueError: If the input data is not in the expected format.
@@ -832,6 +834,7 @@ def PlotMetrics(
         showmeans=True,
         showmedians=True
       )
+      plt.set_cmap(cmap)
       plt.title(f"Violin Plot of {metric} Results")
       plt.xticks(list(range(1, noOfDatasets + 1)), names, rotation=xTicksRotation)
       plt.ylabel("Performance Metric")
@@ -875,8 +878,7 @@ def PlotMetrics(
     for i, metric in enumerate(metrics):
       plt.subplot(noRows, noCols, i + 1)
       for j, dataset in enumerate(data):
-        sns.kdeplot(dataset[metric]["Trials"], label=names[j], fill=True)
-        # Add rug plot for individual data points.
+        sns.kdeplot(dataset[metric]["Trials"], label=names[j], fill=True, cmap=cmap)
         sns.rugplot(dataset[metric]["Trials"], height=0.05, alpha=0.5)
       plt.title(f"Density Plot of {metric} Results")
       plt.xlabel("Performance Metric")
@@ -1006,7 +1008,7 @@ def PlotMetrics(
       plt.figure(figsize=(factor * noCols, factor * noRows))
       df = pd.DataFrame({metric: dataset[metric]["Trials"] for metric in metrics})
       corr = df.corr()
-      sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", square=True)
+      sns.heatmap(corr, annot=True, cmap=cmap, fmt=".2f", square=True)
       plt.title(f"Correlation Heatmap for {names[i]}")
       plt.savefig(f"CorrelationHeatmap_{names[i]}_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
       if (showFigures):
@@ -1222,7 +1224,7 @@ def PlotMetrics(
             allXVals,
             allYVals,
             gridsize=30,
-            cmap="Blues",
+            cmap=cmap,
             mincnt=1  # Only show hexagons with at least one count.
           )
           plt.title(f"Hexbin Plot: {metric1} vs {metric2}")
@@ -1256,7 +1258,7 @@ def PlotMetrics(
       x = np.array(dataset[metrics[0]]["Trials"])
       y = np.array(dataset[metrics[1]]["Trials"])
       z = np.array(dataset[metrics[2]]["Trials"]) if (len(metrics) > 2) else np.zeros_like(x)
-      plt.tricontourf(x, y, z, levels=14, cmap="RdYlBu")
+      plt.tricontourf(x, y, z, levels=14, cmap=cmap)
       plt.colorbar(label="Metric Value")
       plt.title(f"Contour Plot for {names[i]}")
       plt.xlabel(metrics[0])
