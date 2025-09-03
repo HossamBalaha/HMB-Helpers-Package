@@ -935,6 +935,7 @@ def MachineLearningClassification(
   targetColumn="Class",  # Name of the target column in the dataset.
   dropFirstColumn=True,  # Whether to drop the first column (usually an index or ID).
   dropNAColumns=True,  # Whether to drop columns with any null values.
+  encodeCategorical=True,  # Whether to encode categorical features (if any).
   eps=1e-8,  # Small value to avoid division by zero (if needed).
 ):
   r'''
@@ -946,7 +947,8 @@ def MachineLearningClassification(
   and evaluates its performance. Optionally, a separate test file can be provided for evaluation.
 
   Data flow:
-    Load Data -> Drop First Column (if specified) -> Drop NA Columns -> Encode Target Labels ->
+    Load Data -> Drop First Column (if specified) -> Drop NA Columns ->
+    Encode Target Labels -> Encoder Categorial Features (if any and if needed) ->
     Split Features and Target -> Split Train/Test (if no test file) -> Outlier Detection (if specified) ->
     Scale Features -> Feature Selection -> Data Balancing (if specified) -> Train Model -> Evaluate Performance
     -> Plot Performance Metrics
@@ -1057,6 +1059,17 @@ def MachineLearningClassification(
   le = LabelEncoder()
   yEnc = le.fit_transform(y)
   labels = le.classes_
+
+  # Encode categorical features if any and if encodeCategorical is True.
+  featuresEncoders = {}
+  if (encodeCategorical):
+    categoricalCols = X.select_dtypes(include=["object", "category"]).columns
+    if (len(categoricalCols) > 0):
+      # Encode each categorical column using LabelEncoder.
+      for col in categoricalCols:
+        leCol = LabelEncoder()
+        X[col] = leCol.fit_transform(X[col])
+        featuresEncoders[col] = leCol
 
   if (testFilePath and os.path.exists(testFilePath)):
     # If a test file is provided, read it into a DataFrame.
@@ -1219,6 +1232,7 @@ def MachineLearningClassification(
     "Contamination"            : contamination,
     "OutlierDetectionMask"     : dbObj,
     "LabelEncoder"             : le,
+    "FeaturesEncoders"         : featuresEncoders,
   }
 
   # Return the performance metrics, plot object, and objects for saving.

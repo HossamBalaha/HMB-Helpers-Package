@@ -328,6 +328,8 @@ def TrainOneEpoch(
 
   Returns:
     tuple: (avgTrainLoss, avgTrainAccuracy) for the epoch.
+      - avgTrainLoss (float): Average training loss for the epoch.
+      - avgTrainAccuracy (float): Average training accuracy for the epoch.
   '''
 
   # Set the model to training mode.
@@ -409,6 +411,8 @@ def EvaluateOneEpoch(
 
   Returns:
     tuple: (avgValLoss, avgValAccuracy) for the epoch.
+      - avgValLoss (float): Average validation loss for the epoch.
+      - avgValAccuracy (float): Average validation accuracy for the epoch.
   '''
 
   # Set the model to evaluation mode.
