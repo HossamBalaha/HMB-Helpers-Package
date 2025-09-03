@@ -94,6 +94,7 @@ Quickstart
    HandCraftedFeatures
    MachineLearningHelper
    PyTorchHelper
+   AttentionMapsHelper
 
 Getting Help
 ------------

@@ -675,7 +675,7 @@ def HistoryPlotter(
   dpi=720,  # DPI for saving the figure.
   colors=None,  # Optional dict of colors for each metric.
   labels=None,  # Optional dict of labels for each metric.
-  display=True,  # Whether to display the plot.
+  display=False,  # Whether to display the plot.
   figSize=(10, 5),  # Figure size.
   returnFig=False,  # Whether to return the figure object.
 ):
@@ -693,7 +693,7 @@ def HistoryPlotter(
     dpi (int): DPI for saving the figure. Default is 720.
     colors (dict or None): Optional dict mapping metric names to colors.
     labels (dict or None): Optional dict mapping metric names to custom labels.
-    display (bool): Whether to display the plot. Default is True.
+    display (bool): Whether to display the plot. Default is False.
     figSize (tuple): Figure size in inches. Default is (10, 5).
     returnFig (bool): Whether to return the matplotlib figure object. Default is False.
 
