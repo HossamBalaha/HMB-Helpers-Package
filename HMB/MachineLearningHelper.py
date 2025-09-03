@@ -646,24 +646,31 @@ def PerformDataBalancing(xTrain, yTrain, techniqueStr="SMOTE"):
   Perform data balancing on training data using the specified oversampling or undersampling technique.
 
   This function applies data balancing techniques such as SMOTE, ADASYN, BorderlineSMOTE, SVMSMOTE,
-  RandomOverSampler, RandomUnderSampler, NearMiss, or ClusterCentroids to the input training data.
+  KSMOTE, RandomOverSampler, RandomUnderSampler, NearMiss, NearMiss-1, NearMiss-2, NearMiss-3,
+  TomekLinks, or ClusterCentroids to the input training data.
 
   Supported techniques include:
     - "SMOTE": Synthetic Minority Over-sampling Technique
     - "ADASYN": Adaptive Synthetic Sampling Approach
     - "BSMOTE": Borderline SMOTE
     - "SVMSMOTE": Support Vector Machine SMOTE
+    - "KSMOTE": KMeans SMOTE
     - "ROS": Random Over-Sampling
     - "RUS": Random Under-Sampling
-    - "NearMiss": Near Miss Sampling
+    - "NearMiss": Near Miss Sampling. This is the same as "NearMiss-1".
+    - "NearMiss-1": Near Miss version 1
+    - "NearMiss-2": Near Miss version 2
+    - "NearMiss-3": Near Miss version 3
+    - "TomekLinks": Tomek Links
     - "CCx": Cluster Centroids
 
   Parameters:
     xTrain (array-like): Training data features.
     yTrain (array-like): Training data labels.
     techniqueStr (str, optional): Name of the balancing technique to use.
-      Supported values include: "SMOTE", "ADASYN", "BSMOTE", "SVMSMOTE", "ROS", "RUS", "NearMiss", "CCx".
-      Default is "SMOTE".
+      Supported values include: "SMOTE", "ADASYN", "BSMOTE", "SVMSMOTE", "KSMOTE", "ROS",
+      "RUS", "NearMiss", "NearMiss-1", "NearMiss-2", "NearMiss-3",
+       "TL", "CCx". Default is "SMOTE".
 
   Returns:
     tuple: Resampled training data features, labels, and balancing object.
@@ -728,6 +735,10 @@ def PerformDataBalancing(xTrain, yTrain, techniqueStr="SMOTE"):
     # Import BorderlineSMOTE from imbalanced-learn.
     from imblearn.over_sampling import BorderlineSMOTE
     technique = BorderlineSMOTE
+  elif (techniqueStr == "KSMOTE"):
+    # Import KMeansSMOTE from imbalanced-learn.
+    from imblearn.over_sampling import KMeansSMOTE
+    technique = KMeansSMOTE
   elif (techniqueStr == "SVMSMOTE"):
     # Import SVMSMOTE from imbalanced-learn.
     from imblearn.over_sampling import SVMSMOTE
@@ -744,6 +755,22 @@ def PerformDataBalancing(xTrain, yTrain, techniqueStr="SMOTE"):
     # Import NearMiss from imbalanced-learn.
     from imblearn.under_sampling import NearMiss
     technique = NearMiss
+  elif (techniqueStr == "NearMiss-1"):
+    # Import NearMiss from imbalanced-learn.
+    from imblearn.under_sampling import NearMiss
+    return lambda: NearMiss(version=1)
+  elif (techniqueStr == "NearMiss-2"):
+    # Import NearMiss from imbalanced-learn.
+    from imblearn.under_sampling import NearMiss
+    return lambda: NearMiss(version=2)
+  elif (techniqueStr == "NearMiss-3"):
+    # Import NearMiss from imbalanced-learn.
+    from imblearn.under_sampling import NearMiss
+    return lambda: NearMiss(version=3)
+  elif (techniqueStr == "TL"):
+    # Import TomekLinks from imbalanced-learn.
+    from imblearn.under_sampling import TomekLinks
+    technique = TomekLinks
   elif (techniqueStr == "CCx"):
     # Import ClusterCentroids from imbalanced-learn.
     from imblearn.under_sampling import ClusterCentroids

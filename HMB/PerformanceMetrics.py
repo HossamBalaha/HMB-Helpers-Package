@@ -664,6 +664,145 @@ def PlotPRCCurve(
     return fig
 
 
+def HistoryPlotter(
+  history,  # Dictionary containing training history.
+  title,  # Title of the plot.
+  metrics=("loss",),  # Tuple or list of metrics to plot.
+  xLabel="Epochs",  # Label for x-axis.
+  fontSize=14,  # Font size for labels and title.
+  doSave=False,  # Whether to save the plot.
+  savePath=None,  # Path to save the plot.
+  dpi=720,  # DPI for saving the figure.
+  colors=None,  # Optional dict of colors for each metric.
+  labels=None,  # Optional dict of labels for each metric.
+  display=True,  # Whether to display the plot.
+  figSize=(10, 5),  # Figure size.
+  returnFig=False,  # Whether to return the figure object.
+):
+  '''
+  Plot training history metrics (e.g., loss, accuracy) for train and validation sets.
+
+  Parameters:
+    history (dict): Dictionary containing training history with keys like 'train_loss', 'val_loss', etc.
+    title (str): Title of the plot.
+    metrics (tuple or list): Metrics to plot (e.g., ("loss", "accuracy")). Default is ("loss",).
+    xLabel (str): Label for x-axis. Default is "Epochs".
+    fontSize (int): Font size for labels and title. Default is 14.
+    doSave (bool): Whether to save the plot. Default is False.
+    savePath (str or None): Path to save the plot. Default is None.
+    dpi (int): DPI for saving the figure. Default is 720.
+    colors (dict or None): Optional dict mapping metric names to colors.
+    labels (dict or None): Optional dict mapping metric names to custom labels.
+    display (bool): Whether to display the plot. Default is True.
+    figSize (tuple): Figure size in inches. Default is (10, 5).
+    returnFig (bool): Whether to return the matplotlib figure object. Default is False.
+
+  Returns:
+    matplotlib.figure.Figure or None: The axes object, figure object if returnFig is True, otherwise None.
+
+  Notes:
+    - Supports plotting multiple metrics for both training and validation.
+    - Custom colors and labels can be provided for each metric.
+    - Saving and displaying the plot are optional and controlled by parameters.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import HMB.PerformanceMetrics as pm
+    history = {
+      "train_loss": [0.8, 0.6, 0.4],
+      "val_loss": [0.9, 0.7, 0.5],
+      "train_accuracy": [0.5, 0.7, 0.9],
+      "val_accuracy": [0.4, 0.6, 0.8]
+    }
+    pm.HistoryPlotter(
+      history,
+      title="Training History",
+      metrics=("loss", "accuracy"),
+      doSave=True,
+      savePath="history_plot.pdf"
+    )
+  '''
+
+  # Create a new figure with the specified size.
+  plt.figure(figsize=figSize)  # Create figure.
+
+  # Set default colors if not provided.
+  if (colors is None):
+    defaultColors = ["blue", "orange", "green", "red", "purple", "brown"]
+    colors = {}
+    for idx, metric in enumerate(metrics):
+      colors[f"train_{metric}"] = defaultColors[idx % len(defaultColors)]
+      colors[f"val_{metric}"] = defaultColors[(idx + 1) % len(defaultColors)]
+
+  # Set default labels if not provided.
+  if (labels is None):
+    labels = {}
+    for metric in metrics:
+      labels[f"train_{metric}"] = f"Train {metric.capitalize()}"
+      labels[f"val_{metric}"] = f"Validation {metric.capitalize()}"
+
+  # Plot each metric for train and validation.
+  for metric in metrics:
+    trainKey = f"train_{metric}"
+    valKey = f"val_{metric}"
+    if (trainKey in history):
+      # Plot training metric.
+      plt.plot(
+        history[trainKey],  # Training metric values.
+        label=labels.get(trainKey, trainKey),  # Label for legend.
+        color=colors.get(trainKey, None)  # Color for line.
+      )
+    if (valKey in history):
+      # Plot validation metric.
+      plt.plot(
+        history[valKey],  # Validation metric values.
+        label=labels.get(valKey, valKey),  # Label for legend.
+        color=colors.get(valKey, None)  # Color for line.
+      )
+
+  # Set the plot title.
+  plt.title(title, fontsize=fontSize * 1.2)  # Set title.
+
+  # Set x-axis label.
+  plt.xlabel(xLabel.capitalize(), fontsize=fontSize)  # Set x-label.
+
+  # Set y-axis label.
+  if (len(metrics) == 1):
+    plt.ylabel(metrics[0].capitalize(), fontsize=fontSize)  # Set y-label.
+  else:
+    # Set y-label for multiple metrics.
+    plt.ylabel("Metric Value", fontsize=fontSize)
+
+  # Tight layout to minimize wasted space.
+  plt.tight_layout()  # Tight layout.
+
+  # Add legend.
+  plt.legend()  # Add legend.
+
+  # Add grid lines.
+  plt.grid()  # Add grid.
+
+  # Save the plot if requested.
+  if (doSave and savePath):  # Save plot.
+    plt.savefig(savePath.replace(".pdf", ".png"), dpi=dpi, bbox_inches="tight")
+    try:
+      plt.savefig(savePath, dpi=dpi, bbox_inches="tight")
+    except Exception as e:
+      print(f"Error saving plot: {e}")
+
+  # Display the plot if requested.
+  if (display):  # Display plot.
+    plt.show()
+
+  plt.close()  # Close the plot.
+
+  # Return the figure or axes object if requested.
+  if (returnFig):
+    return plt.gcf()  # Return figure object.
+
+
 if __name__ == "__main__":
   # Example confusion matrix for a 3-class classification problem.
   confMatrix = [
