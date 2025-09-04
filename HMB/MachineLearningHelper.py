@@ -1323,6 +1323,7 @@ class OptunaTuning(object):
     targetColumn="Class",  # Name of the target column in the dataset.
     dropFirstColumn=True,  # Whether to drop the first column (usually an index or ID).
     dropNAColumns=True,  # Whether to drop columns with any null values.
+    encodeCategorical=True,  # Whether to encode categorical features (if any).
     saveFigures=True,  # Whether to save the performance plots.
     eps=1e-8,  # Small value to avoid division by zero (if needed).
     loadStudy=True,  # Whether to load an existing study if available.
@@ -1350,6 +1351,7 @@ class OptunaTuning(object):
       targetColumn (str): Name of the target column in the dataset.
       dropFirstColumn (bool): Whether to drop the first column (usually an index or ID).
       dropNAColumns (bool): Whether to drop columns with any null values.
+      encodeCategorical (bool): Whether to encode categorical features (if any).
       saveFigures (bool): Whether to save the performance plots.
       eps (float): Small value to avoid division by zero (if needed).
       loadStudy (bool): Whether to load an existing study if available.
@@ -1368,6 +1370,7 @@ class OptunaTuning(object):
     self.testFilename = testFilename  # Name of the test dataset file.
     self.contamination = contamination  # Proportion of outliers in the data (for outlier detection techniques).
     self.dropNAColumns = dropNAColumns  # Whether to drop columns with any null values.
+    self.encodeCategorical = encodeCategorical  # Whether to encode categorical features (if any).
     self.saveFigures = saveFigures  # Whether to save the performance plots.
     self.eps = eps  # Small value to avoid division by zero (if needed).
     self.loadStudy = loadStudy  # Whether to load an existing study if available.
@@ -1467,6 +1470,7 @@ class OptunaTuning(object):
         targetColumn=self.targetColumn,  # Name of the target column in the dataset.
         dropFirstColumn=self.dropFirstColumn,  # Whether to drop the first column (usually an index or ID).
         dropNAColumns=self.dropNAColumns,  # Whether to drop columns with any null values.
+        encodeCategorical=self.encodeCategorical,  # Whether to encode categorical features (if any).
         eps=self.eps,  # Small value to avoid division by zero (if needed).
       )
 

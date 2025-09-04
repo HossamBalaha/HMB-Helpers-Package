@@ -1,10 +1,15 @@
 import os, timm, torch, tqdm
+import numpy as np
+import pandas as pd
 from PIL import Image
-import torch.nn as nn
-import torch.optim as optim
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix, classification_report
 from torch.cuda.amp import GradScaler
-from sklearn.metrics import confusion_matrix
-from HMB.PerformanceMetrics import CalculatePerformanceMetrics
+from torch.utils.data import DataLoader
+from torchvision import transforms
+
+import HMB.PerformanceMetrics as pm
 
 
 # Function to save a PyTorch model's state dictionary to a file.
@@ -23,6 +28,23 @@ def SaveModel(model, filename="model.pth"):
 
   # Print confirmation message with filename.
   print(f"Model saved to {filename}. You can load it later using LoadModel().")
+
+
+def SavePyTorchDict(modelDict, filename="model.pth"):
+  '''
+  Save a PyTorch state dictionary to a file for later use. You can load it later
+  using LoadPyTorchDict function.
+
+  Parameters:
+    modelDict (dict): The state dictionary to save.
+    filename (str): The name of the file to save the state dictionary to.
+  '''
+
+  # Save the state dictionary to the specified file.
+  torch.save(modelDict, filename)
+
+  # Print confirmation message with filename.
+  print(f"State dictionary saved to {filename}. You can load it later using torch.load().")
 
 
 # Function to load a PyTorch model's state dictionary from a file and move it to a device.
@@ -48,6 +70,32 @@ def LoadModel(model, filename="model.pth", device="gpu"):
 
   # Print confirmation message with filename and device.
   print(f"Model loaded from {filename} and moved to {device}.")
+
+
+def LoadPyTorchDict(filename="model.pth", device="gpu"):
+  '''
+  Load a PyTorch state dictionary from a file and map it to the specified device.
+
+  Parameters:
+    filename (str): The name of the file to load the state dictionary from.
+    device (str): The device to map the state dictionary onto (e.g., "cpu" or "cuda").
+
+  Returns:
+    dict: The loaded state dictionary.
+  '''
+
+  # Check if the state dictionary file exists before loading.
+  if (not os.path.exists(filename)):
+    print(f"State dictionary file not found: {filename}")
+    return None
+
+  # Load the state dictionary from file and map to the specified device.
+  stateDict = torch.load(filename, map_location=device)
+
+  # Print confirmation message with filename and device.
+  print(f"State dictionary loaded from {filename} and mapped to {device}.")
+
+  return stateDict
 
 
 def SaveCheckpoint(model, optimizer, filename="chk.pth.tar"):
@@ -214,7 +262,7 @@ def TrainEvaluateModel(
   model,  # Model to train and evaluate.
   criterion,  # Loss function.
   device,  # Device to run training and evaluation on (CPU or GPU).
-  modelStoragePath,  # Path to save the best model.
+  bestModelStoragePath,  # Path to save the best model.
   noOfClasses,  # Number of classes in the classification task.
   numEpochs,  # Total number of epochs for training.
   optimizer,  # Optimizer for updating model parameters.
@@ -222,6 +270,8 @@ def TrainEvaluateModel(
   scheduler,  # Learning rate scheduler.
   trainLoader,  # DataLoader for training data.
   valLoader,  # DataLoader for validation data.
+  resumeFromCheckpoint=False,  # Whether to resume training from a checkpoint.
+  finalModelStoragePath=None,  # Path to save the final model after training.
   verbose=True,  # Verbosity flag to control logging.
 ):
   '''
@@ -231,7 +281,7 @@ def TrainEvaluateModel(
     model (torch.nn.Module): Model to train and evaluate.
     criterion (callable): Loss function.
     device (torch.device): Device to run training and evaluation on (CPU or GPU).
-    modelStoragePath (str): Path to save the best model.
+    bestModelStoragePath (str): Path to save the best model.
     noOfClasses (int): Number of classes in the classification task.
     numEpochs (int): Total number of epochs for training.
     optimizer (torch.optim.Optimizer): Optimizer for updating model parameters.
@@ -239,6 +289,8 @@ def TrainEvaluateModel(
     scheduler (torch.optim.lr_scheduler._LRScheduler): Learning rate scheduler.
     trainLoader (torch.utils.data.DataLoader): DataLoader for training data.
     valLoader (torch.utils.data.DataLoader): DataLoader for validation data.
+    resumeFromCheckpoint (bool, optional): Flag to indicate if training should resume from a checkpoint. Defaults to False.
+    finalModelStoragePath (str, optional): Path to save the final model after training. Defaults to None.
     verbose (bool, optional): Verbosity flag to control logging. Defaults to True.
 
   Returns:
@@ -250,15 +302,28 @@ def TrainEvaluateModel(
     "train_accuracy": [],
     "val_accuracy"  : [],
     "train_loss"    : [],
-    "val_loss"      : []
+    "val_loss"      : [],
   }
 
   # Variables to track the best validation loss and accuracy.
   bestValLoss = float("inf")
   bestValAccuracy = 0.0
 
+  # If resuming from checkpoint, load the model and optimizer state.
+  if (resumeFromCheckpoint and os.path.exists(bestModelStoragePath)):
+    print(f"Resuming from checkpoint: {resumeFromCheckpoint}")
+    stateDict = LoadPyTorchDict(bestModelStoragePath, device=device)
+    model.load_state_dict(stateDict["model_state_dict"])
+    optimizer.load_state_dict(stateDict["optimizer_state_dict"])
+    scaler.load_state_dict(stateDict["scaler_state_dict"])
+    startEpoch = stateDict["epoch"]
+    bestValLoss = stateDict.get("best_val_loss", float("inf"))
+    bestValAccuracy = stateDict.get("best_val_accuracy", 0.0)
+  else:
+    startEpoch = 0
+
   # Training loop for the specified number of epochs.
-  for epoch in range(numEpochs):
+  for epoch in range(startEpoch, numEpochs):
     if (verbose):
       print(f"Starting epoch {epoch + 1}/{numEpochs}")
 
@@ -289,7 +354,15 @@ def TrainEvaluateModel(
     if ((avgValEpochLoss < bestValLoss) or (avgValEpochAccuracy > bestValAccuracy)):
       bestValLoss = avgValEpochLoss
       bestValAccuracy = avgValEpochAccuracy
-      SaveModel(model, modelStoragePath)
+      # SaveModel(model, bestModelStoragePath)
+      SavePyTorchDict({
+        "model_state_dict"    : model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "epoch"               : epoch + 1,
+        "scaler_state_dict"   : scaler.state_dict(),
+        "best_val_loss"       : bestValLoss,
+        "best_val_accuracy"   : bestValAccuracy,
+      }, filename=bestModelStoragePath)
       if (verbose):
         print(
           f"Saved new best model with val loss: {bestValLoss:.4f} "
@@ -298,6 +371,21 @@ def TrainEvaluateModel(
 
     # Update learning rate scheduler.
     scheduler.step()
+
+  # Save the final model after training if a path is provided.
+  if (finalModelStoragePath):
+    # SaveModel(model, finalModelStoragePath)
+    SavePyTorchDict({
+      "model_state_dict"    : model.state_dict(),
+      "optimizer_state_dict": optimizer.state_dict(),
+      "epoch"               : numEpochs,
+      "scaler_state_dict"   : scaler.state_dict(),
+      "best_val_loss"       : bestValLoss,
+      "best_val_accuracy"   : bestValAccuracy,
+    }, filename=finalModelStoragePath)
+    if (verbose):
+      print(f"Saved final model after {numEpochs} epochs to {finalModelStoragePath}")
+
   return history
 
 
@@ -373,7 +461,7 @@ def TrainOneEpoch(
       labels=list(range(noOfClasses)),  # List of class labels.
     )
     # Calculate performance metrics from the confusion matrix.
-    metrics = CalculatePerformanceMetrics(cm)
+    metrics = pm.CalculatePerformanceMetrics(cm)
     accuracy = metrics["Weighted Accuracy"]
     # Accumulate the total accuracy for the epoch.
     totalEpochAccuracy += accuracy
@@ -454,7 +542,7 @@ def EvaluateOneEpoch(
         labels=list(range(noOfClasses)),  # List of class labels.
       )
       # Calculate performance metrics from the confusion matrix.
-      metrics = CalculatePerformanceMetrics(cm)
+      metrics = pm.CalculatePerformanceMetrics(cm)
       accuracy = metrics["Weighted Accuracy"]
 
       # Accumulate the total accuracy for the validation epoch.
@@ -465,3 +553,209 @@ def EvaluateOneEpoch(
   avgValAccuracy = totalAccuracy / len(dataLoader)
 
   return avgValLoss, avgValAccuracy
+
+
+def InferenceWithPlots(
+  baseDir,  # Base directory containing experiment folders.
+  dataDir,  # Directory containing dataset.
+  modelName,  # Model architecture name.
+  numClasses,  # Number of output classes.
+  device=None,  # Device to run inference on.
+  batchSize=1,  # Batch size for inference.
+  imageSize=448,  # Image size for transforms.
+  expDirPrefix="Results_",  # Prefix for experiment directories.
+  overallResultsFile="Overall_Results.csv",  # Output CSV file for overall results.
+  plotFontSize=16,  # Font size for plots.
+  plotFigSize=(8, 8),  # Figure size for confusion matrix.
+  rocFigSize=(5, 5),  # Figure size for ROC/PRC curves.
+  dpi=720,  # DPI for saving plots.
+  verbose=True,  # Whether to print progress.
+):
+  '''
+  Perform inference on all experiment directories and generate performance plots.
+
+  Parameters:
+    baseDir (str): Base directory containing experiment folders.
+    dataDir (str): Directory containing dataset.
+    modelName (str): Model architecture name.
+    numClasses (int): Number of output classes.
+    device (str or torch.device, optional): Device to run inference on.
+    batchSize (int, optional): Batch size for inference.
+    imageSize (int, optional): Image size for transforms.
+    expDirPrefix (str, optional): Prefix for experiment directories.
+    overallResultsFile (str, optional): Output CSV file for overall results.
+    plotFontSize (int, optional): Font size for plots.
+    plotFigSize (tuple, optional): Figure size for confusion matrix.
+    rocFigSize (tuple, optional): Figure size for ROC/PRC curves.
+    dpi (int, optional): DPI for saving plots.
+    verbose (bool, optional): Whether to print progress.
+  '''
+
+  # Set device.
+  device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+  # Get experiment directories.
+  expDirs = [
+    exp
+    for exp in os.listdir(baseDir)
+    if (os.path.isdir(os.path.join(baseDir, exp)) and exp.startswith(expDirPrefix))
+  ]
+  # Set overall results file path.
+  overallPath = os.path.join(baseDir, overallResultsFile)
+  # Prepare image transform.
+  transform = transforms.Compose([
+    transforms.Resize((imageSize, imageSize)),  # Resize images.
+    transforms.ToTensor(),  # Convert to tensor.
+    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),  # Normalize.
+  ])
+  # Create dataset and dataloader.
+  dataset = CustomDataset(dataDir, transform=transform)
+  dataloader = DataLoader(dataset, batch_size=batchSize, shuffle=False)
+  # Initialize overall history.
+  overallHistory = []
+  # Loop through each experiment directory.
+  for expDir in expDirs:
+    if (verbose):
+      print(f"Processing directory: {expDir}")
+    # Set model and plot paths.
+    modelPath = os.path.join(baseDir, expDir, "best_model.pth")
+    cmFilePath = os.path.join(baseDir, expDir, "CM.pdf")
+    rocFilePath = os.path.join(baseDir, expDir, "ROC.pdf")
+    rocpFilePath = os.path.join(baseDir, expDir, "ROCP.pdf")
+    prcFilePath = os.path.join(baseDir, expDir, "PRC.pdf")
+    prcpFilePath = os.path.join(baseDir, expDir, "PRCP.pdf")
+    # Create the model using timm.
+    model = timm.create_model(modelName, pretrained=False, num_classes=numClasses)
+    # Load the checkpoint from disk.
+    checkpoint = torch.load(modelPath, map_location=device)
+    # Load the model weights from the checkpoint.
+    model.load_state_dict(checkpoint["model_state_dict"])
+    # Move the model to the selected device (CPU or GPU).
+    model = model.to(device)
+    # Set the model to evaluation mode.
+    model.eval()
+    # Lists to store true labels, predicted labels, and probabilities.
+    yTrue = []
+    yPred = []
+    yProbs = []
+    # Disable gradient calculation for evaluation.
+    with torch.no_grad():
+      # Iterate over the dataloader with a progress bar.
+      for imgs, labels in tqdm.tqdm(dataloader, desc="Evaluating", unit="Image"):
+        # Move images and labels to the selected device.
+        imgs = imgs.to(device)
+        labels = labels.to(device)
+        # Get model outputs (logits).
+        outputs = model(imgs)
+        # Apply softmax to get probabilities.
+        probs = torch.softmax(outputs, dim=1)
+        # Get predicted class indices.
+        preds = torch.argmax(outputs, dim=1)
+        # Store true labels, predicted labels, and probabilities.
+        yTrue.extend(labels.cpu().numpy())
+        yPred.extend(preds.cpu().numpy())
+        yProbs.extend(probs.cpu().numpy())
+    # Convert lists to numpy arrays for easier manipulation.
+    yTrue = np.array(yTrue)
+    yPred = np.array(yPred)
+    yProbs = np.array(yProbs)
+    # Compute the confusion matrix.
+    cm = confusion_matrix(yTrue, yPred)
+    # Calculate performance metrics using the confusion matrix.
+    metrics = pm.CalculatePerformanceMetrics(cm, addWeightedAverage=True)
+    metrics["File"] = expDir
+    overallHistory.append(metrics)
+    # Plot and save the confusion matrix.
+    pm.PlotConfusionMatrix(
+      cm,  # Confusion matrix (2D list or numpy array).
+      classes=list(dataset.classToIdx.keys()),  # List of class names.
+      normalize=False,  # Whether to normalize the confusion matrix.
+      roundDigits=3,  # Number of decimal places to round normalized values.
+      title="Confusion Matrix",  # Title of the plot.
+      cmap=plt.cm.Blues,  # Colormap for the plot.
+      display=False,  # Whether to display the plot.
+      save=True,  # Whether to save the plot.
+      fileName=cmFilePath,  # File path to save the plot.
+      fontSize=plotFontSize,  # Font size for labels and annotations.
+      annotate=True,  # Whether to annotate cells with values.
+      figSize=plotFigSize,  # Figure size in inches.
+      colorbar=True,  # Whether to show colorbar.
+      returnFig=False,  # Whether to return the figure object.
+    )
+    # Plot and save the ROC curve and AUC (predicted labels).
+    pm.PlotROCAUCCurve(
+      yTrue,  # True labels.
+      yPred,  # Predicted labels.
+      classes=list(dataset.classToIdx.keys()),  # List of class names.
+      areProbabilities=False,  # Whether yPred are probabilities.
+      title="ROC Curve & AUC",  # Plot title.
+      figSize=rocFigSize,  # Figure size.
+      cmap=None,  # Colormap for ROC curves.
+      display=False,  # Display the plot.
+      save=True,  # Save the plot.
+      fileName=rocFilePath,  # File path to save the plot.
+      fontSize=plotFontSize,  # Font size.
+      plotDiagonal=True,  # Plot diagonal reference line.
+      annotateAUC=True,  # Annotate AUC value on plot.
+      showLegend=True,  # Show legend.
+      returnFig=False,  # Return figure object.
+      dpi=dpi,  # DPI for saving the figure.
+    )
+    # Plot and save the ROC curve and AUC (probabilities).
+    pm.PlotROCAUCCurve(
+      yTrue,  # True labels.
+      yProbs,  # Predicted probabilities.
+      classes=list(dataset.classToIdx.keys()),  # List of class names.
+      areProbabilities=True,  # Whether yPred are probabilities.
+      title="ROC Curve & AUC (Probabilities)",  # Plot title.
+      figSize=rocFigSize,  # Figure size.
+      cmap=None,  # Colormap for ROC curves.
+      display=False,  # Display the plot.
+      save=True,  # Save the plot.
+      fileName=rocpFilePath,  # File path to save the plot.
+      fontSize=plotFontSize,  # Font size.
+      plotDiagonal=True,  # Plot diagonal reference line.
+      annotateAUC=True,  # Annotate AUC value on plot.
+      showLegend=True,  # Show legend.
+      returnFig=False,  # Return figure object.
+      dpi=dpi,  # DPI for saving the figure.
+    )
+    # Plot and save the PRC curve (predicted labels).
+    pm.PlotPRCCurve(
+      yTrue,  # True labels.
+      yPred,  # Predicted labels.
+      classes=list(dataset.classToIdx.keys()),  # List of class names.
+      areProbabilities=False,  # Whether yPred are probabilities.
+      title="PRC Curve",  # Plot title.
+      figSize=rocFigSize,  # Figure size.
+      cmap=None,  # Colormap for PRC curves.
+      display=False,  # Display the plot.
+      save=True,  # Save the plot.
+      fileName=prcFilePath,  # File path to save the plot.
+      fontSize=plotFontSize,  # Font size.
+      annotateAvg=True,  # Annotate average precision value on plot.
+      showLegend=True,  # Show legend.
+      returnFig=False,  # Return figure object.
+      dpi=dpi,  # DPI for saving the figure.
+    )
+    # Plot and save the PRC curve (probabilities).
+    pm.PlotPRCCurve(
+      yTrue,  # True labels.
+      yProbs,  # Predicted probabilities.
+      classes=list(dataset.classToIdx.keys()),  # List of class names.
+      areProbabilities=True,  # Whether yPred are probabilities.
+      title="PRC Curve (Probabilities)",  # Plot title.
+      figSize=rocFigSize,  # Figure size.
+      cmap=None,  # Colormap for PRC curves.
+      display=False,  # Display the plot.
+      save=True,  # Save the plot.
+      fileName=prcpFilePath,  # File path to save the plot.
+      fontSize=plotFontSize,  # Font size.
+      annotateAvg=True,  # Annotate average precision value on plot.
+      showLegend=True,  # Show legend.
+      returnFig=False,  # Return figure object.
+      dpi=dpi,  # DPI for saving the figure.
+    )
+  # Save overall metrics to CSV.
+  df = pd.DataFrame(overallHistory)
+  df = df[["File"] + [col for col in df.columns if col != "File"]]
+  df.to_csv(overallPath, index=False)
