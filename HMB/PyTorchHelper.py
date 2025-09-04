@@ -564,7 +564,7 @@ def InferenceWithPlots(
   device=None,  # Device to run inference on.
   batchSize=1,  # Batch size for inference.
   imageSize=448,  # Image size for transforms.
-  expDirPrefix="Results_",  # Prefix for experiment directories.
+  expDirs=[],  # List of experiment directories.
   overallResultsFile="Overall_Results.csv",  # Output CSV file for overall results.
   plotFontSize=16,  # Font size for plots.
   plotFigSize=(8, 8),  # Figure size for confusion matrix.
@@ -584,7 +584,7 @@ def InferenceWithPlots(
     device (str or torch.device, optional): Device to run inference on.
     batchSize (int, optional): Batch size for inference.
     imageSize (int, optional): Image size for transforms.
-    expDirPrefix (str, optional): Prefix for experiment directories.
+    expDirs (list, optional): List of experiment directories.
     overallResultsFile (str, optional): Output CSV file for overall results.
     plotFontSize (int, optional): Font size for plots.
     plotFigSize (tuple, optional): Figure size for confusion matrix.
@@ -593,20 +593,20 @@ def InferenceWithPlots(
     verbose (bool, optional): Whether to print progress.
   '''
 
+  if (len(expDirs) == 0):
+    if (verbose):
+      print("No experiment directories provided.")
+    return
+
   # Set device.
   device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-
-  # Get experiment directories.
-  expDirs = [
-    exp
-    for exp in os.listdir(baseDir)
-    if (os.path.isdir(os.path.join(baseDir, exp)) and exp.startswith(expDirPrefix))
-  ]
 
   # Set overall results file path.
   overallPath = os.path.join(baseDir, overallResultsFile)
 
   if (not transform):
+    if (verbose):
+      print("No transform provided. Using default transform.")
     # Prepare image transform.
     transform = transforms.Compose([
       transforms.Resize((imageSize, imageSize)),  # Resize images.
