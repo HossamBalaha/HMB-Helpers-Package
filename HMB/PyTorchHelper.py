@@ -450,9 +450,9 @@ def TrainOneEpoch(
     # Compute the loss using the specified criterion.
     loss = criterion(outputs, labels)
     # If loss is a tensor, convert it to a scalar value.
-    loss = loss.item() if isinstance(loss, torch.Tensor) else loss
+    lossScalar = loss.item() if isinstance(loss, torch.Tensor) else loss
     # Accumulate the total loss for the epoch.
-    totalEpochLoss += loss
+    totalEpochLoss += lossScalar
 
     # Compute the confusion matrix and accuracy.
     cm = confusion_matrix(
