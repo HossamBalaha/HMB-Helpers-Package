@@ -558,8 +558,9 @@ def EvaluateOneEpoch(
 def InferenceWithPlots(
   baseDir,  # Base directory containing experiment folders.
   dataDir,  # Directory containing dataset.
-  modelName,  # Model architecture name.
-  numClasses,  # Number of output classes.
+  model,  # Model architecture.
+  modelCheckpointName=None,  # Path to model checkpoint.
+  transform=None,  # Image transform to apply.
   device=None,  # Device to run inference on.
   batchSize=1,  # Batch size for inference.
   imageSize=448,  # Image size for transforms.
@@ -577,8 +578,9 @@ def InferenceWithPlots(
   Parameters:
     baseDir (str): Base directory containing experiment folders.
     dataDir (str): Directory containing dataset.
-    modelName (str): Model architecture name.
-    numClasses (int): Number of output classes.
+    model (torch.nn.Module): Model architecture.
+    modelCheckpointName (str, optional): Name of the model checkpoint.
+    transform (callable, optional): Image transform to apply.
     device (str or torch.device, optional): Device to run inference on.
     batchSize (int, optional): Batch size for inference.
     imageSize (int, optional): Image size for transforms.
@@ -593,50 +595,61 @@ def InferenceWithPlots(
 
   # Set device.
   device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+
   # Get experiment directories.
   expDirs = [
     exp
     for exp in os.listdir(baseDir)
     if (os.path.isdir(os.path.join(baseDir, exp)) and exp.startswith(expDirPrefix))
   ]
+
   # Set overall results file path.
   overallPath = os.path.join(baseDir, overallResultsFile)
-  # Prepare image transform.
-  transform = transforms.Compose([
-    transforms.Resize((imageSize, imageSize)),  # Resize images.
-    transforms.ToTensor(),  # Convert to tensor.
-    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),  # Normalize.
-  ])
+
+  if (not transform):
+    # Prepare image transform.
+    transform = transforms.Compose([
+      transforms.Resize((imageSize, imageSize)),  # Resize images.
+      transforms.ToTensor(),  # Convert to tensor.
+      transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),  # Normalize.
+    ])
+
   # Create dataset and dataloader.
   dataset = CustomDataset(dataDir, transform=transform)
   dataloader = DataLoader(dataset, batch_size=batchSize, shuffle=False)
+
   # Initialize overall history.
   overallHistory = []
+
   # Loop through each experiment directory.
   for expDir in expDirs:
     if (verbose):
       print(f"Processing directory: {expDir}")
-    # Set model and plot paths.
-    modelPath = os.path.join(baseDir, expDir, "best_model.pth")
+
+    if (modelCheckpointName):
+      modelPath = os.path.join(baseDir, expDir, modelCheckpointName)
+      # Load model checkpoint name from experiment directory.
+      stateDict = LoadPyTorchDict(modelPath, device=device)
+      if (stateDict and isinstance(stateDict, dict) and "model_state_dict" in stateDict):
+        model.load_state_dict(stateDict["model_state_dict"])
+      else:
+        model.load_state_dict(stateDict)
+
     cmFilePath = os.path.join(baseDir, expDir, "CM.pdf")
     rocFilePath = os.path.join(baseDir, expDir, "ROC.pdf")
     rocpFilePath = os.path.join(baseDir, expDir, "ROCP.pdf")
     prcFilePath = os.path.join(baseDir, expDir, "PRC.pdf")
     prcpFilePath = os.path.join(baseDir, expDir, "PRCP.pdf")
-    # Create the model using timm.
-    model = timm.create_model(modelName, pretrained=False, num_classes=numClasses)
-    # Load the checkpoint from disk.
-    checkpoint = torch.load(modelPath, map_location=device)
-    # Load the model weights from the checkpoint.
-    model.load_state_dict(checkpoint["model_state_dict"])
+
     # Move the model to the selected device (CPU or GPU).
     model = model.to(device)
+
     # Set the model to evaluation mode.
     model.eval()
+
     # Lists to store true labels, predicted labels, and probabilities.
-    yTrue = []
-    yPred = []
-    yProbs = []
+    yTrue, yPred, yProbs = [], [], []
+
     # Disable gradient calculation for evaluation.
     with torch.no_grad():
       # Iterate over the dataloader with a progress bar.
@@ -654,16 +667,19 @@ def InferenceWithPlots(
         yTrue.extend(labels.cpu().numpy())
         yPred.extend(preds.cpu().numpy())
         yProbs.extend(probs.cpu().numpy())
+
     # Convert lists to numpy arrays for easier manipulation.
     yTrue = np.array(yTrue)
     yPred = np.array(yPred)
     yProbs = np.array(yProbs)
+
     # Compute the confusion matrix.
     cm = confusion_matrix(yTrue, yPred)
     # Calculate performance metrics using the confusion matrix.
     metrics = pm.CalculatePerformanceMetrics(cm, addWeightedAverage=True)
     metrics["File"] = expDir
     overallHistory.append(metrics)
+
     # Plot and save the confusion matrix.
     pm.PlotConfusionMatrix(
       cm,  # Confusion matrix (2D list or numpy array).
@@ -681,6 +697,7 @@ def InferenceWithPlots(
       colorbar=True,  # Whether to show colorbar.
       returnFig=False,  # Whether to return the figure object.
     )
+
     # Plot and save the ROC curve and AUC (predicted labels).
     pm.PlotROCAUCCurve(
       yTrue,  # True labels.
@@ -700,6 +717,7 @@ def InferenceWithPlots(
       returnFig=False,  # Return figure object.
       dpi=dpi,  # DPI for saving the figure.
     )
+
     # Plot and save the ROC curve and AUC (probabilities).
     pm.PlotROCAUCCurve(
       yTrue,  # True labels.
@@ -719,6 +737,7 @@ def InferenceWithPlots(
       returnFig=False,  # Return figure object.
       dpi=dpi,  # DPI for saving the figure.
     )
+
     # Plot and save the PRC curve (predicted labels).
     pm.PlotPRCCurve(
       yTrue,  # True labels.
@@ -737,6 +756,7 @@ def InferenceWithPlots(
       returnFig=False,  # Return figure object.
       dpi=dpi,  # DPI for saving the figure.
     )
+
     # Plot and save the PRC curve (probabilities).
     pm.PlotPRCCurve(
       yTrue,  # True labels.
@@ -755,6 +775,7 @@ def InferenceWithPlots(
       returnFig=False,  # Return figure object.
       dpi=dpi,  # DPI for saving the figure.
     )
+
   # Save overall metrics to CSV.
   df = pd.DataFrame(overallHistory)
   df = df[["File"] + [col for col in df.columns if col != "File"]]
