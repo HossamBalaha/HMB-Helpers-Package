@@ -90,7 +90,8 @@ def LoadPyTorchDict(filename="model.pth", device="gpu"):
     return None
 
   # Load the state dictionary from file and map to the specified device.
-  stateDict = torch.load(filename, map_location=device)
+  # Set weights_only=False to allow loading full objects (required for PyTorch >=2.6).
+  stateDict = torch.load(filename, map_location=device, weights_only=False)
 
   # Print confirmation message with filename and device.
   print(f"State dictionary loaded from {filename} and mapped to {device}.")
@@ -623,11 +624,18 @@ def InferenceWithPlots(
 
   # Loop through each experiment directory.
   for expDir in expDirs:
+    # Check if experiment directory exists.
+    expDirPath = os.path.join(baseDir, expDir)
+    if (not os.path.exists(expDirPath)):
+      if (verbose):
+        print(f"Experiment directory not found: {expDirPath}")
+      continue
+
     if (verbose):
       print(f"Processing directory: {expDir}")
 
     if (modelCheckpointName):
-      modelPath = os.path.join(baseDir, expDir, modelCheckpointName)
+      modelPath = os.path.join(expDirPath, modelCheckpointName)
       # Load model checkpoint name from experiment directory.
       stateDict = LoadPyTorchDict(modelPath, device=device)
       if (stateDict and isinstance(stateDict, dict) and "model_state_dict" in stateDict):
@@ -635,11 +643,11 @@ def InferenceWithPlots(
       else:
         model.load_state_dict(stateDict)
 
-    cmFilePath = os.path.join(baseDir, expDir, "CM.pdf")
-    rocFilePath = os.path.join(baseDir, expDir, "ROC.pdf")
-    rocpFilePath = os.path.join(baseDir, expDir, "ROCP.pdf")
-    prcFilePath = os.path.join(baseDir, expDir, "PRC.pdf")
-    prcpFilePath = os.path.join(baseDir, expDir, "PRCP.pdf")
+    cmFilePath = os.path.join(expDirPath, "CM.pdf")
+    rocFilePath = os.path.join(expDirPath, "ROC.pdf")
+    rocpFilePath = os.path.join(expDirPath, "ROCP.pdf")
+    prcFilePath = os.path.join(expDirPath, "PRC.pdf")
+    prcpFilePath = os.path.join(expDirPath, "PRCP.pdf")
 
     # Move the model to the selected device (CPU or GPU).
     model = model.to(device)
