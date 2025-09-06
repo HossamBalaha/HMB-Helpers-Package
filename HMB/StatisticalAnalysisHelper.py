@@ -1506,7 +1506,6 @@ def ExtractDataFromSummaryFile(file):
   return history, names, metrics
 
 
-
 def PlotDistributionEDA(
   df,  # DataFrame to analyze.
   baseDir,  # Base directory to save the plots.
@@ -1536,8 +1535,11 @@ def PlotDistributionEDA(
     keyword (str, optional): Keyword to include in the saved filenames (default: "X").
     maxUniqueLabels (int, optional): Maximum number of unique labels to show on the x-axis (default: 10).
 
-  Example:
-    import StatisticalAnalysisHelper as sah
+  Example
+  -------
+  .. code-block:: python
+
+    import HMB.StatisticalAnalysisHelper as sah
     import pandas as pd
 
     # This will generate and save EDA distribution plots for both numeric and non-numeric columns

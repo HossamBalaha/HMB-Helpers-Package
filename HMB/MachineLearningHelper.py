@@ -1233,6 +1233,23 @@ def MachineLearningClassification(
     "OutlierDetectionMask"     : dbObj,
     "LabelEncoder"             : le,
     "FeaturesEncoders"         : featuresEncoders,
+    "Configurations"           : {
+      "datasetFilePath"  : datasetFilePath,
+      "scalerName"       : scalerName,
+      "modelName"        : modelName,
+      "fsTechName"       : fsTechName,
+      "fsTechRatio"      : fsTechRatio,
+      "dataBalanceTech"  : dataBalanceTech,
+      "outlierTech"      : outlierTech,
+      "contamination"    : contamination,
+      "testRatio"        : testRatio,
+      "testFilePath"     : testFilePath,
+      "targetColumn"     : targetColumn,
+      "dropFirstColumn"  : dropFirstColumn,
+      "dropNAColumns"    : dropNAColumns,
+      "encodeCategorical": encodeCategorical,
+      "eps"              : eps,
+    }
   }
 
   # Return the performance metrics, plot object, and objects for saving.
@@ -1279,7 +1296,9 @@ class OptunaTuning(object):
   -------
   .. code-block:: python
 
-    tuner = OptunaTuning(
+    import HMB.MachineLearningHelper as mlh
+
+    tuner = mlh.OptunaTuning(
       baseDir="./data",
       scalers=["Standard", "MinMax"],
       models=["RF", "LR"],

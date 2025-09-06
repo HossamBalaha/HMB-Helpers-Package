@@ -35,8 +35,13 @@ class SHAPExplainer(object):
     yPred: Model predictions.
     yPredDecoded: Decoded predictions.
 
-  Example:
-    import ExplainabilityHelper as eh
+  Example
+  -------
+  .. code-block:: python
+
+    import HMB.ExplainabilityHelper as eh
+
+
     explainer = eh.SHAPExplainer(
       baseDir="path/to/baseDir",
       experimentFolderName="Experiment1",
@@ -182,10 +187,19 @@ class SHAPExplainer(object):
     # Use the columns selected during training to ensure consistency.
     print("Columns used during training:", self.objects["CurrentColumns"])
     self.XTest = self.XTest[self.objects["CurrentColumns"]]
+
+    # Apply any feature encoders used during training, if available.
+    featuresEncoders = self.objects.get("FeaturesEncoders", None)
+    if (featuresEncoders is not None):
+      for col, enc in featuresEncoders.items():
+        if (col in self.XTest.columns):
+          self.XTest[col] = enc.transform(self.XTest[col])
+
     # Apply the same scaler used during training, if available.
     if (self.objects["Scaler"]):
       self.XTest = self.objects["Scaler"].transform(self.XTest)  # Normalize the features.
       self.XTest = pd.DataFrame(self.XTest, columns=self.objects["CurrentColumns"])  # Convert back to DataFrame.
+
     # Apply the same feature selector used during training, if available.
     if (self.objects["FeatureSelector"]):
       self.XTest = self.objects["FeatureSelector"].transform(self.XTest)  # Select features.
@@ -359,21 +373,33 @@ class SHAPExplainer(object):
     else:
       distinctCats = [categoryToExplain]
 
-    # Create a list to hold SHAP values for each category.
-    toPlot = [copy.copy(self.shapValues)]
-    for cat in distinctCats:
-      # Filter SHAP values for the specified category.
-      shapValuesAlt = copy.copy(self.shapValues)
-      shapValuesAlt.values = shapValuesAlt.values[self.yTest == cat]  # Filter SHAP values based on the category.
-      shapValuesAlt.data = shapValuesAlt.data[self.yTest == cat]  # Filter features based on the category.
-      if (shapValuesAlt.data.shape[0] == 0):
-        print(f"No records found for category '{cat}'. Skipping this category.")
-        continue
-      toPlot.append(shapValuesAlt)
+    # # Create a list to hold SHAP values for each category.
+    # toPlot = [copy.copy(self.shapValues)]
+    # for cat in distinctCats:
+    #   # Filter SHAP values for the specified category.
+    #   shapValuesAlt = copy.copy(self.shapValues)
+    #   shapValuesAlt.values = shapValuesAlt.values[self.yTest == cat]  # Filter SHAP values based on the category.
+    #   shapValuesAlt.data = shapValuesAlt.data[self.yTest == cat]  # Filter features based on the category.
+    #   if (shapValuesAlt.data.shape[0] == 0):
+    #     print(f"No records found for category '{cat}'. Skipping this category.")
+    #     continue
+    #   toPlot.append(shapValuesAlt)
 
+    # Generate SHAP plots for each category (including "All")
     for cat in distinctCats:
-      # Get the first SHAP values object.
-      temp = toPlot.pop(0)
+      if (cat == "All"):
+        temp = copy.copy(self.shapValues)
+      else:
+        mask = self.yTest == cat
+        temp = copy.copy(self.shapValues)
+        temp.values = temp.values[mask]
+        temp.data = temp.data[mask]
+        if (temp.data.shape[0] == 0):
+          print(f"No records found for category '{cat}'. Skipping this category.")
+          continue
+
+      # # Get the first SHAP values object.
+      # temp = toPlot.pop(0)
 
       # --- Scatter Plot ---
       # Visualize the scatter plot for the test set.

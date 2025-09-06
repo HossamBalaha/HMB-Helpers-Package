@@ -95,6 +95,7 @@ Quickstart
    PyTorchHelper
    AttentionMapsHelper
    MetaheuristicsHelper
+   ExplainabilityHelper
 
 Getting Help
 ------------
