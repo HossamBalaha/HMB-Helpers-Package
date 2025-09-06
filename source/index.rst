@@ -71,8 +71,7 @@ Quickstart
    print(cleaned)
 
 .. note::
-   Requires `Pillow`, `numpy`, `opencv-python`, `PyMuPDF`, `contractions`, and `nltk` packages. Install with:
-   pip install Pillow numpy opencv-python PyMuPDF contractions nltk
+   Requires a set of dependencies. See the file: `requirements.txt <
 
 .. toctree::
    :maxdepth: 1
@@ -95,6 +94,7 @@ Quickstart
    MachineLearningHelper
    PyTorchHelper
    AttentionMapsHelper
+   MetaheuristicsHelper
 
 Getting Help
 ------------

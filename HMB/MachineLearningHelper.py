@@ -1246,7 +1246,7 @@ class OptunaTuning(object):
   This class automates the process of hyperparameter optimization for machine learning pipelines
   using Optuna. It supports tuning over scalers, models, feature selection techniques and ratios,
   data balancing techniques, and outlier detection techniques. The class manages study creation,
-  objective evaluation, result storage, and retrieval of best parameters and study objects.
+  objective evaluation, result storage, and retrieval of the best parameters and study objects.
 
   Parameters:
     baseDir (str): Base directory where the dataset is stored.

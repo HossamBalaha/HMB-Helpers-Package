@@ -1,6 +1,3 @@
-import warnings
-
-warnings.filterwarnings("ignore")
 import os, cv2, random, torch, timm
 from datetime import datetime
 import numpy as np

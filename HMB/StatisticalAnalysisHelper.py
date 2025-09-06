@@ -1,5 +1,5 @@
 # Import necessary libraries.
-import os
+import os, matplotlib
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -448,6 +448,31 @@ def StatisticalAnalysis(results, hypothesizedMean=0, secondMetricList=None, conf
   return report
 
 
+def GetCmapColors(cmap, noColors):
+  '''
+  Utility to get a list of colors from a matplotlib colormap.
+
+  Parameters:
+    cmap (str or Colormap): Name of the colormap or a Colormap object.
+    noColors (int): Number of distinct colors to generate.
+
+  Returns:
+    list: List of RGBA color tuples.
+  '''
+
+  # Generate a list of colors from the specified colormap.
+  if (isinstance(cmap, str)):
+    cmapObj = plt.get_cmap(cmap)
+  else:
+    cmapObj = cmap
+
+  # Ensure we have at least one color.
+  return [
+    cmapObj(i / max(noColors - 1, 1))
+    for i in range(noColors)
+  ]
+
+
 def PlotMetrics(
   data, names, metrics,
   factor=5,  # Factor to multiply the default figure size.
@@ -481,7 +506,7 @@ def PlotMetrics(
     storeInsideNewFolder (bool, optional): Whether to store the plots inside a new folder.
     newFolderName (str, optional): Name of the folder to store the plots.
     noOfPlotsPerRow (int, optional): Number of plots per row in the subplot grid.
-    cmap (str, optional): Color map to use for the plots (default: 'viridis').
+    cmap (str, optional): Color map to use for the plots (default: "viridis").
 
   Raises:
     ValueError: If the input data is not in the expected format.
@@ -610,7 +635,10 @@ def PlotMetrics(
               plt.axhline(0, color="red", linestyle="--", linewidth=1)
               plt.xlabel("Trial Index")
               plt.ylabel("Residuals")
-              plt.title(f"Residuals vs Trial Index\n{metric} - {names[j]}")
+              plt.title(
+                f"Residuals vs Trial Index\n{metric} - {names[j]}",
+                color=GetCmapColors(cmap, len(names))[j]
+              )
               plt.grid(True, alpha=0.5)
               plotIdx += 1
             except Exception as e:
@@ -620,7 +648,7 @@ def PlotMetrics(
                 0.5, 0.5, f"Fit Error:\n{str(e)[:30]}...", ha="center", va="center",
                 transform=plt.gca().transAxes, fontsize=10
               )
-              plt.title(f"Residuals vs Trial Index\n{metric} - {names[j]}\n(Fit Failed)")
+              plt.title(f"Residuals vs Trial Index\n{metric} - {names[j]}\n(Fit Failed)", color="red")
               plt.xlabel("Trial Index")
               plt.ylabel("Residuals")
               plotIdx += 1
@@ -628,7 +656,7 @@ def PlotMetrics(
             # Not enough data points.
             plt.subplot(resRows, resCols, plotIdx)
             plt.text(0.5, 0.5, "N/A\n(< 2 trials)", ha="center", va="center", transform=plt.gca().transAxes)
-            plt.title(f"Residuals vs Trial Index\n{metric} - {names[j]}\n(Insufficient Data)")
+            plt.title(f"Residuals vs Trial Index\n{metric} - {names[j]}\n(Insufficient Data)", color="orange")
             plt.xlabel("Trial Index")
             plt.ylabel("Residuals")
             plotIdx += 1
@@ -683,7 +711,10 @@ def PlotMetrics(
               # Manually get the line for labeling if needed (qqplot usually handles it)
               # Get current axes lines to potentially modify labels
               # line = plt.gca().getLines()[-1] # Example to access line if needed.
-              plt.title(f"Q-Q Plot of Residuals\n{metric} - {names[j]}")
+              plt.title(
+                f"Q-Q Plot of Residuals\n{metric} - {names[j]}",
+                color=GetCmapColors(cmap, len(names))[j]
+              )
               # Labels are usually set by sm.qqplot, but ensure they are present.
               if (not plt.gca().get_ylabel()):
                 plt.xlabel("Theoretical Quantiles (Normal)")
@@ -696,7 +727,7 @@ def PlotMetrics(
               plt.subplot(qqRows, qqCols, plotIdx)
               plt.text(0.5, 0.5, f"Fit/Q-Q Error:\n{str(e)[:30]}...", ha="center", va="center",
                        transform=plt.gca().transAxes, fontsize=10)
-              plt.title(f"Q-Q Plot of Residuals\n{metric} - {names[j]}\n(Fit/Q-Q Failed)")
+              plt.title(f"Q-Q Plot of Residuals\n{metric} - {names[j]}\n(Fit/Q-Q Failed)", color="red")
               plotIdx += 1
               plt.xlabel("Theoretical Quantiles")  # Fallback labels.
               plt.ylabel("Sample Quantiles")
@@ -705,7 +736,7 @@ def PlotMetrics(
             plt.subplot(qqRows, qqCols, plotIdx)
             plt.text(0.5, 0.5, "N/A\n(< 2 trials)", ha="center", va="center",
                      transform=plt.gca().transAxes)
-            plt.title(f"Q-Q Plot of Residuals\n{metric} - {names[j]}\n(Insufficient Data)")
+            plt.title(f"Q-Q Plot of Residuals\n{metric} - {names[j]}\n(Insufficient Data)", color="orange")
             plotIdx += 1
             plt.xlabel("Theoretical Quantiles")  # Fallback labels.
             plt.ylabel("Sample Quantiles")
@@ -751,7 +782,10 @@ def PlotMetrics(
                 plt.axhline(meanDiff - 1.96 * stdDiff, color="gray", linestyle="--", label="-1.96 SD")
                 plt.xlabel(f"Mean of {metric1} and {metric2}")
                 plt.ylabel(f"Difference ({metric1} - {metric2})")
-                plt.title(f"Bland-Altman: {metric1} vs {metric2}\n({names[k]})")
+                plt.title(
+                  f"Bland-Altman: {metric1} vs {metric2}\n({names[k]})",
+                  color=GetCmapColors(cmap, len(names))[k]
+                )
                 plt.legend()
                 plt.grid(True)
                 plotIndex += 1
@@ -775,10 +809,23 @@ def PlotMetrics(
     for i, metric in enumerate(metrics):
       plt.subplot(noRows, noCols, i + 1)
       for j, dataset in enumerate(data):
-        plt.hist(dataset[metric]["Trials"], bins="auto", alpha=0.5, label=names[j], edgecolor="black")
-      plt.title(f"Histogram of {metric} Results")
-      plt.xlabel("Performance Metric")
-      plt.ylabel("Frequency")
+        plt.hist(
+          dataset[metric]["Trials"],
+          bins="auto",
+          alpha=0.5,
+          label=names[j],
+          edgecolor="black",
+          color=GetCmapColors(cmap, len(names))[j]
+        )
+      color = GetCmapColors(cmap, len(names))[i]
+      plt.title(
+        f"Histogram of {metric} Results",
+        color=color
+      )
+      plt.xlabel("Performance Metric", color=color)
+      plt.ylabel("Frequency", color=color)
+      plt.xticks(color=color)
+      plt.yticks(color=color)
       plt.legend()
     plt.tight_layout()
     plt.savefig(f"Histogram_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
@@ -798,7 +845,7 @@ def PlotMetrics(
     plt.figure(figsize=(factor * noCols, factor * noRows))
     for i, metric in enumerate(metrics):
       plt.subplot(noRows, noCols, i + 1)
-      plt.boxplot(
+      bplot = plt.boxplot(
         [el[metric]["Trials"] for el in data],
         vert=True,
         patch_artist=True,
@@ -808,9 +855,22 @@ def PlotMetrics(
         capprops=dict(color="black"),
         flierprops=dict(marker="o", markersize=5, markerfacecolor="red", markeredgecolor="red")
       )
-      plt.title(f"Boxplot of {metric} Results")
-      plt.xticks(list(range(1, noOfDatasets + 1)), names, rotation=xTicksRotation)
-      plt.ylabel("Performance Metric")
+      # Color each box with the cmap colors
+      for patch, color in zip(bplot["boxes"], GetCmapColors(cmap, len(names))):
+        patch.set_facecolor(color)
+      color = GetCmapColors(cmap, len(names))[i]
+      plt.title(
+        f"Boxplot of {metric} Results",
+        color=color
+      )
+      plt.xticks(
+        list(range(1, noOfDatasets + 1)),
+        names,
+        rotation=xTicksRotation,
+        color=color
+      )
+      plt.yticks(color=color)
+      plt.ylabel("Performance Metric", color=color)
     plt.tight_layout()
     plt.savefig(f"BoxPlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
     if (showFigures):
@@ -829,15 +889,24 @@ def PlotMetrics(
     plt.figure(figsize=(factor * noCols, factor * noRows))
     for i, metric in enumerate(metrics):
       plt.subplot(noRows, noCols, i + 1)
-      plt.violinplot(
+      vplot = plt.violinplot(
         [el[metric]["Trials"] for el in data],
         showmeans=True,
         showmedians=True
       )
-      plt.set_cmap(cmap)
-      plt.title(f"Violin Plot of {metric} Results")
-      plt.xticks(list(range(1, noOfDatasets + 1)), names, rotation=xTicksRotation)
-      plt.ylabel("Performance Metric")
+      # Color each violin with the cmap colors
+      for idx, body in enumerate(vplot["bodies"]):
+        body.set_facecolor(GetCmapColors(cmap, len(names))[idx])
+        body.set_edgecolor("black")
+        body.set_alpha(0.7)
+      color = GetCmapColors(cmap, len(names))[i]
+      plt.title(
+        f"Violin Plot of {metric} Results",
+        color=color
+      )
+      plt.xticks(list(range(1, noOfDatasets + 1)), names, rotation=xTicksRotation, color=color)
+      plt.yticks(color=color)
+      plt.ylabel("Performance Metric", color=color)
     plt.tight_layout()
     plt.savefig(f"ViolinPlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
     if (showFigures):
@@ -858,7 +927,15 @@ def PlotMetrics(
       plt.subplot(noRows, noCols, i + 1)
       for j, dataset in enumerate(data):
         stats.probplot(dataset[metric]["Trials"], dist="norm", plot=plt)
-      plt.title(f"Q-Q Plot of {metric} Results")
+      color = GetCmapColors(cmap, len(names))[i]
+      plt.title(
+        f"Q-Q Plot of {metric} Results",
+        color=color
+      )
+      plt.xlabel("Theoretical Quantiles", color=color)
+      plt.ylabel("Sample Quantiles", color=color)
+      plt.xticks(color=color)
+      plt.yticks(color=color)
     plt.tight_layout()
     plt.savefig(f"QQPlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
     if (showFigures):
@@ -878,11 +955,27 @@ def PlotMetrics(
     for i, metric in enumerate(metrics):
       plt.subplot(noRows, noCols, i + 1)
       for j, dataset in enumerate(data):
-        sns.kdeplot(dataset[metric]["Trials"], label=names[j], fill=True, cmap=cmap)
-        sns.rugplot(dataset[metric]["Trials"], height=0.05, alpha=0.5)
-      plt.title(f"Density Plot of {metric} Results")
-      plt.xlabel("Performance Metric")
-      plt.ylabel("Density")
+        sns.kdeplot(
+          dataset[metric]["Trials"],
+          label=names[j],
+          fill=True,
+          color=GetCmapColors(cmap, len(names))[j]
+        )
+        sns.rugplot(
+          dataset[metric]["Trials"],
+          height=0.05,
+          alpha=0.5,
+          color=GetCmapColors(cmap, len(names))[j]
+        )
+      color = GetCmapColors(cmap, len(names))[i]
+      plt.title(
+        f"Density Plot of {metric} Results",
+        color=color
+      )
+      plt.xlabel("Performance Metric", color=color)
+      plt.ylabel("Density", color=color)
+      plt.xticks(color=color)
+      plt.yticks(color=color)
       plt.legend()
     plt.tight_layout()
     plt.savefig(f"DensityPlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
@@ -891,11 +984,6 @@ def PlotMetrics(
     plt.close()
     plt.clf()  # Clear the current figure.
 
-  # ==============================================================================================================
-  # Scatter Plots
-  # Scatter plots are used to visualize the relationship between two variables. They are ideal for identifying
-  # correlations, trends, and outliers in paired data.
-  # ==============================================================================================================
   # ==============================================================================================================
   # Scatter Plots
   # Scatter plots are used to visualize the relationship between two variables. They are ideal for identifying
@@ -928,18 +1016,21 @@ def PlotMetrics(
         for k, dataset in enumerate(data):
           xVals = np.array(dataset[metric1]["Trials"])
           yVals = np.array(dataset[metric2]["Trials"])
-          # Ensure data lengths match for scatter plot
           if (len(xVals) == len(yVals)):
-            plt.scatter(xVals, yVals, label=names[k])
-          else:
-            # Handle mismatched lengths if necessary, or skip.
-            # For now, we assume data integrity from ExtractDataFromSummaryFile.
-            pass
-
-        plt.title(f"Scatter Plot: {metric1} vs {metric2}")
-        plt.xlabel(metric1)
-        plt.ylabel(metric2)
-        # Only add legend if there are multiple datasets to differentiate
+            plt.scatter(
+              xVals, yVals,
+              label=names[k],
+              color=GetCmapColors(cmap, len(names))[k]
+            )
+        color = GetCmapColors(cmap, len(names))[plotIdx]
+        plt.title(
+          f"Scatter Plot: {metric1} vs {metric2}",
+          color=color
+        )
+        plt.xlabel(metric1, color=color)
+        plt.ylabel(metric2, color=color)
+        plt.xticks(color=color)
+        plt.yticks(color=color)
         if (noOfDatasets > 1):
           plt.legend()
 
@@ -963,10 +1054,20 @@ def PlotMetrics(
     for i, metric in enumerate(metrics):
       plt.subplot(noRows, noCols, i + 1)
       for j, dataset in enumerate(data):
-        plt.plot(dataset[metric]["Trials"], label=names[j])
-      plt.title(f"Line Plot of {metric} Results")
-      plt.xlabel("Trial")
-      plt.ylabel("Performance Metric")
+        plt.plot(
+          dataset[metric]["Trials"],
+          label=names[j],
+          color=GetCmapColors(cmap, len(names))[j]
+        )
+      color = GetCmapColors(cmap, len(names))[i]
+      plt.title(
+        f"Line Plot of {metric} Results",
+        color=color
+      )
+      plt.xlabel("Trial", color=color)
+      plt.ylabel("Performance Metric", color=color)
+      plt.xticks(color=color)
+      plt.yticks(color=color)
       plt.legend()
     plt.tight_layout()
     plt.savefig(f"LinePlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
@@ -986,10 +1087,16 @@ def PlotMetrics(
     for i, metric in enumerate(metrics):
       plt.subplot(noRows, noCols, i + 1)
       means = [np.mean(dataset[metric]["Trials"]) for dataset in data]
-      plt.bar(names, means, color="lightblue")
-      plt.title(f"Bar Plot of {metric} Results")
-      plt.xlabel("Dataset")
-      plt.ylabel("Mean Performance Metric")
+      plt.bar(names, means, color=GetCmapColors(cmap, len(names)))
+      color = GetCmapColors(cmap, len(names))[i]
+      plt.title(
+        f"Bar Plot of {metric} Results",
+        color=color
+      )
+      plt.xlabel("Dataset", color=color)
+      plt.ylabel("Mean Performance Metric", color=color)
+      plt.xticks(color=color)
+      plt.yticks(color=color)
     plt.tight_layout()
     plt.savefig(f"BarPlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
     if (showFigures):
@@ -1049,7 +1156,10 @@ def PlotMetrics(
         sortedData = np.sort(dataset[metric]["Trials"])
         yVals = np.arange(len(sortedData)) / float(len(sortedData) - 1)
         plt.plot(sortedData, yVals, label=names[j])
-      plt.title(f"CDF of {metric} Results")
+      plt.title(
+        f"CDF of {metric} Results",
+        color=GetCmapColors(cmap, len(names))[i]
+      )
       plt.xlabel("Performance Metric")
       plt.ylabel("Cumulative Probability")
       plt.legend()
@@ -1074,7 +1184,10 @@ def PlotMetrics(
         sortedData = np.sort(dataset[metric]["Trials"])
         yVals = np.arange(1, len(sortedData) + 1) / float(len(sortedData))
         plt.step(sortedData, yVals, label=names[j], where="post")
-      plt.title(f"ECDF of {metric} Results")
+      plt.title(
+        f"ECDF of {metric} Results",
+        color=GetCmapColors(cmap, len(names))[i]
+      )
       plt.xlabel("Performance Metric")
       plt.ylabel("Empirical Cumulative Probability")
       plt.legend()
@@ -1095,10 +1208,18 @@ def PlotMetrics(
     plt.figure(figsize=(factor * noCols, factor * noRows))
     for i, metric in enumerate(metrics):
       plt.subplot(noRows, noCols, i + 1)
-      sns.swarmplot(data=[dataset[metric]["Trials"] for dataset in data], palette="Set2")
-      plt.title(f"Swarm Plot of {metric} Results")
-      plt.xticks(range(len(names)), names, rotation=xTicksRotation)
-      plt.ylabel("Performance Metric")
+      sns.swarmplot(
+        data=[dataset[metric]["Trials"] for dataset in data],
+        palette=GetCmapColors(cmap, len(names))
+      )
+      color = GetCmapColors(cmap, len(names))[i]
+      plt.title(
+        f"Swarm Plot of {metric} Results",
+        color=color
+      )
+      plt.xticks(range(len(names)), names, rotation=xTicksRotation, color=color)
+      plt.yticks(color=color)
+      plt.ylabel("Performance Metric", color=color)
     plt.tight_layout()
     plt.savefig(f"SwarmPlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
     if (showFigures):
@@ -1140,11 +1261,20 @@ def PlotMetrics(
         labels=metrics,
         autopct="%1.1f%%",
         startangle=140,
-        textprops={"fontsize": max(8, fontSize - 2)}  # Adjust label font size slightly smaller.
+        textprops={"fontsize": max(8, fontSize - 2)},
+        colors=GetCmapColors(cmap, len(metrics))
       )
 
       # Set the title for the current dataset.
-      plt.title(f"Pie Chart of Metrics for {names[i]}", fontsize=fontSize)
+      plt.title(
+        f"Pie Chart of Metrics for {names[i]}",
+        fontsize=fontSize,
+        color=GetCmapColors(cmap, len(names))[i]
+      )
+      plt.xlabel("", color=GetCmapColors(cmap, len(names))[i])
+      plt.ylabel("", color=GetCmapColors(cmap, len(names))[i])
+      plt.xticks(color=GetCmapColors(cmap, len(names))[i])
+      plt.yticks(color=GetCmapColors(cmap, len(names))[i])
       # Equal aspect ratio ensures that pie is drawn as a circle.
       plt.axis("equal")
 
@@ -1173,7 +1303,10 @@ def PlotMetrics(
           label=names[j],
           alpha=0.5
         )
-      plt.title(f"Area Plot of {metric} Results")
+      plt.title(
+        f"Area Plot of {metric} Results",
+        color=GetCmapColors(cmap, len(names))[i]
+      )
       plt.xlabel("Trial")
       plt.ylabel("Performance Metric")
       plt.legend()
@@ -1227,12 +1360,15 @@ def PlotMetrics(
             cmap=cmap,
             mincnt=1  # Only show hexagons with at least one count.
           )
-          plt.title(f"Hexbin Plot: {metric1} vs {metric2}")
+          plt.title(
+            f"Hexbin Plot: {metric1} vs {metric2}",
+            color=GetCmapColors(cmap, len(names))[plotIdx]
+          )
           plt.xlabel(metric1)
           plt.ylabel(metric2)
           plt.colorbar(hb, ax=plt.gca(), label="Count")
         else:
-          plt.title(f"Hexbin Plot: {metric1} vs {metric2}\n(No Data)")
+          plt.title(f"Hexbin Plot: {metric1} vs {metric2}\n(No Data)", color="orange")
           plt.xlabel(metric1)
           plt.ylabel(metric2)
 
@@ -1280,7 +1416,16 @@ def ExtractDataFromSummaryFile(file):
     - Second line: Comma-separated metrics (headers for performance or evaluation criteria).
     - Subsequent lines: Numerical values corresponding to metrics for each trial.
 
-  Example of the file structure:
+  Parameters:
+    file (str): Path to the summary CSV file.
+
+  Returns:
+    tuple: A tuple containing:
+      - history (list): A list of dictionaries, each representing a name with its metrics and trial data.
+      - names (list): A list of cleaned names extracted from the file.
+      - metrics (list): A list of cleaned metrics extracted from the file.
+
+  Example of the file structure (if you have multiple systems):
     System A, , , , , , System B, , , , ,
     Precision, Recall, F1, Accuracy, Specificity, Average, Precision, Recall, F1, Accuracy, Specificity, Average
     0.5556, 0.5556, 0.5556, 0.6667, 0.7333, 0.6133, 0.5556, 0.5556, 0.5556, 0.6667, 0.7333, 0.6133
@@ -1288,12 +1433,15 @@ def ExtractDataFromSummaryFile(file):
     0.8333, 0.2778, 0.4167, 0.7083, 0.9667, 0.6406, 0.8333, 0.2778, 0.4167, 0.7083, 0.9667, 0.6406
     0.5882, 0.5556, 0.5714, 0.6875, 0.7667, 0.6339, 0.5882, 0.5556, 0.5714, 0.6875, 0.7667, 0.6339
     0.8000, 0.6667, 0.7273, 0.8125, 0.9000, 0.7813, 0.8000, 0.6667, 0.7273, 0.8125, 0.9000, 0.7813
-    file (str): Path to the summary CSV file.
 
-    history (list of dict): A list where each entry corresponds to a name and contains a dictionary mapping each metric to its trials and mean value.
-    history (list of dict): List where each entry corresponds to a name and contains a dictionary mapping each metric to its trials and mean value.
-    names (list of str): Cleaned list of names extracted from the first line of the file.
-    metrics (list of str): Cleaned list of metrics extracted from the second line of the file.
+  Example of the file structure (if you have a single system):
+    Precision, Recall, F1, Accuracy, Specificity, Average
+    Metric, Metric, Metric, Metric, Metric, Metric
+    0.5556, 0.5556, 0.5556, 0.6667, 0.7333, 0.6133,
+    0.7692, 0.5556, 0.6452, 0.7708, 0.9000, 0.7282,
+    0.8333, 0.2778, 0.4167, 0.7083, 0.9667, 0.6406,
+    0.5882, 0.5556, 0.5714, 0.6875, 0.7667, 0.6339,
+    0.8000, 0.6667, 0.7273, 0.8125, 0.9000, 0.7813,
 
   Raises:
     FileNotFoundError: If the file does not exist.
@@ -1356,3 +1504,234 @@ def ExtractDataFromSummaryFile(file):
 
   # Return the structured history, cleaned names, and cleaned metrics.
   return history, names, metrics
+
+
+
+def PlotDistributionEDA(
+  df,  # DataFrame to analyze.
+  baseDir,  # Base directory to save the plots.
+  figsize=(18, 14),  # Figure size for subplots.
+  maxUnique=100,  # Maximum number of unique values to include in the plots.
+  minUnique=2,  # Minimum number of unique values to include in the plots.
+  dpi=720,  # Resolution for saved images (DPI).
+  keyword="X",  # Keyword to filter columns by name.
+  maxUniqueLabels=10,  # Maximum number of unique labels to include in the plots.
+):
+  '''
+  Perform exploratory data analysis (EDA) by plotting the distributions of columns in a DataFrame.
+
+  This function automatically generates and saves distribution plots (histograms for numeric columns,
+  bar plots for categorical columns) for each column in the provided DataFrame that meets the criteria
+  for unique value counts and data type. It is useful for quickly visualizing the spread, modality,
+  and frequency of values in each column, and for identifying potential issues such as outliers or
+  highly imbalanced categories.
+
+  Parameters:
+    df (pandas.DataFrame): The DataFrame to analyze.
+    baseDir (str): Directory where the plots will be saved.
+    figsize (tuple, optional): Figure size for the subplots (default: (18, 14)).
+    maxUnique (int, optional): Maximum number of unique values a column can have to be included (default: 100).
+    minUnique (int, optional): Minimum number of unique values a column must have to be included (default: 2).
+    dpi (int, optional): Resolution (dots per inch) for saved images (default: 720).
+    keyword (str, optional): Keyword to include in the saved filenames (default: "X").
+    maxUniqueLabels (int, optional): Maximum number of unique labels to show on the x-axis (default: 10).
+
+  Example:
+    import StatisticalAnalysisHelper as sah
+    import pandas as pd
+
+    # This will generate and save EDA distribution plots for both numeric and non-numeric columns
+    # in the DataFrame "df" to the "plots" directory, with filenames containing "MyData".
+    df = pd.read_csv("my_data.csv")
+    sah.PlotDistributionEDA(
+      df,
+      baseDir="plots",
+      figsize=(20, 15),
+      maxUnique=50,
+      minUnique=2,
+      dpi=300,
+      keyword="MyData",
+      maxUniqueLabels=15
+    )
+
+  Notes:
+    - Numeric columns are plotted as histograms.
+    - Non-numeric (categorical) columns are plotted as bar plots.
+    - Only columns with a number of unique values between minUnique and maxUnique (and <= maxUniqueLabels)
+      are included.
+    - The function is intended for quick EDA and may not be suitable for very large DataFrames
+      or columns with extremely high cardinality.
+  '''
+
+  def _PlotColumnsByType(
+    df,  # DataFrame to analyze.
+    baseDir,  # Base directory to save the plots.
+    numeric=True,  # Whether to plot numeric columns (True) or non-numeric columns (False).
+    figsize=(18, 14),  # Figure size for subplots.
+    maxUnique=100,  # Maximum number of unique values to include in the plots.
+    minUnique=2,  # Minimum number of unique values to include in the plots.
+    dpi=720,  # Resolution for saved images (DPI).
+    keyword="X",  # Keyword to filter columns by name.
+    maxUniqueLabels=10,  # Maximum number of unique labels to include in the plots.
+  ):
+    '''
+    Dynamic function to plot the distribution of columns in a DataFrame.
+    This function filters columns based on their data type and unique value count,
+    then plots histograms for each column in subplots.
+    It saves the plots in the specified base directory.
+    The function can plot either numeric or non-numeric columns based on the `numeric` parameter.
+    The plots are saved as a PDF file in the specified base directory.
+    The function also allows customization of the figure size, number of rows,
+    maximum and minimum unique values, number of bins for histograms, and DPI for the saved
+    images.
+
+    Parameters:
+      df (pandas.DataFrame): The DataFrame to analyze.
+      baseDir (str): Base directory to save the plots.
+      numeric (bool): Whether to plot numeric columns (True) or non-numeric columns (False).
+      figsize (tuple): Figure size for subplots.
+      maxUnique (int): Maximum number of unique values to include in the plots.
+      minUnique (int): Minimum number of unique values to include in the plots.
+      bins (int): Number of bins for histograms.
+      dpi (int): Resolution for saved images (DPI).
+      keyword (str): Keyword to filter columns by name.
+      maxUniqueLabels (int): Maximum number of unique labels to include in the plots.
+    '''
+
+    # Filter columns based on data type and unique value count.
+    filteredColumns = [
+      col for col in df.columns
+      if (
+        len(df[col].unique()) >= minUnique and
+        len(df[col].unique()) <= maxUnique and
+        (
+          df[col].dtype in ["int64", "float64"]
+          if numeric else df[col].dtype not in ["int64", "float64"]
+        )
+      )
+    ]
+
+    # Remove columns that contain too many unique values.
+    # This is to avoid plotting columns with too many unique values.
+    filteredColumns = [
+      col for col in filteredColumns
+      if (len(df[col].unique()) <= maxUniqueLabels)
+    ]
+
+    # Check if there are any columns to plot.
+    if (not filteredColumns):
+      print(f"No {'numeric' if numeric else 'non-numeric'} columns found matching criteria.")
+      return
+
+    if (len(filteredColumns) <= 5):
+      noCols, noRows = len(filteredColumns), 1
+    elif (len(filteredColumns) <= 50):
+      noCols = 5
+      # Calculate number of rows based on number of columns.
+      noRows = int(np.ceil(len(filteredColumns) / noCols))
+    else:
+      raise ValueError(
+        "Too many columns to plot. Please reduce the number of columns or increase the figure size."
+      )
+
+    print(f"Plotting {'numeric' if numeric else 'non-numeric'} columns:")
+    print(f"Number of columns for subplots: {noCols}")
+    print(f"Number of rows for subplots: {noRows}")
+    print(f"Columns to plot: {filteredColumns}")
+
+    if (figsize is None):
+      # Make sure figsize is a dynamic tuple based on the number of columns and rows.
+      # Adjust figure size based on the number of columns and rows.
+      factor = 5  # Factor to adjust the figure size.
+      figWidth = noCols * factor
+      figHeight = noRows * factor
+      figsize = (figWidth, figHeight)
+
+    # Create figure for subplots.
+    plt.figure(figsize=figsize)
+
+    # Plot each column in a separate subplot.
+    for i, col in enumerate(filteredColumns):
+      plt.subplot(noRows, noCols, i + 1)
+
+      # To use dynamic colors for each subplot, we can use a simple rule:
+      # color = plt.cm.viridis(i / len(filteredColumns))  # Use colormap for dynamic colors.
+      # color = plt.cm.tab10(i % 10)  # Use tab10 colormap for distinct colors.
+      # color = plt.cm.get_cmap("Set1", len(filteredColumns))(i)  # Use Set1 colormap for distinct colors.
+      # color = plt.cm.get_cmap("tab20", len(filteredColumns))(i)  # Use tab20 colormap for distinct colors.
+      # color = plt.cm.get_cmap("Accent", len(filteredColumns))(i)  # Use Accent colormap for distinct colors.
+      # More can be found at: https://matplotlib.org/stable/tutorials/colors/colormaps.html
+
+      color = plt.cm.get_cmap("tab20", len(filteredColumns))(i)  # Use tab20 colormap for distinct colors.
+
+      # Plot histogram
+      sns.histplot(
+        df[col],  # Column to plot distribution for.
+        kde=False,  # Disable kernel density estimate.
+        # bins=30,  # Number of bins for histogram.
+        color=color,  # Use dynamic color for each subplot.
+        stat="count",  # Use count for histogram.
+        edgecolor="black",  # Edge color for histogram bars.
+        alpha=0.7,  # Transparency of histogram bars.
+        linewidth=2,  # Width of the edges of histogram bars.
+        zorder=2,  # Set the z-order for the histogram bars.
+      )
+
+      # Trim the length of labels contents to 15 characters for better readability.
+      labels = [str(label)[:15] for label in df[col].unique()]
+      # Set x-axis labels to the unique values of the column.
+      plt.xticks(
+        ticks=np.arange(len(labels)),  # Set x-ticks to the range of unique values.
+        labels=labels,  # Set x-tick labels to the unique values.
+        rotation=45,  # Rotate x-axis labels for better readability.
+        fontsize=12,  # Set font size for x-axis labels.
+      )
+      # Set the grid behind the bars for better visibility.
+      # Add grid lines for better readability.
+      plt.grid(axis="y", linestyle="--", alpha=0.7, zorder=0)
+      plt.yticks(fontsize=12)  # Set y-axis tick font size.
+      plt.title(col, fontsize=14, fontweight="bold")  # Set title for the subplot.
+      plt.xlabel(None)  # Remove x-axis label for subplots.
+      plt.ylabel(None)  # Remove x-axis label for subplots.
+      plt.tight_layout()
+
+    # Save plot as a PDF file in the specified base directory.
+    filename = (
+      f"{keyword}_EDA_Distribution_Numeric_Plots.pdf"
+      if numeric else f"{keyword}_EDA_Distribution_NonNumeric_Plots.pdf"
+    )
+    plt.savefig(
+      os.path.join(baseDir, filename),  # Save path for the plot.
+      dpi=dpi,  # Resolution for the saved image.
+      bbox_inches="tight",  # Adjust bounding box to fit the plot.
+    )
+    # Close the plot to free up memory.
+    plt.close()
+    print(f"Saved: {filename}")
+
+  # Plot the distribution of numeric columns.
+  print("Plotting numeric columns...")
+  _PlotColumnsByType(
+    df=df,  # DataFrame to analyze.
+    baseDir=baseDir,  # Base directory to save the plots.
+    numeric=True,  # Plot numeric columns.
+    figsize=figsize,  # Figure size for subplots.
+    maxUnique=maxUnique,  # Maximum number of unique values to include in the plots.
+    minUnique=minUnique,  # Minimum number of unique values to include in the plots.
+    dpi=dpi,  # Resolution for saved images (DPI).
+    keyword=keyword,  # Keyword to filter columns by name.
+    maxUniqueLabels=maxUniqueLabels,  # Maximum number of unique labels to include in the plots.
+  )
+  # Plot the distribution of non-numeric columns.
+  print("Plotting non-numeric columns...")
+  _PlotColumnsByType(
+    df=df,  # DataFrame to analyze.
+    baseDir=baseDir,  # Base directory to save the plots.
+    numeric=False,  # Plot non-numeric columns.
+    figsize=figsize,  # Figure size for subplots.
+    maxUnique=maxUnique,  # Maximum number of unique values to include in the plots.
+    minUnique=minUnique,  # Minimum number of unique values to include in the plots.
+    dpi=dpi,  # Resolution for saved images (DPI).
+    keyword=keyword,  # Keyword to filter columns by name.
+    maxUniqueLabels=maxUniqueLabels,  # Maximum number of unique labels to include in the plots.
+  )
