@@ -47,6 +47,7 @@ def CalculatePerformanceMetrics(
 
     import numpy as np
     import HMB.PerformanceMetrics as pm
+
     confMatrix = [[50, 2, 1], [5, 45, 0], [0, 3, 47]]
     metrics = pm.CalculatePerformanceMetrics(confMatrix, addWeightedAverage=True)
     for key, value in metrics.items():
@@ -227,6 +228,7 @@ def PlotConfusionMatrix(
 
     import numpy as np
     import HMB.PerformanceMetrics as pm
+
     confMatrix = [[50, 2, 1], [5, 45, 0], [0, 3, 47]]
     classLabels = ["Class 0", "Class 1", "Class 2"]
     pm.PlotConfusionMatrix(
@@ -378,6 +380,7 @@ def PlotROCAUCCurve(
 
     import numpy as np
     import HMB.PerformanceMetrics as pm
+
     yTrue = [0, 1, 2, 0, 1, 2]
     yPred = [
       [0.8, 0.1, 0.1],
@@ -549,6 +552,7 @@ def PlotPRCCurve(
 
     import numpy as np
     import HMB.PerformanceMetrics as pm
+
     yTrue = [0, 1, 2, 0, 1, 2]
     yPred = [
       [0.8, 0.1, 0.1],
@@ -639,9 +643,6 @@ def PlotPRCCurve(
   plt.xticks(fontsize=fontSize * 0.75)
   plt.yticks(fontsize=fontSize * 0.75)
 
-  # Add grid lines to the plot.
-  plt.grid(True)
-
   if (showLegend):
     # Show legend if requested.
     plt.legend(fontsize=fontSize * 0.75)
@@ -664,143 +665,537 @@ def PlotPRCCurve(
     return fig
 
 
-def HistoryPlotter(
-  history,  # Dictionary containing training history.
-  title,  # Title of the plot.
-  metrics=("loss",),  # Tuple or list of metrics to plot.
-  xLabel="Epochs",  # Label for x-axis.
-  fontSize=14,  # Font size for labels and title.
-  doSave=False,  # Whether to save the plot.
-  savePath=None,  # Path to save the plot.
-  dpi=720,  # DPI for saving the figure.
-  colors=None,  # Optional dict of colors for each metric.
-  labels=None,  # Optional dict of labels for each metric.
-  display=False,  # Whether to display the plot.
-  figSize=(10, 5),  # Figure size.
-  returnFig=False,  # Whether to return the figure object.
+def PlotCounterfactualOutcomes(
+  X,
+  classifier,
+  treatmentCol=None,
+  lowVal=None,
+  highVal=None,
+  classNames=None,
+  outputFile="CounterfactualOutcomePlot.pdf",
+  showPlot=True,
+  returnPreds=False,
+  fontSize=12,
 ):
-  '''
-  Plot training history metrics (e.g., loss, accuracy) for train and validation sets.
+  r'''
+  Plot counterfactual outcome distributions for two treatment scenarios using a histogram.
 
   Parameters:
-    history (dict): Dictionary containing training history with keys like 'train_loss', 'val_loss', etc.
-    title (str): Title of the plot.
-    metrics (tuple or list): Metrics to plot (e.g., ("loss", "accuracy")). Default is ("loss",).
-    xLabel (str): Label for x-axis. Default is "Epochs".
-    fontSize (int): Font size for labels and title. Default is 14.
-    doSave (bool): Whether to save the plot. Default is False.
-    savePath (str or None): Path to save the plot. Default is None.
-    dpi (int): DPI for saving the figure. Default is 720.
-    colors (dict or None): Optional dict mapping metric names to colors.
-    labels (dict or None): Optional dict mapping metric names to custom labels.
-    display (bool): Whether to display the plot. Default is False.
-    figSize (tuple): Figure size in inches. Default is (10, 5).
-    returnFig (bool): Whether to return the matplotlib figure object. Default is False.
+    X (pandas.DataFrame): Feature matrix.
+    classifier: Trained classifier with predict method.
+    treatmentCol (str or None): Name of the treatment column. If None, prints available columns and returns.
+    lowVal (numeric or None): Value representing "no/low" treatment. If None, uses min value in column.
+    highVal (numeric or None): Value representing "high" treatment. If None, uses max value in column.
+    classNames (list or None): List of class names for x-axis ticks. If None, inferred from classifier or predictions.
+    outputFile (str): File name to save the plot. Default is "CounterfactualOutcomePlot.pdf".
+    showPlot (bool): Whether to display the plot. Default is True.
+    returnPreds (bool): If True, returns (yPredLow, yPredHigh). Default is False.
+    fontSize (int): Font size for labels and title. Default is 12.
 
   Returns:
-    matplotlib.figure.Figure or None: The axes object, figure object if returnFig is True, otherwise None.
+    None or tuple: None if returnPreds is False, otherwise (yPredLow, yPredHigh).
 
   Notes:
-    - Supports plotting multiple metrics for both training and validation.
-    - Custom colors and labels can be provided for each metric.
-    - Saving and displaying the plot are optional and controlled by parameters.
+    - The function creates two copies of X, sets the treatment column to lowVal and highVal, and predicts outcomes for both scenarios.
+    - The results are plotted as overlaid histograms, with x-axis ticks labeled by classNames if provided.
+    - The plot is saved to outputFile and optionally displayed.
 
-  Examples
-  --------
+  Example
+  -------
   .. code-block:: python
 
     import HMB.PerformanceMetrics as pm
-    history = {
-      "train_loss": [0.8, 0.6, 0.4],
-      "val_loss": [0.9, 0.7, 0.5],
-      "train_accuracy": [0.5, 0.7, 0.9],
-      "val_accuracy": [0.4, 0.6, 0.8]
-    }
-    pm.HistoryPlotter(
-      history,
-      title="Training History",
-      metrics=("loss", "accuracy"),
-      doSave=True,
-      savePath="history_plot.pdf"
+
+    X = ...  # Load or create your feature DataFrame.
+    classifier = ...  # Load or train your classifier.
+    classNames = []  # Specify class names.
+
+    pm.PlotCounterfactualOutcomes(
+      X, classifier,
+      treatmentCol="Inflight Wi-Fi service",
+      classNames=classNames,
+      outputFile="CounterfactualOutcomePlot.pdf",
+      showPlot=True,
+      fontSize=14
     )
   '''
 
-  # Create a new figure with the specified size.
-  plt.figure(figsize=figSize)  # Create figure.
+  def _PreviewColumnsAndValues(xdf, maxUnique=10):
+    # Print available columns and their unique values for user guidance.
+    print("Available columns:")
+    for col in xdf.columns:
+      uniqueVals = xdf[col].unique()
+      if (len(uniqueVals) <= maxUnique):
+        print(f"- {col}: unique values = {uniqueVals}")
+      else:
+        print(
+          f"- {col}: {len(uniqueVals)} unique values (showing first {maxUnique}): "
+          f"{uniqueVals[:maxUnique]}"
+        )
 
-  # Set default colors if not provided.
-  if (colors is None):
-    defaultColors = ["blue", "orange", "green", "red", "purple", "brown"]
-    colors = {}
-    for idx, metric in enumerate(metrics):
-      colors[f"train_{metric}"] = defaultColors[idx % len(defaultColors)]
-      colors[f"val_{metric}"] = defaultColors[(idx + 1) % len(defaultColors)]
+  # Plot counterfactual outcomes for two treatment scenarios.
+  if (treatmentCol is None or treatmentCol not in X.columns):
+    # If treatmentCol is not specified or invalid, print available columns and return.
+    print("[Counterfactual Plot] Please specify a valid treatmentCol. Available columns:")
+    _PreviewColumnsAndValues(X)
+    return None
 
-  # Set default labels if not provided.
-  if (labels is None):
-    labels = {}
-    for metric in metrics:
-      labels[f"train_{metric}"] = f"Train {metric.capitalize()}"
-      labels[f"val_{metric}"] = f"Validation {metric.capitalize()}"
+  # Get sorted unique values in treatment column.
+  uniqueVals = np.sort(X[treatmentCol].unique())
+  if (len(uniqueVals) < 2):
+    # If not enough unique values, print warning and return.
+    print(f"Not enough unique values in treatment column '{treatmentCol}' to create counterfactuals.")
+    return None
 
-  # Plot each metric for train and validation.
-  for metric in metrics:
-    trainKey = f"train_{metric}"
-    valKey = f"val_{metric}"
-    if (trainKey in history):
-      # Plot training metric.
-      plt.plot(
-        history[trainKey],  # Training metric values.
-        label=labels.get(trainKey, trainKey),  # Label for legend.
-        color=colors.get(trainKey, None)  # Color for line.
-      )
-    if (valKey in history):
-      # Plot validation metric.
-      plt.plot(
-        history[valKey],  # Validation metric values.
-        label=labels.get(valKey, valKey),  # Label for legend.
-        color=colors.get(valKey, None)  # Color for line.
-      )
+  if (lowVal is None or highVal is None):
+    # If lowVal or highVal not specified, use min and max and print info.
+    if (lowVal is None):
+      lowVal = uniqueVals[0]
+    if (highVal is None):
+      highVal = uniqueVals[-1]
+    print(f"[Counterfactual Plot] Using lowVal={lowVal}, highVal={highVal}")
 
-  # Set the plot title.
-  plt.title(title, fontsize=fontSize * 1.2)  # Set title.
+  if (hasattr(classifier, "_estimator_type") and classifier._estimator_type == "regressor"):
+    # If classifier is a regressor, skip plotting and print warning.
+    print(
+      "[Counterfactual Plot] Classifier is a regressor. "
+      "Counterfactual outcome plots are only for classifiers."
+    )
+    return None
 
-  # Set x-axis label.
-  plt.xlabel(xLabel.capitalize(), fontsize=fontSize)  # Set x-label.
+  xLow = X.copy()  # Copy dataframe for low treatment scenario.
+  xHigh = X.copy()  # Copy dataframe for high treatment scenario.
+  xLow[treatmentCol] = lowVal  # Set treatment column to low value.
+  xHigh[treatmentCol] = highVal  # Set treatment column to high value.
+  yPredLow = classifier.predict(xLow)  # Predict outcomes for low treatment.
+  yPredHigh = classifier.predict(xHigh)  # Predict outcomes for high treatment.
 
-  # Set y-axis label.
-  if (len(metrics) == 1):
-    plt.ylabel(metrics[0].capitalize(), fontsize=fontSize)  # Set y-label.
+  if (classNames is None):
+    # Infer class names if not provided.
+    if (hasattr(classifier, "classes_")):
+      classNames = [str(c) for c in classifier.classes_]
+    else:
+      classNames = [str(c) for c in np.unique(np.concatenate([yPredLow, yPredHigh]))]
+
+  plt.figure(figsize=(8, 6))  # Create new figure for plot.
+  bins = np.arange(-0.5, np.max([yPredLow.max(), yPredHigh.max()]) + 1.5, 1)  # Set histogram bins.
+
+  plt.hist(
+    yPredLow,
+    bins=bins,
+    alpha=0.6,
+    label=f"{treatmentCol}={lowVal}",
+    color="red",
+    rwidth=0.8,
+  )  # Plot low treatment histogram.
+  plt.hist(
+    yPredHigh,
+    bins=bins,
+    alpha=0.6,
+    label=f"{treatmentCol}={highVal}",
+    color="blue",
+    rwidth=0.8,
+  )  # Plot high treatment histogram.
+
+  # Set x-axis label with font size.
+  plt.xlabel("Predicted Class", fontsize=fontSize)
+
+  # Set x-ticks to class names if provided.
+  if (classNames is not None):
+    # If classNames is provided, set x-ticks to class names.
+    numClasses = len(classNames)
+    plt.xticks(ticks=np.arange(numClasses), labels=classNames, fontsize=fontSize)
+
+  # Set y-axis label with font size.
+  plt.ylabel("Number of Samples", fontsize=fontSize)
+  # Set plot title with font size.
+  plt.title(f"Counterfactual Outcome Plot: {treatmentCol}", fontsize=fontSize + 2)
+  plt.legend(fontsize=fontSize)  # Show legend with font size.
+  plt.grid(axis="y", alpha=0.3)  # Add grid to y-axis.
+  plt.tight_layout()  # Adjust layout.
+  plt.savefig(outputFile)  # Save plot to file.
+
+  if (showPlot):
+    plt.show()  # Show plot if requested.
+  plt.close()  # Close the plot to free memory.
+
+  if (returnPreds):
+    return yPredLow, yPredHigh  # Optionally return predictions.
+  print(f"[Counterfactual Plot] Unique values in '{treatmentCol}': {uniqueVals}")
+  return None
+
+
+def PlotInteractionEffect(
+  X,
+  classifier,
+  feature1,
+  feature2,
+  gridSize=30,
+  outputFile="InteractionEffectPlot.pdf",
+  showPlot=True,
+  fontSize=12,
+  plotType="surface",  # or "contour"
+  backend="matplotlib"  # or "plotly"
+):
+  r'''
+  Plot the interaction effect between two features on the predicted outcome using a 3D surface or contour plot.
+
+  Parameters:
+    X (pandas.DataFrame): Feature matrix.
+    classifier: Trained classifier with predict or predict_proba method.
+    feature1 (str): Name of the first feature (x-axis).
+    feature2 (str): Name of the second feature (y-axis).
+    gridSize (int): Number of grid points for each feature. Default is 30.
+    outputFile (str): File name to save the plot. Default is "InteractionEffectPlot.pdf".
+    showPlot (bool): Whether to display the plot. Default is True.
+    fontSize (int): Font size for labels and title. Default is 12.
+    plotType (str): "surface" for 3D surface plot, "contour" for contour plot. Default is "surface".
+    backend (str): "matplotlib" for static plots, "plotly" for interactive HTML. Default is "matplotlib".
+
+  Returns:
+    Figure object (matplotlib or plotly) or None.
+
+  Notes:
+    - For classifiers with predict_proba, the positive class probability is plotted if binary, otherwise the max probability.
+    - For classifiers without predict_proba, the predicted class is plotted.
+    - The plot is saved to outputFile and optionally displayed.
+
+  Example
+  -------
+  .. code-block:: python
+
+    import HMB.PerformanceMetrics as pm
+
+    X = ...  # Load or create your feature DataFrame.
+    classifier = ...  # Load or train your classifier.
+
+    pm.PlotInteractionEffect(
+      X, classifier,
+      feature1="Flight Distance",
+      feature2="Seat Comfort",
+      gridSize=30,
+      outputFile="InteractionEffectPlot.pdf",
+      showPlot=True,
+      fontSize=14,
+      plotType="surface",
+      backend="matplotlib"
+    )
+  '''
+
+  # Check if the specified features exist in the DataFrame.
+  if (feature1 not in X.columns or feature2 not in X.columns):
+    # Print an error message if features are not found.
+    print(f"[Interaction Effect Plot] '{feature1}' or '{feature2}' not found in columns.")
+    print(f"Available columns: {list(X.columns)}")
+
+    return None
+  # Get the minimum and maximum values for feature1.
+  f1Min, f1Max = X[feature1].min(), X[feature1].max()
+  # Get the minimum and maximum values for feature2.
+  f2Min, f2Max = X[feature2].min(), X[feature2].max()
+  # Create a grid of values for feature1.
+  f1Grid = np.linspace(f1Min, f1Max, gridSize)
+  # Create a grid of values for feature2.
+  f2Grid = np.linspace(f2Min, f2Max, gridSize)
+  # Create a meshgrid for the two features.
+  f1Mesh, f2Mesh = np.meshgrid(f1Grid, f2Grid)
+  # Use the median values of all features as a base row.
+  baseRow = X.median().to_dict()
+  # Initialize a grid to store predictions.
+  Z = np.zeros_like(f1Mesh, dtype=float)
+
+  # Iterate over the grid to compute predictions for each combination.
+  for i in range(gridSize):
+    # Iterate over the second feature's grid.
+    for j in range(gridSize):
+      # Copy the base row for each grid point.
+      row = baseRow.copy()
+      # Set the value for feature1 at this grid point.
+      row[feature1] = f1Mesh[i, j]
+      # Set the value for feature2 at this grid point.
+      row[feature2] = f2Mesh[i, j]
+      # Create a DataFrame for prediction.
+      rowDf = pd.DataFrame([row])
+      # Use predict_proba if available, otherwise use predict.
+      if (hasattr(classifier, "predict_proba")):
+        # Get the predicted probabilities.
+        proba = classifier.predict_proba(rowDf)[0]
+        # Use the probability of the positive class if binary, else use the max probability.
+        if (len(proba) == 2):
+          Z[i, j] = proba[1]
+        else:
+          Z[i, j] = np.max(proba)
+      else:
+        # Use the predicted class if predict_proba is not available.
+
+        Z[i, j] = classifier.predict(rowDf)[0]
+  # Set the x-axis label.
+  xLabel = feature1
+  # Set the y-axis label.
+  yLabel = feature2
+  # Set the z-axis label depending on the classifier type.
+  zLabel = "Predicted Probability" if (hasattr(classifier, "predict_proba")) else "Predicted Class"
+
+  # Check which backend to use for plotting.
+  if (backend == "matplotlib"):
+    # Import matplotlib and 3D plotting toolkit.
+    from mpl_toolkits.mplot3d import Axes3D
+    # Create a new figure for the plot.
+    fig = plt.figure(figsize=(8, 6))
+    # Plot a 3D surface if requested.
+    if (plotType == "surface"):
+      # Add a 3D subplot.
+      ax = fig.add_subplot(111, projection="3d")
+      # Plot the surface.
+      surf = ax.plot_surface(f1Mesh, f2Mesh, Z, cmap="viridis", edgecolor="none", alpha=0.85)
+      # Set the x-axis label with font size.
+      ax.set_xlabel(xLabel, fontsize=fontSize)
+      # Set the y-axis label with font size.
+      ax.set_ylabel(yLabel, fontsize=fontSize)
+      # Set the z-axis label with font size.
+      ax.set_zlabel(zLabel, fontsize=fontSize)
+      # Set the plot title with font size.
+      ax.set_title(f"Interaction Effect: {feature1} vs {feature2}", fontsize=fontSize + 2)
+      # Add a colorbar to the plot.
+      fig.colorbar(surf, shrink=0.5, aspect=10)
+    else:
+      # Plot a filled contour plot if requested.
+      cp = plt.contourf(f1Mesh, f2Mesh, Z, cmap="viridis")
+      # Set the x-axis label with font size.
+      plt.xlabel(xLabel, fontsize=fontSize)
+      # Set the y-axis label with font size.
+      plt.ylabel(yLabel, fontsize=fontSize)
+      # Set the plot title with font size.
+      plt.title(f"Interaction Effect: {feature1} vs {feature2}", fontsize=fontSize + 2)
+      # Add a colorbar to the plot.
+
+      plt.colorbar(cp)
+    # Adjust the layout for better appearance.
+    plt.tight_layout()
+    # Save the plot to the specified output file.
+
+    plt.savefig(outputFile)
+    # Show the plot if requested.
+    if (showPlot):
+      plt.show()
+    # Close the plot to free memory.
+
+    plt.close()
+    # Print a message indicating where the plot was saved.
+    print(f"[Interaction Effect Plot] Saved to {outputFile}")
+    # Return the figure object.
+    return fig
   else:
-    # Set y-label for multiple metrics.
-    plt.ylabel("Metric Value", fontsize=fontSize)
+    # Import plotly for interactive plotting.
+    import plotly.graph_objs as go
+    import plotly.io as pio
 
-  # Tight layout to minimize wasted space.
-  plt.tight_layout()  # Tight layout.
+    # Create a plotly surface plot if requested.
+    if (plotType == "surface"):
+      fig = go.Figure(data=[go.Surface(z=Z, x=f1Grid, y=f2Grid, colorscale="Viridis")])
+    else:
+      # Create a plotly contour plot if requested.
+      fig = go.Figure(
+        data=[
+          go.Contour(z=Z, x=f1Grid, y=f2Grid, colorscale="Viridis", contours_coloring="heatmap")
+        ]
+      )
 
-  # Add legend.
-  plt.legend()  # Add legend.
+    # Update the layout with axis labels and font size.
+    fig.update_layout(
+      title=f"Interaction Effect: {feature1} vs {feature2}",
+      scene=dict(
+        xaxis_title=xLabel,
+        yaxis_title=yLabel,
+        zaxis_title=zLabel,
+        xaxis=dict(title_font=dict(size=fontSize)),
+        yaxis=dict(title_font=dict(size=fontSize)),
+        zaxis=dict(title_font=dict(size=fontSize)),
+      ),
+      font=dict(size=fontSize),
+      margin=dict(l=0, r=0, b=0, t=40),
+    )
 
-  # Add grid lines.
-  plt.grid()  # Add grid.
+    # Save the plot as an interactive HTML file.
+    pio.write_html(fig, file=outputFile, auto_open=showPlot)
+    # Print a message indicating where the plot was saved.
+    print(f"[Interaction Effect Plot] Saved to {outputFile}")
+    # Return the figure object.
+    return fig
 
-  # Save the plot if requested.
-  if (doSave and savePath):  # Save plot.
-    plt.savefig(savePath.replace(".pdf", ".png"), dpi=dpi, bbox_inches="tight")
-    try:
-      plt.savefig(savePath, dpi=dpi, bbox_inches="tight")
-    except Exception as e:
-      print(f"Error saving plot: {e}")
 
-  # Display the plot if requested.
-  if (display):  # Display plot.
+def PlotCalibrationCurve(
+  classifier,
+  X,
+  y,
+  classNames=None,
+  nBins=10,
+  strategy="uniform",
+  outputFile="CalibrationCurve.pdf",
+  showPlot=True,
+  fontSize=12,
+  plotHistogram=False,
+  returnFig=False,
+  cmap=None
+):
+  r'''
+  Plot calibration curves to evaluate how well predicted probabilities align with observed outcomes.
+
+  Parameters:
+    classifier: Trained classifier with predict_proba method.
+    X (pandas.DataFrame or np.ndarray): Feature matrix.
+    y (array-like): True labels.
+    classNames (list or None): List of class names. If None, inferred from classifier.
+    nBins (int): Number of bins to discretize the [0, 1] interval. Default is 10.
+    strategy (str): Binning strategy ('uniform' or 'quantile'). Default is 'uniform'.
+    outputFile (str): File name to save the plot. Default is "CalibrationCurve.pdf".
+    showPlot (bool): Whether to display the plot. Default is True.
+    fontSize (int): Font size for labels and title. Default is 12.
+    plotHistogram (bool): Whether to plot a histogram of predicted probabilities below the calibration curve. Default is False.
+    returnFig (bool): Whether to return the matplotlib figure object. Default is False.
+    cmap (str or Colormap or None): Colormap to use for the curves. If None, uses "tab10.
+
+  Returns:
+    None or matplotlib.figure.Figure: The figure object if returnFig is True, otherwise None.
+
+  Notes:
+    - For binary classification, plots the calibration curve for the positive class.
+    - For multiclass, plots one-vs-rest calibration curves for each class.
+    - The plot is saved to outputFile and optionally displayed.
+    - If plotHistogram is True, a histogram of predicted probabilities is shown below the calibration curve.
+    - For best results, use with probabilistic models and sufficient sample size per bin.
+
+  Example
+  -------
+  .. code-block:: python
+
+    import HMB.PerformanceMetrics as pm
+
+    X = ...  # Load or create your feature DataFrame.
+    y = ...  # Load or create your true labels.
+    classifier = ...  # Load or train your classifier.
+    classNames = []  # Specify class names.
+
+    pm.PlotCalibrationCurve(
+      classifier, X, y,
+      classNames=classNames,
+      nBins=10,
+      outputFile="CalibrationCurve.pdf",
+      showPlot=True,
+      fontSize=14,
+      plotHistogram=True,
+      returnFig=False,
+      cmap='tab20'
+    )
+  '''
+  import random
+  from sklearn.calibration import calibration_curve
+
+  # Check if classifier supports predict_proba.
+  if (not hasattr(classifier, "predict_proba")):
+    raise ValueError("Classifier must support 'predict_proba' for calibration curves.")
+  # Check if X and y are not None.
+  if (X is None or y is None):
+    raise ValueError("X and y must not be None.")
+  # Check if X and y are not empty.
+  if (len(X) == 0 or len(y) == 0):
+    raise ValueError("X and y must not be empty.")
+  # Convert y to numpy array.
+  y = np.array(y)
+  # Get predicted probabilities from classifier.
+  yProb = classifier.predict_proba(X)
+  # Get number of classes.
+  nClasses = yProb.shape[1] if (len(yProb.shape) > 1) else 2
+  # Check if there are at least two classes.
+  if (nClasses < 2):
+    raise ValueError("Calibration curve requires at least two classes.")
+
+  # Infer class names if not provided.
+  if (classNames is None):
+    if (hasattr(classifier, "classes_")):
+      classNames = [str(c) for c in classifier.classes_]
+    else:
+      classNames = [str(i) for i in range(nClasses)]
+
+  # Prepare figure and axes.
+  if (plotHistogram):
+    fig, (ax1, ax2) = plt.subplots(
+      2, 1,
+      figsize=(8, 8),
+      gridspec_kw={'height_ratios': [2, 1]},
+    )
+  else:
+    fig, ax1 = plt.subplots(figsize=(8, 6))
+    ax2 = None
+
+  # Get color map for plotting.
+  if (cmap is None):
+    cmapObj = plt.cm.get_cmap('tab10', nClasses)
+  elif isinstance(cmap, str):
+    cmapObj = plt.cm.get_cmap(cmap, nClasses)
+  else:
+    cmapObj = cmap
+
+  # Pick random colors from the colormap for each class.
+  colorIndices = random.sample(range(cmapObj.N), nClasses) if cmapObj.N >= nClasses else list(range(nClasses))
+  random.shuffle(colorIndices)
+  colors = [cmapObj(i) for i in colorIndices]
+
+  # Initialize lines and labels lists.
+  lines = []
+  labels = []
+
+  # Plot calibration curve(s).
+  for i in range(nClasses):
+    # For binary classification, plot only the positive class.
+    if (nClasses == 2):
+      prob = yProb[:, 1]
+      yTrue = (y == classifier.classes_[1]) if (hasattr(classifier, "classes_")) else (y == 1)
+      label = f"{classNames[1]} (n={np.sum(yTrue)})" if (len(classNames) > 1) else "Class 1"
+      fracPos, meanPred = calibration_curve(yTrue, prob, n_bins=nBins, strategy=strategy)
+      line, = ax1.plot(meanPred, fracPos, marker='o', label=label, color=colors[1 % len(colors)])
+      lines.append(line)
+      labels.append(label)
+      if (plotHistogram and ax2 is not None):
+        ax2.hist(prob, range=(0, 1), bins=nBins, color=colors[1 % len(colors)], alpha=0.6, label=label)
+      break
+    else:
+      prob = yProb[:, i]
+      yTrue = (y == i) if (not hasattr(classifier, "classes_")) else (y == classifier.classes_[i])
+      label = f"{classNames[i]} (n={np.sum(yTrue)})"
+      fracPos, meanPred = calibration_curve(yTrue, prob, n_bins=nBins, strategy=strategy)
+      line, = ax1.plot(meanPred, fracPos, marker='o', label=label, color=colors[i % len(colors)])
+      lines.append(line)
+      labels.append(label)
+      if (plotHistogram and ax2 is not None):
+        ax2.hist(prob, range=(0, 1), bins=nBins, color=colors[i % len(colors)], alpha=0.6, label=label)
+
+  # Plot perfectly calibrated line.
+  ax1.plot([0, 1], [0, 1], "k--", label="Perfectly calibrated")
+  ax1.set_xlabel("Mean Predicted Probability", fontsize=fontSize)
+  ax1.set_ylabel("Fraction of Positives", fontsize=fontSize)
+  ax1.set_title("Calibration Curve", fontsize=fontSize + 2)
+  ax1.legend(fontsize=fontSize)
+  ax1.grid(True, alpha=0.3)
+
+  if (plotHistogram and ax2 is not None):
+    ax2.set_xlabel("Predicted Probability", fontsize=fontSize)
+    ax2.set_ylabel("Count", fontsize=fontSize)
+    ax2.set_title("Predicted Probability Histogram", fontsize=fontSize)
+    ax2.legend(fontsize=fontSize)
+    ax2.grid(True, alpha=0.3)
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
+  else:
+    plt.tight_layout()
+
+  fig.savefig(outputFile)
+  if (showPlot):
     plt.show()
-
-  plt.close()  # Close the plot.
-
-  # Return the figure or axes object if requested.
+  plt.close(fig)
+  print(f"[Calibration Curve] Saved to {outputFile}")
   if (returnFig):
-    return plt.gcf()  # Return figure object.
+    return fig
+  return None
 
 
 if __name__ == "__main__":
