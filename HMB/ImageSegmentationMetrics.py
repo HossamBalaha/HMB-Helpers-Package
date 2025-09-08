@@ -47,7 +47,7 @@ def ComputeIoU(preds, targets, smooth=1.0, iouType="binary", weight=None):
     weight = np.array([0.7, 0.3])  # Example weights for two classes.
     iouWeighted = ism.ComputeIoU(preds, targets, iouType="weighted", weight=weight)
     print(f"Weighted IoU: {iouWeighted}")
-   '''
+  '''
 
   if (iouType == "binary"):
     # Threshold predictions at 0.5 to obtain binary mask.
@@ -1209,7 +1209,7 @@ def ComputeHMBLoss(preds, targets):
   Compute the HMB Loss, a weighted combination of multiple loss functions for segmentation.
 
   The HMB Loss (H-Loss), as suggested by Hossam (the author), introduces a weighted sum
-  of various loss functions: Dice, IoU, MSE, BCE, Tversky, and Tanimoto losses.
+  of various loss functions: Dice, IoU, MSE, BCE, Tversky, and Tanimoto losses [1]_.
   This idea is presented in a research article that can be accessed from:
   https://doi.org/10.1109/ACCESS.2024.3483661
 
@@ -1245,6 +1245,7 @@ def ComputeHMBLoss(preds, targets):
     & El-Baz, A. (2024). Artificial intelligence-based kidney segmentation with modified
     cycle-consistent generative adversarial network and appearance-based shape prior. IEEE Access.
     https://doi.org/10.1109/ACCESS.2024.3483661
+
   '''
 
   # Calculate individual loss components.

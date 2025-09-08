@@ -36,23 +36,26 @@ extensions = [
   "sphinx.ext.autosummary",  # Generate summary tables.
   "sphinx.ext.coverage",  # Check documentation coverage.
   "sphinx.ext.mathjax",  # Render math formulas.
+  "sphinx.ext.imgmath",  # Alternative math rendering.
   "sphinx.ext.ifconfig",  # Include content based on configuration.
   "myst_parser",  # Support for Markdown files.
   "sphinx_copybutton",  # Add copy buttons to code blocks.
   "sphinx_design",  # Enhanced design elements.
   # "sphinxcontrib.bibtex",  # Support for bibliographies.
   "sphinx_autodoc_typehints",  # Better handling of type hints.
+  "rst2pdf.pdfbuilder",  # PDF output support.
 ]
 
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+pdf_documents = [("index", "HMB-Helpers-Package", "HMB Helpers Package Documentation", "Hossam Magdy Balaha")]
 
 # Autodoc configuration options.
 autodoc_member_order = "bysource"  # Document members in source order.
 autoclass_content = "both"  # Include class and __init__ docstrings.
 autodoc_typehints = "description"  # Show type hints in the description.
 autodoc_type_aliases = {}  # Add type aliases if needed.
-autodoc_mock_imports = ["spams", "cv2"]  # Mock heavy dependencies for RTD.
+autodoc_mock_imports = []  # Mock heavy dependencies for RTD. # "spams", "cv2"
 autosummary_generate = True  # Always generate autosummary pages.
 
 # Napoleon settings for Google/NumPy docstrings.
@@ -100,23 +103,28 @@ html_static_path = ["_static"]
 html_logo = "_static/Logo.png"  # Add your logo file to _static.
 html_favicon = "_static/Favicons/favicon.ico"  # Add your favicon file to _static.
 html_theme_options = {
-  "description"    : "HMB Helpers Package Documentation",
-  "fixed_sidebar"  : True,
-  "github_user"    : "HossamBalaha",
-  "github_repo"    : "HMB-Helpers-Package",
-  "github_banner"  : True,
-  "show_powered_by": False,
+  "description"          : "HMB Helpers Package Documentation",
+  "fixed_sidebar"        : False,
+  "github_user"          : "HossamBalaha",
+  "github_repo"          : "HMB-Helpers-Package",
+  "github_banner"        : True,
+  "show_powered_by"      : False,
 }
 
 # -- Options for LaTeX/PDF output --------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-latex-output
 
-latex_engine = "xelatex"  # Use xelatex for better font support.
+latex_engine = "xelatex"  # Alternatives: "pdflatex", "lualatex", "xelatex".
 latex_elements = {
   "papersize"   : "a4paper",
   "pointsize"   : "11pt",
-  "preamble"    : "",
   "figure_align": "htbp",
+  "preamble"    : r"""
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{hyperref}
+""",
 }
 
 # -- Miscellaneous -----------------------------------------------------------

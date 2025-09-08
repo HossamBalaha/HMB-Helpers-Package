@@ -4,7 +4,6 @@ import cv2, PIL  # Import OpenCV and PIL for image processing.
 import numpy as np  # Import numpy for numerical operations.
 
 
-
 def ReadVolume(caseImgPaths, caseSegPaths, raiseErrors=True):
   '''
   Read and preprocess a 3D volume from a set of 2D slices and their corresponding segmentation masks.
@@ -392,15 +391,16 @@ def MatchTwoImagesViaSIFT(
   This is useful for aligning images that may have different perspectives or scales.
 
   .. math::
-    H = \begin{bmatrix}
-    h_{11} & h_{12} & h_{13} \\
-    h_{21} & h_{22} & h_{23} \\
-    h_{31} & h_{32} & h_{33}
-    \end{bmatrix}
+
+     H = \begin{bmatrix}
+         h_{11} & h_{12} & h_{13} \\
+         h_{21} & h_{22} & h_{23} \\
+         h_{31} & h_{32} & h_{33}
+     \end{bmatrix}
 
   where:
-    - :math: `H` is the homography matrix.
-    - :math: `h_{ij}` are the elements of the homography matrix.
+    - :math:`H` is the homography matrix.
+    - :math:`h_{ij}` are the elements of the homography matrix.
 
   Parameters:
     img1 (numpy.ndarray): First input RGB image.
@@ -472,15 +472,16 @@ def MatchTwoImagesViaORB(
   The function returns the aligned images, matches, homography matrix, and output shape.
 
   .. math::
-    H = \begin{bmatrix}
-    h_{11} & h_{12} & h_{13} \\
-    h_{21} & h_{22} & h_{23} \\
-    h_{31} & h_{32} & h_{33}
-    \end{bmatrix}
+
+     H = \begin{bmatrix}
+         h_{11} & h_{12} & h_{13} \\
+         h_{21} & h_{22} & h_{23} \\
+         h_{31} & h_{32} & h_{33}
+     \end{bmatrix}
 
   where:
-    - :math: `H` is the homography matrix.
-    - :math: `h_{ij}` are the elements of the homography matrix.
+    - :math:`H` is the homography matrix.
+    - :math:`h_{ij}` are the elements of the homography matrix.
 
   Parameters:
     img1 (numpy.ndarray): First input RGB image.

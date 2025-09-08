@@ -169,6 +169,7 @@ class AttentionMapsVisualizer(object):
   .. code-block:: python
 
     from HMB.AttentionMapsHelper import AttentionMapsVisualizer
+
     visualizer = AttentionMapsVisualizer(
       baseFolder="/home/hmbala01/[B] BC Conf",
       folder="Results_E125_BS32_T5",

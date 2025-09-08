@@ -3,11 +3,11 @@
    :align: center
    :width: 200px
 
-.. |build| image:: https://img.shields.io/github/actions/workflow/status/HossamBalaha/HMB-Helpers-Package/ci.yml?branch=main
+.. |build| image:: _static/build.png
    :alt: Build Status
-.. |license| image:: https://img.shields.io/github/license/HossamBalaha/HMB-Helpers-Package
+.. |license| image:: _static/license.png
    :alt: License
-.. |python| image:: https://img.shields.io/pypi/pyversions/HMB-Helpers-Package
+.. |python| image:: _static/python.png
    :alt: Python Version
 
 |build| |license| |python|
@@ -15,7 +15,7 @@
 HMB Documentation
 =================
 
-**Version:** 1.0.0 ([Changelog](https://github.com/HossamBalaha/HMB-Helpers-Package/releases))
+**Version:** 0.1.0 ([Changelog](https://github.com/HossamBalaha/HMB-Helpers-Package/releases))
 
 Welcome to the **HMB Helpers Package** documentation!
 
@@ -71,31 +71,31 @@ Quickstart
    print(cleaned)
 
 .. note::
-   Requires a set of dependencies. See the file: `requirements.txt <
+   Requires a set of dependencies. See the file: `requirements.txt <https://github.com/HossamBalaha/HMB-Helpers-Package/blob/main/requirements.txt>`_
 
 .. toctree::
    :maxdepth: 1
    :caption: Contents:
 
+   AttentionMapsHelper
    EmbeddingsToTextHelper
+   ExplainabilityHelper
+   HandCraftedFeatures
    ImagesComparisonMetrics
    ImageSegmentationMetrics
    ImagesHelper
    ImagesNormalization
    Initializations
+   MachineLearningHelper
+   MetaheuristicsHelper
    PDFHelper
    PerformanceMetrics
+   PyTorchHelper
    PyTorchSegmentationLosses
    TextGenerationMetrics
    TextHelper
    Utils
    WSIHelper
-   HandCraftedFeatures
-   MachineLearningHelper
-   PyTorchHelper
-   AttentionMapsHelper
-   MetaheuristicsHelper
-   ExplainabilityHelper
 
 Getting Help
 ------------
@@ -119,3 +119,15 @@ Useful Links
 - `GitHub Repository <https://github.com/HossamBalaha/HMB-Helpers-Package.git>`_
 - `API Reference <modules.html>`_
 - `Contact & Support <mailto:h3ossam@gmail.com>`_
+
+LaTeX Math Example
+------------------
+
+Here is an example of a matrix using LaTeX math in Sphinx:
+
+.. math::
+  H = \begin{bmatrix}
+  h_{11} & h_{12} & h_{13} \\
+  h_{21} & h_{22} & h_{23} \\
+  h_{31} & h_{32} & h_{33}
+  \end{bmatrix}

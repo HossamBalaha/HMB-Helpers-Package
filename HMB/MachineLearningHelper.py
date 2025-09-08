@@ -670,7 +670,7 @@ def PerformDataBalancing(xTrain, yTrain, techniqueStr="SMOTE"):
     techniqueStr (str, optional): Name of the balancing technique to use.
       Supported values include: "SMOTE", "ADASYN", "BSMOTE", "SVMSMOTE", "KSMOTE", "ROS",
       "RUS", "NearMiss", "NearMiss-1", "NearMiss-2", "NearMiss-3",
-       "TL", "CCx". Default is "SMOTE".
+      "TL", "CCx". Default is "SMOTE".
 
   Returns:
     tuple: Resampled training data features, labels, and balancing object.

@@ -3,6 +3,18 @@ import numpy as np
 
 
 def MutualInformation(image1, image2, bins=100):
+  '''
+  Compute the mutual information between two images.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+    bins (int): Number of bins for the histograms (default: 100).
+
+  Returns:
+    float: The computed mutual information value.
+  '''
+
   from scipy.stats import entropy
 
   # Too Few Bins: Using very few bins (e.g., bins=5) can oversimplify the distribution,
@@ -78,6 +90,18 @@ def MutualInformation(image1, image2, bins=100):
 
 
 def MutualInformationColor(image1, image2, bins=100):
+  '''
+  Compute the mutual information between two color images by averaging over all channels.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input color image.
+    image2 (numpy.ndarray or compatible): Second input color image.
+    bins (int): Number of bins for the histograms (default: 100).
+
+  Returns:
+    float: The average mutual information across all color channels.
+  '''
+
   # Split the images into their respective color channels.
   split1 = cv2.split(image1)  # Split the first image into its color channels.
   split2 = cv2.split(image2)  # Split the second image into its color channels.
@@ -98,6 +122,17 @@ def MutualInformationColor(image1, image2, bins=100):
 
 
 def NormalizedMutualInformation(image1, image2):
+  '''
+  Compute the normalized mutual information (NMI) between two images.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+
+  Returns:
+    float: The computed normalized mutual information value.
+  '''
+
   from sklearn.metrics import normalized_mutual_info_score
 
   # Convert the first input image into a NumPy array and flatten it into a 1D array.
@@ -120,6 +155,18 @@ def NormalizedMutualInformation(image1, image2):
 
 
 def StructuralSimilarity(image1, image2, winSize=7):
+  '''
+  Compute the structural similarity index (SSIM) between two images.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+    winSize (int): Window size for local comparisons (default: 7).
+
+  Returns:
+    float: The computed SSIM score.
+  '''
+
   from skimage.metrics import structural_similarity as ssim
 
   # Convert the first input image into a NumPy array.
@@ -163,6 +210,17 @@ def StructuralSimilarity(image1, image2, winSize=7):
 
 
 def NormalizedCrossCorrelation(image1, image2):
+  '''
+  Compute the normalized cross-correlation (NCC) between two images.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+
+  Returns:
+    float: The computed NCC value.
+  '''
+
   # Convert the first input image into a NumPy array.
   image1 = np.asarray(image1)
 
@@ -200,6 +258,19 @@ def NormalizedCrossCorrelation(image1, image2):
 
 
 def HistogramComparison(image1, image2, bins=256, eps=1e-10):
+  '''
+  Compute the histogram intersection between two images.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+    bins (int): Number of bins for the histograms (default: 256).
+    eps (float): Small constant to avoid division by zero (default: 1e-10).
+
+  Returns:
+    float: The computed histogram intersection value (0 to 1).
+  '''
+
   # Convert the first input image into a NumPy array.
   image1 = np.asarray(image1)
 
@@ -251,6 +322,17 @@ def HistogramComparison(image1, image2, bins=256, eps=1e-10):
 
 
 def UniversalQualityIndex(image1, image2):
+  '''
+  Compute the universal quality index (UQI) between two images.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+
+  Returns:
+    float: The computed UQI value.
+  '''
+
   # Convert the first input image into a NumPy array.
   image1 = np.asarray(image1)
 
@@ -315,6 +397,17 @@ def UniversalQualityIndex(image1, image2):
 
 
 def CosineSimilarityImages(image1, image2):
+  '''
+  Compute the cosine similarity between two images.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+
+  Returns:
+    float: The computed cosine similarity value (-1 to 1).
+  '''
+
   from sklearn.metrics.pairwise import cosine_similarity
 
   # Convert the first input image into a NumPy array.
@@ -366,6 +459,18 @@ def CosineSimilarityImages(image1, image2):
 
 
 def PeakSignalToNoiseRatio(image1, image2, eps=1e-10):
+  '''
+  Compute the peak signal-to-noise ratio (PSNR) between two images.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+    eps (float): Small constant to avoid division by zero (default: 1e-10).
+
+  Returns:
+    float: The computed PSNR value in decibels (dB).
+  '''
+
   # Convert the first input image into a NumPy array.
   image1 = np.asarray(image1)
 
@@ -415,6 +520,17 @@ def PeakSignalToNoiseRatio(image1, image2, eps=1e-10):
 
 
 def FeatureBasedSimilarity(image1, image2):
+  '''
+  Compute the feature-based similarity between two images using SIFT keypoints and descriptors.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+
+  Returns:
+    float: The computed feature-based similarity score (0 to 1).
+  '''
+
   # Convert the first input image into a NumPy array.
   image1 = np.asarray(image1)
 
@@ -488,6 +604,17 @@ def FeatureBasedSimilarity(image1, image2):
 
 
 def MeanSquaredError(image1, image2):
+  '''
+  Compute the mean squared error (MSE) between two images.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+
+  Returns:
+    float: The computed MSE value.
+  '''
+
   # Convert the first input image into a NumPy array.
   image1 = np.asarray(image1)
 
@@ -518,6 +645,17 @@ def MeanSquaredError(image1, image2):
 
 
 def NormalizedMeanSquaredError(image1, image2):
+  '''
+  Compute the normalized mean squared error (NMSE) between two images.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+
+  Returns:
+    float: The computed NMSE value.
+  '''
+
   # Convert the first input image into a NumPy array.
   image1 = np.asarray(image1)
 
@@ -557,6 +695,17 @@ def NormalizedMeanSquaredError(image1, image2):
 
 
 def EarthMoversDistance(image1, image2):
+  '''
+  Compute the Earth Mover's Distance (EMD) between two images.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+
+  Returns:
+    float: The computed Earth Mover's Distance value.
+  '''
+
   from scipy.stats import wasserstein_distance
 
   # Convert the first input image into a NumPy array.
@@ -598,6 +747,17 @@ def EarthMoversDistance(image1, image2):
 
 
 def SpectralResidual(image1, image2):
+  '''
+  Compute the spectral residual similarity (SRS) between two images.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+
+  Returns:
+    float: The computed spectral residual similarity value.
+  '''
+
   from scipy.fftpack import fft2, fftshift, ifft2
 
   # Define a helper function to compute the spectral residual of an image.
@@ -669,6 +829,17 @@ def SpectralResidual(image1, image2):
 
 
 def PhaseCongruency(image1, image2):
+  '''
+  Compute the phase congruency similarity between two images.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+
+  Returns:
+    float: The computed phase congruency similarity value.
+  '''
+
   from skimage.filters import prewitt
 
   # Define a helper function to compute the phase congruency of an image.
@@ -712,6 +883,17 @@ def PhaseCongruency(image1, image2):
 
 
 def NoiseQualityMeasure(image1, image2):
+  '''
+  Compute the noise quality measure (NQM) between two images.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+
+  Returns:
+    float: The computed noise quality measure value.
+  '''
+
   # Convert the first input image into a NumPy array.
   image1 = np.asarray(image1)
 
@@ -746,6 +928,17 @@ def NoiseQualityMeasure(image1, image2):
 
 
 def HellingerDistance(image1, image2):
+  '''
+  Compute the Hellinger distance between two images.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+
+  Returns:
+    float: The computed Hellinger distance value.
+  '''
+
   # Convert the first input image into a NumPy array.
   image1 = np.asarray(image1)
 
@@ -805,6 +998,17 @@ def HellingerDistance(image1, image2):
 
 
 def BhattacharyyaDistance(image1, image2):
+  '''
+  Compute the Bhattacharyya distance between two images.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+
+  Returns:
+    float: The computed Bhattacharyya distance value.
+  '''
+
   # Convert the first input image into a NumPy array.
   image1 = np.asarray(image1)
 
@@ -865,6 +1069,17 @@ def BhattacharyyaDistance(image1, image2):
 
 
 def PerceptualHash(image1, image2):
+  '''
+  Compute the perceptual hash (pHash) Hamming distance between two images.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+
+  Returns:
+    int: The computed Hamming distance between the perceptual hashes.
+  '''
+
   from imagehash import phash
 
   # Convert the first input image into a NumPy array.
@@ -904,6 +1119,17 @@ def PerceptualHash(image1, image2):
 
 
 def JensenShannonDivergence(image1, image2):
+  '''
+  Compute the Jensen-Shannon divergence (JSD) between two images.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+
+  Returns:
+    float: The computed Jensen-Shannon divergence value.
+  '''
+
   from scipy.spatial.distance import jensenshannon
 
   # Convert the first input image into a NumPy array.
@@ -944,6 +1170,18 @@ def JensenShannonDivergence(image1, image2):
 
 
 def KLDivergence(image1, image2, eps=1e-10):
+  '''
+  Compute the Kullback-Leibler (KL) divergence between two images.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+    eps (float): Small constant to avoid division by zero (default: 1e-10).
+
+  Returns:
+    float: The computed KL divergence value.
+  '''
+
   from scipy.stats import entropy
 
   # Convert the first input image into a NumPy array.
@@ -1005,6 +1243,18 @@ def KLDivergence(image1, image2, eps=1e-10):
 
 
 def GradientMagnitudeSimilarityDeviation(image1, image2, eps=1e-10):
+  '''
+  Compute the gradient magnitude similarity deviation (GMSD) between two images.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+    eps (float): Small constant to avoid division by zero (default: 1e-10).
+
+  Returns:
+    float: The computed GMSD value.
+  '''
+
   # Convert the first input image into a NumPy array.
   image1 = np.asarray(image1)
 
@@ -1053,6 +1303,17 @@ def GradientMagnitudeSimilarityDeviation(image1, image2, eps=1e-10):
 
 
 def SpectralAngleMapper(image1, image2):
+  '''
+  Compute the spectral angle mapper (SAM) between two images.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+
+  Returns:
+    float: The computed SAM value.
+  '''
+
   # Convert the first input image into a NumPy array.
   image1 = np.asarray(image1)
 
@@ -1102,6 +1363,16 @@ def SpectralAngleMapper(image1, image2):
 
 
 def BRISQUE(image):
+  '''
+  Compute the BRISQUE (Blind/Referenceless Image Spatial Quality Evaluator) score for an image.
+
+  Parameters:
+    image (numpy.ndarray or compatible): Input image.
+
+  Returns:
+    float: The computed BRISQUE score (lower is better quality).
+  '''
+
   from brisque import BRISQUE
 
   # Convert the input image into a NumPy array.
@@ -1119,6 +1390,17 @@ def BRISQUE(image):
 
 
 def SummaryTable(image1, image2):
+  '''
+  Compute a summary table of various similarity and dissimilarity metrics between two images.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+
+  Returns:
+    dict: Dictionary mapping metric names to their computed values.
+  '''
+
   mi = MutualInformation(image1, image2, bins=150)  # Updated.
   nmi = NormalizedMutualInformation(image1, image2)  # Updated.
   ssimScore = StructuralSimilarity(image1, image2, winSize=25)  # Updated.
@@ -1176,6 +1458,17 @@ def SummaryTable(image1, image2):
 
 
 def IsSimilarityAccepted(image1, image2):
+  '''
+  Determine if two images are similar based on Mutual Information, Cosine Similarity, and Perceptual Hash.
+
+  Parameters:
+    image1 (numpy.ndarray or compatible): First input image.
+    image2 (numpy.ndarray or compatible): Second input image.
+
+  Returns:
+    tuple: (bool, str) indicating if the images are similar and a summary string.
+  '''
+
   scores = SummaryTable(image1, image2)
   mi = scores["MI (U)"]
   cosSim = scores["CS (U)"]

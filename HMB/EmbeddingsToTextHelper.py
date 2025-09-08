@@ -14,10 +14,11 @@ class EmbeddingsToTextModel(nn.Module):
     dropoutRatio=0.1,  # Dropout ratio for regularization.
     numPromptTokens=5,  # Number of learnable prompt tokens.
   ):
-    '''
+    r'''
     Initialize the EmbeddingsToTextModel for generating text from features.
     This model uses a pre-trained T5 model and adds a feature projection layer
     to transform input features into a format suitable for text generation.
+
     Parameters:
       tokenizeModelName (str): Name of the pre-trained T5 model to use (default: "t5-small").
       inputFeatureDim (int): Dimension of the input feature vector (default: 6144).
@@ -71,15 +72,17 @@ class EmbeddingsToTextModel(nn.Module):
     attention_mask=None,  # Attention mask to indicate which tokens are valid (optional).
     labels=None,  # Labels for the causal language modeling task (optional, default: None).
   ):
-    '''
+    r'''
     Forward pass through the EmbeddingsToTextModel.
     This method processes the input features, projects them to T5's hidden dimension,
     and generates text using the T5 model.
+
     Parameters:
       features (torch.Tensor): Input features to be projected and processed.
       input_ids (torch.Tensor, optional): Input token IDs for the T5 model (default: None).
       attentionMask (torch.Tensor, optional): Attention mask to indicate which tokens are valid (default: None).
       labels (torch.Tensor, optional): Labels for the causal language modeling task (default: None).
+
     Returns:
       outputs: The output of the T5 model, which includes the generated text and loss if labels are provided.
     '''
@@ -117,15 +120,18 @@ class EmbeddingsToTextModel(nn.Module):
     features,  # Input features to be projected and processed.
     **kwargs  # Additional keyword arguments for the generation method.
   ):
-    '''
+    r'''
     Generate text from input features using the T5 model.
     This method projects the input features and generates text based on the provided parameters.
+
     Parameters:
       features (torch.Tensor): Input features to be projected and processed.
       **kwargs: Additional keyword arguments for the generation method.
+
     Returns:
       torch.Tensor: Generated text token IDs.
     '''
+
     # Disables gradient calculation for generation.
     with torch.no_grad():
       # Gets the batch size from the input features.
@@ -167,11 +173,12 @@ def TrainModel(
   modelStoragePath="BestModel.pth",  # Path to save the best model state.
   verbose=False  # Whether to print verbose output during training (default: False).
 ):
-  '''
+  r'''
   Train the EmbeddingsToTextModel using the provided training and validation data loaders.
   This function performs the training loop, including forward and backward passes,
   loss computation, and optimization steps. It also evaluates the model on the validation set
   after each epoch to monitor performance and saves the best model state based on validation loss.
+
   Parameters:
     model (EmbeddingsToTextModel): Instance of the EmbeddingsToTextModel to be trained.
     trainLoader (DataLoader): DataLoader for training data.

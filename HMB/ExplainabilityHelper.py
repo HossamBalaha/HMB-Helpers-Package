@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 
 class SHAPExplainer(object):
-  '''
+  r'''
   A class to perform SHAP (SHapley Additive exPlanations) analysis on a trained machine learning model.
 
   This class provides a pipeline for loading a trained model and its associated data, preparing the test set
@@ -41,7 +41,6 @@ class SHAPExplainer(object):
 
     import HMB.ExplainabilityHelper as eh
 
-
     explainer = eh.SHAPExplainer(
       baseDir="path/to/baseDir",
       experimentFolderName="Experiment1",
@@ -60,11 +59,12 @@ class SHAPExplainer(object):
       noOfFeatures=5
     )
 
-  Notes:
-    - SHAP visualizations are saved as PNG and PDF files in the specified storage directory.
-    - The class supports both global and local interpretability visualizations.
-    - For more information about SHAP and its visualization techniques, see:
-      https://shap.readthedocs.io/en/latest/index.html
+  Notes
+  -----
+    SHAP visualizations are saved as PNG and PDF files in the specified storage directory.
+    The class supports both global and local interpretability visualizations.
+    For more information about SHAP and its visualization techniques, see:
+    https://shap.readthedocs.io/en/latest/index.html
   '''
 
   def __init__(
@@ -77,7 +77,7 @@ class SHAPExplainer(object):
     shapStorageKeyword,
     dpi=1080,
   ):
-    '''
+    r'''
     Initialize the SHAPExplainer object with file paths and configuration.
 
     Parameters:
@@ -89,7 +89,8 @@ class SHAPExplainer(object):
       shapStorageKeyword (str): Keyword for the storage path where SHAP results will be saved.
       dpi (int, optional): Dots per inch for saving plots (default: 1080).
 
-    Notes:
+    Notes
+    -----
       - The storage directory for SHAP results will be created if it does not exist.
       - All attributes are initialized to None except for configuration parameters.
     '''
@@ -119,7 +120,7 @@ class SHAPExplainer(object):
       os.makedirs(self.storagePath)
 
   def LoadModelAndData(self, maxNoRecords=10):
-    '''
+    r'''
     Load the trained model objects and the test dataset from files, and prepare the test data.
 
     This method loads the model, scaler, feature selector, and other objects from a pickle file,
@@ -132,7 +133,8 @@ class SHAPExplainer(object):
     Parameters:
       maxNoRecords (int, optional): Maximum number of records to limit the test dataset to (default: 10).
 
-    Notes:
+    Notes
+    -----
       - Ensures that the test data columns match those used during training.
       - Applies the same scaler and feature selector as in the training pipeline.
       - If maxNoRecords is set, randomly samples up to that number of records from the test set.
@@ -223,7 +225,8 @@ class SHAPExplainer(object):
     This method creates a SHAP explainer object using the trained model and the prepared test features,
     then computes SHAP values for the test set to explain model predictions.
 
-    Notes:
+    Notes
+    -----
       - The computed SHAP values are stored in self.shapValues.
       - Prints the shape of the computed SHAP values.
       - The SHAP explainer is stored in self.explainer.
@@ -245,7 +248,8 @@ class SHAPExplainer(object):
     This method uses the trained model to predict on the prepared test features,
     and decodes the predicted labels back to their original form using the stored label encoder.
 
-    Notes:
+    Notes
+    -----
       - The predictions are stored in self.yPred.
       - The decoded predictions are stored in self.yPredDecoded.
     '''
@@ -278,12 +282,14 @@ class SHAPExplainer(object):
       noOfRecords (int, optional): Number of records to consider for summary/scatter plots.
       noOfFeatures (int, optional): Number of top features to display in plots.
 
-    Notes:
+    Notes
+    -----
       - All plots are saved as both PNG and PDF files in the storage directory.
       - If categoryToExplain is "all", plots are generated for each unique class in the target variable.
       - Prints a message when visualizations are saved.
       - Uses SHAP's built-in plotting functions for visualization.
     '''
+
     # Determine the instance index to explain if not provided.
     if (instanceIndex is None):
       instanceIndex = np.random.randint(0, self.XTest.shape[0])  # Choose a random instance index.
