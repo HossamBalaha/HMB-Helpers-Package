@@ -207,3 +207,40 @@ def ReadTextFile(filePath):
     text = f.read()
   # Return the read text.
   return text
+
+
+def LoadYaml(yamlPath):
+  '''
+  Load data from a YAML file.
+
+  Parameters:
+    yamlPath (str): Path to the YAML file.
+
+  Returns:
+    object: The data loaded from the YAML file as a Python object.
+
+  Raises:
+    AssertionError: If the specified file does not exist.
+  '''
+
+  # Check if the file exists.
+  assert os.path.exists(yamlPath), f"File not found: {yamlPath}"
+
+  # Open the YAML file in read mode and load its contents.
+  with open(yamlPath, "r") as yamlFile:
+    yamlData = yaml.load(yamlFile, Loader=yaml.FullLoader)
+  return yamlData
+
+
+def SaveYaml(yamlPath, yamlData):
+  '''
+  Save data to a YAML file.
+
+  Parameters:
+    yamlPath (str): Path to the YAML file.
+    yamlData (object): Data to be saved to the YAML file.
+  '''
+
+  # Open the YAML file in write mode and dump the data.
+  with open(yamlPath, "w") as yamlFile:
+    yaml.dump(yamlData, yamlFile)

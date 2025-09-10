@@ -720,3 +720,528 @@ def FixTruncatedPNGImage(imgPath):
       print(f"Fixed truncated PNG image: {imgPath}")
   except Exception as e:
     print(f"Error fixing truncated PNG image: {e}")
+
+
+def LoadDicom(filePath):
+  '''
+  Load a DICOM file and extract its pixel array.
+
+  Parameters:
+    filePath (str): Path to the DICOM file.
+
+  Returns:
+    numpy.ndarray: The pixel data extracted from the DICOM file.
+  '''
+
+  import pydicom  # Import pydicom for handling DICOM files.
+  from pydicom.pixels.processing import apply_voi_lut
+
+  # Read the DICOM file.
+  ds = pydicom.dcmread(filePath)
+
+  # Extract the pixel array source the DICOM file.
+  # image2D = ds.pixel_array
+  image2D = apply_voi_lut(ds.pixel_array, ds)
+
+  return image2D
+
+
+def MinMaxNormalization(image, mapToUint8=True):
+  '''
+  Normalize an image using min-max normalization.
+  The pixel values are scaled to the range [0, 255] if mapToUint8 is True,
+  otherwise they are scaled to the range [0, 1].
+
+  Parameters:
+    image (numpy.ndarray): Input image.
+    mapToUint8 (bool): If True, the output image will be converted to uint8.
+
+  Returns:
+    numpy.ndarray: The normalized image. If mapToUint8 is True, the output will be of type uint8.
+  '''
+
+  # Calculate the delta between the maximum and minimum pixel intensities.
+  delta = image.max() - image.min()
+
+  # Normalize the image to range source 0 to 1.
+  normSim = (image - image.min()) / delta
+
+  if (not mapToUint8):
+    return normSim
+
+  # Scale the image to range source 0 to 255.
+  normSim = normSim * 255.0
+
+  # Convert the image to unsigned 8-bit integers.
+  image = normSim.astype(np.uint8)
+
+  return image
+
+
+def CalculateCDF(image):
+  '''
+  Calculate the cumulative distribution function (CDF) of an image.
+
+  Parameters:
+    image (numpy.ndarray): Input image.
+
+  Returns:
+    tuple: A typle containing:
+      - cdfNormalized (numpy.ndarray): The normalized CDF of the image.
+      - bins (numpy.ndarray): The bin values as integers.
+  '''
+
+  # Flatten the image to a 1D array.
+  flattened = image.flatten()
+
+  # Get the maximum and minimum pixel intensities.
+  maxInt = int(flattened.max())
+  minInt = int(flattened.min())
+
+  # Compute the histogram and bin values using numpy's histogram function.
+  # The number of bins is determined by the maximum value in the image.
+  histogram, bins = np.histogram(
+    flattened,  # Source image.
+    bins=maxInt,  # Number of bins.
+    range=[minInt, maxInt],  # Range of values.
+  )
+
+  # Calculate the cumulative sum of the histogram values.
+  cdf = histogram.cumsum()
+
+  # Normalize the cumulative sum to range source 0 to 1.
+  cdfNormalized = cdf / cdf.max()
+
+  # Return the normalized CDF and the bins as integers.
+  return cdfNormalized, bins.astype(int)
+
+
+def CalculateAverageCDFs(
+  sourceFolder,  # The folder containing the source images.
+  applyThresholding=False,  # If True, the source images will be thresholded.
+  applyNormalization=False,  # If True, the source images will be normalized.
+  isDicom=True,  # If True, the source files are DICOM files.
+  specialIndex=None,  # If not None, only the files with the indices in this list will be used.
+):
+  '''
+  Calculate the average cumulative distribution functions (CDFs) for a set of images in a folder.
+
+  Parameters:
+    sourceFolder (str): Path to the folder containing the images.
+    applyThresholding (bool): Whether to apply thresholding to the images.
+    applyNormalization (bool): Whether to normalize the images.
+    isDicom (bool): Whether the images are DICOM files.
+    specialIndex (list or None): List of indices to process, or None to process all.
+
+  Returns:
+    tuple: A tuple containing:
+      - avgCDFs (numpy.ndarray): The average CDFs across all images.
+      - counts (numpy.ndarray): The counts of occurrences for each bin.
+      - maxBins (int): The maximum number of bins used.
+  '''
+
+  # Get a sorted list of files in the "source" folder.
+  sourceFiles = sorted(os.listdir(sourceFolder))
+
+  # Check if the special index is inside the range of the "source" files range.
+  if ((specialIndex is not None) and (max(specialIndex) >= len(sourceFiles))):
+    return None
+
+  # Initialize lists to store CDFs and bins.
+  cdfs, bins = [], []
+
+  # Initialize variables to keep track of maximum number of bins.
+  maxBins = 0
+
+  # Define the working range.
+  workingRange = range(len(sourceFiles)) if specialIndex is None else specialIndex
+
+  # Loop through each file in the "source" folder.
+  for i in workingRange:
+    # Get the file path
+    filePath = os.path.join(sourceFolder, sourceFiles[i])
+
+    if (isDicom):  # If the file is a DICOM file.
+      image2D = LoadDicom(filePath)
+    else:
+      # Read the image file.
+      image2D = cv2.imread(filePath)
+
+    # Normalize the image if the applyNormalization flag is True.
+    if (applyNormalization):
+      image2D = MinMaxNormalization(image2D)
+
+      # Convert the image to grayscale if it is not already.
+    if (len(image2D.shape) > 2):
+      # Convert the image to grayscale.
+      image2D = cv2.cvtColor(image2D, cv2.COLOR_BGR2GRAY)
+
+    # Apply thresholding to the image if the applyThresholding flag is True.
+    if (applyThresholding):
+      # Apply thresholding to the image.
+      _, image2D = cv2.threshold(
+        image2D,  # Source image.
+        0,  # Threshold value.
+        255,  # Maximum value.
+        cv2.THRESH_BINARY + cv2.THRESH_OTSU,  # Thresholding type.
+      )
+
+    # Calculate the CDF and bins for the image.
+    cdf_, bins_ = CalculateCDF(image2D)
+
+    # Append the CDF and bins to the respective lists.
+    cdfs.append(cdf_)
+    bins.append(bins_[:-1])
+
+    # Update the maximum number of bins if necessary.
+    if (np.max(bins_) > maxBins):
+      maxBins = int(np.max(bins_))
+
+  # Initialize arrays to store cumulative CDFs and counts.
+  cumCDFs = np.zeros(maxBins)
+  counts = np.zeros(maxBins)
+
+  # Loop through each CDF and its corresponding bins.
+  for i in range(len(cdfs)):
+    # Accumulate the CDF values based on the corresponding bins.
+    cumCDFs[bins[i]] += cdfs[i]
+
+    # Increment the counts for the corresponding bins.
+    counts[bins[i]] += 1
+
+  # Calculate the average CDFs by dividing cumulative CDFs by counts.
+  avgCDFs = cumCDFs / counts
+
+  # Return the average CDFs, counts, and maximum number of bins.
+  return avgCDFs, counts, maxBins
+
+
+def PriorInformationTrainingGeneric(
+  image,  # The grayscale image.
+  mask,  # The mask of the included region.
+  startingRadius=5,  # The starting radius for drawing circles.
+  stepRadius=5,  # The step size for increasing the radius.
+  maxValue=255,  # The maximum intensity value.
+):
+  '''
+  Generate histograms for included and non-included regions at multiple radii for prior information training.
+
+  Parameters:
+    image (numpy.ndarray): Grayscale image.
+    mask (numpy.ndarray): Mask of the included region.
+    startingRadius (int): Starting radius for drawing circles.
+    stepRadius (int): Step size for increasing the radius.
+    maxValue (int): Maximum intensity value.
+
+  Returns:
+    list: List of dictionaries containing histograms and related information for each radius.
+  '''
+
+  # Calculate the moments of the included region mask to find the centroid.
+  moments = cv2.moments(mask)
+  centroidX = int(moments["m10"] / moments["m00"])  # Calculate the x coordinate of the centroid.
+  centroidY = int(moments["m01"] / moments["m00"])  # Calculate the y coordinate of the centroid.
+
+  # Find the maximum radius that can be drawn from the centroid to the image borders.
+  maxRadius = np.min(
+    [
+      centroidX,  # Distance from centroid to the left border.
+      centroidY,  # Distance from centroid to the top border.
+      image.shape[0] - centroidX,  # Distance from centroid to the right border.
+      image.shape[1] - centroidY,  # Distance from centroid to the bottom border.
+    ]
+  )
+
+  # Create an empty list to store histograms.
+  listOfHistograms = []
+
+  # Iterate through different radii.
+  for radius in range(startingRadius, maxRadius + 1, stepRadius):
+    # Create an empty image to draw a white circle.
+    circleImage = np.zeros_like(mask).astype(np.uint8)
+
+    # Draw a white circle at the centroid with the specified radius.
+    cv2.circle(circleImage, (centroidX, centroidY), radius, (255, 255, 255), -1)
+
+    # Separate included and non-included pixels based on the circle mask.
+    includedPixels = image[circleImage > 0]
+    nonIncludedPixels = image[circleImage <= 0]
+
+    # Calculate histograms for the included and non-included regions.
+    histIncluded, binIncluded = np.histogram(
+      includedPixels,  # Pixels from the included region.
+      bins=np.max(image),  # Number of bins.
+      range=(0, np.max(image)),  # Range of histogram bins.
+    )
+
+    histNonIncluded, binNonIncluded = np.histogram(
+      nonIncludedPixels,  # Pixels from the non-included region.
+      bins=np.max(image),  # Number of bins.
+      range=(0, np.max(image)),  # Range of histogram bins.
+    )
+
+    # Add the histograms and relevant information to the list of histograms.
+    listOfHistograms.append(
+      {
+        "included"       : histIncluded,
+        "nonIncluded"    : histNonIncluded,
+        "radius"         : radius,
+        "includedBins"   : binIncluded,
+        "nonIncludedBins": binNonIncluded,
+        "maxIntensity"   : np.max(image),
+        "centroidX"      : centroidX,
+        "centroidY"      : centroidY,
+      }
+    )
+
+  # Return the list of histograms for different radii.
+  return listOfHistograms
+
+
+def PriorInformationTestingGeneric(image, histogramsDict, startingSigma=1, stepSigma=1, position=0):
+  '''
+  Generate probability maps for included and non-included regions using prior histograms.
+
+  Parameters:
+    image (numpy.ndarray): Grayscale image.
+    histogramsDict (dict): Dictionary of histograms for different radii.
+    startingSigma (int): Initial sigma for intensity range.
+    stepSigma (int): Step size for increasing sigma.
+    position (int): Progress bar position for tqdm.
+
+  Returns:
+    tuple: A tuple containing:
+      - sumIncludedMaps (numpy.ndarray): The summed included probability map.
+      - sumNonIncludedMaps (numpy.ndarray): The summed non-included probability map.
+  '''
+
+  # Calculate the centroids of the image in the X and Y dimensions.
+  centroidX, centroidY = image.shape[0] // 2, image.shape[1] // 2
+
+  # Initialize two lists to store included and non-included probability maps.
+  listOfIncludedMaps = []
+  listOfNonIncludedMaps = []
+
+  # Iterate through the radii in the histograms dictionary.
+  for radius in tqdm.tqdm(
+    list(histogramsDict.keys()),  # Get the list of radii from the histograms dictionary.
+    desc=f"Prior Information ({position + 1})",  # Set a description for the progress bar.
+    leave=(position == 0),  # Specify if the progress bar should leave (clear) when done.
+    position=position,  # Set the position of the progress bar.
+  ):
+    # Get the included and non-included histograms for the current radius.
+    histIncluded = histogramsDict[radius]["included"]
+    histNonIncluded = histogramsDict[radius]["nonIncluded"]
+
+    # Create an empty image to draw a white circle.
+    circleImage = np.zeros_like(image)
+
+    # Draw a white circle at the centroid with the specified radius.
+    cv2.circle(circleImage, (centroidX, centroidY), radius, (255, 255, 255), -1)
+
+    # Create empty probability maps for included and non-included.
+    includedProbabilityMap = np.zeros_like(image, dtype=np.float32)
+    nonIncludedProbabilityMap = np.zeros_like(image, dtype=np.float32)
+
+    # Find the locations where the circle mask is not zero.
+    locations = np.argwhere(circleImage > 0).tolist()
+
+    # Iterate through the contour points.
+    for point in locations:
+      # Get the X and Y coordinates of the current point.
+      x = point[1]
+      y = point[0]
+
+      # Get the intensity of the current point in the image.
+      intensity = image[y, x]
+
+      # Set the starting sigma for intensity range calculation.
+      sigma = startingSigma
+
+      # Initialize the starting histogram included range.
+      histIncludedRange = 0
+
+      # Calculate the intensity range for included probability while ensuring it's not zero.
+      while (histIncludedRange == 0):
+        # Create a range of intensities based on the current intensity and sigma value.
+        rangeIntensity = np.arange(intensity - sigma, intensity + sigma + 1)
+
+        # Filter out negative and out-of-range intensity values.
+        rangeIntensity = rangeIntensity[(rangeIntensity >= 0) & (rangeIntensity < np.max(image))]
+
+        # Calculate the included probability within the current intensity range.
+        histIncludedRange = np.sum(histIncluded[rangeIntensity])
+
+        # Increment sigma for the next iteration.
+        sigma += stepSigma
+
+      # Calculate the non-included probability within the same intensity range.
+      histNonIncludedRange = np.sum(histNonIncluded[rangeIntensity])
+
+      # Calculate the denominator of the probability map.
+      den = histIncludedRange + histNonIncludedRange
+
+      # Calculate the probability of being included at the current point.
+      probIncluded = histIncludedRange / den
+
+      # Calculate the probability of being non-included at the current point.
+      probNonIncluded = histNonIncludedRange / den
+
+      # Update the included and non-included probability maps with the calculated probabilities.
+      includedProbabilityMap[y, x] = probIncluded
+      nonIncludedProbabilityMap[y, x] = probNonIncluded
+
+    # Normalize the included and non-included probability maps to the range [0, 1].
+    includedProbabilityMap = MinMaxNormalization(includedProbabilityMap)
+    nonIncludedProbabilityMap = MinMaxNormalization(nonIncludedProbabilityMap)
+
+    # Add the probability maps to their respective lists.
+    listOfIncludedMaps.append(includedProbabilityMap)
+    listOfNonIncludedMaps.append(nonIncludedProbabilityMap)
+
+  # Normalize the sum of included and non-included probability maps to the range [0, 1].
+  sumIncludedMaps = np.zeros_like(image, dtype=np.float32)
+  sumNonIncludedMaps = np.zeros_like(image, dtype=np.float32)
+
+  # Calculate the sum of included maps.
+  for includedMap in listOfIncludedMaps:
+    sumIncludedMaps += includedMap
+
+  # Calculate the sum of non-included maps.
+  for nonIncludedMap in listOfNonIncludedMaps:
+    sumNonIncludedMaps += nonIncludedMap
+
+  # Normalize the sum of included and non-included probability maps.
+  sumIncludedMaps = MinMaxNormalization(sumIncludedMaps)
+  sumNonIncludedMaps = MinMaxNormalization(sumNonIncludedMaps)
+
+  # Return the sum of included and non-included probability maps.
+  return sumIncludedMaps, sumNonIncludedMaps
+
+
+def PriorInformationGeneric(image, mask, startingRadius=10, stepRadius=10, startingSigma=1, stepSigma=1):
+  '''
+  Generate lists of probability maps for included and non-included regions at multiple radii.
+
+  Parameters:
+    image (numpy.ndarray): Grayscale image.
+    mask (numpy.ndarray): Mask of the included region.
+    startingRadius (int): Starting radius for drawing circles.
+    stepRadius (int): Step size for increasing the radius.
+    startingSigma (int): Initial sigma for intensity range.
+    stepSigma (int): Step size for increasing sigma.
+
+  Returns:
+    tuple: A tuple containing:
+      - listOfIncludedMaps (list): List of included probability maps.
+      - listOfNonIncludedMaps (list): List of non-included probability maps.
+  '''
+
+  listOfIncludedMaps = []
+  listOfNonIncludedMaps = []
+
+  # Find the centroid of the included region.
+  moments = cv2.moments(mask)
+  centroidX = int(moments["m10"] / moments["m00"])
+  centroidY = int(moments["m01"] / moments["m00"])
+
+  # Find the maximum radius that can be drawn from the centroid to the image borders.
+  maxRadius = np.min(
+    [
+      centroidX,  # Distance from centroid to the left border.
+      centroidY,  # Distance from centroid to the top border.
+      image.shape[0] - centroidX,  # Distance from centroid to the right border.
+      image.shape[1] - centroidY,  # Distance from centroid to the bottom border.
+    ]
+  )
+
+  # Iterate through different radii.
+  for radius in range(startingRadius, maxRadius + 1, stepRadius):
+    # Create an empty image to draw a white circle.
+    circleImage = np.zeros_like(mask)
+
+    # Draw a white circle at the centroid with the specified radius.
+    cv2.circle(circleImage, (centroidX, centroidY), radius, (255, 255, 255), -1)
+
+    # Separate included and non-included pixels based on the circle mask.
+    includedPixels = image[circleImage > 0]
+    nonIncludedPixels = image[circleImage <= 0]
+
+    # Calculate histograms for the included and non-included regions.
+    histIncluded, binIncluded = np.histogram(
+      includedPixels,  # Pixels from the included region.
+      bins=np.max(image),  # Number of bins.
+      range=(0, np.max(image)),  # Range of histogram bins.
+    )
+
+    histNonIncluded, binNonIncluded = np.histogram(
+      nonIncludedPixels,  # Pixels from the non-included region.
+      bins=np.max(image),  # Number of bins.
+      range=(0, np.max(image)),  # Range of histogram bins.
+    )
+
+    # Create empty probability maps for included and non-included.
+    includedProbabilityMap = np.zeros_like(image, dtype=np.float32)
+    nonIncludedProbabilityMap = np.zeros_like(image, dtype=np.float32)
+
+    # Find the locations where the circle mask is not zero.
+    locations = np.argwhere(circleImage > 0).tolist()
+
+    # Iterate through the contour points.
+    for point in locations:
+      # Get the X and Y coordinates of the current point.
+      x = point[1]
+      y = point[0]
+
+      # Get the intensity of the current point in the image.
+      intensity = image[y, x]
+
+      # Set the starting sigma for intensity range calculation.
+      sigma = startingSigma
+
+      # Initialize the starting histogram included range.
+      histIncludedRange = 0
+
+      # Calculate the intensity range for included probability while ensuring it's not zero.
+      while (histIncludedRange == 0):
+        # Create a range of intensities based on the current intensity and sigma value.
+        rangeIntensity = np.arange(intensity - sigma, intensity + sigma + 1)
+
+        # Filter out negative and out-of-range intensity values.
+        rangeIntensity = rangeIntensity[(rangeIntensity >= 0) & (rangeIntensity < np.max(image))]
+
+        # Calculate the included probability within the current intensity range.
+        histIncludedRange = np.sum(histIncluded[rangeIntensity])
+
+        # Increment sigma for the next iteration.
+        sigma += stepSigma
+
+      # Calculate the non-included probability within the same intensity range.
+      histNonIncludedRange = np.sum(histNonIncluded[rangeIntensity])
+
+      # Calculate the denominator of the probability map.
+      den = histIncludedRange + histNonIncludedRange
+
+      # Calculate the probability of being included at the current point.
+      probIncluded = histIncludedRange / den
+
+      # Calculate the probability of being non-included at the current point.
+      probNonIncluded = histNonIncludedRange / den
+
+      # Update the included and non-included probability maps with the calculated probabilities.
+      includedProbabilityMap[y, x] = probIncluded
+      nonIncludedProbabilityMap[y, x] = probNonIncluded
+
+    # Normalize the included and non-included probability maps to the range [0, 1].
+    includedProbabilityMap = (
+      (includedProbabilityMap - np.min(includedProbabilityMap)) /
+      (np.max(includedProbabilityMap) - np.min(includedProbabilityMap))
+    )
+    nonIncludedProbabilityMap = (
+      (nonIncludedProbabilityMap - np.min(nonIncludedProbabilityMap)) /
+      (np.max(nonIncludedProbabilityMap) - np.min(nonIncludedProbabilityMap))
+    )
+    listOfIncludedMaps.append(includedProbabilityMap)
+    listOfNonIncludedMaps.append(nonIncludedProbabilityMap)
+
+  return listOfIncludedMaps, listOfNonIncludedMaps
