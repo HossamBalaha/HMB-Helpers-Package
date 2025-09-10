@@ -1,4 +1,3 @@
-# Import necessary libraries.
 import os, matplotlib
 import numpy as np
 import pandas as pd
@@ -17,7 +16,7 @@ IgnoreWarnings()  # Suppress all warnings globally.
 
 
 def StatisticalAnalysis(results, hypothesizedMean=0, secondMetricList=None, confidenceLevel=0.95, nBootstraps=1000):
-  '''
+  r'''
   Perform comprehensive statistical analysis on a list of results.
 
   Parameters:
@@ -29,6 +28,17 @@ def StatisticalAnalysis(results, hypothesizedMean=0, secondMetricList=None, conf
 
   Returns:
     dict: Dictionary containing all statistical analysis results.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import HMB.StatisticalAnalysisHelper as sah
+
+    results = [0.8, 0.82, 0.78, 0.81, 0.79]
+    analysisReport = sah.StatisticalAnalysis(results, hypothesizedMean=0.75)
+    print("Statistical Analysis Report:")
+    print(analysisReport)
   '''
 
   # Initialize an empty dictionary to store the analysis results.
@@ -446,7 +456,7 @@ def StatisticalAnalysis(results, hypothesizedMean=0, secondMetricList=None, conf
 
 
 def GetCmapColors(cmap, noColors, darkColorsOnly=True, darknessThreshold=0.7):
-  '''
+  r'''
   Utility to get a list of unique colors from a matplotlib colormap.
 
   Parameters:
@@ -536,7 +546,7 @@ def PlotMetrics(
   fixedTicksColors=True,  # Whether to use fixed ticks colors for consistency across plots.
   fixedTicksColor="black",  # Color to use for fixed ticks if fixedTicksColors is True.
 ):
-  '''
+  r'''
   Plot boxplots, violin plots, Q-Q plots, histograms, density plots, scatter plots,
   heatmaps, line plots, bar plots, pair plots, CDF plots, pie charts, and swarm plots
   for each metric in the data.
@@ -559,6 +569,48 @@ def PlotMetrics(
     differentColors (bool, optional): Whether to use different colors for different plots.
     fixedTicksColors (bool, optional): Whether to use fixed ticks colors for consistency across plots.
     fixedTicksColor (str, optional): Color to use for fixed ticks if fixedTicksColors is True.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import numpy as np
+    import HMB.StatisticalAnalysisHelper as sah
+
+    # Example data: 3 datasets with 100 trials each and 2 metrics (accuracy and loss).
+    data = {
+      "Dataset1": {
+        "accuracy": np.random.rand(100) * 0.2 + 0.8,  # Random accuracies between 0.8 and 1.0.
+        "loss": np.random.rand(100) * 0.5 + 0.5,      # Random losses between 0.5 and 1.0.
+      },
+      "Dataset2": {
+        "accuracy": np.random.rand(100) * 0.3 + 0.7,  # Random accuracies between 0.7 and 1.0.
+        "loss": np.random.rand(100) * 0.4 + 0.6,      # Random losses between 0.6 and 1.0.
+      },
+      "Dataset3": {
+        "accuracy": np.random.rand(100) * 0.25 + 0.75, # Random accuracies between 0.75 and 1.0.
+        "loss": np.random.rand(100) * 0.45 + 0.55,     # Random losses between 0.55 and 1.0.
+      },
+    }
+    names = list(data.keys())
+    metrics = ["accuracy", "loss"]
+    sah.PlotMetrics(
+      data, names, metrics,
+      factor=4,
+      keyword="ModelPerformance",
+      dpi=300,
+      xTicksRotation=30,
+      whichToPlot=["BoxPlots", "ViolinPlots", "Histograms", "ScatterPlots", "LinePlots"],
+      fontSize=12,
+      showFigures=True,
+      storeInsideNewFolder=True,
+      newFolderName="ModelPerformancePlots",
+      noOfPlotsPerRow=2,
+      cmap="plasma",
+      differentColors=True,
+      fixedTicksColors=True,
+      fixedTicksColor="black"
+    )
   '''
 
   # Set the default Seaborn style for the plots.
@@ -741,8 +793,9 @@ def PlotMetrics(
             plt.ylabel("Residuals")
             plotIdx += 1
 
-      plt.tight_layout(pad=1.0)  # Add padding to prevent title overlap
-      plt.savefig(f"ResidualPlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+      plt.tight_layout(pad=1.0)  # Add padding to prevent title overlap.
+      keywordRep = keyword.replace('\n', '_')
+      plt.savefig(f"ResidualPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()
@@ -829,7 +882,8 @@ def PlotMetrics(
             plt.ylabel("Sample Quantiles")
 
       plt.tight_layout(pad=1.5)  # Increase padding due to longer titles.
-      plt.savefig(f"QQResidualPlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+      keywordRep = keyword.replace('\n', '_')
+      plt.savefig(f"QQResidualPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()
@@ -917,7 +971,8 @@ def PlotMetrics(
       plt.yticks(color=GetTickColor(i))
       plt.legend()
     plt.tight_layout()
-    plt.savefig(f"Histogram_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+    keywordRep = keyword.replace('\n', '_')
+    plt.savefig(f"Histogram_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
     if (showFigures):
       plt.show()
     plt.close()
@@ -966,7 +1021,8 @@ def PlotMetrics(
       plt.yticks(color=GetTickColor(i))
       plt.ylabel("Performance Metric", color=GetTickColor(i))
     plt.tight_layout()
-    plt.savefig(f"BoxPlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+    keywordRep = keyword.replace('\n', '_')
+    plt.savefig(f"BoxPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
     if (showFigures):
       plt.show()
     plt.close()  # Close the figure to free memory.
@@ -1002,7 +1058,8 @@ def PlotMetrics(
       plt.yticks(color=GetTickColor(i))
       plt.ylabel("Performance Metric", color=GetTickColor(i))
     plt.tight_layout()
-    plt.savefig(f"ViolinPlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+    keywordRep = keyword.replace('\n', '_')
+    plt.savefig(f"ViolinPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
     if (showFigures):
       plt.show()
     plt.close()
@@ -1031,7 +1088,8 @@ def PlotMetrics(
       plt.xticks(color=GetTickColor(i))
       plt.yticks(color=GetTickColor(i))
     plt.tight_layout()
-    plt.savefig(f"QQPlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+    keywordRep = keyword.replace('\n', '_')
+    plt.savefig(f"QQPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
     if (showFigures):
       plt.show()
     plt.close()
@@ -1072,7 +1130,8 @@ def PlotMetrics(
       plt.yticks(color=GetTickColor(i))
       plt.legend()
     plt.tight_layout()
-    plt.savefig(f"DensityPlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+    keywordRep = keyword.replace('\n', '_')
+    plt.savefig(f"DensityPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
     if (showFigures):
       plt.show()
     plt.close()
@@ -1129,7 +1188,8 @@ def PlotMetrics(
           plt.legend()
 
       plt.tight_layout()
-      plt.savefig(f"ScatterPlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+      keywordRep = keyword.replace('\n', '_')
+      plt.savefig(f"ScatterPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()
@@ -1164,7 +1224,8 @@ def PlotMetrics(
       plt.yticks(color=GetTickColor(i))
       plt.legend()
     plt.tight_layout()
-    plt.savefig(f"LinePlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+    keywordRep = keyword.replace('\n', '_')
+    plt.savefig(f"LinePlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
     if (showFigures):
       plt.show()
     plt.close()
@@ -1192,7 +1253,8 @@ def PlotMetrics(
       plt.xticks(color=GetTickColor(i))
       plt.yticks(color=GetTickColor(i))
     plt.tight_layout()
-    plt.savefig(f"BarPlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+    keywordRep = keyword.replace('\n', '_')
+    plt.savefig(f"BarPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
     if (showFigures):
       plt.show()
     plt.close()
@@ -1213,7 +1275,8 @@ def PlotMetrics(
       plt.title(f"Correlation Heatmap for {names[i]}")
       plt.xticks(color=GetTickColor(i))
       plt.yticks(color=GetTickColor(i))
-      plt.savefig(f"CorrelationHeatmap_{names[i]}_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+      keywordRep = keyword.replace('\n', '_')
+      plt.savefig(f"CorrelationHeatmap_{names[i]}_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()
@@ -1234,7 +1297,8 @@ def PlotMetrics(
       plt.suptitle(f"Pair Plot for {names[i]}", y=1.02)
       plt.xticks(color=GetTickColor(i))
       plt.yticks(color=GetTickColor(i))
-      plt.savefig(f"PairPlot_{names[i]}_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+      keywordRep = keyword.replace('\n', '_')
+      plt.savefig(f"PairPlot_{names[i]}_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()
@@ -1264,7 +1328,8 @@ def PlotMetrics(
       plt.yticks(color=GetTickColor(i))
       plt.legend()
     plt.tight_layout()
-    plt.savefig(f"CDF_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+    keywordRep = keyword.replace('\n', '_')
+    plt.savefig(f"CDF_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
     if (showFigures):
       plt.show()
     plt.close()
@@ -1294,7 +1359,8 @@ def PlotMetrics(
       plt.yticks(color=GetTickColor(i))
       plt.legend()
     plt.tight_layout()
-    plt.savefig(f"ECDF_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+    keywordRep = keyword.replace('\n', '_')
+    plt.savefig(f"ECDF_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
     if (showFigures):
       plt.show()
     plt.close()
@@ -1323,7 +1389,8 @@ def PlotMetrics(
       plt.yticks(color=GetTickColor(i))
       plt.ylabel("Performance Metric", color=GetTickColor(i))
     plt.tight_layout()
-    plt.savefig(f"SwarmPlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+    keywordRep = keyword.replace('\n', '_')
+    plt.savefig(f"SwarmPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
     if (showFigures):
       plt.show()
     plt.close()
@@ -1383,7 +1450,8 @@ def PlotMetrics(
 
       # Improve layout to prevent label clipping (though pie charts can be tricky)
       plt.tight_layout()
-      plt.savefig(f"PieChart_{names[i]}_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+      keywordRep = keyword.replace('\n', '_')
+      plt.savefig(f"PieChart_{names[i]}_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()
@@ -1416,7 +1484,8 @@ def PlotMetrics(
       plt.yticks(color=GetTickColor(i))
       plt.legend()
     plt.tight_layout()
-    plt.savefig(f"AreaPlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+    keywordRep = keyword.replace('\n', '_')
+    plt.savefig(f"AreaPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
     if (showFigures):
       plt.show()
     plt.close()
@@ -1482,7 +1551,8 @@ def PlotMetrics(
           plt.yticks(color=GetTickColor(j))
 
       plt.tight_layout()
-      plt.savefig(f"HexbinPlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+      keywordRep = keyword.replace('\n', '_')
+      plt.savefig(f"HexbinPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()
@@ -1510,7 +1580,8 @@ def PlotMetrics(
       plt.ylabel(metrics[1], color=GetTickColor(i))
       plt.xticks(color=GetTickColor(i))
       plt.yticks(color=GetTickColor(i))
-      plt.savefig(f"ContourPlot_{names[i]}_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+      keywordRep = keyword.replace('\n', '_')
+      plt.savefig(f"ContourPlot_{names[i]}_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()
@@ -1538,7 +1609,8 @@ def PlotMetrics(
       plt.yticks(color=GetTickColor(i))
       plt.ylabel("Performance Metric", color=GetTickColor(i))
     plt.tight_layout()
-    plt.savefig(f"StripPlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+    keywordRep = keyword.replace('\n', '_')
+    plt.savefig(f"StripPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
     if (showFigures):
       plt.show()
     plt.close()
@@ -1563,7 +1635,8 @@ def PlotMetrics(
       plt.yticks(color=GetTickColor(i))
       plt.ylabel("Performance Metric", color=GetTickColor(i))
     plt.tight_layout()
-    plt.savefig(f"DotPlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+    keywordRep = keyword.replace('\n', '_')
+    plt.savefig(f"DotPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
     if (showFigures):
       plt.show()
     plt.close()
@@ -1595,7 +1668,8 @@ def PlotMetrics(
     # Adjust the layout for the stacked bar plot.
     plt.tight_layout()
     # Save the stacked bar plot as a PDF file.
-    plt.savefig(f"StackedBarPlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+    keywordRep = keyword.replace('\n', '_')
+    plt.savefig(f"StackedBarPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
     if (showFigures):
       plt.show()
     plt.close()
@@ -1637,7 +1711,8 @@ def PlotMetrics(
       # Adjust the layout for the stacked area plot.
       plt.tight_layout()
       # Save the stacked area plot as a PDF file.
-      plt.savefig(f"StackedAreaPlot_{names[i]}_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+      keywordRep = keyword.replace('\n', '_')
+      plt.savefig(f"StackedAreaPlot_{names[i]}_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()
@@ -1695,7 +1770,8 @@ def PlotMetrics(
       # Adjust the layout to prevent overlap.
       plt.tight_layout()
       # Save the 2D histogram plot as a PDF file.
-      plt.savefig(f"Histogram2DPlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+      keywordRep = keyword.replace('\n', '_')
+      plt.savefig(f"Histogram2DPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
       # Show the figure if requested.
       if (showFigures):
         plt.show()
@@ -1741,7 +1817,8 @@ def PlotMetrics(
     # Adjust the layout to prevent overlap.
     plt.tight_layout()
     # Save the step plot as a PDF file.
-    plt.savefig(f"StepPlot_{keyword}.pdf", dpi=dpi, bbox_inches="tight")
+    keywordRep = keyword.replace('\n', '_')
+    plt.savefig(f"StepPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
     if (showFigures):
       plt.show()
     plt.close()  # Close the current figure.
@@ -1749,21 +1826,11 @@ def PlotMetrics(
 
 
 def ExtractDataFromSummaryFile(file):
-  '''
-  Extract and organize data from a summary CSV file containing names, metrics, and trial data.
-  The file is expected to be structured as follows:
+  r'''
+  Extract and organize data from a summary CSV file containing names, metrics, and trial data. The file is expected to be structured as follows:
     - First line: Comma-separated names (headers for individuals or categories).
     - Second line: Comma-separated metrics (headers for performance or evaluation criteria).
     - Subsequent lines: Numerical values corresponding to metrics for each trial.
-
-  Parameters:
-    file (str): Path to the summary CSV file.
-
-  Returns:
-    tuple: A tuple containing:
-      - history (list): A list of dictionaries, each representing a name with its metrics and trial data.
-      - names (list): A list of cleaned names extracted from the file.
-      - metrics (list): A list of cleaned metrics extracted from the file.
 
   Example of the file structure (if you have multiple systems):
     System A, , , , , , System B, , , , ,
@@ -1783,9 +1850,30 @@ def ExtractDataFromSummaryFile(file):
     0.5882, 0.5556, 0.5714, 0.6875, 0.7667, 0.6339,
     0.8000, 0.6667, 0.7273, 0.8125, 0.9000, 0.7813,
 
+  Parameters:
+    file (str): Path to the summary CSV file.
+
+  Returns:
+    tuple: A tuple containing:
+      - history (list): A list of dictionaries, each representing a name with its metrics and trial data.
+      - names (list): A list of cleaned names extracted from the file.
+      - metrics (list): A list of cleaned metrics extracted from the file.
+
   Raises:
     FileNotFoundError: If the file does not exist.
     ValueError: If the file format is invalid or data cannot be parsed.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import HMB.StatisticalAnalysisHelper as sah
+
+    history, names, metrics = sah.ExtractDataFromSummaryFile("path/to/your/summary_file.csv")
+    print("Names:", names)
+    print("Metrics:", metrics)
+    for record in history:
+      print(record)
   '''
 
   # Read all lines from the input file.
@@ -1856,7 +1944,7 @@ def PlotDistributionEDA(
   keyword="X",  # Keyword to filter columns by name.
   maxUniqueLabels=10,  # Maximum number of unique labels to include in the plots.
 ):
-  '''
+  r'''
   Perform exploratory data analysis (EDA) by plotting the distributions of columns in a DataFrame.
 
   This function automatically generates and saves distribution plots (histograms for numeric columns,
@@ -1875,27 +1963,6 @@ def PlotDistributionEDA(
     keyword (str, optional): Keyword to include in the saved filenames (default: "X").
     maxUniqueLabels (int, optional): Maximum number of unique labels to show on the x-axis (default: 10).
 
-  Example
-  -------
-  .. code-block:: python
-
-    import HMB.StatisticalAnalysisHelper as sah
-    import pandas as pd
-
-    # This will generate and save EDA distribution plots for both numeric and non-numeric columns
-    # in the DataFrame "df" to the "plots" directory, with filenames containing "MyData".
-    df = pd.read_csv("my_data.csv")
-    sah.PlotDistributionEDA(
-      df,
-      baseDir="plots",
-      figsize=(20, 15),
-      maxUnique=50,
-      minUnique=2,
-      dpi=300,
-      keyword="MyData",
-      maxUniqueLabels=15
-    )
-
   Notes:
     - Numeric columns are plotted as histograms.
     - Non-numeric (categorical) columns are plotted as bar plots.
@@ -1903,6 +1970,27 @@ def PlotDistributionEDA(
       are included.
     - The function is intended for quick EDA and may not be suitable for very large DataFrames
       or columns with extremely high cardinality.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import pandas as pd
+    import HMB.StatisticalAnalysisHelper as sah
+
+    # This will generate and save EDA distribution plots for both numeric and non-numeric columns
+    # in the DataFrame "df" to the "plots" directory, with filenames containing "MyData".
+    df = pd.read_csv("path/to/your/data.csv")
+    sah.PlotDistributionEDA(
+      df,
+      baseDir="paths/to/your/plots",
+      figsize=(20, 15),
+      maxUnique=50,
+      minUnique=2,
+      dpi=300,
+      keyword="MyData",
+      maxUniqueLabels=15
+    )
   '''
 
   def _PlotColumnsByType(
@@ -1916,7 +2004,7 @@ def PlotDistributionEDA(
     keyword="X",  # Keyword to filter columns by name.
     maxUniqueLabels=10,  # Maximum number of unique labels to include in the plots.
   ):
-    '''
+    r'''
     Dynamic function to plot the distribution of columns in a DataFrame.
     This function filters columns based on their data type and unique value count,
     then plots histograms for each column in subplots.
@@ -2048,7 +2136,7 @@ def PlotDistributionEDA(
       bbox_inches="tight",  # Adjust bounding box to fit the plot.
     )
     # Close the plot to free up memory.
-    plt.close()
+    plt.close()  # Close the figure to free memory.
     print(f"Saved: {filename}")
 
   # Plot the distribution of numeric columns.

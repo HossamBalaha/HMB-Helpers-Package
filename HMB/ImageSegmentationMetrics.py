@@ -7,6 +7,7 @@ def ComputeIoU(preds, targets, smooth=1.0, iouType="binary", weight=None):
 
   .. math::
     IoU = \frac{|Prediction \cap Ground\ Truth| + smooth}{|Prediction \cup Ground\ Truth| + smooth}
+
   where:
     - :math:`|Prediction \cap Ground\ Truth|` is the intersection of the predicted and ground truth tensors.
     - :math:`|Prediction \cup Ground\ Truth|` is the union of the predicted and ground truth tensors.
@@ -19,11 +20,11 @@ def ComputeIoU(preds, targets, smooth=1.0, iouType="binary", weight=None):
       - `weighted`: Use class weights for weighted IoU (requires `weight` parameter).
 
   Parameters:
-    preds: Predicted tensor (logits).
-    targets: Ground truth tensor (binary mask).
-    smooth: Smoothing factor to avoid division by zero.
-    iouType: Type of IoU to compute ("binary", "soft", or "weighted").
-    weight: Class weights for multiclass IoU.
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
+    smooth (float, optional): Smoothing factor to avoid division by zero.
+    iouType (str, optional): Type of IoU to compute ("binary", "soft", or "weighted").
+    weight (numpy.ndarray, optional): Class weights for weighted IoU. Required if `iouType` is "weighted".
 
   Returns:
     float: IoU value.
@@ -38,6 +39,7 @@ def ComputeIoU(preds, targets, smooth=1.0, iouType="binary", weight=None):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     iou = ism.ComputeIoU(preds, targets, iouType="binary")
@@ -89,9 +91,9 @@ def ComputeDice(preds, targets, smooth=1.0):
     - :math:`|Ground\ Truth|` is the sum of the ground truth tensor.
 
   Parameters:
-    preds: Predicted tensor (logits).
-    targets: Ground truth tensor (binary mask).
-    smooth: Smoothing factor to avoid division by zero.
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
+    smooth (float, optional): Smoothing factor to avoid division by zero. Default is 1.0.
 
   Returns:
     float: Dice coefficient value.
@@ -102,6 +104,7 @@ def ComputeDice(preds, targets, smooth=1.0):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     dice = ism.ComputeDice(preds, targets)
@@ -134,8 +137,8 @@ def ComputePixelAccuracy(preds, targets):
     - Total Number of Pixels is the product of the dimensions of the predicted tensor.
 
   Parameters:
-    preds: Predicted tensor (logits).
-    targets: Ground truth tensor (binary mask).
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
 
   Returns:
     float: Pixel accuracy value.
@@ -146,6 +149,7 @@ def ComputePixelAccuracy(preds, targets):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     acc = ism.ComputePixelAccuracy(preds, targets)
@@ -175,8 +179,8 @@ def ComputePrecision(preds, targets):
     - :math:`FP` is the number of false positives (predicted positive but actually negative).
 
   Parameters:
-    preds: Predicted tensor (logits).
-    targets: Ground truth tensor (binary mask).
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
 
   Returns:
     float: Precision value.
@@ -187,6 +191,7 @@ def ComputePrecision(preds, targets):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     precision = ism.ComputePrecision(preds, targets)
@@ -217,8 +222,8 @@ def ComputeRecall(preds, targets):
     - :math:`FN` is the number of false negatives (predicted negative but actually positive).
 
   Parameters:
-    preds: Predicted tensor (logits).
-    targets: Ground truth tensor (binary mask).
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
 
   Returns:
     float: Recall value.
@@ -229,6 +234,7 @@ def ComputeRecall(preds, targets):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     recall = ism.ComputeRecall(preds, targets)
@@ -259,8 +265,8 @@ def ComputeSpecificity(preds, targets):
     - :math:`FP` is the number of false positives (predicted positive but actually negative).
 
   Parameters:
-    preds: Predicted tensor (logits).
-    targets: Ground truth tensor (binary mask).
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
 
   Returns:
     float: Specificity value.
@@ -271,6 +277,7 @@ def ComputeSpecificity(preds, targets):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     specificity = ism.ComputeSpecificity(preds, targets)
@@ -301,8 +308,8 @@ def ComputeFPR(preds, targets):
     - :math:`TN` is the number of true negatives (predicted negative and actually negative).
 
   Parameters:
-    preds: Predicted tensor (logits).
-    targets: Ground truth tensor (binary mask).
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
 
   Returns:
     float: FPR value.
@@ -313,6 +320,7 @@ def ComputeFPR(preds, targets):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     fpr = ism.ComputeFPR(preds, targets)
@@ -343,8 +351,8 @@ def ComputeFNR(preds, targets):
     - :math:`TP` is the number of true positives (predicted positive and actually positive).
 
   Parameters:
-    preds: Predicted tensor (logits).
-    targets: Ground truth tensor (binary mask).
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
 
   Returns:
     float: FNR value.
@@ -355,6 +363,7 @@ def ComputeFNR(preds, targets):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     fnr = ism.ComputeFNR(preds, targets)
@@ -385,8 +394,8 @@ def ComputeF1Score(preds, targets):
     - Recall is the ratio of true positives to the sum of true positives and false negatives.
 
   Parameters:
-    preds: Predicted tensor (logits).
-    targets: Ground truth tensor (binary mask).
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
 
   Returns:
     float: F1 score value.
@@ -397,6 +406,7 @@ def ComputeF1Score(preds, targets):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     f1 = ism.ComputeF1Score(preds, targets)
@@ -428,8 +438,8 @@ def ComputeMeanAveragePrecision(preds, targets):
     - :math:`N` is the total number of images in the batch.
 
   Parameters:
-    preds: Predicted tensor (logits).
-    targets: Ground truth tensor (binary mask).
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
 
   Returns:
     float: mAP value.
@@ -440,6 +450,7 @@ def ComputeMeanAveragePrecision(preds, targets):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(2, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(2, 1, 256, 256))
     mapScore = ism.ComputeMeanAveragePrecision(preds, targets)
@@ -474,8 +485,8 @@ def ComputeHausdorffDistance(preds, targets):
     - :math:`d(a, b)` is the Euclidean distance between points `a` and `b`.
 
   Parameters:
-    preds: Predicted tensor (logits).
-    targets: Ground truth tensor (binary mask).
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
 
   Returns:
     float: Hausdorff distance value.
@@ -486,6 +497,7 @@ def ComputeHausdorffDistance(preds, targets):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     hd = ism.ComputeHausdorffDistance(preds, targets)
@@ -526,10 +538,10 @@ def ComputeBoundaryF1Score(preds, targets, dilationRatio=0.02, eps=1e-7):
     - :math:`Recall_{boundary}` is the recall of the predicted boundary.
 
   Parameters:
-    preds: Predicted tensor (logits).
-    targets: Ground truth tensor (binary mask).
-    dilationRatio: Ratio for boundary dilation.
-    eps: Small constant to avoid division by zero.
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
+    dilationRatio (float, optional): Ratio to determine the dilation size based on image dimensions. Default is 0.02.
+    eps (float, optional): Small constant to avoid division by zero. Default is 1e-7.
 
   Returns:
     float: Boundary F1 Score value.
@@ -540,6 +552,7 @@ def ComputeBoundaryF1Score(preds, targets, dilationRatio=0.02, eps=1e-7):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     bfScore = ism.ComputeBoundaryF1Score(preds, targets)
@@ -550,8 +563,8 @@ def ComputeBoundaryF1Score(preds, targets, dilationRatio=0.02, eps=1e-7):
 
   preds = np.float32(preds > 0.5)
   targets = np.float32(targets > 0.5)
+
   # Get boundaries by subtracting eroded mask from mask.
-  from scipy.ndimage import binary_erosion
   def GetBoundary(mask, dilationRatio):
     h, w = mask.shape[-2], mask.shape[-1]
     dilation = int(np.round(dilationRatio * np.sqrt(h * w)))
@@ -591,8 +604,8 @@ def ComputeMatthewsCorrelationCoefficient(preds, targets):
     - :math:`FN` is the number of false negatives (predicted negative but actually positive).
 
   Parameters:
-    preds: Predicted tensor (logits).
-    targets: Ground truth tensor (binary mask).
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
 
   Returns:
     float: MCC value.
@@ -603,6 +616,7 @@ def ComputeMatthewsCorrelationCoefficient(preds, targets):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     mcc = ism.ComputeMatthewsCorrelationCoefficient(preds, targets)
@@ -642,8 +656,8 @@ def ComputeCohensKappa(preds, targets):
     - :math:`p_e` is the expected agreement by chance.
 
   Parameters:
-    preds: Predicted tensor (logits).
-    targets: Ground truth tensor (binary mask).
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
 
   Returns:
     float: Cohen's Kappa value.
@@ -654,6 +668,7 @@ def ComputeCohensKappa(preds, targets):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     kappa = ism.ComputeCohensKappa(preds, targets)
@@ -700,8 +715,8 @@ def ComputeBalancedAccuracy(preds, targets):
     - :math:`Specificity` is the true negative rate.
 
   Parameters:
-    preds: Predicted tensor (logits).
-    targets: Ground truth tensor (binary mask).
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
 
   Returns:
     float: Balanced accuracy value.
@@ -712,6 +727,7 @@ def ComputeBalancedAccuracy(preds, targets):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     balancedAcc = ism.ComputeBalancedAccuracy(preds, targets)
@@ -739,8 +755,8 @@ def ComputeMeanSurfaceDistance(preds, targets):
     - :math:`d(p, q)` is the Euclidean distance between points `p` and `q`.
 
   Parameters:
-    preds: Predicted tensor (logits).
-    targets: Ground truth tensor (binary mask).
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
 
   Returns:
     float: MSD value.
@@ -751,6 +767,7 @@ def ComputeMeanSurfaceDistance(preds, targets):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     msd = ism.ComputeMeanSurfaceDistance(preds, targets)
@@ -791,8 +808,8 @@ def ComputeAverageSymmetricSurfaceDistance(preds, targets):
     - :math:`MSD(T, P)` is the Mean Surface Distance from target to prediction.
 
   Parameters:
-    preds: Predicted tensor (logits).
-    targets: Ground truth tensor (binary mask).
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
 
   Returns:
     float: ASSD value.
@@ -803,6 +820,7 @@ def ComputeAverageSymmetricSurfaceDistance(preds, targets):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     assd = ism.ComputeAverageSymmetricSurfaceDistance(preds, targets)
@@ -828,9 +846,9 @@ def ComputeVolumetricOverlapError(preds, targets, smooth=1.0):
     - :math:`IoU` is the Intersection over Union value.
 
   Parameters:
-    preds: Predicted tensor (logits).
-    targets: Ground truth tensor (binary mask).
-    smooth: Smoothing factor to avoid division by zero.
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
+    smooth (float, optional): Smoothing factor to avoid division by zero. Default is 1.0.
 
   Returns:
     float: VOE value.
@@ -841,6 +859,7 @@ def ComputeVolumetricOverlapError(preds, targets, smooth=1.0):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     voe = ism.ComputeVolumetricOverlapError(preds, targets)
@@ -866,8 +885,8 @@ def ComputeGlobalConsistencyError(preds, targets):
     - :math:`N` is the total number of pixels in the mask.
 
   Parameters:
-    preds: Predicted tensor (logits).
-    targets: Ground truth tensor (binary mask).
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
 
   Returns:
     float: GCE value.
@@ -878,6 +897,7 @@ def ComputeGlobalConsistencyError(preds, targets):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     gce = ism.ComputeGlobalConsistencyError(preds, targets)
@@ -911,9 +931,9 @@ def ComputeTversky(preds, targets, alpha=0.5):
     - :math:`\alpha` is the weight for false positives (default 0.5).
 
   Parameters:
-    preds: Predicted tensor (logits).
-    targets: Ground truth tensor (binary mask).
-    alpha: Weight for false positives (default 0.5).
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
+    alpha (float, optional): Weight for false positives. Default is 0.5.
 
   Returns:
     float: Tversky index value.
@@ -924,6 +944,7 @@ def ComputeTversky(preds, targets, alpha=0.5):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     tversky = ism.ComputeTversky(preds, targets, alpha=0.7)
@@ -956,10 +977,10 @@ def ComputeFocalTverskyLoss(preds, targets, alpha=0.5, gamma=np.round(4 / 3.0, 5
     - :math:`\alpha` is the weight for false positives (default 0.5).
 
   Parameters:
-    preds: Predicted tensor (logits).
-    targets: Ground truth tensor (binary mask).
-    alpha: Weight for false positives (default 0.5).
-    gamma: Focusing parameter (default 4/3).
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
+    alpha (float, optional): Weight for false positives. Default is 0.5.
+    gamma (float, optional): Focusing parameter. Default is 4/3.
 
   Returns:
     float: Focal Tversky index value.
@@ -970,6 +991,7 @@ def ComputeFocalTverskyLoss(preds, targets, alpha=0.5, gamma=np.round(4 / 3.0, 5
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     focalTversky = ism.ComputeFocalTverskyLoss(preds, targets, alpha=0.7, gamma=1.33)
@@ -997,11 +1019,11 @@ def ComputeFocalLoss(preds, targets, beta=0.5, gamma=2.0, eps=1e-7):
     - :math:`\epsilon` is a small constant to avoid log(0).
 
   Parameters:
-    preds: Predicted tensor (probabilities).
-    targets: Ground truth tensor (binary mask).
-    beta: Balance parameter (default 0.5).
-    gamma: Focusing parameter (default 2.0).
-    eps: Small constant to avoid log(0).
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
+    beta (float, optional): Balancing factor for positive/negative examples. Default is 0.5.
+    gamma (float, optional): Focusing parameter. Default is 2.0.
+    eps (float, optional): Small constant to avoid log(0). Default is 1e-7.
 
   Returns:
     float: Focal loss value.
@@ -1012,6 +1034,7 @@ def ComputeFocalLoss(preds, targets, beta=0.5, gamma=2.0, eps=1e-7):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     loss = ism.ComputeFocalLoss(preds, targets)
@@ -1045,12 +1068,12 @@ def ComputeComboLoss(preds, targets, alpha=0.5, beta=0.5, smooth=1.0, eps=1e-7):
     - :math:`\beta` balances CE and Dice.
 
   Parameters:
-    preds: Predicted tensor (probabilities).
-    targets: Ground truth tensor (binary mask).
-    alpha: Weight for positive class in CE (default 0.5).
-    beta: Balance between CE and Dice (default 0.5).
-    smooth: Smoothing factor for Dice (default 1.0).
-    eps: Small constant to avoid log(0).
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
+    alpha (float, optional): Weight for positive class in CE. Default is 0.5.
+    beta (float, optional): Balance between CE and Dice. Default is 0.5.
+    smooth (float, optional): Smoothing factor for Dice. Default is 1.0.
+    eps (float, optional): Small constant to avoid log(0). Default is 1e-7.
 
   Returns:
     float: Combo loss value.
@@ -1061,6 +1084,7 @@ def ComputeComboLoss(preds, targets, alpha=0.5, beta=0.5, smooth=1.0, eps=1e-7):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     loss = ism.ComputeComboLoss(preds, targets)
@@ -1093,8 +1117,8 @@ def ComputeTanimotoLoss(preds, targets):
     - :math:`t` is the ground truth mask.
 
   Parameters:
-    preds: Predicted tensor (logits or probabilities).
-    targets: Ground truth tensor (binary mask).
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
 
   Returns:
     float: Tanimoto loss value.
@@ -1105,6 +1129,7 @@ def ComputeTanimotoLoss(preds, targets):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     loss = ism.ComputeTanimotoLoss(preds, targets)
@@ -1137,8 +1162,8 @@ def ComputeMSELoss(preds, targets):
     - :math:`N` is the number of elements.
 
   Parameters:
-    preds: Predicted tensor.
-    targets: Ground truth tensor.
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
 
   Returns:
     float: MSE loss value.
@@ -1149,6 +1174,7 @@ def ComputeMSELoss(preds, targets):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.rand(1, 1, 256, 256)
     loss = ism.ComputeMSELoss(preds, targets)
@@ -1173,9 +1199,9 @@ def ComputeBCELoss(preds, targets, smooth=1e-7):
     - :math:`smooth` is a small constant to avoid log(0).
 
   Parameters:
-    preds: Predicted tensor (probabilities).
-    targets: Ground truth tensor (binary mask).
-    smooth: Small constant to avoid log(0) (default 1e-7).
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
+    smooth (float, optional): Small constant to avoid log(0). Default is 1e-7.
 
   Returns:
     float: BCE loss value.
@@ -1186,6 +1212,7 @@ def ComputeBCELoss(preds, targets, smooth=1e-7):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     loss = ism.ComputeBCELoss(preds, targets)
@@ -1222,8 +1249,8 @@ def ComputeHMBLoss(preds, targets):
     - Tanimoto Loss (distribution-based)
 
   Parameters:
-    preds: Predicted tensor.
-    targets: Ground truth tensor.
+    preds (numpy.ndarray): Predicted tensor (logits).
+    targets (numpy.ndarray): Ground truth tensor (binary mask).
 
   Returns:
     float: Weighted average loss value.
@@ -1234,6 +1261,7 @@ def ComputeHMBLoss(preds, targets):
 
     import numpy as np
     import HMB.ImageSegmentationMetrics as ism
+
     preds = np.random.rand(1, 1, 256, 256)
     targets = np.random.randint(0, 2, size=(1, 1, 256, 256))
     loss = ism.ComputeHMBLoss(preds, targets)

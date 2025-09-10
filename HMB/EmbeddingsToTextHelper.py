@@ -5,6 +5,47 @@ from transformers import T5ForConditionalGeneration, T5Tokenizer
 
 
 class EmbeddingsToTextModel(nn.Module):
+  r'''
+  A PyTorch model that generates text from input features using a pre-trained T5 model.
+  The model includes a feature projection layer to transform input features into
+  a suitable format for text generation. It also incorporates learnable prompt tokens
+  to enhance the generation process.
+
+  Attributes:
+    t5 (T5ForConditionalGeneration): Pre-trained T5 model for text generation.
+    tokenizer (T5Tokenizer): Tokenizer for the T5 model.
+    featureProjection (nn.Sequential): Sequential layer for projecting input features.
+    toT5Hidden (nn.Linear): Linear layer to project features to T5's hidden size.
+    promptEmbeddings (nn.Parameter): Learnable prompt embeddings for the model.
+    numPromptTokens (int): Number of learnable prompt tokens.
+    generationMaxLength (int): Maximum length for generated text sequences.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import HMB.EmbeddingsToTextHelper as e2tt
+
+    # Initialize the model with default parameters.
+    model = e2tt.EmbeddingsToTextModel(
+      tokenizeModelName="t5-small",
+      inputFeatureDim=6144,
+      hiddenDim=512,
+      generationMaxLength=512,
+      dropoutRatio=0.1,
+      numPromptTokens=5,
+    )
+    # Print the model architecture.
+    print(model)
+    # Example input features (batch size of 2, feature dimension of 6144).
+    exampleFeatures = torch.randn(2, 6144)
+    # Generate text from the example features.
+    generatedIds = model.generate(exampleFeatures, max_length=50)
+    # Decode the generated text to a human-readable format.
+    generatedText = model.tokenizer.batch_decode(generatedIds, skip_special_tokens=True)
+    print(generatedText)
+  '''
+
   def __init__(
     self,
     tokenizeModelName="t5-small",  # Name of the pre-trained T5 model to use.
@@ -25,6 +66,7 @@ class EmbeddingsToTextModel(nn.Module):
       hiddenDim (int): Hidden dimension for the feature projection layers (default: 512).
       generationMaxLength (int): Maximum length for the generated text (default: 512).
       dropoutRatio (float): Dropout ratio for regularization (default: 0.1).
+      numPromptTokens (int): Number of learnable prompt tokens (default: 5).
     '''
 
     # Calls the parent class constructor to initialize nn.Module.
@@ -84,7 +126,7 @@ class EmbeddingsToTextModel(nn.Module):
       labels (torch.Tensor, optional): Labels for the causal language modeling task (default: None).
 
     Returns:
-      outputs: The output of the T5 model, which includes the generated text and loss if labels are provided.
+      transformers.modeling_outputs.Seq2SeqLMOutput: Output from the T5 model containing logits and loss. It includes the generated text and loss if labels are provided.
     '''
 
     # Gets the batch size from the input features.
@@ -105,10 +147,10 @@ class EmbeddingsToTextModel(nn.Module):
 
     # Performs a forward pass through the T5 model.
     outputs = self.t5(
-      inputs_embeds=inputsEmbeds,
-      attention_mask=attentionMask,
-      decoder_input_ids=input_ids,
-      labels=labels,
+      inputs_embeds=inputsEmbeds,  # Uses the projected features as input embeddings.
+      attention_mask=attentionMask,  # Uses the attention mask for the prompt tokens.
+      decoder_input_ids=input_ids,  # Input IDs for the decoder (if provided).
+      labels=labels,  # Labels for the causal language modeling task (if provided).
     )
 
     # Returns the outputs from the T5 model.
@@ -150,12 +192,12 @@ class EmbeddingsToTextModel(nn.Module):
 
       # Generates text token IDs using the T5 model's generate method.
       generatedIds = self.t5.generate(
-        inputs_embeds=encoderHidden,
-        attention_mask=attentionMask,
-        max_length=self.generationMaxLength,
-        pad_token_id=self.tokenizer.pad_token_id,
-        eos_token_id=self.tokenizer.eos_token_id,
-        **kwargs
+        inputs_embeds=encoderHidden,  # Uses the projected features as input embeddings.
+        attention_mask=attentionMask,  # Uses the attention mask for the prompt tokens.
+        max_length=self.generationMaxLength,  # Sets the maximum length for generated text.
+        pad_token_id=self.tokenizer.pad_token_id,  # Ensures proper handling of padding tokens.
+        eos_token_id=self.tokenizer.eos_token_id,  # Ensures proper handling of end-of-sequence tokens.
+        **kwargs,  # Passes any additional generation parameters.
       )
     # Returns the generated token IDs.
     return generatedIds
@@ -187,6 +229,39 @@ def TrainModel(
     learningRate (float): Learning rate for the optimizer (default: 1e-4).
     optimizerType (str): Type of optimizer to use for training (default: "adamw").
     modelStoragePath (str): Path to save the best model state (default: "BestModel.pth").
+    verbose (bool): Whether to print verbose output during training (default: False).
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import HMB.EmbeddingsToTextHelper as e2tt
+
+    # Initialize the model with default parameters.
+    model = e2tt.EmbeddingsToTextModel(
+      tokenizeModelName="t5-small",
+      inputFeatureDim=6144,
+      hiddenDim=512,
+      generationMaxLength=512,
+      dropoutRatio=0.1,
+      numPromptTokens=5,
+    )
+    # Assume trainLoader and valLoader are predefined DataLoader instances.
+    trainLoader = ...  # Your training DataLoader here.
+    valLoader = ...    # Your validation DataLoader here.
+    # Print the model architecture.
+    print(model)
+    # Train the model using the training and validation data loaders.
+    e2tt.TrainModel(
+      model=model,
+      trainLoader=trainLoader,
+      valLoader=valLoader,
+      numEpochs=10,
+      learningRate=1e-4,
+      optimizerType="adamw",
+      modelStoragePath="BestModel.pth",
+      verbose=True,
+    )
   '''
 
   # Selects the device for training (GPU if available, otherwise CPU).

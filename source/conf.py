@@ -119,12 +119,12 @@ latex_elements = {
   "papersize"   : "a4paper",
   "pointsize"   : "11pt",
   "figure_align": "htbp",
-  "preamble"    : r"""
-\usepackage{amsmath,amssymb,amsfonts}
-\usepackage{graphicx}
-\usepackage{float}
-\usepackage{hyperref}
-""",
+#   "preamble"    : r"""
+# \usepackage{amsmath,amssymb,amsfonts}
+# \usepackage{graphicx}
+# \usepackage{float}
+# \usepackage{hyperref}
+# """,
 }
 
 # -- Miscellaneous -----------------------------------------------------------

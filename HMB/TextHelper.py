@@ -36,6 +36,7 @@ def CleanText(
   .. code-block:: python
 
     import HMB.TextHelper as th
+
     raw = "I can't believe it's not butter!   "
     cleaned = th.CleanText(raw)
     print(cleaned)

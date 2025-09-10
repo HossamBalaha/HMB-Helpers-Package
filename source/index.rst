@@ -92,6 +92,7 @@ Quickstart
    PerformanceMetrics
    PyTorchHelper
    PyTorchSegmentationLosses
+   StatisticalAnalysisHelper
    TextGenerationMetrics
    TextHelper
    Utils

@@ -48,7 +48,7 @@ def SavePyTorchDict(modelDict, filename="model.pth"):
 
 
 # Function to load a PyTorch model's state dictionary from a file and move it to a device.
-def LoadModel(model, filename="model.pth", device="gpu"):
+def LoadModel(model, filename="model.pth", device="cuda"):
   '''
   Load the model state from a file and move it to the specified device.
 
@@ -72,7 +72,7 @@ def LoadModel(model, filename="model.pth", device="gpu"):
   print(f"Model loaded from {filename} and moved to {device}.")
 
 
-def LoadPyTorchDict(filename="model.pth", device="gpu"):
+def LoadPyTorchDict(filename="model.pth", device="cuda"):
   '''
   Load a PyTorch state dictionary from a file and map it to the specified device.
 

@@ -9,10 +9,12 @@ from pytorch_grad_cam import GradCAM, HiResCAM, ScoreCAM, GradCAMPlusPlus, Ablat
 from pytorch_grad_cam.utils.image import show_cam_on_image
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
+from HMB.PyTorchHelper import LoadPyTorchDict
+
 
 # Wrapper to return logits only.
 class LogitsModelWrapper(torch.nn.Module):
-  '''
+  r'''
   Wrapper for a model to return only logits from the forward pass.
 
   Parameters:
@@ -36,8 +38,10 @@ def HuggingFaceModel(
   modelCheckpointPath,
   size,
   device,
+  meanValues=[0.485, 0.456, 0.406],
+  stdValues=[0.229, 0.224, 0.225],
 ):
-  '''
+  r'''
   Load a Hugging Face Vision Transformer model and its checkpoint, and prepare preprocessing transforms.
 
   Parameters:
@@ -46,9 +50,11 @@ def HuggingFaceModel(
     modelCheckpointPath (str): Path to the trained model checkpoint.
     size (int): Image size for resizing and visualization.
     device (str or torch.device): Device to run the model on ("cuda" or "cpu").
+    meanValues (list): Mean values for normalization.
+    stdValues (list): Standard deviation values for normalization.
 
   Returns:
-    tuple: (model, vitTargetLayer, transform)
+    tuple: A tuple containing:
       - model (torch.nn.Module): Loaded model.
       - vitTargetLayer (torch.nn.Module): Target layer for CAM extraction.
       - transform (torchvision.transforms.Compose): Image preprocessing pipeline.
@@ -57,18 +63,36 @@ def HuggingFaceModel(
     - Loads the model weights from the checkpoint.
     - Sets the model to evaluation mode.
     - Prepares the image transform for inference.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import HMB.AttentionMapsHelper as amh
+
+    model, vitTargetLayer, transform = amh.HuggingFaceModel(
+      modelName="google/vit-base-patch16-224",
+      numClasses=3,
+      modelCheckpointPath="/path/to/checkpoint.pth",
+      size=224,
+      device="cuda",
+      meanValues=[0.485, 0.456, 0.406],
+      stdValues=[0.229, 0.224, 0.225],
+    )
   '''
 
   # Create the model using Hugging Face transformers.
   model = ViTForImageClassification.from_pretrained(
-    modelName,
-    num_labels=numClasses,
-    ignore_mismatched_sizes=True,
+    modelName,  # Model name.
+    num_labels=numClasses,  # Set number of output classes.
+    ignore_mismatched_sizes=True,  # Ignore size mismatches when loading weights.
   )
   # Load model checkpoint.
-  checkpoint = torch.load(modelCheckpointPath, map_location=device)
-  # Load state dict into model.
-  model.load_state_dict(checkpoint["model_state_dict"])
+  stateDict = LoadPyTorchDict(modelCheckpointPath, device=device)
+  if (stateDict and isinstance(stateDict, dict) and "model_state_dict" in stateDict):
+    model.load_state_dict(stateDict["model_state_dict"])
+  else:
+    model.load_state_dict(stateDict)
   # Wrap the model to return logits only.
   model = LogitsModelWrapper(model)
   # Move model to device.
@@ -79,9 +103,9 @@ def HuggingFaceModel(
   vitTargetLayer = model.vit.encoder.layer[-1].output
   # Define image transform.
   transform = transforms.Compose([
-    transforms.Resize((size, size)),
-    transforms.ToTensor(),
-    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+    transforms.Resize((size, size)),  # Resize image to specified size.
+    transforms.ToTensor(),  # Convert image to tensor.
+    transforms.Normalize(mean=meanValues, std=stdValues),  # Normalize image.
   ])
   # Return model, target layer, and transform.
   return model, vitTargetLayer, transform
@@ -93,7 +117,7 @@ def TimmModel(
   modelCheckpointPath,
   device,
 ):
-  '''
+  r'''
   Load a timm Vision Transformer model and its checkpoint, and prepare preprocessing transforms.
 
   Parameters:
@@ -103,7 +127,7 @@ def TimmModel(
     device (str or torch.device): Device to run the model on ("cuda" or "cpu").
 
   Returns:
-    tuple: (model, vitTargetLayer, transform)
+    tuple: A tuple containing:
       - model (torch.nn.Module): Loaded model.
       - vitTargetLayer (torch.nn.Module): Target layer for CAM extraction.
       - transform (torchvision.transforms.Compose): Image preprocessing pipeline.
@@ -113,15 +137,30 @@ def TimmModel(
     - Sets the model to evaluation mode.
     - Prepares the image transform for inference.
     - Tested on:
-      - timm/eva02_large_patch14_448.mim_m38m_ft_in22k_in1k from https://huggingface.co/timm/eva02_large_patch14_448.mim_m38m_ft_in22k_in1k
+       -- timm/eva02_large_patch14_448.mim_m38m_ft_in22k_in1k from https://huggingface.co/timm/eva02_large_patch14_448.mim_m38m_ft_in22k_in1k
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import HMB.AttentionMapsHelper as amh
+
+    model, vitTargetLayer, transform = amh.TimmModel(
+      modelName="eva02_large_patch14_448.mim_m38m_ft_in22k_in1k",
+      numClasses=3,
+      modelCheckpointPath="/path/to/checkpoint.pth",
+      device="cuda"
+    )
   '''
 
   # Create the model using timm.
   model = timm.create_model(modelName, pretrained=False, num_classes=numClasses)
   # Load model checkpoint.
-  checkpoint = torch.load(modelCheckpointPath, map_location=device)
-  # Load state dict into model.
-  model.load_state_dict(checkpoint["model_state_dict"])
+  stateDict = LoadPyTorchDict(modelCheckpointPath, device=device)
+  if (stateDict and isinstance(stateDict, dict) and "model_state_dict" in stateDict):
+    model.load_state_dict(stateDict["model_state_dict"])
+  else:
+    model.load_state_dict(stateDict)
   # Get data configuration for preprocessing.
   dataConfig = timm.data.resolve_model_data_config(model)
   # Create image transform for inference.
@@ -137,7 +176,7 @@ def TimmModel(
 
 
 class AttentionMapsVisualizer(object):
-  '''
+  r'''
   Visualize attention maps for images using various CAM methods on a Vision Transformer (ViT) model.
 
   Parameters:
@@ -168,25 +207,26 @@ class AttentionMapsVisualizer(object):
   --------
   .. code-block:: python
 
-    from HMB.AttentionMapsHelper import AttentionMapsVisualizer
+    import HMB.AttentionMapsHelper as amh
 
-    visualizer = AttentionMapsVisualizer(
-      baseFolder="/home/hmbala01/[B] BC Conf",
-      folder="Results_E125_BS32_T5",
-      dataFolder="/home/hmbala01/[B] BC Conf/Dataset_BUSI All",
+    visualizer = amh.AttentionMapsVisualizer(
+      baseFolder="/path/to/base/folder",
+      folder="Results",
+      dataFolder="/path/to/data/folder",
       modelName="eva02_large_patch14_448.mim_m38m_ft_in22k_in1k",
-      modelCheckpointPath="/home/hmbala01/[B] BC Conf/Results_E125_BS32_T5/best_model.pth",
+      modelCheckpointPath="/path/to/checkpoint.pth",
+      modelType="Timm",
       size=448,
       reshapeTransformSize=32,
-      device="cuda"
+      device="cuda",
     )
     visualizer.VisualizeAttentionMaps(
-      cams=[GradCAM, ScoreCAM],
+      cams=["GradCAM", "ScoreCAM"],
       figSize=(14, 8),
       imagesPerClass=2,
       save=True,
       display=True,
-      outPrefix="BUSI_AttentionMaps",
+      outPrefix="AttentionMaps",
       dpi=300,
       fontSize=10,
       alpha=0.4,
@@ -256,6 +296,18 @@ class AttentionMapsVisualizer(object):
 
   @staticmethod
   def ReshapeTransform(outputs, height, width):
+    r'''
+    Reshape transformer outputs for CAM extraction.
+
+    Parameters:
+      outputs (torch.Tensor or tuple): Outputs from the transformer model.
+      height (int): Height of the feature map.
+      width (int): Width of the feature map.
+
+    Returns:
+      torch.Tensor: Reshaped tensor suitable for CAM extraction.
+    '''
+
     # Reshape transformer outputs for CAM.
     if isinstance(outputs, tuple):
       tensor = outputs[0]
@@ -280,7 +332,7 @@ class AttentionMapsVisualizer(object):
     selectImages=None,  # Optional dict: {class_name: [image filenames]}.
     allowedExtensions=(".jpg", ".jpeg", ".png", ".bmp"),
   ):
-    '''
+    r'''
     Visualize and save attention maps for images using specified CAM methods.
 
     Parameters:
@@ -293,11 +345,22 @@ class AttentionMapsVisualizer(object):
       figSize (tuple): Figure size in inches.
       imagesPerClass (int): Number of images per class to visualize.
       selectImages (dict or None): Optional dict mapping class names to list of image filenames.
+      allowedExtensions (tuple): Allowed image file extensions.
+
+    Notes:
+      - If selectImages is provided, it should be a dictionary where keys are class names and
+        values are lists of image filenames to visualize for that class. If not provided, random images will be selected.
+      - The resulting figure will have rows corresponding to classes and columns corresponding to CAM methods and images.
+      - The output file will be saved in the base folder with a timestamp.
+
+    Raises:
+      AssertionError: If no image files are found in the data folder.
+      ValueError: If an unsupported CAM method is specified.
     '''
 
     # Set default CAMs if not provided.
     if (cams is None):
-      cams = [GradCAM, ScoreCAM, EigenCAM]
+      cams = ["GradCAM", "ScoreCAM", "EigenCAM"]
 
     # Calculate total subplots.
     totalRows = len(self.classes)
@@ -309,6 +372,7 @@ class AttentionMapsVisualizer(object):
 
     # Loop through each class.
     for c, cls in enumerate(self.classes):
+      print(f"Processing class: {cls} ({c+1}/{self.numClasses})")
       clsPath = os.path.join(self.dataFolder, cls)
 
       # Get image files for the class.
@@ -321,6 +385,9 @@ class AttentionMapsVisualizer(object):
       # Select images for visualization.
       if (selectImages and cls in selectImages):
         chosenImages = selectImages[cls]
+        if (imagesPerClass and imagesPerClass > 0):
+          # Limit to imagesPerClass if more provided.
+          chosenImages = chosenImages[:imagesPerClass]
       else:
         chosenImages = random.sample(imageFiles, min(imagesPerClass, len(imageFiles)))
 
@@ -333,12 +400,34 @@ class AttentionMapsVisualizer(object):
         imgTensor = self.transform(image).unsqueeze(0).to(self.device)
 
         # Loop through CAM methods.
-        for i, camCls in enumerate(cams):
+        for i, cam in enumerate(cams):
+          # Select CAM class.
+          if (cam == "GradCAM"):
+            camCls = GradCAM
+          elif (cam == "HiResCAM"):
+            camCls = HiResCAM
+          elif (cam == "ScoreCAM"):
+            camCls = ScoreCAM
+          elif (cam == "GradCAMPlusPlus"):
+            camCls = GradCAMPlusPlus
+          elif (cam == "AblationCAM"):
+            camCls = AblationCAM
+          elif (cam == "XGradCAM"):
+            camCls = XGradCAM
+          elif (cam == "EigenCAM"):
+            camCls = EigenCAM
+          elif (cam == "FullGrad"):
+            camCls = FullGrad
+          else:
+            raise ValueError(f"Unsupported CAM method: {cam}")
+
+          print(f"Processing Class: {cls}, Image: {imageName}, CAM: {camCls.__name__}")
+
           # Initialize CAM method.
           cam = camCls(
             model=self.model,
-            target_layers=[self.vit_target_layer],
-            ReshapeTransform=lambda x: self.ReshapeTransform(
+            target_layers=[self.vitTargetLayer],
+            reshape_transform=lambda x: self.ReshapeTransform(
               x,
               self.reshapeTransformSize,
               self.reshapeTransformSize
@@ -370,18 +459,21 @@ class AttentionMapsVisualizer(object):
           ax.imshow(overlay, vmin=0, vmax=255)
 
           # Set subplot title.
-          ax.set_title(f"{cam_cls.__name__}", fontsize=fontSize)
+          ax.set_title(f"{camCls.__name__}", fontsize=fontSize)
 
           # Set class label on leftmost column.
           if (i == 0 and imgIdx == 0):
             ax.set_ylabel(cls, fontsize=fontSize, rotation=90, labelpad=40, va="center")
 
+          # Remove axis ticks.
           ax.set_xticks([])
           ax.set_yticks([])
           plotIdx += 1
 
     # Tight layout to minimize wasted space.
     plt.tight_layout()
+
+    print("Visualization complete and ready for saving or displaying.")
 
     # Generate output file path.
     rndTimestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -395,4 +487,5 @@ class AttentionMapsVisualizer(object):
     if (display):
       plt.show()
 
+    # Close the plot to free memory.
     plt.close()
