@@ -103,12 +103,27 @@ html_static_path = ["_static"]
 html_logo = "_static/Logo.png"  # Add your logo file to _static.
 html_favicon = "_static/Favicons/favicon.ico"  # Add your favicon file to _static.
 html_theme_options = {
-  "description"          : "HMB Helpers Package Documentation",
-  "fixed_sidebar"        : False,
-  "github_user"          : "HossamBalaha",
-  "github_repo"          : "HMB-Helpers-Package",
-  "github_banner"        : True,
-  "show_powered_by"      : False,
+  "description"    : "HMB Helpers Package Documentation",
+  "fixed_sidebar"  : False,
+  "github_user"    : "HossamBalaha",
+  "github_repo"    : "HMB-Helpers-Package",
+  "github_banner"  : True,
+  "show_powered_by": False,
+  "repository_url": "https://github.com/HossamBalaha/HMB-Helpers-Package",
+  "repository_branch": "main",
+  # "path_to_docs": "source/",
+  "use_repository_button": True,
+  # "use_issues_button": True,
+  "use_download_button": True,
+  "use_fullscreen_button": True,
+  # "use_edit_page_button": True,
+  "home_page_in_toc": True,
+  "show_navbar_depth": 2,
+  "logo_only": False,
+  "show_toc_level": 2,
+  # "announcement": "Welcome to the HMB Helpers Package documentation!",
+  # "extra_navbar": "",
+  # "extra_footer": "",
 }
 
 # -- Options for LaTeX/PDF output --------------------------------------------
@@ -119,12 +134,14 @@ latex_elements = {
   "papersize"   : "a4paper",
   "pointsize"   : "11pt",
   "figure_align": "htbp",
-#   "preamble"    : r"""
-# \usepackage{amsmath,amssymb,amsfonts}
-# \usepackage{graphicx}
-# \usepackage{float}
-# \usepackage{hyperref}
-# """,
+  "preamble"    : r"""
+""",
+  #   "preamble"    : r"""
+  # \usepackage{amsmath,amssymb,amsfonts}
+  # \usepackage{graphicx}
+  # \usepackage{float}
+  # \usepackage{hyperref}
+  # """,
 }
 
 # -- Miscellaneous -----------------------------------------------------------

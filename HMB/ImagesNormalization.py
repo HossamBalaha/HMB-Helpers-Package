@@ -5,7 +5,7 @@ import tqdm  # TQDM for progress bars.
 
 
 def RGB2LAB(img, isNorm=True):
-  '''
+  r'''
   Convert an RGB image to the LAB color space and normalize the channels.
 
   Parameters:
@@ -35,7 +35,7 @@ def RGB2LAB(img, isNorm=True):
 
 
 def LAB2RGB(I1, I2, I3, isNorm=True):
-  '''
+  r'''
   Convert normalized LAB channels back to the RGB color space.
 
   Parameters:
@@ -66,7 +66,7 @@ def LAB2RGB(I1, I2, I3, isNorm=True):
 
 
 def LabSplitMeanStd(img):
-  '''
+  r'''
   Compute the mean and standard deviation of the LAB channels of an RGB image.
 
   Parameters:
@@ -93,7 +93,7 @@ def LabSplitMeanStd(img):
 
 
 class ReinhardColorNormalization(object):
-  '''
+  r'''
 
   '''
 
@@ -225,7 +225,7 @@ def GetFitNormalizer(
 
 
 def CreateAverageHistogram(refImages, noChannels=4):
-  '''
+  r'''
   Create an average histogram from a list of reference images.
 
   Parameters:
@@ -266,7 +266,7 @@ def CreateAverageHistogram(refImages, noChannels=4):
 
 
 def CreateLUTFromHistogram(avgHist):
-  '''
+  r'''
   Create a Look-Up Table (LUT) from an average histogram.
 
   Parameters:
@@ -300,7 +300,7 @@ def CreateLUTFromHistogram(avgHist):
 
 
 def ApplyLUT(image, lut, noChannels=4):
-  '''
+  r'''
   Apply a Look-Up Table (LUT) to an image.
 
   Parameters:
@@ -326,7 +326,7 @@ def ApplyLUT(image, lut, noChannels=4):
 
 
 def LABSplit2RGB(I1, I2, I3):
-  '''
+  r'''
   Convert LAB channels back to RGB color space.
 
   Parameters:
@@ -357,7 +357,7 @@ def LABSplit2RGB(I1, I2, I3):
 
 
 def RGB2OD(img):
-  '''
+  r'''
   Convert an RGB image to Optical Density (OD) space.
 
   Parameters:
@@ -381,7 +381,7 @@ def RGB2OD(img):
 
 
 def OD2RGB(img):
-  '''
+  r'''
   Convert an image from Optical Density (OD) space back to RGB.
 
   Parameters:
@@ -403,7 +403,7 @@ def OD2RGB(img):
 
 
 def StandarizeBrightness(img):
-  '''
+  r'''
   Standardize the brightness of an image using the 90th percentile.
 
   Parameters:
@@ -433,7 +433,7 @@ def StandarizeBrightness(img):
 
 
 def NormalizeRows(A):
-  '''
+  r'''
   Normalize the rows of a matrix.
 
   Parameters:
@@ -450,7 +450,7 @@ def NormalizeRows(A):
 
 
 def FindStainMatrixMacenko(img, beta=0.15, alpha=1.0):
-  '''
+  r'''
   Find the stain matrix using Macenko's method.
 
   Parameters:
@@ -512,7 +512,7 @@ def FindStainMatrixMacenko(img, beta=0.15, alpha=1.0):
 
 
 def ConcentrateStainMatrixMacenko(img, stainMatrix, lambdaVal=0.01):
-  '''
+  r'''
   Concentrate the stain matrix using LASSO.
 
   Parameters:
@@ -554,7 +554,7 @@ def ConcentrateStainMatrixMacenko(img, stainMatrix, lambdaVal=0.01):
 
 
 def ApplyReinhard(img, targetMeans, targetStds):
-  '''
+  r'''
   Apply Reinhard color normalization to an image.
 
   Parameters:

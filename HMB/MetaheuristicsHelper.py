@@ -16,7 +16,7 @@ def MantaRayForagingOptimizer(
   explorationProb=0.5,  # Probability of exploration phase.
   customUpdate=None,  # Optional custom update function for candidates.
 ):
-  '''
+  r'''
   Perform one iteration of the Manta Ray Foraging Optimization (MRFO) algorithm with dynamic options.
 
   Parameters:

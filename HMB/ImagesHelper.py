@@ -5,7 +5,7 @@ import numpy as np  # Import numpy for numerical operations.
 
 
 def ReadVolume(caseImgPaths, caseSegPaths, raiseErrors=True):
-  '''
+  r'''
   Read and preprocess a 3D volume from a set of 2D slices and their corresponding segmentation masks.
 
   Parameters:
@@ -82,7 +82,7 @@ def ReadVolume(caseImgPaths, caseSegPaths, raiseErrors=True):
 
 
 def ReadVolumeSpecificClasses(caseImgPaths, caseSegPaths, specificClasses=[]):
-  '''
+  r'''
   Read and preprocess a 3D volume from a set of 2D slices and their corresponding segmentation masks.
 
   Parameters:
@@ -176,7 +176,7 @@ def ExtractMultipleObjectsFromROI(
   cntAreaThreshold=0,
   sortByX=True,
 ):
-  '''
+  r'''
   Extracts multiple objects from a region of interest (ROI) in a medical image.
 
   Parameters:
@@ -252,7 +252,7 @@ def ExtractMultipleObjectsFromROI(
 
 
 def GetEmptyPercentage(img, shape=(256, 256), inverse=False):
-  '''
+  r'''
   Calculate the percentage of empty (black or white) regions in an image.
 
   Parameters:
@@ -290,7 +290,7 @@ def GetEmptyPercentage(img, shape=(256, 256), inverse=False):
 
 
 def GetEmptyPercentageHistogram(img, shape=(256, 256), inverse=False, thresholdLow=10, thresholdHigh=245):
-  '''
+  r'''
   Calculate the percentage of empty (black or white) regions in an image using histogram analysis.
 
   Parameters:
@@ -337,7 +337,7 @@ def GetEmptyPercentageHistogram(img, shape=(256, 256), inverse=False, thresholdL
 
 
 def ExtractLargestContour(img):
-  '''
+  r'''
   Extract the largest contour from an image and create a mask.
 
   Parameters:
@@ -464,7 +464,7 @@ def MatchTwoImagesViaORB(
   maxNumFeatures=5000,  # Maximum number of features to detect.
   maxGoodMatches=50,  # Maximum number of good matches to consider for alignment.
 ):
-  '''
+  r'''
   Match two images using ORB (Oriented FAST and Rotated BRIEF) feature detection.
   This function detects keypoints and computes descriptors for both images using ORB,
   then matches them using a brute-force matcher. The function filters the matches to retain
@@ -548,7 +548,7 @@ def FreeFormDeformationImproved(
   convergenceMinimumValue=1e-6,  # Convergence threshold.
   convergenceWindowSize=10,  # Window size for convergence determination.
 ):
-  '''
+  r'''
   Perform Free Form Deformation (FFD) using B-spline transformation to align two images.
 
   Parameters:
@@ -657,7 +657,7 @@ def FreeFormDeformationImproved(
 
 # Reads an image file and ignores ICC profile information.
 def IgnoreICCFile(imgPath):
-  '''
+  r'''
   Reads an image file and ignores ICC profile information.
   This is useful for ensuring consistent color representation across different platforms.
 
@@ -675,7 +675,7 @@ def IgnoreICCFile(imgPath):
 
 # Check if a PNG image is not truncated by reading its header.
 def CheckIfPNGImageIsNotTruncated(imgPath):
-  '''
+  r'''
   Check if a PNG image is not truncated by reading its header.
   This is useful for validating the integrity of PNG files.
   Returns True if the image is a valid PNG, False otherwise.
@@ -704,7 +704,7 @@ def CheckIfPNGImageIsNotTruncated(imgPath):
 
 # Fix a truncated PNG image by appending a valid PNG end chunk.
 def FixTruncatedPNGImage(imgPath):
-  '''
+  r'''
   Fix a truncated PNG image by appending a valid PNG end chunk.
   This is useful for recovering partially downloaded or corrupted PNG files.
 
@@ -723,7 +723,7 @@ def FixTruncatedPNGImage(imgPath):
 
 
 def LoadDicom(filePath):
-  '''
+  r'''
   Load a DICOM file and extract its pixel array.
 
   Parameters:
@@ -747,7 +747,7 @@ def LoadDicom(filePath):
 
 
 def MinMaxNormalization(image, mapToUint8=True):
-  '''
+  r'''
   Normalize an image using min-max normalization.
   The pixel values are scaled to the range [0, 255] if mapToUint8 is True,
   otherwise they are scaled to the range [0, 1].
@@ -779,7 +779,7 @@ def MinMaxNormalization(image, mapToUint8=True):
 
 
 def CalculateCDF(image):
-  '''
+  r'''
   Calculate the cumulative distribution function (CDF) of an image.
 
   Parameters:
@@ -823,7 +823,7 @@ def CalculateAverageCDFs(
   isDicom=True,  # If True, the source files are DICOM files.
   specialIndex=None,  # If not None, only the files with the indices in this list will be used.
 ):
-  '''
+  r'''
   Calculate the average cumulative distribution functions (CDFs) for a set of images in a folder.
 
   Parameters:
@@ -923,7 +923,7 @@ def PriorInformationTrainingGeneric(
   stepRadius=5,  # The step size for increasing the radius.
   maxValue=255,  # The maximum intensity value.
 ):
-  '''
+  r'''
   Generate histograms for included and non-included regions at multiple radii for prior information training.
 
   Parameters:
@@ -999,7 +999,7 @@ def PriorInformationTrainingGeneric(
 
 
 def PriorInformationTestingGeneric(image, histogramsDict, startingSigma=1, stepSigma=1, position=0):
-  '''
+  r'''
   Generate probability maps for included and non-included regions using prior histograms.
 
   Parameters:
@@ -1014,6 +1014,7 @@ def PriorInformationTestingGeneric(image, histogramsDict, startingSigma=1, stepS
       - sumIncludedMaps (numpy.ndarray): The summed included probability map.
       - sumNonIncludedMaps (numpy.ndarray): The summed non-included probability map.
   '''
+  import tqdm  # Import tqdm for progress bar.
 
   # Calculate the centroids of the image in the X and Y dimensions.
   centroidX, centroidY = image.shape[0] // 2, image.shape[1] // 2
@@ -1120,7 +1121,7 @@ def PriorInformationTestingGeneric(image, histogramsDict, startingSigma=1, stepS
 
 
 def PriorInformationGeneric(image, mask, startingRadius=10, stepRadius=10, startingSigma=1, stepSigma=1):
-  '''
+  r'''
   Generate lists of probability maps for included and non-included regions at multiple radii.
 
   Parameters:

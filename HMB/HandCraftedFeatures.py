@@ -27,7 +27,7 @@ import numpy as np  # NumPy for numerical operations.
 # ===========================================================================================
 
 def FirstOrderFeatures2D(img, mask, isNorm=True, ignoreZeros=True):
-  '''
+  r'''
   Calculate first-order statistical features from an image using a mask.
 
   Parameters:
@@ -119,7 +119,7 @@ def FirstOrderFeatures2D(img, mask, isNorm=True, ignoreZeros=True):
 
 
 def FirstOrderFeatures2DV2(data, isNorm=True, ignoreZeros=True):
-  '''
+  r'''
   Calculate first-order statistical features from an image using a mask.
 
   Parameters:
@@ -207,7 +207,7 @@ def FirstOrderFeatures2DV2(data, isNorm=True, ignoreZeros=True):
 # ===========================================================================================
 
 def CalculateGLCMCooccuranceMatrix(image, d, theta, isSymmetric=False, isNorm=True, ignoreZeros=True, epsilon=1e-6):
-  '''
+  r'''
   Calculate the Gray-Level Co-occurrence Matrix (GLCM) for a given image.
 
   Parameters:
@@ -286,7 +286,7 @@ def CalculateGLCMCooccuranceMatrix(image, d, theta, isSymmetric=False, isNorm=Tr
 
 
 def CalculateGLCMCooccuranceMatrix3D(volume, d, theta, isSymmetric=False, isNorm=True, ignoreZeros=True, epsilon=1e-6):
-  '''
+  r'''
   Calculate the 3D Gray-Level Co-occurrence Matrix (GLCM) for a given volume.
 
   Parameters:
@@ -374,7 +374,7 @@ def CalculateGLCMCooccuranceMatrix3D(volume, d, theta, isSymmetric=False, isNorm
 
 
 def CalculateGLCMFeaturesOptimized(coMatrix):
-  '''
+  r'''
   Calculate texture features from a Gray-Level Co-occurrence Matrix (GLCM).
 
   Parameters:
@@ -471,7 +471,7 @@ def CalculateGLCMFeaturesOptimized(coMatrix):
 # ===========================================================================================
 
 def CalculateGLRLMRunLengthMatrix(matrix, theta, isNorm=True, ignoreZeros=True, epsilon=1e-6):
-  '''
+  r'''
   Calculate the Gray-Level Run-Length Matrix (GLRLM) for a given 2D matrix.
   The GLRLM is a statistical tool used to quantify the texture of an image by
   analyzing the runs of pixels with the same intensity level in a specific direction.
@@ -564,7 +564,7 @@ def CalculateGLRLMRunLengthMatrix(matrix, theta, isNorm=True, ignoreZeros=True, 
 
 
 def CalculateGLRLMFeatures(rlMatrix, image):
-  '''
+  r'''
   Calculate texture features from a Gray-Level Run-Length Matrix (GLRLM).
   This function computes various texture features based on the GLRLM, which is derived
   from an image. These features are commonly used in texture analysis and image processing.
@@ -645,7 +645,7 @@ def CalculateGLRLMFeatures(rlMatrix, image):
 
 
 def CalculateGLRLMRunLengthMatrix3D(volume, theta, isNorm=True, ignoreZeros=True, epsilon=1e-6):
-  '''
+  r'''
   Calculate 3D Gray-Level Run-Length Matrix (GLRLM) for volumetric texture analysis.
 
   Parameters:
@@ -723,7 +723,7 @@ def CalculateGLRLMRunLengthMatrix3D(volume, theta, isNorm=True, ignoreZeros=True
 # ===========================================================================================
 
 def FindConnectedRegions(image, connectivity=4):
-  '''
+  r'''
   Finds connected regions in a 2D image based on pixel connectivity.
 
   Parameters:
@@ -812,7 +812,7 @@ def FindConnectedRegions(image, connectivity=4):
 
 
 def CalculateGLSZMSizeZoneMatrix(image, connectivity=4, isNorm=False, ignoreZeros=False, epsilon=1e-6):
-  '''
+  r'''
   Calculate the Size-Zone Matrix for a given image based on connected regions.
 
   Parameters:
@@ -894,7 +894,7 @@ def CalculateGLSZMSizeZoneMatrix(image, connectivity=4, isNorm=False, ignoreZero
 
 
 def CalculateGLSZMFeatures(szMatrix, data, N, Z, epsilon=1e-6):
-  '''
+  r'''
   Calculate the features of the Size-Zone Matrix (GLSZM).
 
   Parameters:
@@ -1029,7 +1029,7 @@ def CalculateGLSZMFeatures(szMatrix, data, N, Z, epsilon=1e-6):
 
 
 def FindConnectedRegions3D(volume, connectivity=6):
-  '''
+  r'''
   Finds connected regions in a 3D volume based on pixel connectivity.
 
   Parameters:
@@ -1146,7 +1146,7 @@ def FindConnectedRegions3D(volume, connectivity=6):
 
 
 def CalculateGLSZMSizeZoneMatrix3D(volume, connectivity=6, isNorm=True, ignoreZeros=True, epsilon=1e-6):
-  '''
+  r'''
   Calculate the Size-Zone Matrix for a 3D volume based on connected regions.
 
   Parameters:
@@ -1230,7 +1230,7 @@ def BuildLBPKernel(
   theta=135,  # Angle parameter to rotate the kernel (default is 135 degrees).
   isClockwise=False,  # Direction of rotation (False means counterclockwise).
 ):
-  '''
+  r'''
   Build a kernel matrix for Local Binary Pattern (LBP) computation.
   The kernel is generated based on the specified distance and angle (theta).
   The kernel is a square matrix of size (2 * distance + 1) x (2 * distance + 1).
@@ -1336,7 +1336,7 @@ def LocalBinaryPattern2D(
   isClockwise=False,
   normalizeLBP=False,
 ):
-  '''
+  r'''
   Compute the Local Binary Pattern (LBP) matrix for a given 2D matrix.
   This function calculates the LBP values based on the specified distance,
   angle (theta), and direction (clockwise or counterclockwise).
@@ -1430,7 +1430,7 @@ def UniformLocalBinaryPattern2D(
   isClockwise=False,
   normalizeLBP=False,
 ):
-  '''
+  r'''
   Compute the Uniform Local Binary Pattern (LBP) matrix for a given 2D matrix.
   This function calculates the LBP values based on the specified distance,
   angle (theta), and direction (clockwise or counterclockwise).
@@ -1501,7 +1501,7 @@ def UniformLocalBinaryPattern2D(
 # Function(s) for calculating shape features.
 # ===========================================================================================
 def ShapeFeatures2D(matrix):
-  '''
+  r'''
   Calculate shape features of a given binary matrix in 2D.
   The function computes various shape features such as area, perimeter,
   centroid, bounding box, aspect ratio, compactness, eccentricity,
@@ -1701,7 +1701,7 @@ def ShapeFeatures2D(matrix):
 
 
 def ShapeFeatures3D(volume):
-  '''
+  r'''
   Calculate 3D shape features of a given binary or labeled volume.
   The function computes various geometric and topological properties such as volume,
   surface area, compactness, sphericity, elongation, flatness, rectangularity,

@@ -14,7 +14,7 @@ import HMB.PerformanceMetrics as pm
 
 # Function to save a PyTorch model's state dictionary to a file.
 def SaveModel(model, filename="model.pth"):
-  '''
+  r'''
   Save the model state to a file for later use. You can load it later
   using LoadModel() function from this module.
 
@@ -31,7 +31,7 @@ def SaveModel(model, filename="model.pth"):
 
 
 def SavePyTorchDict(modelDict, filename="model.pth"):
-  '''
+  r'''
   Save a PyTorch state dictionary to a file for later use. You can load it later
   using LoadPyTorchDict function.
 
@@ -49,7 +49,7 @@ def SavePyTorchDict(modelDict, filename="model.pth"):
 
 # Function to load a PyTorch model's state dictionary from a file and move it to a device.
 def LoadModel(model, filename="model.pth", device="cuda"):
-  '''
+  r'''
   Load the model state from a file and move it to the specified device.
 
   Parameters:
@@ -73,7 +73,7 @@ def LoadModel(model, filename="model.pth", device="cuda"):
 
 
 def LoadPyTorchDict(filename="model.pth", device="cuda"):
-  '''
+  r'''
   Load a PyTorch state dictionary from a file and map it to the specified device.
 
   Parameters:
@@ -100,7 +100,7 @@ def LoadPyTorchDict(filename="model.pth", device="cuda"):
 
 
 def SaveCheckpoint(model, optimizer, filename="chk.pth.tar"):
-  '''
+  r'''
   Save model and optimizer state to a checkpoint file.
   Useful for resuming training or inference later.
   This function saves the model's state dictionary and the optimizer's state dictionary
@@ -125,7 +125,7 @@ def SaveCheckpoint(model, optimizer, filename="chk.pth.tar"):
 
 
 def LoadCheckpoint(checkpointFile, model, optimizer, lr, device):
-  '''
+  r'''
   Load model and optimizer state from a checkpoint file.
   Updates the learning rate of the optimizer if provided.
   This function loads the model's state dictionary and the optimizer's state dictionary
@@ -162,7 +162,7 @@ def LoadCheckpoint(checkpointFile, model, optimizer, lr, device):
 
 
 class CustomDataset(torch.utils.data.Dataset):
-  '''
+  r'''
   PyTorch dataset for image classification tasks, loading images from a directory
   structure where each class has its own subfolder.
 
@@ -237,7 +237,7 @@ class CustomDataset(torch.utils.data.Dataset):
 
 
 def CreateTimmModel(modelName, numClasses, pretrained=True):
-  '''
+  r'''
   Create a classification model using the timm library.
 
   Parameters:
@@ -275,7 +275,7 @@ def TrainEvaluateModel(
   finalModelStoragePath=None,  # Path to save the final model after training.
   verbose=True,  # Verbosity flag to control logging.
 ):
-  '''
+  r'''
   Train and evaluate a classification model for a specified number of epochs.
 
   Parameters:
@@ -401,7 +401,7 @@ def TrainOneEpoch(
   optimizer,  # Optimizer for updating model parameters.
   scaler,  # Gradient scaler for mixed precision training.
 ):
-  '''
+  r'''
   Train the model for one epoch.
 
   Parameters:
@@ -488,7 +488,7 @@ def EvaluateOneEpoch(
   device,  # Device to run evaluation on (CPU or GPU).
   noOfClasses,  # Number of classes in the classification task.
 ):
-  '''
+  r'''
   Evaluate the model for one epoch.
 
   Parameters:
@@ -573,7 +573,7 @@ def InferenceWithPlots(
   dpi=720,  # DPI for saving plots.
   verbose=True,  # Whether to print progress.
 ):
-  '''
+  r'''
   Perform inference on all experiment directories and generate performance plots.
 
   Parameters:

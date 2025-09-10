@@ -5,7 +5,7 @@ from HMB.ImagesHelper import *
 
 
 def ReadWSIViaOpenSlide(slidePath):
-  '''
+  r'''
   Reads a whole slide image (WSI) using OpenSlide and returns an OpenSlide object.
 
   Parameters:
@@ -38,7 +38,7 @@ def TileExtractionAlignmentHandler(
   doPlotting=True,  # Whether to generate and save plots for visualization.
   verbose=False,  # Whether to print verbose output during processing.
 ):
-  '''
+  r'''
   Extracts and aligns patches from HE (Hematoxylin-Eosin) and MT (Masson's Trichrome) slides,
   processes them, and saves the results.
 
@@ -278,7 +278,7 @@ def ExtractPatch(
   maxNumFeaturesORB=5000,  # Maximum number of features to detect for matching.
   maxGoodMatchesORB=25,  # Maximum number of good matches to consider for alignment.
 ):
-  '''
+  r'''
   Extracts and processes patches from HE (Hematoxylin & Eosin) and MT (Trichrome) slides.
   The function applies transformations, matches regions using ORB, and computes differences
   between the two slide types. It also generates binary masks and weighted combinations.

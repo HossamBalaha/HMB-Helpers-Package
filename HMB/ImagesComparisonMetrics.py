@@ -3,7 +3,7 @@ import numpy as np
 
 
 def MutualInformation(image1, image2, bins=100):
-  '''
+  r'''
   Compute the mutual information between two images.
 
   Parameters:
@@ -90,7 +90,7 @@ def MutualInformation(image1, image2, bins=100):
 
 
 def MutualInformationColor(image1, image2, bins=100):
-  '''
+  r'''
   Compute the mutual information between two color images by averaging over all channels.
 
   Parameters:
@@ -122,7 +122,7 @@ def MutualInformationColor(image1, image2, bins=100):
 
 
 def NormalizedMutualInformation(image1, image2):
-  '''
+  r'''
   Compute the normalized mutual information (NMI) between two images.
 
   Parameters:
@@ -155,7 +155,7 @@ def NormalizedMutualInformation(image1, image2):
 
 
 def StructuralSimilarity(image1, image2, winSize=7):
-  '''
+  r'''
   Compute the structural similarity index (SSIM) between two images.
 
   Parameters:
@@ -210,7 +210,7 @@ def StructuralSimilarity(image1, image2, winSize=7):
 
 
 def NormalizedCrossCorrelation(image1, image2):
-  '''
+  r'''
   Compute the normalized cross-correlation (NCC) between two images.
 
   Parameters:
@@ -258,7 +258,7 @@ def NormalizedCrossCorrelation(image1, image2):
 
 
 def HistogramComparison(image1, image2, bins=256, eps=1e-10):
-  '''
+  r'''
   Compute the histogram intersection between two images.
 
   Parameters:
@@ -322,7 +322,7 @@ def HistogramComparison(image1, image2, bins=256, eps=1e-10):
 
 
 def UniversalQualityIndex(image1, image2):
-  '''
+  r'''
   Compute the universal quality index (UQI) between two images.
 
   Parameters:
@@ -397,7 +397,7 @@ def UniversalQualityIndex(image1, image2):
 
 
 def CosineSimilarityImages(image1, image2):
-  '''
+  r'''
   Compute the cosine similarity between two images.
 
   Parameters:
@@ -459,7 +459,7 @@ def CosineSimilarityImages(image1, image2):
 
 
 def PeakSignalToNoiseRatio(image1, image2, eps=1e-10):
-  '''
+  r'''
   Compute the peak signal-to-noise ratio (PSNR) between two images.
 
   Parameters:
@@ -520,7 +520,7 @@ def PeakSignalToNoiseRatio(image1, image2, eps=1e-10):
 
 
 def FeatureBasedSimilarity(image1, image2):
-  '''
+  r'''
   Compute the feature-based similarity between two images using SIFT keypoints and descriptors.
 
   Parameters:
@@ -604,7 +604,7 @@ def FeatureBasedSimilarity(image1, image2):
 
 
 def MeanSquaredError(image1, image2):
-  '''
+  r'''
   Compute the mean squared error (MSE) between two images.
 
   Parameters:
@@ -645,7 +645,7 @@ def MeanSquaredError(image1, image2):
 
 
 def NormalizedMeanSquaredError(image1, image2):
-  '''
+  r'''
   Compute the normalized mean squared error (NMSE) between two images.
 
   Parameters:
@@ -695,7 +695,7 @@ def NormalizedMeanSquaredError(image1, image2):
 
 
 def EarthMoversDistance(image1, image2):
-  '''
+  r'''
   Compute the Earth Mover's Distance (EMD) between two images.
 
   Parameters:
@@ -747,7 +747,7 @@ def EarthMoversDistance(image1, image2):
 
 
 def SpectralResidual(image1, image2):
-  '''
+  r'''
   Compute the spectral residual similarity (SRS) between two images.
 
   Parameters:
@@ -829,7 +829,7 @@ def SpectralResidual(image1, image2):
 
 
 def PhaseCongruency(image1, image2):
-  '''
+  r'''
   Compute the phase congruency similarity between two images.
 
   Parameters:
@@ -883,7 +883,7 @@ def PhaseCongruency(image1, image2):
 
 
 def NoiseQualityMeasure(image1, image2):
-  '''
+  r'''
   Compute the noise quality measure (NQM) between two images.
 
   Parameters:
@@ -928,7 +928,7 @@ def NoiseQualityMeasure(image1, image2):
 
 
 def HellingerDistance(image1, image2):
-  '''
+  r'''
   Compute the Hellinger distance between two images.
 
   Parameters:
@@ -998,7 +998,7 @@ def HellingerDistance(image1, image2):
 
 
 def BhattacharyyaDistance(image1, image2):
-  '''
+  r'''
   Compute the Bhattacharyya distance between two images.
 
   Parameters:
@@ -1069,7 +1069,7 @@ def BhattacharyyaDistance(image1, image2):
 
 
 def PerceptualHash(image1, image2):
-  '''
+  r'''
   Compute the perceptual hash (pHash) Hamming distance between two images.
 
   Parameters:
@@ -1119,7 +1119,7 @@ def PerceptualHash(image1, image2):
 
 
 def JensenShannonDivergence(image1, image2):
-  '''
+  r'''
   Compute the Jensen-Shannon divergence (JSD) between two images.
 
   Parameters:
@@ -1170,7 +1170,7 @@ def JensenShannonDivergence(image1, image2):
 
 
 def KLDivergence(image1, image2, eps=1e-10):
-  '''
+  r'''
   Compute the Kullback-Leibler (KL) divergence between two images.
 
   Parameters:
@@ -1243,7 +1243,7 @@ def KLDivergence(image1, image2, eps=1e-10):
 
 
 def GradientMagnitudeSimilarityDeviation(image1, image2, eps=1e-10):
-  '''
+  r'''
   Compute the gradient magnitude similarity deviation (GMSD) between two images.
 
   Parameters:
@@ -1303,7 +1303,7 @@ def GradientMagnitudeSimilarityDeviation(image1, image2, eps=1e-10):
 
 
 def SpectralAngleMapper(image1, image2):
-  '''
+  r'''
   Compute the spectral angle mapper (SAM) between two images.
 
   Parameters:
@@ -1363,7 +1363,7 @@ def SpectralAngleMapper(image1, image2):
 
 
 def BRISQUE(image):
-  '''
+  r'''
   Compute the BRISQUE (Blind/Referenceless Image Spatial Quality Evaluator) score for an image.
 
   Parameters:
@@ -1390,7 +1390,7 @@ def BRISQUE(image):
 
 
 def SummaryTable(image1, image2):
-  '''
+  r'''
   Compute a summary table of various similarity and dissimilarity metrics between two images.
 
   Parameters:
@@ -1458,7 +1458,7 @@ def SummaryTable(image1, image2):
 
 
 def IsSimilarityAccepted(image1, image2):
-  '''
+  r'''
   Determine if two images are similar based on Mutual Information, Cosine Similarity, and Perceptual Hash.
 
   Parameters:

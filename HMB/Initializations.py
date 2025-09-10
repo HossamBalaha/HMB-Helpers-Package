@@ -6,7 +6,7 @@ from PIL import PngImagePlugin
 
 # -------------------------------------------------- #
 def SetMaxTextChunkSize(maxChunkSize=100 * (1024 ** 2)):
-  '''
+  r'''
   Set the maximum size for text chunks in PNG images.
   This is useful for controlling the size of metadata stored in PNG files.
   '''
@@ -21,7 +21,7 @@ def SetMaxTextChunkSize(maxChunkSize=100 * (1024 ** 2)):
 
 # -------------------------------------------------- #
 def SetEnvironmentVariables(defaultThreads=6):
-  '''
+  r'''
   Set environment variables to control the number of threads used by libraries like OpenBLAS, MKL, and OMP.
   This is useful for optimizing performance and avoiding excessive CPU usage.
   '''
@@ -43,7 +43,7 @@ def SetEnvironmentVariables(defaultThreads=6):
 
 
 def MaximizeThreads():
-  '''
+  r'''
   Maximize the number of threads used by libraries like OpenBLAS, MKL, and OMP.
   This is useful for optimizing performance on multi-core CPUs.
   '''
@@ -128,7 +128,7 @@ def SeedEverything(seed=42, deterministic=True, benchmark=True):
 
 
 def DoRandomSeeding():
-  '''
+  r'''
   Perform random seeding for reproducibility.
   This function sets the random seed for various libraries to ensure consistent results across runs.
   '''
@@ -216,7 +216,7 @@ def DownloadNLTKPackages():
 
 
 def IncreaseSysRecursionLimit(limit=10000):
-  '''
+  r'''
   Increase the system recursion limit to allow deeper recursive calls.
   This is useful for algorithms that require deep recursion, such as certain tree or graph algorithms.
   '''

@@ -4,7 +4,7 @@ import fitz, re
 
 # Define a function to read the full content of a PDF file.
 def ReadFullPDF(filePath):
-  '''
+  r'''
   Reads the full content of a PDF file and returns it as a string.
 
   Parameters:
@@ -39,7 +39,7 @@ def ReadFullPDF(filePath):
 
 # Define a function to read the content of a specific page in a PDF file.
 def ReadPDFPage(filePath, pageNum):
-  '''
+  r'''
   Reads the content of a specific page in a PDF file.
 
   Parameters:
@@ -64,7 +64,7 @@ def ReadPDFPage(filePath, pageNum):
 
 # Define a function to get the total number of pages in a PDF file.
 def GetPDFPageCount(filePath):
-  '''
+  r'''
   Returns the total number of pages in a PDF file.
 
   Parameters:
@@ -82,7 +82,7 @@ def GetPDFPageCount(filePath):
 
 # Define a function to extract all text matching a regex pattern from a PDF file.
 def ExtractPDFTextByRegex(filePath, pattern):
-  '''
+  r'''
   Extracts all text matching a regex pattern from a PDF file.
 
   Parameters:
@@ -99,7 +99,7 @@ def ExtractPDFTextByRegex(filePath, pattern):
 
 # Define a function to extract metadata from a PDF file.
 def ExtractPDFMetadata(filePath):
-  '''
+  r'''
   Extracts metadata from a PDF file.
 
   Parameters:
@@ -117,7 +117,7 @@ def ExtractPDFMetadata(filePath):
 
 # Define a function to extract images from all pages of a PDF file.
 def ExtractPDFImages(filePath):
-  '''
+  r'''
   Extracts images from all pages of a PDF file.
 
   Parameters:
@@ -143,7 +143,7 @@ def ExtractPDFImages(filePath):
 
 # Define a function to extract tables from a PDF file using tabula-py.
 def ExtractPDFTables(filePath, pages="all"):
-  '''
+  r'''
   Extracts tables from a PDF file using tabula-py.
 
   Installation:
@@ -170,7 +170,7 @@ def ExtractPDFTables(filePath, pages="all"):
 
 # Define a function to save a range of pages from a PDF file as a new PDF.
 def SplitPDF(filePath, startPage, endPage, outputPath):
-  '''
+  r'''
   Saves a range of pages from a PDF file as a new PDF.
 
   Parameters:
@@ -192,7 +192,7 @@ def SplitPDF(filePath, startPage, endPage, outputPath):
 
 # Define a function to merge multiple PDF files into a single PDF.
 def MergePDFs(pdfPaths, outputPath):
-  '''
+  r'''
   Merges multiple PDF files into a single PDF.
 
   Parameters:
@@ -212,7 +212,7 @@ def MergePDFs(pdfPaths, outputPath):
 
 # Define a function to delete specified pages from a PDF and save the result.
 def DeletePDFPages(filePath, pagesToDelete, outputPath):
-  '''
+  r'''
   Deletes specified pages from a PDF and saves the result.
 
   Parameters:
@@ -229,7 +229,7 @@ def DeletePDFPages(filePath, pagesToDelete, outputPath):
 
 # Define a function to rotate specified pages in a PDF by a given angle.
 def RotatePDFPages(filePath, rotation, outputPath, pages=None):
-  '''
+  r'''
   Rotates specified pages in a PDF by a given angle.
 
   Parameters:
@@ -252,7 +252,7 @@ def RotatePDFPages(filePath, rotation, outputPath, pages=None):
 
 # Define a function to extract annotations/comments from all pages of a PDF file.
 def ExtractPDFAnnotations(filePath):
-  '''
+  r'''
   Extracts annotations/comments from all pages of a PDF file.
 
   Parameters:
@@ -281,7 +281,7 @@ def PDFContainsText(
   useRegex=False,
   returnPositions=False
 ):
-  '''
+  r'''
   Checks if the PDF contains the specified text, with options for case sensitivity, regex, and returning positions.
 
   Parameters:
@@ -335,7 +335,7 @@ def PDFContainsText(
 
 # Define a function to add a bookmark to a specific page in the PDF.
 def AddPDFBookmark(filePath, pageNum, title, outputPath):
-  '''
+  r'''
   Adds a bookmark to a specific page in the PDF.
 
   Parameters:
@@ -353,7 +353,7 @@ def AddPDFBookmark(filePath, pageNum, title, outputPath):
 
 # Define a function to extract all hyperlinks from the PDF.
 def ExtractPDFLinks(filePath):
-  '''
+  r'''
   Extracts all hyperlinks from the PDF.
 
   Parameters:
@@ -376,7 +376,7 @@ def ExtractPDFLinks(filePath):
 
 # Define a function to highlight all occurrences of a text string in the PDF.
 def HighlightPDFText(filePath, searchText, outputPath, color=(1, 1, 0)):
-  '''
+  r'''
   Highlights all occurrences of a text string in the PDF.
 
   Parameters:
@@ -400,7 +400,7 @@ def HighlightPDFText(filePath, searchText, outputPath, color=(1, 1, 0)):
 
 # Define a function to encrypt the PDF with a password.
 def EncryptPDF(filePath, password, outputPath):
-  '''
+  r'''
   Encrypts the PDF with a password.
 
   Parameters:
@@ -416,7 +416,7 @@ def EncryptPDF(filePath, password, outputPath):
 
 # Define a function to remove password protection from a PDF.
 def DecryptPDF(filePath, password, outputPath):
-  '''
+  r'''
   Removes password protection from a PDF.
 
   Parameters:
@@ -436,7 +436,7 @@ def DecryptPDF(filePath, password, outputPath):
 
 # Define a function to list all fonts used in the PDF.
 def ExtractPDFFonts(filePath):
-  '''
+  r'''
   Lists all fonts used in the PDF.
 
   Parameters:

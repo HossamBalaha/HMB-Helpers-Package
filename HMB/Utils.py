@@ -8,7 +8,7 @@ import numpy as np  # NumPy library for numerical operations.
 
 
 def ReadProjectConfig(configFilePath):
-  '''
+  r'''
   Read the project configuration from the file. This function loads a configuration
   file in either YAML or JSON format and returns its contents as a dictionary.
 
@@ -130,7 +130,7 @@ def IsIntersectingWithOtherContours(point, anListCoords):
 
 
 def WritePickleFile(filePath, data):
-  '''
+  r'''
   Write data to a pickle file.
 
   Parameters:
@@ -145,7 +145,7 @@ def WritePickleFile(filePath, data):
 
 
 def ReadPickleFile(filePath):
-  '''
+  r'''
   Read data from a pickle file.
 
   Parameters:
@@ -170,7 +170,7 @@ def ReadPickleFile(filePath):
 
 
 def WriteTextFile(filePath, text):
-  '''
+  r'''
   Write text to a file.
 
   Parameters:
@@ -185,7 +185,7 @@ def WriteTextFile(filePath, text):
 
 
 def ReadTextFile(filePath):
-  '''
+  r'''
   Read text from a file.
 
   Parameters:
@@ -210,7 +210,7 @@ def ReadTextFile(filePath):
 
 
 def LoadYaml(yamlPath):
-  '''
+  r'''
   Load data from a YAML file.
 
   Parameters:
@@ -233,7 +233,7 @@ def LoadYaml(yamlPath):
 
 
 def SaveYaml(yamlPath, yamlData):
-  '''
+  r'''
   Save data to a YAML file.
 
   Parameters:

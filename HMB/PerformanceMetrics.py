@@ -8,7 +8,7 @@ def CalculatePerformanceMetrics(
   eps=1e-10,  # Small value to avoid division by zero.
   addWeightedAverage=False,  # Whether to include weighted averages in the output.
 ):
-  '''
+  r'''
   Calculate performance metrics from a confusion matrix.
 
   Parameters:
@@ -1213,7 +1213,7 @@ def HistoryPlotter(
   figSize=(10, 5),  # Figure size.
   returnFig=False,  # Whether to return the figure object.
 ):
-  '''
+  r'''
   Plot training history metrics (e.g., loss, accuracy) for train and validation sets.
 
   Parameters:
