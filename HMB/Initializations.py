@@ -67,16 +67,14 @@ def IgnoreWarnings():
   # Suppress all warnings globally.
   warnings.filterwarnings("ignore")
 
-  # def warn(*args, **kwargs):
-  #   '''
-  #   Custom function to suppress warnings.
-  #   This function overrides the default warning behavior to suppress all warnings.
-  #   '''
-  #
-  #   pass
-  #
-  # # Override the default warning function with the custom function.
-  # warnings.warn = warn
+  # Patch warnings.warn to ignore 'skip_file_prefixes' kwarg if present.
+  _orig_warn = warnings.warn
+
+  def warn(*args, **kwargs):
+    kwargs.pop("skip_file_prefixes", None)
+    return _orig_warn(*args, **kwargs)
+
+  warnings.warn = warn
 
   # Disable the TF warnings.
   # This is useful for TensorFlow users to suppress warnings related to TensorFlow.
