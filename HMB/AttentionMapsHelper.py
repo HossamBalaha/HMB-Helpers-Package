@@ -361,12 +361,16 @@ class AttentionMapsVisualizer(object):
     else:
       tensor = outputs
 
+    # Only proceed if tensor is 3D (B, N, C).
+    if (tensor.ndim != 3):
+      raise ValueError(f"Expected transformer output to be 3D (B, N, C), got shape {tensor.shape}.")
+
     # Try to get patch size from model.
     patchSize = None
     if (hasattr(model, "patch_embed") and hasattr(model.patch_embed, "patch_size")):
-      patchSize = model.patch_embed.patchSize
+      patchSize = model.patch_embed.patch_size
       if (isinstance(patchSize, int)):
-        patchSize = (patchSize, patch_size)
+        patchSize = (patchSize, patchSize)
     else:
       # Fallback: try to infer from input and output shape.
       B, C, H, W = inputTensor.shape
