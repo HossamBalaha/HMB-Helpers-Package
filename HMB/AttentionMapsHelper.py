@@ -387,6 +387,7 @@ class AttentionMapsVisualizer(object):
     imagesPerClass=1,  # Number of images per class to visualize.
     selectImages=None,  # Optional dict: {class_name: [image filenames]}.
     allowedExtensions=(".jpg", ".jpeg", ".png", ".bmp"),
+    doAverage=True,
   ):
     r'''
     Visualize and save attention maps for images using specified CAM methods.
@@ -402,6 +403,7 @@ class AttentionMapsVisualizer(object):
       imagesPerClass (int): Number of images per class to visualize.
       selectImages (dict or None): Optional dict mapping class names to list of image filenames.
       allowedExtensions (tuple): Allowed image file extensions.
+      doAverage (bool): Whether to compute and display the average overlay per class.
 
     Notes:
       - If selectImages is provided, it should be a dictionary where keys are class names and
@@ -420,7 +422,7 @@ class AttentionMapsVisualizer(object):
 
     # Calculate total subplots.
     totalRows = len(self.classes)
-    totalCols = len(cams) * imagesPerClass
+    totalCols = len(cams) * imagesPerClass + (imagesPerClass if doAverage else 0)
 
     # Create figure with specified size.
     plt.figure(figsize=figSize)
@@ -447,6 +449,7 @@ class AttentionMapsVisualizer(object):
       else:
         chosenImages = random.sample(imageFiles, min(imagesPerClass, len(imageFiles)))
 
+
       # Loop through selected images.
       for imgIdx, imageName in enumerate(chosenImages):
         imagePath = os.path.join(clsPath, imageName)
@@ -454,6 +457,8 @@ class AttentionMapsVisualizer(object):
         # Open and preprocess image.
         image = Image.open(imagePath).convert("RGB")
         imgTensor = self.transform(image).unsqueeze(0).to(self.device)
+
+        history = []
 
         # Loop through CAM methods.
         for i, cam in enumerate(cams):
@@ -533,6 +538,9 @@ class AttentionMapsVisualizer(object):
           overlay = heatmap * alpha + imageNp * (1.0 - alpha)
           overlay = np.uint8(255 * overlay)
 
+          # Save overlay to history.
+          history.append(overlay)
+
           # Add subplot.
           ax = plt.subplot(totalRows, totalCols, plotIdx)
           ax.imshow(overlay, vmin=0, vmax=255)
@@ -547,6 +555,16 @@ class AttentionMapsVisualizer(object):
           # Remove axis ticks.
           ax.set_xticks([])
           ax.set_yticks([])
+          plotIdx += 1
+
+        # Combine the overlays for the current image and find the average.
+        if (len(history) and doAverage):
+          combinedOverlay = np.mean(np.array(history), axis=0).astype(np.uint8)
+          combinedAx = plt.subplot(totalRows, totalCols, plotIdx)
+          combinedAx.imshow(combinedOverlay, vmin=0, vmax=255)
+          combinedAx.set_title("Combined", fontsize=fontSize)
+          combinedAx.set_xticks([])
+          combinedAx.set_yticks([])
           plotIdx += 1
 
     # Tight layout to minimize wasted space.
