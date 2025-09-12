@@ -239,6 +239,7 @@ class AttentionMapsVisualizer(object):
     modelCheckpointPath (str): Path to the trained model checkpoint.
     modelType (str): Type of model ("Timm" and "HuggingFace"). Default is "Timm".
     size (int): Image size for resizing and visualization. Default is 448.
+    doReshape (bool): Whether to reshape transformer outputs for CAM. Default is False.
     device (str or torch.device): Device to run the model on ("cuda" or "cpu").
 
   Attributes:
@@ -294,12 +295,15 @@ class AttentionMapsVisualizer(object):
     modelCheckpointPath,
     modelType="Timm",
     size=448,
+    doReshape=False,
     device=None,
   ):
     # Set device.
     self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     # Set image size.
     self.size = size
+    # Whether to reshape transformer outputs for CAM.
+    self.doReshape = doReshape
     # Set base folder.
     self.baseFolder = baseFolder
     # Set results folder.
@@ -342,57 +346,32 @@ class AttentionMapsVisualizer(object):
       raise ValueError("Unsupported model type. Currently only 'Timm' and 'HuggingFace' are supported.")
 
   @staticmethod
-  def ReshapeTransform(outputs, inputTensor, model):
+  def ReshapeTransform(outputs, height, width):
     r'''
-    Reshape transformer outputs for CAM extraction, dynamically inferring grid size from input and model.
+    Reshape the transformer outputs to a 4D tensor suitable for CAM extraction.
 
     Parameters:
-      outputs (torch.Tensor or tuple): Outputs from the transformer model.
-      inputTensor (torch.Tensor): The input image tensor (B, 3, H, W).
-      model (torch.nn.Module): The vision transformer model.
+      outputs (torch.Tensor): Outputs from the transformer model.
+      height (int): Height of the feature map.
+      width (int): Width of the feature map.
 
     Returns:
-      torch.Tensor: Reshaped tensor suitable for CAM extraction.
+      torch.Tensor: Reshaped tensor of shape (batch_size, channels, height, width).
     '''
 
-    # Remove class token if present.
+    # Reshape transformer outputs for CAM.
     if (isinstance(outputs, tuple)):
       tensor = outputs[0]
     else:
       tensor = outputs
+    # tensor.size(0): batch size.
+    # tensor.size(1): number of tokens (including class token).
+    # tensor.size(2): feature dimension.
 
-    # Only proceed if tensor is 3D (B, N, C).
-    if (tensor.ndim != 3):
-      raise ValueError(f"Expected transformer output to be 3D (B, N, C), got shape {tensor.shape}.")
-
-    # Try to get patch size from model.
-    patchSize = None
-    if (hasattr(model, "patch_embed") and hasattr(model.patch_embed, "patch_size")):
-      patchSize = model.patch_embed.patch_size
-      if (isinstance(patchSize, int)):
-        patchSize = (patchSize, patchSize)
-    else:
-      # Fallback: try to infer from input and output shape.
-      B, C, H, W = inputTensor.shape
-      numPatches = tensor.shape[1]
-      gridSize = int(np.sqrt(numPatches))
-      patchSize = (H // gridSize, W // gridSize)
-
-    # Compute feature map size.
-    B, C, H, W = inputTensor.shape
-    hFeat, wFeat = H // patchSize[0], W // patchSize[1]
-
-    # Remove class token if present.
-    if (tensor.shape[1] == hFeat * wFeat + 1):
-      tensor = tensor[:, 1:, :]
-    elif (tensor.shape[1] != hFeat * wFeat):
-      # Fallback: try to infer grid size.
-      gridSize = int(np.sqrt(tensor.shape[1]))
-      tensor = tensor[:, :gridSize * gridSize, :]
-      hFeat = wFeat = gridSize
-
-    tensor = tensor.reshape(tensor.size(0), hFeat, wFeat, tensor.size(2))
-    tensor = tensor.permute(0, 3, 1, 2)
+    # Remove class token and reshape.
+    tensor = tensor[:, 1:, :]
+    tensor = tensor.reshape(tensor.size(0), height, width, tensor.size(2))
+    tensor = tensor.transpose(2, 3).transpose(1, 2)
     return tensor
 
   def VisualizeAttentionMaps(
@@ -500,16 +479,39 @@ class AttentionMapsVisualizer(object):
 
           print(f"Processing Class: {cls}, Image: {imageName}, CAM: {camCls.__name__}")
 
-          # Initialize CAM method.
-          cam = camCls(
-            model=self.model,
-            target_layers=[self.vitTargetLayer],
-            reshape_transform=lambda x: self.ReshapeTransform(
-              x,
-              imgTensor,
-              self.model
-            ),
-          )
+          self.reshapeTransformSize = None
+          # Determine reshape size based on the input size.
+          if (self.size == 224):
+            self.reshapeTransformSize = 14
+          elif (self.size == 384):
+            self.reshapeTransformSize = 24
+          elif (self.size == 448):
+            self.reshapeTransformSize = 28
+          elif (self.size == 512):
+            self.reshapeTransformSize = 32
+          elif (self.size == 576):
+            self.reshapeTransformSize = 36
+
+          if (self.doReshape and self.reshapeTransformSize is None):
+            # Estimate reshape size for non-standard sizes.
+            self.reshapeTransformSize = self.size // 16
+            cam = camCls(
+              model=self.model,
+              target_layers=[self.vitTargetLayer],
+              reshape_transform=lambda x: self.ReshapeTransform(
+                x,
+                self.reshapeTransformSize,
+                self.reshapeTransformSize
+              ),
+            )
+          else:
+            # Use default (no reshape).
+            self.reshapeTransformSize = None
+            cam = camCls(
+              model=self.model,
+              target_layers=[self.vitTargetLayer],
+              reshape_transform=None,
+            )
 
           # Compute CAM.
           grayscaleCam = cam(
