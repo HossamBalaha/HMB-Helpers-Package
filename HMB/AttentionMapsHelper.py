@@ -239,7 +239,6 @@ class AttentionMapsVisualizer(object):
     modelCheckpointPath (str): Path to the trained model checkpoint.
     modelType (str): Type of model ("Timm" and "HuggingFace"). Default is "Timm".
     size (int): Image size for resizing and visualization. Default is 448.
-    reshapeTransformSize (int): Size for reshape transform in CAM. Default is 32.
     device (str or torch.device): Device to run the model on ("cuda" or "cpu").
 
   Attributes:
@@ -269,7 +268,6 @@ class AttentionMapsVisualizer(object):
       modelCheckpointPath="/path/to/checkpoint.pth",
       modelType="Timm",
       size=448,
-      reshapeTransformSize=32,
       device="cuda",
     )
     visualizer.VisualizeAttentionMaps(
@@ -296,15 +294,12 @@ class AttentionMapsVisualizer(object):
     modelCheckpointPath,
     modelType="Timm",
     size=448,
-    reshapeTransformSize=32,
     device=None,
   ):
     # Set device.
     self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     # Set image size.
     self.size = size
-    # Set reshape transform size.
-    self.reshapeTransformSize = reshapeTransformSize
     # Set base folder.
     self.baseFolder = baseFolder
     # Set results folder.
@@ -347,27 +342,53 @@ class AttentionMapsVisualizer(object):
       raise ValueError("Unsupported model type. Currently only 'Timm' and 'HuggingFace' are supported.")
 
   @staticmethod
-  def ReshapeTransform(outputs, height, width):
+  def ReshapeTransform(outputs, inputTensor, model):
     r'''
-    Reshape transformer outputs for CAM extraction.
+    Reshape transformer outputs for CAM extraction, dynamically inferring grid size from input and model.
 
     Parameters:
       outputs (torch.Tensor or tuple): Outputs from the transformer model.
-      height (int): Height of the feature map.
-      width (int): Width of the feature map.
+      inputTensor (torch.Tensor): The input image tensor (B, 3, H, W).
+      model (torch.nn.Module): The vision transformer model.
 
     Returns:
       torch.Tensor: Reshaped tensor suitable for CAM extraction.
     '''
 
-    # Reshape transformer outputs for CAM.
-    if isinstance(outputs, tuple):
+    # Remove class token if present.
+    if (isinstance(outputs, tuple)):
       tensor = outputs[0]
     else:
       tensor = outputs
-    tensor = tensor[:, 1:, :]
-    tensor = tensor.reshape(tensor.size(0), height, width, tensor.size(2))
-    tensor = tensor.transpose(2, 3).transpose(1, 2)
+
+    # Try to get patch size from model.
+    patchSize = None
+    if (hasattr(model, "patch_embed") and hasattr(model.patch_embed, "patch_size")):
+      patchSize = model.patch_embed.patchSize
+      if (isinstance(patchSize, int)):
+        patchSize = (patchSize, patch_size)
+    else:
+      # Fallback: try to infer from input and output shape.
+      B, C, H, W = inputTensor.shape
+      numPatches = tensor.shape[1]
+      gridSize = int(np.sqrt(numPatches))
+      patchSize = (H // gridSize, W // gridSize)
+
+    # Compute feature map size.
+    B, C, H, W = inputTensor.shape
+    hFeat, wFeat = H // patchSize[0], W // patchSize[1]
+
+    # Remove class token if present.
+    if (tensor.shape[1] == hFeat * wFeat + 1):
+      tensor = tensor[:, 1:, :]
+    elif (tensor.shape[1] != hFeat * wFeat):
+      # Fallback: try to infer grid size.
+      gridSize = int(np.sqrt(tensor.shape[1]))
+      tensor = tensor[:, :gridSize * gridSize, :]
+      hFeat = wFeat = gridSize
+
+    tensor = tensor.reshape(tensor.size(0), hFeat, wFeat, tensor.size(2))
+    tensor = tensor.permute(0, 3, 1, 2)
     return tensor
 
   def VisualizeAttentionMaps(
@@ -481,8 +502,8 @@ class AttentionMapsVisualizer(object):
             target_layers=[self.vitTargetLayer],
             reshape_transform=lambda x: self.ReshapeTransform(
               x,
-              self.reshapeTransformSize,
-              self.reshapeTransformSize
+              imgTensor,
+              self.model
             ),
           )
 
