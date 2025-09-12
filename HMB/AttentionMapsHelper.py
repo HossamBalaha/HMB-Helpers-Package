@@ -111,11 +111,58 @@ def HuggingFaceModel(
   return model, vitTargetLayer, transform
 
 
+def GetDefaultVitTargetLayer(model):
+  '''
+  Dynamically select a suitable target layer for CAM from a timm model.
+  Tries common patterns for ViT, Swin, MaxViT, etc.
+
+  Parameters:
+    model (torch.nn.Module): The model to inspect.
+
+  Returns:
+    torch.nn.Module: The selected target layer for CAM.
+  '''
+
+  # Try common ViT/MaxViT pattern: model.blocks[-1].norm1
+  if (hasattr(model, "blocks") and isinstance(model.blocks, (list, torch.nn.ModuleList))):
+    lastBlock = model.blocks[-1]
+    if (hasattr(lastBlock, "norm1")):
+      return lastBlock.norm1
+    # Some models use "norm" instead of "norm1"
+    if (hasattr(lastBlock, "norm")):
+      return lastBlock.norm
+    # Fallback: return the last block itself
+    return lastBlock
+
+  # Swin Transformer: model.layers[-1].blocks[-1].norm1 or norm
+  if (hasattr(model, "layers") and isinstance(model.layers, (list, torch.nn.ModuleList))):
+    lastLayer = model.layers[-1]
+    if (hasattr(lastLayer, "blocks") and isinstance(lastLayer.blocks, (list, torch.nn.ModuleList))):
+      lastBlock = lastLayer.blocks[-1]
+      if (hasattr(lastBlock, "norm1")):
+        return lastBlock.norm1
+      if (hasattr(lastBlock, "norm")):
+        return lastBlock.norm
+      return lastBlock
+    return lastLayer
+
+  # Some models have a "norm" attribute at the top level
+  if (hasattr(model, "norm")):
+    return model.norm
+
+  # Fallback: return the last child module
+  children = list(model.children())
+  if (children):
+    return children[-1]
+  raise ValueError("Could not automatically determine a suitable target layer for CAM. Please specify manually.")
+
+
 def TimmModel(
   modelName,
   numClasses,
   modelCheckpointPath,
   device,
+  targetLayer=None,  # Optional: allow user to specify target layer
 ):
   r'''
   Load a timm Vision Transformer model and its checkpoint, and prepare preprocessing transforms.
@@ -125,6 +172,7 @@ def TimmModel(
     numClasses (int): Number of output classes.
     modelCheckpointPath (str): Path to the trained model checkpoint.
     device (str or torch.device): Device to run the model on ("cuda" or "cpu").
+    targetLayer (str or None): Optional string specifying the target layer for CAM.
 
   Returns:
     tuple: A tuple containing:
@@ -170,7 +218,11 @@ def TimmModel(
   # Set model to evaluation mode.
   model.eval()
   # Set target layer for CAM.
-  vitTargetLayer = model.blocks[-1].norm1
+  # vitTargetLayer = model.blocks[-1].norm1
+  if (targetLayer is not None):
+    vitTargetLayer = targetLayer if not isinstance(targetLayer, str) else eval(f"model.{targetLayer}")
+  else:
+    vitTargetLayer = GetDefaultVitTargetLayer(model)
   # Return model, target layer, and transform.
   return model, vitTargetLayer, transform
 
@@ -372,7 +424,7 @@ class AttentionMapsVisualizer(object):
 
     # Loop through each class.
     for c, cls in enumerate(self.classes):
-      print(f"Processing class: {cls} ({c+1}/{self.numClasses})")
+      print(f"Processing class: {cls} ({c + 1}/{self.numClasses})")
       clsPath = os.path.join(self.dataFolder, cls)
 
       # Get image files for the class.
@@ -489,3 +541,13 @@ class AttentionMapsVisualizer(object):
 
     # Close the plot to free memory.
     plt.close()
+
+
+if __name__ == "__main__":
+  import timm
+
+  modelName = "maxvit_xlarge_tf_512.in21k_ft_in1k"
+  model = timm.create_model(modelName, pretrained=True)
+
+  targetLayer = GetDefaultVitTargetLayer(model)
+  print(targetLayer)

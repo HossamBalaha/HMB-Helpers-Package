@@ -7,7 +7,7 @@ tensorflow==2.10.1
 keras==2.10.0
 tensorboard==2.10.1
 numpy==1.26.4
-matplotlib==3.10.5
+matplotlib==3.10.6
 scikit-learn==1.6.1
 scikit-image==0.25.2
 pandas==2.3.1
@@ -53,3 +53,7 @@ tabula-py==2.10.0
 jpype1==1.6.0
 grad-cam==1.5.5
 pydicom==3.0.1
+ptitprince==0.2.7
+squarify==0.4.4
+plotly==6.2.0
+kaleido==1.1.0
