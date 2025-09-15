@@ -146,6 +146,10 @@ def GetDefaultVitTargetLayer(model):
     norm = model.norm
     if (IsCAMLayer(norm)):
       return norm
+  elif (hasattr(model, "norm_pre")):
+    norm = model.norm_pre
+    if (IsCAMLayer(norm)):
+      return norm
 
   if (hasattr(model, "stages") and IsContainer(model.stages)):
     # print("Model has stages.")
@@ -665,7 +669,7 @@ if __name__ == "__main__":
 
   modelName = "maxvit_xlarge_tf_512.in21k_ft_in1k"
   model = timm.create_model(modelName, pretrained=True)
-  print(model)
+  # print(model)
   print("Getting default target layer for CAM...")
   print("Model:", modelName)
   targetLayer = GetDefaultVitTargetLayer(model)
@@ -673,6 +677,7 @@ if __name__ == "__main__":
 
   modelName = "convnextv2_huge.fcmae_ft_in22k_in1k_512"
   model = timm.create_model(modelName, pretrained=True)
+  # print(model)
   print("Getting default target layer for CAM...")
   print("Model:", modelName)
   targetLayer = GetDefaultVitTargetLayer(model)
