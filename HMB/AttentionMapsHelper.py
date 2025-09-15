@@ -115,6 +115,7 @@ def GetDefaultVitTargetLayer(model):
   '''
   Dynamically select a suitable target layer for CAM from a timm model.
   Tries common patterns for ViT, Swin, MaxViT, ConvNeXtV2, etc.
+  Skips Identity layers as they are not suitable for CAM.
 
   Parameters:
     model (torch.nn.Module): The model to inspect.
@@ -126,72 +127,94 @@ def GetDefaultVitTargetLayer(model):
   def IsContainer(x):
     return isinstance(x, (list, torch.nn.ModuleList, torch.nn.Sequential))
 
+  def IsNormLayer(module):
+    return isinstance(module, (torch.nn.LayerNorm, torch.nn.BatchNorm2d, torch.nn.GroupNorm, torch.nn.Identity))
+
+  def IsIdentity(module):
+    return isinstance(module, torch.nn.Identity)
+
+  # Helper: recursively search for the last normalization layer, skipping Identity.
+  def FindLastNorm(module):
+    for name, submodule in reversed(list(module.named_modules())):
+      if (IsNormLayer(submodule)): #  and not IsIdentity(submodule)
+        return submodule
+    return None
+
   if (hasattr(model, "stages") and IsContainer(model.stages)):
-    print("Model has stages.")
+    # print("Model has stages.")
     lastStage = list(model.stages)[-1]
     if (hasattr(lastStage, "norm")):
-      print("Last stage has norm.")
-      return lastStage.norm
+      norm = lastStage.norm
+      if (IsIdentity(norm)):
+        return norm
     if (hasattr(lastStage, "blocks") and IsContainer(lastStage.blocks)):
-      print("Last stage has blocks.")
+      # print("Last stage has blocks.")
       lastBlock = list(lastStage.blocks)[-1]
+      # print("Last stage last block:", lastBlock)
       if (hasattr(lastBlock, "norm")):
-        print("Last block has norm.")
-        return lastBlock.norm
+        norm = lastBlock.norm
+        if (IsIdentity(norm)):
+          return norm
       if (hasattr(lastBlock, "norm1")):
-        print("Last block has norm1.")
-        return lastBlock.norm1
-      # Fallback: recursively search lastBlock for norm layers
-      for name, module in reversed(list(lastBlock.named_modules())):
-        if isinstance(module, (torch.nn.LayerNorm, torch.nn.BatchNorm2d, torch.nn.GroupNorm)):
-          return module
-      return lastBlock
-    # Fallback: recursively search lastStage for norm layers
-    for name, module in reversed(list(lastStage.named_modules())):
-      if isinstance(module, (torch.nn.LayerNorm, torch.nn.BatchNorm2d, torch.nn.GroupNorm)):
-        return module
-    return lastStage
+        norm1 = lastBlock.norm1
+        if (IsIdentity(norm1)):
+          return norm1
+      found = FindLastNorm(lastBlock)
+      # print("Found in last block:", found)
+      if (found is not None):
+        return found
+      # return lastBlock
+    found = FindLastNorm(lastStage)
+    if ((found is not None)):
+      return found
+    # return lastStage
 
   if (hasattr(model, "blocks") and IsContainer(model.blocks)):
-    print("Model has blocks.")
     lastBlock = list(model.blocks)[-1]
     if (hasattr(lastBlock, "norm")):
-      print("Last block has norm.")
-      return lastBlock.norm
+      norm = lastBlock.norm
+      if (IsIdentity(norm)):
+        return norm
     if (hasattr(lastBlock, "norm1")):
-      print("Last block has norm1.")
-      return lastBlock.norm1
-    for name, module in reversed(list(lastBlock.named_modules())):
-      if isinstance(module, (torch.nn.LayerNorm, torch.nn.BatchNorm2d, torch.nn.GroupNorm)):
-        return module
-    return lastBlock
+      norm1 = lastBlock.norm1
+      if (IsIdentity(norm1)):
+        return norm1
+    found = FindLastNorm(lastBlock)
+    if (found is not None):
+      return found
+    # return lastBlock
 
-  # Swin: model.layers[-1].blocks[-1].norm1 or norm
-  if hasattr(model, "layers") and IsContainer(model.layers):
+  if (hasattr(model, "layers") and IsContainer(model.layers)):
     lastLayer = list(model.layers)[-1]
-    if hasattr(lastLayer, "blocks") and IsContainer(lastLayer.blocks):
+    if (hasattr(lastLayer, "blocks") and IsContainer(lastLayer.blocks)):
       lastBlock = list(lastLayer.blocks)[-1]
-      if hasattr(lastBlock, "norm1"):
-        return lastBlock.norm1
-      if hasattr(lastBlock, "norm"):
-        return lastBlock.norm
-      for name, module in reversed(list(lastBlock.named_modules())):
-        if isinstance(module, (torch.nn.LayerNorm, torch.nn.BatchNorm2d, torch.nn.GroupNorm)):
-          return module
-      return lastBlock
-    for name, module in reversed(list(lastLayer.named_modules())):
-      if isinstance(module, (torch.nn.LayerNorm, torch.nn.BatchNorm2d, torch.nn.GroupNorm)):
-        return module
-    return lastLayer
+      if (hasattr(lastBlock, "norm1")):
+        norm1 = lastBlock.norm1
+        if (IsIdentity(norm1)):
+          return norm1
+      if (hasattr(lastBlock, "norm")):
+        norm = lastBlock.norm
+        if (IsIdentity(norm)):
+          return norm
+      found = FindLastNorm(lastBlock)
+      if (found is not None):
+        return found
+      # return lastBlock
+    found = FindLastNorm(lastLayer)
+    if (found is not None):
+      return found
+    # return lastLayer
 
-  # Top-level norm
-  if hasattr(model, "norm"):
-    return model.norm
+  # Top-level norm.
+  if (hasattr(model, "norm")):
+    norm = model.norm
+    if (IsIdentity(norm)):
+      return norm
 
-  # Fallback: recursively search for the last normalization layer in the whole model
-  for name, module in reversed(list(model.named_modules())):
-    if isinstance(module, (torch.nn.LayerNorm, torch.nn.BatchNorm2d, torch.nn.GroupNorm)):
-      return module
+  # Fallback: recursively search for the last normalization layer in the whole model, skipping Identity.
+  found = FindLastNorm(model)
+  if (found is not None):
+    return found
 
   raise ValueError("Could not automatically determine a suitable target layer for CAM. Please specify manually.")
 
