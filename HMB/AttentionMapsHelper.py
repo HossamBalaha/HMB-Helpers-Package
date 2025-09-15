@@ -123,7 +123,19 @@ def GetDefaultVitTargetLayer(model):
     torch.nn.Module: The selected target layer for CAM.
   '''
 
-  # Try common ViT/MaxViT pattern: model.blocks[-1].norm1
+  # MaxViT pattern: model.stages[-1].blocks[-1].norm
+  if (hasattr(model, "stages") and isinstance(model.stages, (list, torch.nn.ModuleList))):
+    lastStage = model.stages[-1]
+    if (hasattr(lastStage, "blocks") and isinstance(lastStage.blocks, (list, torch.nn.ModuleList))):
+      lastBlock = lastStage.blocks[-1]
+      if (hasattr(lastBlock, "norm")):
+        return lastBlock.norm
+      # Fallback: return the last block itself
+      return lastBlock
+    # Fallback: return the last stage itself
+    return lastStage
+
+  # Try common ViT/MaxViT pattern: model.blocks[-1].norm1 or norm
   if (hasattr(model, "blocks") and isinstance(model.blocks, (list, torch.nn.ModuleList))):
     lastBlock = model.blocks[-1]
     if (hasattr(lastBlock, "norm1")):
@@ -452,7 +464,6 @@ class AttentionMapsVisualizer(object):
           chosenImages = chosenImages[:imagesPerClass]
       else:
         chosenImages = random.sample(imageFiles, min(imagesPerClass, len(imageFiles)))
-
 
       # Loop through selected images.
       for imgIdx, imageName in enumerate(chosenImages):
