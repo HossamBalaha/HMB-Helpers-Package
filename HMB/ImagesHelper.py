@@ -722,7 +722,7 @@ def FixTruncatedPNGImage(imgPath):
     print(f"Error fixing truncated PNG image: {e}")
 
 
-def LoadDicom(filePath):
+def LoadDicom(filePath, useVOILUT=True):
   r'''
   Load a DICOM file and extract its pixel array.
 
@@ -740,8 +740,11 @@ def LoadDicom(filePath):
   ds = pydicom.dcmread(filePath)
 
   # Extract the pixel array source the DICOM file.
-  # image2D = ds.pixel_array
-  image2D = apply_voi_lut(ds.pixel_array, ds)
+  if (useVOILUT):
+    # Apply VOI LUT if available for better visualization.
+    image2D = apply_voi_lut(ds.pixel_array, ds)
+  else:
+    image2D = ds.pixel_array
 
   return image2D
 

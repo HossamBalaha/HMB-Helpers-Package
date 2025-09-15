@@ -957,6 +957,18 @@ def PlotMetrics(
 
   # Set the default Seaborn style for the plots.
   sns.set(style="whitegrid")
+  sns.set_context(
+    "paper",
+    rc={
+      "font.size"       : fontSize,
+      "axes.titlesize"  : fontSize,
+      "axes.labelsize"  : fontSize,
+      "xtick.labelsize" : fontSize,
+      "ytick.labelsize" : fontSize,
+      "legend.fontsize" : fontSize,
+      "figure.titlesize": fontSize,
+    }
+  )
 
   # Set the default font size for Matplotlib plots.
   plt.rcParams.update({"font.size": fontSize})

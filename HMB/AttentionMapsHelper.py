@@ -233,7 +233,6 @@ class AttentionMapsVisualizer(object):
 
   Parameters:
     baseFolder (str): Base directory containing model and dataset.
-    folder (str): Subfolder for results and model checkpoint.
     dataFolder (str): Directory containing image data organized by class.
     modelName (str): Name of the timm model to use.
     modelCheckpointPath (str): Path to the trained model checkpoint.
@@ -263,7 +262,6 @@ class AttentionMapsVisualizer(object):
 
     visualizer = amh.AttentionMapsVisualizer(
       baseFolder="/path/to/base/folder",
-      folder="Results",
       dataFolder="/path/to/data/folder",
       modelName="eva02_large_patch14_448.mim_m38m_ft_in22k_in1k",
       modelCheckpointPath="/path/to/checkpoint.pth",
@@ -289,7 +287,6 @@ class AttentionMapsVisualizer(object):
   def __init__(
     self,
     baseFolder,
-    folder,
     dataFolder,
     modelName,
     modelCheckpointPath,
@@ -306,8 +303,6 @@ class AttentionMapsVisualizer(object):
     self.doReshape = doReshape
     # Set base folder.
     self.baseFolder = baseFolder
-    # Set results folder.
-    self.folder = folder
 
     # Set data folder.
     self.dataFolder = dataFolder
@@ -344,6 +339,15 @@ class AttentionMapsVisualizer(object):
       )
     else:
       raise ValueError("Unsupported model type. Currently only 'Timm' and 'HuggingFace' are supported.")
+
+    print(f"Model and transform loaded. Number of classes: {self.numClasses}")
+    print(f"Classes: {self.classes}")
+    print(f"Using device: {self.device}")
+    print(f"Model type: {self.modelType}, Model name: {self.modelName}")
+    print(f"Model checkpoint path: {self.modelCheckpointPath}")
+    print(f"Image size: {self.size}, Do reshape: {self.doReshape}")
+    print(f"Target layer for CAM: {self.vitTargetLayer}")
+    print("Initialization complete.")
 
   @staticmethod
   def ReshapeTransform(outputs, height, width):
