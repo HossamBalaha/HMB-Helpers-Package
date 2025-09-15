@@ -114,7 +114,7 @@ def HuggingFaceModel(
 def GetDefaultVitTargetLayer(model):
   '''
   Dynamically select a suitable target layer for CAM from a timm model.
-  Tries common patterns for ViT, Swin, MaxViT, etc.
+  Tries common patterns for ViT, Swin, MaxViT, ConvNeXtV2, etc.
 
   Parameters:
     model (torch.nn.Module): The model to inspect.
@@ -123,49 +123,76 @@ def GetDefaultVitTargetLayer(model):
     torch.nn.Module: The selected target layer for CAM.
   '''
 
-  # MaxViT pattern: model.stages[-1].blocks[-1].norm
-  if (hasattr(model, "stages") and isinstance(model.stages, (list, torch.nn.ModuleList))):
-    lastStage = model.stages[-1]
-    if (hasattr(lastStage, "blocks") and isinstance(lastStage.blocks, (list, torch.nn.ModuleList))):
-      lastBlock = lastStage.blocks[-1]
+  def IsContainer(x):
+    return isinstance(x, (list, torch.nn.ModuleList, torch.nn.Sequential))
+
+  if (hasattr(model, "stages") and IsContainer(model.stages)):
+    print("Model has stages.")
+    lastStage = list(model.stages)[-1]
+    if (hasattr(lastStage, "norm")):
+      print("Last stage has norm.")
+      return lastStage.norm
+    if (hasattr(lastStage, "blocks") and IsContainer(lastStage.blocks)):
+      print("Last stage has blocks.")
+      lastBlock = list(lastStage.blocks)[-1]
       if (hasattr(lastBlock, "norm")):
+        print("Last block has norm.")
         return lastBlock.norm
-      # Fallback: return the last block itself
+      if (hasattr(lastBlock, "norm1")):
+        print("Last block has norm1.")
+        return lastBlock.norm1
+      # Fallback: recursively search lastBlock for norm layers
+      for name, module in reversed(list(lastBlock.named_modules())):
+        if isinstance(module, (torch.nn.LayerNorm, torch.nn.BatchNorm2d, torch.nn.GroupNorm)):
+          return module
       return lastBlock
-    # Fallback: return the last stage itself
+    # Fallback: recursively search lastStage for norm layers
+    for name, module in reversed(list(lastStage.named_modules())):
+      if isinstance(module, (torch.nn.LayerNorm, torch.nn.BatchNorm2d, torch.nn.GroupNorm)):
+        return module
     return lastStage
 
-  # Try common ViT/MaxViT pattern: model.blocks[-1].norm1 or norm
-  if (hasattr(model, "blocks") and isinstance(model.blocks, (list, torch.nn.ModuleList))):
-    lastBlock = model.blocks[-1]
-    if (hasattr(lastBlock, "norm1")):
-      return lastBlock.norm1
-    # Some models use "norm" instead of "norm1"
+  if (hasattr(model, "blocks") and IsContainer(model.blocks)):
+    print("Model has blocks.")
+    lastBlock = list(model.blocks)[-1]
     if (hasattr(lastBlock, "norm")):
+      print("Last block has norm.")
       return lastBlock.norm
-    # Fallback: return the last block itself
+    if (hasattr(lastBlock, "norm1")):
+      print("Last block has norm1.")
+      return lastBlock.norm1
+    for name, module in reversed(list(lastBlock.named_modules())):
+      if isinstance(module, (torch.nn.LayerNorm, torch.nn.BatchNorm2d, torch.nn.GroupNorm)):
+        return module
     return lastBlock
 
-  # Swin Transformer: model.layers[-1].blocks[-1].norm1 or norm
-  if (hasattr(model, "layers") and isinstance(model.layers, (list, torch.nn.ModuleList))):
-    lastLayer = model.layers[-1]
-    if (hasattr(lastLayer, "blocks") and isinstance(lastLayer.blocks, (list, torch.nn.ModuleList))):
-      lastBlock = lastLayer.blocks[-1]
-      if (hasattr(lastBlock, "norm1")):
+  # Swin: model.layers[-1].blocks[-1].norm1 or norm
+  if hasattr(model, "layers") and IsContainer(model.layers):
+    lastLayer = list(model.layers)[-1]
+    if hasattr(lastLayer, "blocks") and IsContainer(lastLayer.blocks):
+      lastBlock = list(lastLayer.blocks)[-1]
+      if hasattr(lastBlock, "norm1"):
         return lastBlock.norm1
-      if (hasattr(lastBlock, "norm")):
+      if hasattr(lastBlock, "norm"):
         return lastBlock.norm
+      for name, module in reversed(list(lastBlock.named_modules())):
+        if isinstance(module, (torch.nn.LayerNorm, torch.nn.BatchNorm2d, torch.nn.GroupNorm)):
+          return module
       return lastBlock
+    for name, module in reversed(list(lastLayer.named_modules())):
+      if isinstance(module, (torch.nn.LayerNorm, torch.nn.BatchNorm2d, torch.nn.GroupNorm)):
+        return module
     return lastLayer
 
-  # Some models have a "norm" attribute at the top level
-  if (hasattr(model, "norm")):
+  # Top-level norm
+  if hasattr(model, "norm"):
     return model.norm
 
-  # Fallback: return the last child module
-  children = list(model.children())
-  if (children):
-    return children[-1]
+  # Fallback: recursively search for the last normalization layer in the whole model
+  for name, module in reversed(list(model.named_modules())):
+    if isinstance(module, (torch.nn.LayerNorm, torch.nn.BatchNorm2d, torch.nn.GroupNorm)):
+      return module
+
   raise ValueError("Could not automatically determine a suitable target layer for CAM. Please specify manually.")
 
 
@@ -608,6 +635,14 @@ if __name__ == "__main__":
 
   modelName = "maxvit_xlarge_tf_512.in21k_ft_in1k"
   model = timm.create_model(modelName, pretrained=True)
-
+  print("Getting default target layer for CAM...")
+  print("Model:", modelName)
   targetLayer = GetDefaultVitTargetLayer(model)
-  print(targetLayer)
+  print("Target Layer:", targetLayer)
+
+  modelName = "convnextv2_huge.fcmae_ft_in22k_in1k_512"
+  model = timm.create_model(modelName, pretrained=True)
+  print("Getting default target layer for CAM...")
+  print("Model:", modelName)
+  targetLayer = GetDefaultVitTargetLayer(model)
+  print("Target Layer:", targetLayer)
