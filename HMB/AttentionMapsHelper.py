@@ -127,25 +127,32 @@ def GetDefaultVitTargetLayer(model):
   def IsContainer(x):
     return isinstance(x, (list, torch.nn.ModuleList, torch.nn.Sequential))
 
-  def IsNormLayer(module):
-    return isinstance(module, (torch.nn.LayerNorm, torch.nn.BatchNorm2d, torch.nn.GroupNorm, torch.nn.Identity))
+  def IsCAMLayer(module):
+    # return isinstance(module, (torch.nn.LayerNorm, torch.nn.BatchNorm2d, torch.nn.GroupNorm, torch.nn.Identity))
+    return isinstance(module, (torch.nn.Identity))
 
   def IsIdentity(module):
     return isinstance(module, torch.nn.Identity)
 
   # Helper: recursively search for the last normalization layer, skipping Identity.
-  def FindLastNorm(module):
+  def FindLastCAMLayer(module):
     for name, submodule in reversed(list(module.named_modules())):
-      if (IsNormLayer(submodule)): #  and not IsIdentity(submodule)
+      if (IsCAMLayer(submodule)):
         return submodule
     return None
+
+  # Some models have a "norm" attribute at the top level.
+  if (hasattr(model, "norm")):
+    norm = model.norm
+    if (IsCAMLayer(norm)):
+      return norm
 
   if (hasattr(model, "stages") and IsContainer(model.stages)):
     # print("Model has stages.")
     lastStage = list(model.stages)[-1]
     if (hasattr(lastStage, "norm")):
       norm = lastStage.norm
-      if (IsIdentity(norm)):
+      if (IsCAMLayer(norm)):
         return norm
     if (hasattr(lastStage, "blocks") and IsContainer(lastStage.blocks)):
       # print("Last stage has blocks.")
@@ -153,18 +160,18 @@ def GetDefaultVitTargetLayer(model):
       # print("Last stage last block:", lastBlock)
       if (hasattr(lastBlock, "norm")):
         norm = lastBlock.norm
-        if (IsIdentity(norm)):
+        if (IsCAMLayer(norm)):
           return norm
       if (hasattr(lastBlock, "norm1")):
         norm1 = lastBlock.norm1
-        if (IsIdentity(norm1)):
+        if (IsCAMLayer(norm1)):
           return norm1
-      found = FindLastNorm(lastBlock)
+      found = FindLastCAMLayer(lastBlock)
       # print("Found in last block:", found)
       if (found is not None):
         return found
       # return lastBlock
-    found = FindLastNorm(lastStage)
+    found = FindLastCAMLayer(lastStage)
     if ((found is not None)):
       return found
     # return lastStage
@@ -173,13 +180,13 @@ def GetDefaultVitTargetLayer(model):
     lastBlock = list(model.blocks)[-1]
     if (hasattr(lastBlock, "norm")):
       norm = lastBlock.norm
-      if (IsIdentity(norm)):
+      if (IsCAMLayer(norm)):
         return norm
     if (hasattr(lastBlock, "norm1")):
       norm1 = lastBlock.norm1
-      if (IsIdentity(norm1)):
+      if (IsCAMLayer(norm1)):
         return norm1
-    found = FindLastNorm(lastBlock)
+    found = FindLastCAMLayer(lastBlock)
     if (found is not None):
       return found
     # return lastBlock
@@ -190,17 +197,17 @@ def GetDefaultVitTargetLayer(model):
       lastBlock = list(lastLayer.blocks)[-1]
       if (hasattr(lastBlock, "norm1")):
         norm1 = lastBlock.norm1
-        if (IsIdentity(norm1)):
+        if (IsCAMLayer(norm1)):
           return norm1
       if (hasattr(lastBlock, "norm")):
         norm = lastBlock.norm
-        if (IsIdentity(norm)):
+        if (IsCAMLayer(norm)):
           return norm
-      found = FindLastNorm(lastBlock)
+      found = FindLastCAMLayer(lastBlock)
       if (found is not None):
         return found
       # return lastBlock
-    found = FindLastNorm(lastLayer)
+    found = FindLastCAMLayer(lastLayer)
     if (found is not None):
       return found
     # return lastLayer
@@ -208,11 +215,11 @@ def GetDefaultVitTargetLayer(model):
   # Top-level norm.
   if (hasattr(model, "norm")):
     norm = model.norm
-    if (IsIdentity(norm)):
+    if (IsCAMLayer(norm)):
       return norm
 
   # Fallback: recursively search for the last normalization layer in the whole model, skipping Identity.
-  found = FindLastNorm(model)
+  found = FindLastCAMLayer(model)
   if (found is not None):
     return found
 
@@ -658,6 +665,7 @@ if __name__ == "__main__":
 
   modelName = "maxvit_xlarge_tf_512.in21k_ft_in1k"
   model = timm.create_model(modelName, pretrained=True)
+  print(model)
   print("Getting default target layer for CAM...")
   print("Model:", modelName)
   targetLayer = GetDefaultVitTargetLayer(model)
