@@ -85,6 +85,7 @@ Quickstart
    ImageSegmentationMetrics
    ImagesHelper
    ImagesNormalization
+   ImagesToEmbeddings
    Initializations
    MachineLearningHelper
    MetaheuristicsHelper
