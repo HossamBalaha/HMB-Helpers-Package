@@ -7,6 +7,7 @@ def CalculatePerformanceMetrics(
   confMatrix,  # Confusion matrix (2D list or numpy array).
   eps=1e-10,  # Small value to avoid division by zero.
   addWeightedAverage=False,  # Whether to include weighted averages in the output.
+  addPerClass=False,  # Whether to include per-class metrics in the output.
 ):
   r'''
   Calculate performance metrics from a confusion matrix.
@@ -15,6 +16,7 @@ def CalculatePerformanceMetrics(
     confMatrix (list or numpy.ndarray): Confusion matrix representing the classification results.
     eps (float): Small value to avoid division by zero. Default is 1e-10.
     addWeightedAverage (bool): Whether to include weighted averages in the output. Default is False.
+    addPerClass (bool): Whether to include per-class metrics in the output. Default is False.
 
   Returns:
     dict: A dictionary containing performance metrics including:
@@ -88,12 +90,31 @@ def CalculatePerformanceMetrics(
     "TN": TN,
   }
 
+  # If requested, calculate per-class precision, recall, F1, accuracy, and specificity.
+  if (addPerClass):
+    precision = TP / (TP + FP)
+    recall = TP / (TP + FN)
+    f1 = 2.0 * precision * recall / (precision + recall)
+    accuracy = (TP + TN) / (TP + TN + FP + FN)
+    specificity = TN / (TN + FP)
+    bac = 0.5 * (recall + specificity)
+
+    metrics.update({
+      "Per Class Precision"  : precision,
+      "Per Class Recall"     : recall,
+      "Per Class F1"         : f1,
+      "Per Class Accuracy"   : accuracy,
+      "Per Class Specificity": specificity,
+      "Per Class BAC"        : bac,
+    })
+
   # Calculate macro-averaged precision, recall, F1, accuracy, and specificity.
   precision = np.mean(TP / (TP + FP))
   recall = np.mean(TP / (TP + FN))
   f1 = 2.0 * precision * recall / (precision + recall)
   accuracy = np.mean(TP + TN) / np.sum(confMatrix)
   specificity = np.mean(TN / (TN + FP))
+  bac = 0.5 * (recall + specificity)
 
   # Add macro metrics to the dictionary.
   metrics.update({
@@ -102,11 +123,12 @@ def CalculatePerformanceMetrics(
     "Macro F1"         : f1,
     "Macro Accuracy"   : accuracy,
     "Macro Specificity": specificity,
+    "Macro BAC"        : bac,
   })
 
   # If requested, calculate the macro average of the metrics.
   if (addWeightedAverage):
-    avg = (precision + recall + f1 + accuracy + specificity) / 5.0
+    avg = (precision + recall + f1 + accuracy + specificity + bac) / 6.0
     metrics.update({
       "Macro Average": avg,
     })
@@ -117,6 +139,7 @@ def CalculatePerformanceMetrics(
   f1 = 2.0 * precision * recall / (precision + recall)
   accuracy = np.sum(TP + TN) / np.sum(TP + TN + FP + FN)
   specificity = np.sum(TN) / np.sum(TN + FP)
+  bac = 0.5 * (recall + specificity)
 
   # Add micro metrics to the dictionary.
   metrics.update({
@@ -125,11 +148,12 @@ def CalculatePerformanceMetrics(
     "Micro F1"         : f1,
     "Micro Accuracy"   : accuracy,
     "Micro Specificity": specificity,
+    "Micro BAC"        : bac,
   })
 
   # If requested, calculate the micro average of the metrics.
   if (addWeightedAverage):
-    avg = (precision + recall + f1 + accuracy + specificity) / 5.0
+    avg = (precision + recall + f1 + accuracy + specificity + bac) / 6.0
     metrics.update({
       "Micro Average": avg,
     })
@@ -146,6 +170,7 @@ def CalculatePerformanceMetrics(
   f1 = 2.0 * precision * recall / (precision + recall)
   accuracy = np.sum((TP + TN) * weights) / np.sum(confMatrix)
   specificity = np.sum(TN / (TN + FP) * weights)
+  bac = 0.5 * (recall + specificity)
 
   # Add weights and weighted metrics to the dictionary.
   metrics.update({
@@ -155,11 +180,12 @@ def CalculatePerformanceMetrics(
     "Weighted F1"         : f1,
     "Weighted Accuracy"   : accuracy,
     "Weighted Specificity": specificity,
+    "Weighted BAC"        : bac,
   })
 
   # If requested, calculate the weighted average of the metrics.
   if (addWeightedAverage):
-    avg = (precision + recall + f1 + accuracy + specificity) / 5.0
+    avg = (precision + recall + f1 + accuracy + specificity + bac) / 6.0
     metrics.update({
       "Weighted Average": avg,
     })
@@ -1338,6 +1364,660 @@ def HistoryPlotter(
     return plt.gcf()  # Return figure object.
 
 
+def PlotCumulativeGainLiftChart(
+  yTrue,
+  yScores,
+  posLabel=1,
+  title="Cumulative Gain & Lift Chart",
+  classNames=None,
+  figsize=(10, 5),
+  fontSize=14,
+  display=True,
+  save=False,
+  fileName="CumulativeGainLiftChart.pdf",
+  dpi=720,
+  returnFig=False,
+):
+  r'''
+  Plot Cumulative Gain and Lift charts to visualize model effectiveness for ranking tasks.
+
+  Parameters:
+    yTrue (array-like): True binary labels.
+    yScores (array-like): Target scores/probabilities for the positive class.
+    posLabel (int or str): The label of the positive class. Default is 1.
+    title (str): Plot title. Default is "Cumulative Gain & Lift Chart".
+    classNames (list or None): Optional class names for legend. Default is None.
+    figsize (tuple): Figure size. Default is (10, 5).
+    fontSize (int): Font size for labels and title. Default is 14.
+    display (bool): Whether to display the plot. Default is True.
+    save (bool): Whether to save the plot. Default is False.
+    fileName (str): File name to save the plot. Default is "CumulativeGainLiftChart.pdf".
+    dpi (int): DPI for saving the figure. Default is 720.
+    returnFig (bool): Whether to return the figure object. Default is False.
+
+  Returns:
+    matplotlib.figure.Figure or None: The matplotlib figure object(s) if returnFig is True, otherwise None.
+
+  Notes:
+    - The Cumulative Gain chart shows the proportion of positives captured as more samples are included, sorted by model score.
+    - The Lift chart shows the improvement over random selection at each proportion of the sample.
+    - Saving and displaying the plot are optional and controlled by parameters.
+
+  Example
+  -------
+  .. code-block:: python
+
+    import HMB.PerformanceMetrics as pm
+
+    yTrue = [0, 1, 1, 0, 1, 0, 1, 0, 1, 0]
+    yScores = [0.1, 0.8, 0.7, 0.2, 0.9, 0.3, 0.6, 0.4, 0.5, 0.05]
+    pm.PlotCumulativeGainLiftChart(
+      yTrue, yScores,
+      title="Model Ranking Effectiveness",
+      display=True,
+      save=False
+    )
+  '''
+
+  # Convert inputs to numpy arrays.
+  yTrue = np.array(yTrue)
+  yScores = np.array(yScores)
+
+  # Find the number of samples and sort by predicted scores.
+  numSamples = len(yTrue)
+  order = np.argsort(-yScores)
+  # Sort true labels according to the order of predicted scores.
+  yTrueSorted = yTrue[order]
+  # Calculate cumulative positives and proportions.
+  positives = (yTrueSorted == posLabel).astype(int)
+  cumPositives = np.cumsum(positives)
+  # Calculate total positives, proportion of samples, and proportion of positives captured.
+  totalPositives = np.sum(positives)
+  percSamples = np.arange(1, numSamples + 1) / numSamples
+  percPositives = cumPositives / totalPositives
+
+  # Cumulative Gain Chart.
+  fig, ax1 = plt.subplots(figsize=figsize)
+  ax1.plot(percSamples, percPositives, label="Model", color="blue", lw=2)
+  ax1.plot([0, 1], [0, 1], "--", color="gray", label="Random", lw=1.5)
+  ax1.set_xlabel("Proportion of Samples", fontsize=fontSize)
+  ax1.set_ylabel("Proportion of Positives Captured", fontsize=fontSize)
+  ax1.set_title(f"{title} - Cumulative Gain", fontsize=fontSize + 2)
+  ax1.legend(fontsize=fontSize * 0.9)
+  ax1.grid(axis="y", alpha=0.2)
+  plt.tight_layout()
+
+  # Save the Cumulative Gain chart if requested.
+  if (save):
+    fig.savefig(fileName.replace(".pdf", "_CumulativeGain.png"), dpi=dpi, bbox_inches="tight")
+    fig.savefig(fileName.replace(".pdf", "_CumulativeGain.pdf"), dpi=dpi, bbox_inches="tight")
+
+  # Display the Cumulative Gain chart if requested.
+  if (display):
+    plt.show()
+
+  plt.close(fig)
+
+  # Lift Chart.
+  # Calculate lift, avoiding division by zero.
+  lift = percPositives / percSamples
+  lift[0] = lift[1]  # avoid inf at 0
+
+  # Create Lift chart.
+  fig2, ax2 = plt.subplots(figsize=figsize)
+  ax2.plot(percSamples, lift, label="Model", color="green", lw=2)
+  ax2.axhline(1, color="gray", linestyle="--", label="Random")
+  ax2.set_xlabel("Proportion of Samples", fontsize=fontSize)
+  ax2.set_ylabel("Lift", fontsize=fontSize)
+  ax2.set_title(f"{title} - Lift Chart", fontsize=fontSize + 2)
+  ax2.legend(fontsize=fontSize * 0.9)
+  ax2.grid(True, alpha=0.3)
+  plt.tight_layout()
+
+  # Save the Lift chart if requested.
+  if (save):
+    fig2.savefig(fileName.replace(".pdf", "_Lift.png"), dpi=dpi, bbox_inches="tight")
+    fig2.savefig(fileName.replace(".pdf", "_Lift.pdf"), dpi=dpi, bbox_inches="tight")
+
+  # Display the Lift chart if requested.
+  if (display):
+    plt.show()
+
+  plt.close(fig2)
+
+  if (returnFig):
+    return fig, fig2
+
+  return None
+
+
+def PlotErrorAnalysis(
+  yTrue,
+  yPred,
+  X=None,
+  classNames=None,
+  maxExamples=5,
+  fontSize=12,
+  figsize=(12, 8),
+  display=True,
+  save=False,
+  fileName="ErrorAnalysis.pdf",
+  dpi=720,
+  returnFig=False,
+):
+  r'''
+  Plot error analysis showing examples of false positives, false negatives, true positives, and true negatives.
+
+  Parameters:
+    yTrue (array-like): True labels.
+    yPred (array-like): Predicted labels.
+    X (array-like, DataFrame, or None): Optional input samples to display. Default is None.
+    classNames (list or None): Optional class names for display. Default is None.
+    maxExamples (int): Max examples per error type to show. Default is 5.
+    fontSize (int): Font size for text. Default is 12.
+    figsize (tuple): Figure size. Default is (12, 8).
+    display (bool): Whether to display the plot. Default is True.
+    save (bool): Whether to save the plot. Default is False.
+    fileName (str): File name to save the plot. Default is "ErrorAnalysis.pdf".
+    dpi (int): DPI for saving the figure. Default is 720.
+    returnFig (bool): Whether to return the figure object. Default is False.
+
+  Returns:
+    matplotlib.figure.Figure or None: The matplotlib figure object if returnFig is True, otherwise None.
+
+  Notes:
+    - Shows up to maxExamples for each of FP, FN, TP, TN, with sample indices and optionally sample data.
+    - Useful for qualitative error analysis and debugging.
+    - Saving and displaying the plot are optional and controlled by parameters.
+
+  Example
+  -------
+  .. code-block:: python
+
+    import HMB.PerformanceMetrics as pm
+
+    yTrue = [0, 1, 1, 0, 1, 0, 1]
+    yPred = [0, 1, 0, 0, 1, 1, 1]
+    pm.PlotErrorAnalysis(
+      yTrue, yPred,
+      maxExamples=3,
+      display=True,
+      save=False
+    )
+  '''
+
+  yTrue = np.array(yTrue)
+  yPred = np.array(yPred)
+  if (classNames is None and len(np.unique(yTrue)) == 2):
+    classNames = ["Negative", "Positive"]
+  elif (classNames is None):
+    classNames = [str(c) for c in np.unique(yTrue)]
+
+  # Binary only for now.
+  FPIdx = np.where((yTrue == 0) & (yPred == 1))[0]
+  FNIdx = np.where((yTrue == 1) & (yPred == 0))[0]
+  TPIdx = np.where((yTrue == 1) & (yPred == 1))[0]
+  TNIdx = np.where((yTrue == 0) & (yPred == 0))[0]
+
+  types = [
+    ("False Positives", FPIdx, "#FFCCCC"),
+    ("False Negatives", FNIdx, "#FFE5B4"),
+    ("True Positives", TPIdx, "#CCFFCC"),
+    ("True Negatives", TNIdx, "#CCE5FF"),
+  ]
+  errorCounts = [len(FPIdx), len(FNIdx), len(TPIdx), len(TNIdx)]
+  errorLabels = ["FP", "FN", "TP", "TN"]
+  errorColors = ["#FF6666", "#FFB266", "#66FF66", "#66B2FF"]
+
+  fig = plt.figure(figsize=figsize)
+  gs = fig.add_gridspec(3, 2, height_ratios=[0.7, 1, 1])
+
+  # Top: summary bar chart.
+  ax_bar = fig.add_subplot(gs[0, :])
+  ax_bar.bar(errorLabels, errorCounts, color=errorColors, edgecolor="black")
+  for i, count in enumerate(errorCounts):
+    ax_bar.text(
+      i, count + max(errorCounts) * 0.02,
+      str(count),
+      ha="center",
+      va="bottom",
+      fontsize=fontSize + 2,
+      fontweight="bold"
+    )
+  ax_bar.set_ylabel("Count", fontsize=fontSize)
+  ax_bar.set_title("Error Type Counts", fontsize=fontSize + 4)
+  ax_bar.spines['top'].set_visible(False)
+  ax_bar.spines['right'].set_visible(False)
+  ax_bar.grid(axis="y", alpha=0.2)
+
+  # 2x2 grid for error examples
+  axes = [
+    fig.add_subplot(gs[1, 0]),
+    fig.add_subplot(gs[1, 1]),
+    fig.add_subplot(gs[2, 0]),
+    fig.add_subplot(gs[2, 1]),
+  ]
+
+  for i, (label, idxs, color) in enumerate(types):
+    ax = axes[i]
+    n = min(maxExamples, len(idxs))
+    ax.set_title(f"{label} (n={len(idxs)})", fontsize=fontSize + 1, backgroundcolor=color, pad=8)
+    ax.axis("off")
+
+    if (n == 0):
+      ax.text(0.5, 0.5, "None", ha="center", va="center", fontsize=fontSize, color="gray")
+      continue
+
+    # Table header.
+    header = "Idx | True | Pred" + (" | Sample" if X is not None else "")
+    ax.text(0, 1, header, fontsize=fontSize, fontweight="bold", va="top", family="monospace")
+
+    for j in range(n):
+      idx = idxs[j]
+      tval = yTrue[idx]
+      pval = yPred[idx]
+      row = f"{idx:<3} | {tval:<4} | {pval:<4}"
+
+      if (X is not None):
+        sample = X.iloc[idx] if (hasattr(X, "iloc")) else X[idx]
+        sampleStr = str(sample)
+
+        # Limit sample string length for readability.
+        if (len(sample_str) > 60):
+          sampleStr = sampleStr[:57] + "..."
+        row += f" | {sampleStr}"
+      ax.text(
+        0, 1 - (j + 1) * 0.13, row,
+        fontsize=fontSize * 0.95,
+        va="top",
+        family="monospace",
+        bbox=dict(facecolor=color, edgecolor="none", alpha=0.25)
+      )
+
+  plt.suptitle("Error Analysis: FP, FN, TP, TN", fontsize=fontSize + 6, fontweight="bold")
+  plt.tight_layout(rect=[0, 0, 1, 0.96])
+
+  if (save):
+    plt.savefig(fileName, dpi=dpi, bbox_inches="tight")
+
+  if (display):
+    plt.show()
+
+  plt.close()
+
+  if (returnFig):
+    return fig
+
+  return None
+
+
+def PlotClasswisePRFBar(
+  cm,
+  classNames=None,
+  fontSize=14,
+  figsize=(8, 5),
+  display=True,
+  save=False,
+  fileName="ClasswisePRFBar.pdf",
+  dpi=720,
+  returnFig=False,
+):
+  '''
+  Plot classwise Precision, Recall, and F1-score as a grouped bar chart.
+  
+  Parameters:
+    cm (array-like): Confusion matrix (2D array).
+    classNames (list or None): List of class names. If None, uses class indices.
+    fontSize (int): Font size for labels and title. Default is 14.
+    figsize (tuple): Figure size. Default is (8, 5).
+    display (bool): Whether to display the plot. Default is True.
+    save (bool): Whether to save the plot. Default is False.
+    fileName (str): File name to save the plot. Default is "ClasswisePRFBar.pdf".
+    dpi (int): DPI for saving the figure. Default is 720.
+    returnFig (bool): Whether to return the figure object. Default is False.
+    
+  Returns:
+    matplotlib.figure.Figure or None: The matplotlib figure object if returnFig is True, otherwise None.
+    
+  Notes:
+    - Computes precision, recall, and F1-score from the confusion matrix.
+    - Displays a grouped bar chart for each class.
+    - Saving and displaying the plot are optional and controlled by parameters.
+    
+  Example
+  -------
+  .. code-block:: python
+  
+    import HMB.PerformanceMetrics as pm
+    
+    cm = [[50, 2, 1],
+          [10, 45, 5],
+          [0, 3, 47]]
+    classNames = ["Class A", "Class B", "Class C"]
+    pm.PlotClasswisePRFBar(
+      cm, classNames=classNames,
+      fontSize=12,
+      figsize=(9, 6),
+      display=True,
+      save=True,
+      fileName="ClasswisePRFBar.pdf",
+      dpi=300,
+      returnFig=False
+    )
+  '''
+
+  cm = np.array(cm)
+  numClasses = cm.shape[0]
+
+  if (classNames is None):
+    classNames = [str(i) for i in range(numClasses)]
+
+  pm = CalculatePerformanceMetrics(
+    cm,  # Confusion matrix (2D list or numpy array).
+    eps=1e-10,  # Small value to avoid division by zero.
+    addWeightedAverage=True,  # Whether to include weighted averages in the output.
+    addPerClass=True,  # Whether to include per-class metrics in the output.
+  )
+  precision = pm["Per Class Precision"]
+  recall = pm["Per Class Recall"]
+  f1 = pm["Per Class F1"]
+  specificity = pm["Per Class Specificity"]
+  accuracy = pm["Per Class Accuracy"]
+  bac = pm["Per Class BAC"]
+
+  metrics = np.vstack([precision, recall, f1, specificity, accuracy, bac])
+  labels = ["Precision", "Recall", "F1-score", "Specificity", "Accuracy", "BAC"]
+
+  x = np.arange(numClasses)
+  width = 0.15
+
+  fig, ax = plt.subplots(figsize=figsize)
+
+  for i in range(metrics.shape[0]):
+    ax.bar(
+      x + i * width,
+      metrics[i],
+      width,
+      label=labels[i],
+      edgecolor="black"  # Add border around bars
+    )
+
+  ax.set_xticks(x + width * 2.5)
+  ax.set_xticklabels(classNames, fontsize=fontSize)
+  ax.set_ylim(0, 1.05)
+  ax.set_ylabel("Score", fontsize=fontSize)
+  ax.set_title(
+    "Classwise Performance Metrics",
+    fontsize=fontSize + 2
+  )
+  ax.legend(fontsize=fontSize * 0.85)
+  plt.tight_layout()
+
+  if (save):
+    fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+
+  if (display):
+    plt.show()
+
+  plt.close(fig)
+
+  if (returnFig):
+    return fig
+
+  return None
+
+
+def PlotErrorMatrix(
+  cm,
+  classNames=None,
+  fontSize=14,
+  figsize=(7, 6),
+  display=True,
+  save=False,
+  fileName="ErrorMatrix.pdf",
+  dpi=720,
+  returnFig=False,
+):
+  """
+  Plot confusion matrix with most common errors highlighted.
+  """
+  cm = np.array(cm)
+  numClasses = cm.shape[0]
+  if classNames is None:
+    classNames = [str(i) for i in range(numClasses)]
+
+  fig, ax = plt.subplots(figsize=figsize)
+  im = ax.imshow(cm, cmap="Blues")
+  ax.set_xticks(np.arange(numClasses))
+  ax.set_yticks(np.arange(numClasses))
+  ax.set_xticklabels(classNames, fontsize=fontSize)
+  ax.set_yticklabels(classNames, fontsize=fontSize)
+  plt.xlabel("Predicted", fontsize=fontSize)
+  plt.ylabel("True", fontsize=fontSize)
+  plt.title("Error Matrix (Confusion Matrix)", fontsize=fontSize + 2)
+
+  # Highlight most common errors (off-diagonal max per row)
+  for i in range(numClasses):
+    for j in range(numClasses):
+      color = "red" if (i != j and cm[i, j] == np.max(np.delete(cm[i], i))) else "black"
+      ax.text(j, i, str(cm[i, j]), ha="center", va="center", color=color, fontsize=fontSize * 0.9)
+  plt.colorbar(im, ax=ax)
+  plt.tight_layout()
+  if save:
+    fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+  if display:
+    plt.show()
+  plt.close(fig)
+  if returnFig:
+    return fig
+  return None
+
+
+def PlotMisclassificationExamples(
+  yTrue,
+  yPred,
+  X=None,
+  classNames=None,
+  maxExamples=5,
+  fontSize=12,
+  figsize=(10, 5),
+  display=True,
+  save=False,
+  fileName="MisclassificationExamples.pdf",
+  dpi=720,
+  returnFig=False,
+):
+  """
+  Show most frequent misclassifications as a table or text.
+  """
+  from collections import Counter
+
+  yTrue = np.array(yTrue)
+  yPred = np.array(yPred)
+  mask = yTrue != yPred
+  errors = list(zip(yTrue[mask], yPred[mask]))
+  counter = Counter(errors)
+  most_common = counter.most_common(maxExamples)
+
+  fig, ax = plt.subplots(figsize=figsize)
+  ax.axis("off")
+  lines = []
+  for idx, ((t, p), count) in enumerate(most_common):
+    line = f"{idx + 1}. True: {t}  Pred: {p}  Count: {count}"
+    if X is not None:
+      sample_idxs = np.where((yTrue == t) & (yPred == p))[0][:1]
+      for si in sample_idxs:
+        line += f" | Sample idx: {si} | Sample: {X[si] if not hasattr(X, 'iloc') else X.iloc[si]}"
+    lines.append(line)
+  text = "\n".join(lines) if lines else "No misclassifications."
+  ax.text(0, 1, text, fontsize=fontSize, va="top")
+  plt.title("Most Frequent Misclassifications", fontsize=fontSize + 2)
+  plt.tight_layout()
+  if save:
+    fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+  if display:
+    plt.show()
+  plt.close(fig)
+  if returnFig:
+    return fig
+  return None
+
+
+def PlotPredictionConfidenceHistogram(
+  yPredProba,
+  yPred=None,
+  classNames=None,
+  fontSize=14,
+  figsize=(8, 5),
+  bins=20,
+  display=True,
+  save=False,
+  fileName="PredictionConfidenceHistogram.pdf",
+  dpi=720,
+  returnFig=False,
+):
+  """
+  Plot histogram of predicted probabilities for predicted class.
+  """
+
+  yPredProba = np.array(yPredProba)
+  if yPred is None:
+    yPred = np.argmax(yPredProba, axis=1)
+  confidences = yPredProba[np.arange(len(yPred)), yPred]
+  fig, ax = plt.subplots(figsize=figsize)
+  ax.hist(confidences, bins=bins, color="skyblue", edgecolor="black", alpha=0.8)
+  ax.set_xlabel("Predicted Probability (Confidence)", fontsize=fontSize)
+  ax.set_ylabel("Count", fontsize=fontSize)
+  ax.set_title("Prediction Confidence Histogram", fontsize=fontSize + 2)
+  plt.tight_layout()
+  if save:
+    fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+  if display:
+    plt.show()
+  plt.close(fig)
+  if returnFig:
+    return fig
+  return None
+
+
+def PlotClassificationResiduals(
+  yTrue,
+  yPred,
+  fontSize=14,
+  figsize=(8, 5),
+  display=True,
+  save=False,
+  fileName="ClassificationResiduals.pdf",
+  dpi=720,
+  returnFig=False,
+):
+  '''
+  Plot residuals for classification tasks (true - predicted).
+
+  Parameters:
+    yTrue (array-like): True labels.
+    yPred (array-like): Predicted labels.
+    fontSize (int): Font size for labels and title. Default is 14.
+    figsize (tuple): Figure size. Default is (8, 5).
+    display (bool): Whether to display the plot. Default is True.
+    save (bool): Whether to save the plot. Default is False.
+    fileName (str): File name to save the plot. Default is "ClassificationResiduals.pdf".
+    dpi (int): DPI for saving the figure. Default is 720.
+    returnFig (bool): Whether to return the figure object. Default is False.
+
+  Returns:
+    matplotlib.figure.Figure or None: The matplotlib figure object if returnFig is True, otherwise
+
+  Example
+  -------
+  .. code-block:: python
+
+    import HMB.PerformanceMetrics as pm
+
+    yTrue = [0, 1, 1, 0, 1, 0, 1]
+    yPred = [0, 1, 0, 0, 1, 1, 1]
+    pm.PlotClassificationResiduals(
+      yTrue, yPred,
+      fontSize=12,
+      figsize=(9, 6),
+      display=True,
+      save=True,
+      fileName="ClassificationResiduals.pdf",
+      dpi=300,
+      returnFig=False
+    )
+  '''
+
+  import seaborn as sns
+
+  yTrue = np.array(yTrue)
+  yPred = np.array(yPred)
+  residuals = yTrue - yPred
+
+  fig, (ax1, ax2) = plt.subplots(
+    2, 1,
+    figsize=figsize,
+    gridspec_kw={'height_ratios': [2, 1]}
+  )
+
+  # Histogram of residuals
+  bins = np.arange(residuals.min() - 0.5, residuals.max() + 1.5, 1)
+  ax1.hist(
+    residuals,
+    bins=bins,
+    color="purple",
+    edgecolor="black",
+    alpha=0.7,
+    rwidth=0.85
+  )
+  ax1.set_xlabel("Residual (True - Predicted)", fontsize=fontSize)
+  ax1.set_ylabel("Count", fontsize=fontSize)
+  ax1.set_title("Classification Residuals", fontsize=fontSize + 2)
+  ax1.grid(axis="y", alpha=0.3)
+
+  # Swarm plot of residuals (shows distribution and outliers).
+  sns.swarmplot(
+    x=residuals,
+    ax=ax2,
+    color="purple",
+    size=6
+  )
+  ax2.set_xlabel("Residual (True - Predicted)", fontsize=fontSize)
+  ax2.set_yticks([])
+  ax2.set_ylabel("")
+  ax2.set_title("Residuals Distribution (Swarm Plot)", fontsize=fontSize)
+
+  # Summary statistics.
+  mean_res = np.mean(residuals)
+  std_res = np.std(residuals)
+  min_res = np.min(residuals)
+  max_res = np.max(residuals)
+  textstr = f"Mean: {mean_res:.2f} | Std: {std_res:.2f} | Min: {min_res} | Max: {max_res}"
+  ax1.text(
+    0.98, 0.98, textstr,
+    transform=ax1.transAxes,
+    fontsize=fontSize * 0.85,
+    verticalalignment='top',
+    horizontalalignment='right',
+    bbox=dict(boxstyle="round,pad=0.3", facecolor="#f7f7f7", edgecolor="gray", alpha=0.7)
+  )
+
+  plt.tight_layout()
+
+  if (save):
+    fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+
+  if (display):
+    plt.show()
+
+  plt.close(fig)
+
+  if (returnFig):
+    return fig
+
+  return None
+
+
 if __name__ == "__main__":
   # Example confusion matrix for a 3-class classification problem.
   confMatrix = [
@@ -1358,15 +2038,105 @@ if __name__ == "__main__":
   # Plot and display the confusion matrix with annotations.
   # To save the figure, set save=True and provide a fileName.
   # To get the figure object, set returnFig=True.
-  PlotConfusionMatrix(
-    confMatrix,  # Confusion matrix to plot.
-    classes=classLabels,  # Class labels for the axes.
-    normalize=False,  # Set to True to normalize the matrix.
-    title="Confusion Matrix",  # Title of the plot.
-    annotate=True,  # Annotate cells with values.
-    fontSize=12,  # Font size for labels and annotations.
-    figSize=(6, 6),  # Size of the figure.
-    colorbar=True,  # Show colorbar.
-    display=True,  # Display the figure.
-    save=False,  # Set to True to save the figure.
-  )
+  # PlotConfusionMatrix(
+  #   confMatrix,  # Confusion matrix to plot.
+  #   classes=classLabels,  # Class labels for the axes.
+  #   normalize=False,  # Set to True to normalize the matrix.
+  #   title="Confusion Matrix",  # Title of the plot.
+  #   annotate=True,  # Annotate cells with values.
+  #   fontSize=12,  # Font size for labels and annotations.
+  #   figSize=(6, 6),  # Size of the figure.
+  #   colorbar=True,  # Show colorbar.
+  #   display=True,  # Display the figure.
+  #   save=False,  # Set to True to save the figure.
+  # )
+
+  # Test the PlotCumulativeGainLiftChart.
+  # yTrue = [0, 1, 1, 0, 1, 0, 1, 0, 1, 0]
+  # yScores = [0.1, 0.8, 0.7, 0.2, 0.9, 0.3, 0.6, 0.4, 0.5, 0.05]
+  # PlotCumulativeGainLiftChart(
+  #   yTrue, yScores,
+  #   title="Cumulative Gain & Lift Chart Example",
+  #   display=True,
+  #   save=False,
+  # )
+
+  # # Test the PlotErrorAnalysis.
+  # yTrue = [0, 1, 1, 0, 1, 0, 1, 0, 1, 0]
+  # yPred = [0, 1, 0, 0, 1, 1, 1, 0, 0, 0]
+  # PlotErrorAnalysis(
+  #   yTrue, yPred,
+  #   maxExamples=5,
+  #   display=True,
+  #   save=False
+  # )
+
+  # # Test the PlotClasswisePRFBar.
+  # cm = [
+  #   [50, 2, 1],
+  #   [10, 45, 5],
+  #   [0, 3, 47]
+  # ]
+  # classNames = ["Class A", "Class B", "Class C"]
+  # PlotClasswisePRFBar(
+  #   cm, classNames=classNames,
+  #   fontSize=12,
+  #   figsize=(9, 6),
+  #   display=True,
+  #   save=False,
+  #   fileName="ClasswisePRFBar.pdf",
+  #   dpi=300,
+  #   returnFig=False
+  # )
+
+  # # Test the PlotErrorMatrix.
+  # PlotErrorMatrix(
+  #   cm, classNames=classNames,
+  #   fontSize=12,
+  #   figsize=(7, 6),
+  #   display=True,
+  #   save=False,
+  #   fileName="ErrorMatrix.pdf",
+  #   dpi=300,
+  #   returnFig=False
+  # )
+
+  # # Test the PlotMisclassificationExamples.
+  # yTrue = [0, 1, 1, 0, 1, 0, 1]
+  # yPred = [0, 1, 0, 0, 1, 1, 1]
+  # PlotMisclassificationExamples(
+  #   yTrue, yPred,
+  #   maxExamples=3,
+  #   display=True,
+  #   save=False
+  # )
+
+  # # Test the PlotPredictionConfidenceHistogram.
+  # yPredProba = [
+  #   [0.9, 0.1],
+  #   [0.2, 0.8],
+  #   [0.6, 0.4],
+  #   [0.3, 0.7],
+  #   [0.95, 0.05],
+  #   [0.4, 0.6],
+  #   [0.1, 0.9]
+  # ]
+  # PlotPredictionConfidenceHistogram(
+  #   yPredProba,
+  #   fontSize=12,
+  #   figsize=(8, 5),
+  #   bins=10,
+  #   display=True,
+  #   save=False
+  # )
+
+  # # Test the PlotClassificationResiduals.
+  # yTrue = [0, 1, 1, 0, 1, 0, 1]
+  # yPred = [0, 1, 0, 0, 1, 1, 1]
+  # PlotClassificationResiduals(
+  #   yTrue, yPred,
+  #   fontSize=12,
+  #   figsize=(8, 5),
+  #   display=True,
+  #   save=False
+  # )

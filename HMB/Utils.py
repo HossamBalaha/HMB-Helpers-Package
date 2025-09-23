@@ -28,8 +28,9 @@ def ReadProjectConfig(configFilePath):
   .. code-block:: python
 
     import HMB.Utils as utils
-    config = utils.ReadProjectConfig('config.yaml')
-    print(config['project_name'])
+
+    config = utils.ReadProjectConfig("config.yaml")
+    print(config["project_name"])
   '''
 
   # Check if the configuration file exists.
@@ -244,3 +245,32 @@ def SaveYaml(yamlPath, yamlData):
   # Open the YAML file in write mode and dump the data.
   with open(yamlPath, "w") as yamlFile:
     yaml.dump(yamlData, yamlFile)
+
+
+def Hex2RGB(hexColor, isRGBA=False):
+  r'''
+  Convert a hexadecimal color string to an RGB or RGBA tuple.
+
+  Parameters:
+    hexColor (str): Hexadecimal color string (e.g., "#RRGGBB" or "RRGGBB").
+    isRGBA (bool): If True, return an RGBA tuple; otherwise, return an RGB tuple. Default is False.
+
+  Returns:
+    tuple: A tuple representing the RGB or RGBA color.
+
+  .. code-block:: python
+
+    import HMB.Utils as utils
+
+    rgbColor = utils.Hex2RGB("#FF5733")  # Returns (255, 87, 51).
+    rgbaColor = utils.Hex2RGB("#FF5733", isRGBA=True)  # Returns (255, 87, 51, 255).
+    print(f"RGB Color for #FF5733: {rgbColor}")
+    print(f"RGBA Color for #FF5733: {rgbaColor}")
+  '''
+
+  hexColor = hexColor.lstrip("#")
+  hlen = len(hexColor)
+  color = tuple(int(hexColor[i:i + hlen // 3], 16) for i in range(0, hlen, hlen // 3))
+  if (not isRGBA):
+    color = color[:3]
+  return color
