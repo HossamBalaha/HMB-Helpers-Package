@@ -178,7 +178,7 @@ class CustomDataset(torch.utils.data.Dataset):
     transform=None,
     allowedExtensions=(".png", ".jpg", ".jpeg")
   ):
-    '''
+    r'''
     Initialize the custom dataset for image classification tasks.
 
     Parameters:
@@ -209,7 +209,7 @@ class CustomDataset(torch.utils.data.Dataset):
           self.samples.append((path, idx))
 
   def __len__(self):
-    '''
+    r'''
     Get the total number of samples in the dataset.
 
     Returns:
@@ -219,7 +219,7 @@ class CustomDataset(torch.utils.data.Dataset):
     return len(self.samples)
 
   def __getitem__(self, idx):
-    '''
+    r'''
     Retrieve an image and its label by index.
 
     Parameters:

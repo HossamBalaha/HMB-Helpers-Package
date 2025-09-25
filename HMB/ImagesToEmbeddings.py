@@ -3,6 +3,77 @@ from PIL import Image
 from timm.data import resolve_data_config
 from timm.data.transforms_factory import create_transform
 from timm.layers import SwiGLUPacked
+from transformers import AutoImageProcessor, AutoModel
+
+
+class TransformersEmbeddingModel(object):
+  r'''
+  A class to extract embeddings from images using pre-trained models from the Hugging Face Transformers library.
+  '''
+
+  def __init__(self, modelName, device):
+    r'''
+    Initialize the TransformersEmbeddingModel with a specified model name and device.
+
+    Parameters:
+      modelName (str): Name of the pre-trained model to load from Hugging Face.
+      device (str or torch.device): Device to run the model on (e.g., "cuda", "cpu").
+    '''
+
+    self.modelName = modelName
+    self.device = device
+    self.model = None
+    self.processor = None
+
+  def LoadModel(self):
+    r'''
+    Load the pre-trained model and processor from the specified model name.
+
+    Returns:
+      model (nn.Module): The loaded pre-trained model.
+      processor (AutoImageProcessor): The loaded image processor.
+    '''
+
+    # Load the processor and model from Hugging Face.
+    self.processor = AutoImageProcessor.from_pretrained(self.modelName)
+    self.model = AutoModel.from_pretrained(self.modelName)
+    # Set the model to evaluation mode and move to the specified device.
+    self.model.eval()
+    self.model.to(self.device, dtype=torch.float32)
+    # Return the model and processor.
+    return self.model, self.processor
+
+  def GetEmbedding(self, imagePath):
+    r'''
+    Extract embedding from an image using the loaded model and processor.
+
+    Parameters:
+      imagePath (str): Path to the input image.
+
+    Returns:
+      embedding (numpy.ndarray): The extracted embedding as a numpy array.
+    '''
+
+    # Ensure the image path exists.
+    assert os.path.exists(imagePath), f"Image path {imagePath} does not exist."
+    # Load model and processor if not already loaded.
+    if (not hasattr(self, "model")) or (not hasattr(self, "processor")):
+      LoadModel()
+    # Open and process the image.
+    image = Image.open(imagePath).convert("RGB")
+    # Prepare inputs for the model.
+    inputs = self.processor(images=image, return_tensors="pt").to(self.device, dtype=torch.float32)
+    # Extract features with inference mode and autocast.
+    with torch.inference_mode(), torch.autocast(device_type=self.device, dtype=torch.float32):
+      outputs = self.model(**inputs)
+    # Get the embedding from the [CLS] token.
+    embedding = outputs.last_hidden_state[:, 0, :]
+    # Convert embedding to float16 and numpy array.
+    embedding = embedding.to(torch.float16)
+    # Move embedding to CPU and convert to numpy.
+    embedding = embedding.cpu().numpy()
+    # Return the squeezed embedding.
+    return embedding.squeeze()
 
 
 def ExtractEmbeddingsTimm(
