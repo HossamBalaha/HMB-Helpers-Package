@@ -35,7 +35,7 @@ class TransformersEmbeddingModel(object):
     '''
 
     # Load the processor and model from Hugging Face.
-    self.processor = AutoImageProcessor.from_pretrained(self.modelName)
+    self.processor = AutoImageProcessor.from_pretrained(self.modelName, use_fast=True)
     self.model = AutoModel.from_pretrained(self.modelName)
     # Set the model to evaluation mode and move to the specified device.
     self.model.eval()
