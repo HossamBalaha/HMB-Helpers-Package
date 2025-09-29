@@ -1,5 +1,6 @@
 # Import the required libraries.
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 
 
@@ -1875,7 +1876,7 @@ def PlotMisclassificationExamples(
     if X is not None:
       sample_idxs = np.where((yTrue == t) & (yPred == p))[0][:1]
       for si in sample_idxs:
-        line += f" | Sample idx: {si} | Sample: {X[si] if not hasattr(X, "iloc") else X.iloc[si]}"
+        line += f" | Sample idx: {si} | Sample: {X[si] if not hasattr(X, 'iloc') else X.iloc[si]}"
     lines.append(line)
   text = "\n".join(lines) if lines else "No misclassifications."
   ax.text(0, 1, text, fontsize=fontSize, va="top")
