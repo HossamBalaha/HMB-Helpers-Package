@@ -209,6 +209,7 @@ def PlotConfusionMatrix(
   figSize=(8, 8),  # Figure size in inches.
   colorbar=True,  # Whether to show colorbar.
   returnFig=False,  # Whether to return the figure object.
+  dpi=720,  # DPI for saving the figure.
 ):
   r'''
   Plot a confusion matrix with options for normalization, annotation, saving, and display.
@@ -228,6 +229,7 @@ def PlotConfusionMatrix(
     figSize (tuple): Figure size in inches. Default is (8, 8).
     colorbar (bool): Whether to show colorbar. Default is True.
     returnFig (bool): Whether to return the matplotlib figure object. Default is False.
+    dpi (int): DPI for saving the figure. Default is 720.
 
   Returns:
     matplotlib.figure.Figure or None: The matplotlib figure object if returnFig is True, otherwise None.
@@ -330,7 +332,7 @@ def PlotConfusionMatrix(
 
   # Save the plot if requested.
   if (save):  # Save the plot.
-    fig.savefig(fileName, dpi=720, bbox_inches="tight")
+    fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
 
   # Display the plot if requested.
   if (display):  # Display the plot.
@@ -698,6 +700,7 @@ def PlotCounterfactualOutcomes(
   lowVal=None,
   highVal=None,
   classNames=None,
+  save=False,
   outputFile="CounterfactualOutcomePlot.pdf",
   showPlot=True,
   returnPreds=False,
@@ -713,6 +716,7 @@ def PlotCounterfactualOutcomes(
     lowVal (numeric or None): Value representing "no/low" treatment. If None, uses min value in column.
     highVal (numeric or None): Value representing "high" treatment. If None, uses max value in column.
     classNames (list or None): List of class names for x-axis ticks. If None, inferred from classifier or predictions.
+    save (bool): Whether to save the plot to outputFile. Default is False.
     outputFile (str): File name to save the plot. Default is "CounterfactualOutcomePlot.pdf".
     showPlot (bool): Whether to display the plot. Default is True.
     returnPreds (bool): If True, returns (yPredLow, yPredHigh). Default is False.
@@ -839,7 +843,9 @@ def PlotCounterfactualOutcomes(
   plt.legend(fontsize=fontSize)  # Show legend with font size.
   plt.grid(axis="y", alpha=0.3)  # Add grid to y-axis.
   plt.tight_layout()  # Adjust layout.
-  plt.savefig(outputFile)  # Save plot to file.
+
+  if (save):
+    plt.savefig(outputFile)  # Save plot to file.
 
   if (showPlot):
     plt.show()  # Show plot if requested.
@@ -857,6 +863,7 @@ def PlotInteractionEffect(
   feature1,
   feature2,
   gridSize=30,
+  save=False,
   outputFile="InteractionEffectPlot.pdf",
   showPlot=True,
   fontSize=12,
@@ -872,6 +879,7 @@ def PlotInteractionEffect(
     feature1 (str): Name of the first feature (x-axis).
     feature2 (str): Name of the second feature (y-axis).
     gridSize (int): Number of grid points for each feature. Default is 30.
+    save (bool): Whether to save the plot to outputFile. Default is False.
     outputFile (str): File name to save the plot. Default is "InteractionEffectPlot.pdf".
     showPlot (bool): Whether to display the plot. Default is True.
     fontSize (int): Font size for labels and title. Default is 12.
@@ -1042,10 +1050,15 @@ def PlotInteractionEffect(
       margin=dict(l=0, r=0, b=0, t=40),
     )
 
-    # Save the plot as an interactive HTML file.
-    pio.write_html(fig, file=outputFile, auto_open=showPlot)
-    # Print a message indicating where the plot was saved.
-    print(f"[Interaction Effect Plot] Saved to {outputFile}")
+    if (save):
+      # Save the plot as an interactive HTML file.
+      pio.write_html(fig, file=outputFile, auto_open=showPlot)
+      # Print a message indicating where the plot was saved.
+      print(f"[Interaction Effect Plot] Saved to {outputFile}")
+
+    if (showPlot):
+      fig.show()  # Show the plot if requested.
+
     # Return the figure object.
     return fig
 
@@ -1057,6 +1070,7 @@ def PlotCalibrationCurve(
   classNames=None,
   nBins=10,
   strategy="uniform",
+  save=False,
   outputFile="CalibrationCurve.pdf",
   showPlot=True,
   fontSize=12,
@@ -1073,7 +1087,8 @@ def PlotCalibrationCurve(
     y (array-like): True labels.
     classNames (list or None): List of class names. If None, inferred from classifier.
     nBins (int): Number of bins to discretize the [0, 1] interval. Default is 10.
-    strategy (str): Binning strategy ('uniform' or 'quantile'). Default is 'uniform'.
+    strategy (str): Binning strategy ("uniform" or "quantile"). Default is "uniform".
+    save (bool): Whether to save the plot to outputFile. Default is False.
     outputFile (str): File name to save the plot. Default is "CalibrationCurve.pdf".
     showPlot (bool): Whether to display the plot. Default is True.
     fontSize (int): Font size for labels and title. Default is 12.
@@ -1111,7 +1126,7 @@ def PlotCalibrationCurve(
       fontSize=14,
       plotHistogram=True,
       returnFig=False,
-      cmap='tab20'
+      cmap="tab20"
     )
   '''
   import random
@@ -1148,7 +1163,7 @@ def PlotCalibrationCurve(
     fig, (ax1, ax2) = plt.subplots(
       2, 1,
       figsize=(8, 8),
-      gridspec_kw={'height_ratios': [2, 1]},
+      gridspec_kw={"height_ratios": [2, 1]},
     )
   else:
     fig, ax1 = plt.subplots(figsize=(8, 6))
@@ -1156,7 +1171,7 @@ def PlotCalibrationCurve(
 
   # Get color map for plotting.
   if (cmap is None):
-    cmapObj = plt.cm.get_cmap('tab10', nClasses)
+    cmapObj = plt.cm.get_cmap("tab10", nClasses)
   elif isinstance(cmap, str):
     cmapObj = plt.cm.get_cmap(cmap, nClasses)
   else:
@@ -1179,7 +1194,7 @@ def PlotCalibrationCurve(
       yTrue = (y == classifier.classes_[1]) if (hasattr(classifier, "classes_")) else (y == 1)
       label = f"{classNames[1]} (n={np.sum(yTrue)})" if (len(classNames) > 1) else "Class 1"
       fracPos, meanPred = calibration_curve(yTrue, prob, n_bins=nBins, strategy=strategy)
-      line, = ax1.plot(meanPred, fracPos, marker='o', label=label, color=colors[1 % len(colors)])
+      line, = ax1.plot(meanPred, fracPos, marker="o", label=label, color=colors[1 % len(colors)])
       lines.append(line)
       labels.append(label)
       if (plotHistogram and ax2 is not None):
@@ -1190,7 +1205,7 @@ def PlotCalibrationCurve(
       yTrue = (y == i) if (not hasattr(classifier, "classes_")) else (y == classifier.classes_[i])
       label = f"{classNames[i]} (n={np.sum(yTrue)})"
       fracPos, meanPred = calibration_curve(yTrue, prob, n_bins=nBins, strategy=strategy)
-      line, = ax1.plot(meanPred, fracPos, marker='o', label=label, color=colors[i % len(colors)])
+      line, = ax1.plot(meanPred, fracPos, marker="o", label=label, color=colors[i % len(colors)])
       lines.append(line)
       labels.append(label)
       if (plotHistogram and ax2 is not None):
@@ -1214,11 +1229,15 @@ def PlotCalibrationCurve(
   else:
     plt.tight_layout()
 
-  fig.savefig(outputFile)
+  if (save):
+    fig.savefig(outputFile)
+
   if (showPlot):
     plt.show()
+
   plt.close(fig)
   print(f"[Calibration Curve] Saved to {outputFile}")
+
   if (returnFig):
     return fig
   return None
@@ -1243,7 +1262,7 @@ def HistoryPlotter(
   Plot training history metrics (e.g., loss, accuracy) for train and validation sets.
 
   Parameters:
-    history (dict): Dictionary containing training history with keys like 'train_loss', 'val_loss', etc.
+    history (dict): Dictionary containing training history with keys like "train_loss", "val_loss", etc.
     title (str): Title of the plot.
     metrics (tuple or list): Metrics to plot (e.g., ("loss", "accuracy")). Default is ("loss",).
     xLabel (str): Label for x-axis. Default is "Epochs".
@@ -1347,7 +1366,8 @@ def HistoryPlotter(
 
   # Save the plot if requested.
   if (doSave and savePath):  # Save plot.
-    plt.savefig(savePath.replace(".pdf", ".png"), dpi=dpi, bbox_inches="tight")
+    ext = savePath.split(".")[-1]
+    plt.savefig(savePath.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
     try:
       plt.savefig(savePath, dpi=dpi, bbox_inches="tight")
     except Exception as e:
@@ -1449,8 +1469,12 @@ def PlotCumulativeGainLiftChart(
 
   # Save the Cumulative Gain chart if requested.
   if (save):
-    fig.savefig(fileName.replace(".pdf", "_CumulativeGain.png"), dpi=dpi, bbox_inches="tight")
-    fig.savefig(fileName.replace(".pdf", "_CumulativeGain.pdf"), dpi=dpi, bbox_inches="tight")
+    ext = fileName.split(".")[-1]
+    fig.savefig(fileName.replace(f".{ext}", "_CumulativeGain.png"), dpi=dpi, bbox_inches="tight")
+    try:
+      fig.savefig(fileName.replace(f".{ext}", "_CumulativeGain.pdf"), dpi=dpi, bbox_inches="tight")
+    except Exception as e:
+      print(f"Error saving Cumulative Gain chart: {e}")
 
   # Display the Cumulative Gain chart if requested.
   if (display):
@@ -1476,8 +1500,12 @@ def PlotCumulativeGainLiftChart(
 
   # Save the Lift chart if requested.
   if (save):
-    fig2.savefig(fileName.replace(".pdf", "_Lift.png"), dpi=dpi, bbox_inches="tight")
-    fig2.savefig(fileName.replace(".pdf", "_Lift.pdf"), dpi=dpi, bbox_inches="tight")
+    ext = fileName.split(".")[-1]
+    fig2.savefig(fileName.replace(f".{ext}", f"_Lift.png"), dpi=dpi, bbox_inches="tight")
+    try:
+      fig2.savefig(fileName.replace(f".{ext}", f"_Lift.pdf"), dpi=dpi, bbox_inches="tight")
+    except Exception as e:
+      print(f"Error saving Lift chart: {e}")
 
   # Display the Lift chart if requested.
   if (display):
@@ -1586,8 +1614,8 @@ def PlotErrorAnalysis(
     )
   ax_bar.set_ylabel("Count", fontsize=fontSize)
   ax_bar.set_title("Error Type Counts", fontsize=fontSize + 4)
-  ax_bar.spines['top'].set_visible(False)
-  ax_bar.spines['right'].set_visible(False)
+  ax_bar.spines["top"].set_visible(False)
+  ax_bar.spines["right"].set_visible(False)
   ax_bar.grid(axis="y", alpha=0.2)
 
   # 2x2 grid for error examples
@@ -1847,7 +1875,7 @@ def PlotMisclassificationExamples(
     if X is not None:
       sample_idxs = np.where((yTrue == t) & (yPred == p))[0][:1]
       for si in sample_idxs:
-        line += f" | Sample idx: {si} | Sample: {X[si] if not hasattr(X, 'iloc') else X.iloc[si]}"
+        line += f" | Sample idx: {si} | Sample: {X[si] if not hasattr(X, "iloc") else X.iloc[si]}"
     lines.append(line)
   text = "\n".join(lines) if lines else "No misclassifications."
   ax.text(0, 1, text, fontsize=fontSize, va="top")
@@ -1957,7 +1985,7 @@ def PlotClassificationResiduals(
   fig, (ax1, ax2) = plt.subplots(
     2, 1,
     figsize=figsize,
-    gridspec_kw={'height_ratios': [2, 1]}
+    gridspec_kw={"height_ratios": [2, 1]}
   )
 
   # Histogram of residuals
@@ -1997,8 +2025,8 @@ def PlotClassificationResiduals(
     0.98, 0.98, textstr,
     transform=ax1.transAxes,
     fontsize=fontSize * 0.85,
-    verticalalignment='top',
-    horizontalalignment='right',
+    verticalalignment="top",
+    horizontalalignment="right",
     bbox=dict(boxstyle="round,pad=0.3", facecolor="#f7f7f7", edgecolor="gray", alpha=0.7)
   )
 
