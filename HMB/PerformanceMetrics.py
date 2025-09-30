@@ -55,6 +55,22 @@ def CalculatePerformanceMetrics(
     metrics = pm.CalculatePerformanceMetrics(confMatrix, addWeightedAverage=True)
     for key, value in metrics.items():
       print(f"{key}: {np.round(value, 4)}")
+
+
+  Another example to use the confusion matrix from sklearn:
+
+  .. code-block:: python
+
+    import numpy as np
+    from sklearn.metrics import confusion_matrix
+    import HMB.PerformanceMetrics as pm
+
+    yTrue = [0, 1, 2, 0, 1, 2]
+    yPred = [0, 2, 1, 0, 0, 1]
+    confMatrix = confusion_matrix(yTrue, yPred)
+    metrics = pm.CalculatePerformanceMetrics(confMatrix, addWeightedAverage=True)
+    for key, value in metrics.items():
+      print(f"{key}: {np.round(value, 4)}")
   '''
 
   # Convert the confusion matrix to a NumPy array for easier manipulation.
@@ -333,13 +349,19 @@ def PlotConfusionMatrix(
 
   # Save the plot if requested.
   if (save):  # Save the plot.
-    fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+    ext = fileName.split(".")[-1]
+    if (ext.lower() == "pdf"):
+      try:
+        fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+      except Exception as e:
+        print(f"Error saving plot: {e}")
+    fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
 
   # Display the plot if requested.
   if (display):  # Display the plot.
     plt.show()
 
-  plt.close()  # Close the plot.
+  plt.close(fig)  # Close the plot.
 
   # Return the figure object if requested.
   if (returnFig):
@@ -506,15 +528,21 @@ def PlotROCAUCCurve(
   # Tight the layout to ignore wasted spaces.
   plt.tight_layout()
 
-  if (save):
-    # Save the plot if requested.
-    fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+  # Save the plot if requested.
+  if (save):  # Save the plot.
+    ext = fileName.split(".")[-1]
+    if (ext.lower() == "pdf"):
+      try:
+        fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+      except Exception as e:
+        print(f"Error saving plot: {e}")
+    fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
 
   if (display):
     # Display the plot if requested.
     plt.show()
 
-  plt.close()  # Close the plot.
+  plt.close(fig)  # Close the plot.
 
   if (returnFig):
     # Return the figure object if requested.
@@ -679,15 +707,21 @@ def PlotPRCCurve(
   # Tight the layout to ignore wasted spaces.
   plt.tight_layout()
 
-  if (save):
-    # Save the plot if requested.
-    fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+  # Save the plot if requested.
+  if (save):  # Save the plot.
+    ext = fileName.split(".")[-1]
+    if (ext.lower() == "pdf"):
+      try:
+        fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+      except Exception as e:
+        print(f"Error saving plot: {e}")
+    fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
 
   if (display):
     # Display the plot if requested.
     plt.show()
 
-  plt.close()  # Close the plot.
+  plt.close(fig)  # Close the plot.
 
   if (returnFig):
     # Return the figure object if requested.
@@ -701,11 +735,13 @@ def PlotCounterfactualOutcomes(
   lowVal=None,
   highVal=None,
   classNames=None,
+  title="Counterfactual Outcome Distributions",
   save=False,
-  outputFile="CounterfactualOutcomePlot.pdf",
-  showPlot=True,
+  fileName="CounterfactualOutcomePlot.pdf",
+  display=True,
   returnPreds=False,
   fontSize=12,
+  dpi=720,
 ):
   r'''
   Plot counterfactual outcome distributions for two treatment scenarios using a histogram.
@@ -717,11 +753,13 @@ def PlotCounterfactualOutcomes(
     lowVal (numeric or None): Value representing "no/low" treatment. If None, uses min value in column.
     highVal (numeric or None): Value representing "high" treatment. If None, uses max value in column.
     classNames (list or None): List of class names for x-axis ticks. If None, inferred from classifier or predictions.
-    save (bool): Whether to save the plot to outputFile. Default is False.
-    outputFile (str): File name to save the plot. Default is "CounterfactualOutcomePlot.pdf".
-    showPlot (bool): Whether to display the plot. Default is True.
+    title (str): Title of the plot. Default is "Counterfactual Outcome Distributions".
+    save (bool): Whether to save the plot to fileName. Default is False.
+    fileName (str): File name to save the plot. Default is "CounterfactualOutcomePlot.pdf".
+    display (bool): Whether to display the plot. Default is True.
     returnPreds (bool): If True, returns (yPredLow, yPredHigh). Default is False.
     fontSize (int): Font size for labels and title. Default is 12.
+    dpi (int): DPI for saving the figure. Default is 720.
 
   Returns:
     None or tuple: None if returnPreds is False, otherwise (yPredLow, yPredHigh).
@@ -729,7 +767,7 @@ def PlotCounterfactualOutcomes(
   Notes:
     - The function creates two copies of X, sets the treatment column to lowVal and highVal, and predicts outcomes for both scenarios.
     - The results are plotted as overlaid histograms, with x-axis ticks labeled by classNames if provided.
-    - The plot is saved to outputFile and optionally displayed.
+    - The plot is saved to fileName and optionally displayed.
 
   Example
   -------
@@ -745,8 +783,10 @@ def PlotCounterfactualOutcomes(
       X, classifier,
       treatmentCol="Inflight Wi-Fi service",
       classNames=classNames,
-      outputFile="CounterfactualOutcomePlot.pdf",
-      showPlot=True,
+      title="Counterfactual Outcome Distributions",
+      save=True,
+      fileName="CounterfactualOutcomePlot.pdf",
+      display=True,
       fontSize=14
     )
   '''
@@ -839,21 +879,35 @@ def PlotCounterfactualOutcomes(
 
   # Set y-axis label with font size.
   plt.ylabel("Number of Samples", fontsize=fontSize)
-  # Set plot title with font size.
-  plt.title(f"Counterfactual Outcome Plot: {treatmentCol}", fontsize=fontSize + 2)
+
+  if (title and len(title) > 0):
+    plt.title(title, fontsize=fontSize + 2)  # Set plot title if provided.
+  else:
+    # Set plot title with font size.
+    plt.title(f"Counterfactual Outcome Plot: {treatmentCol}", fontsize=fontSize + 2)
+
   plt.legend(fontsize=fontSize)  # Show legend with font size.
   plt.grid(axis="y", alpha=0.3)  # Add grid to y-axis.
   plt.tight_layout()  # Adjust layout.
 
-  if (save):
-    plt.savefig(outputFile)  # Save plot to file.
+  # Save the plot if requested.
+  if (save):  # Save the plot.
+    ext = fileName.split(".")[-1]
+    if (ext.lower() == "pdf"):
+      try:
+        plt.savefig(fileName, dpi=dpi, bbox_inches="tight")
+      except Exception as e:
+        print(f"Error saving plot: {e}")
+    plt.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
 
-  if (showPlot):
+  if (display):
     plt.show()  # Show plot if requested.
+
   plt.close()  # Close the plot to free memory.
 
   if (returnPreds):
     return yPredLow, yPredHigh  # Optionally return predictions.
+
   print(f"[Counterfactual Plot] Unique values in '{treatmentCol}': {uniqueVals}")
   return None
 
@@ -864,12 +918,14 @@ def PlotInteractionEffect(
   feature1,
   feature2,
   gridSize=30,
+  title="Interaction Effect Plot",
   save=False,
-  outputFile="InteractionEffectPlot.pdf",
-  showPlot=True,
+  fileName="InteractionEffectPlot.pdf",
+  display=True,
   fontSize=12,
   plotType="surface",  # or "contour"
-  backend="matplotlib"  # or "plotly"
+  backend="matplotlib",  # or "plotly"
+  dpi=720,
 ):
   r'''
   Plot the interaction effect between two features on the predicted outcome using a 3D surface or contour plot.
@@ -880,12 +936,14 @@ def PlotInteractionEffect(
     feature1 (str): Name of the first feature (x-axis).
     feature2 (str): Name of the second feature (y-axis).
     gridSize (int): Number of grid points for each feature. Default is 30.
-    save (bool): Whether to save the plot to outputFile. Default is False.
-    outputFile (str): File name to save the plot. Default is "InteractionEffectPlot.pdf".
-    showPlot (bool): Whether to display the plot. Default is True.
+    title (str): Title of the plot. Default is "Interaction Effect Plot".
+    save (bool): Whether to save the plot to fileName. Default is False.
+    fileName (str): File name to save the plot. Default is "InteractionEffectPlot.pdf".
+    display (bool): Whether to display the plot. Default is True.
     fontSize (int): Font size for labels and title. Default is 12.
     plotType (str): "surface" for 3D surface plot, "contour" for contour plot. Default is "surface".
     backend (str): "matplotlib" for static plots, "plotly" for interactive HTML. Default is "matplotlib".
+    dpi (int): DPI for saving the figure. Default is 720.
 
   Returns:
     Figure object (matplotlib or plotly) or None.
@@ -893,7 +951,7 @@ def PlotInteractionEffect(
   Notes:
     - For classifiers with predict_proba, the positive class probability is plotted if binary, otherwise the max probability.
     - For classifiers without predict_proba, the predicted class is plotted.
-    - The plot is saved to outputFile and optionally displayed.
+    - The plot is saved to fileName and optionally displayed.
 
   Example
   -------
@@ -909,8 +967,10 @@ def PlotInteractionEffect(
       feature1="Flight Distance",
       feature2="Seat Comfort",
       gridSize=30,
-      outputFile="InteractionEffectPlot.pdf",
-      showPlot=True,
+      title="Interaction Effect Plot",
+      save=True,
+      fileName="InteractionEffectPlot.pdf",
+      display=True,
       fontSize=14,
       plotType="surface",
       backend="matplotlib"
@@ -1007,17 +1067,30 @@ def PlotInteractionEffect(
       plt.colorbar(cp)
     # Adjust the layout for better appearance.
     plt.tight_layout()
-    # Save the plot to the specified output file.
 
-    plt.savefig(outputFile)
+    if (title and len(title) > 0):
+      plt.suptitle(title, fontsize=fontSize + 4)  # Set overall title if provided.
+      plt.subplots_adjust(top=0.9)  # Adjust the top to fit the suptitle.
+
+    # Save the plot if requested.
+    if (save):  # Save the plot.
+      ext = fileName.split(".")[-1]
+      if (ext.lower() == "pdf"):
+        try:
+          fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+        except Exception as e:
+          print(f"Error saving plot: {e}")
+      fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+
     # Show the plot if requested.
-    if (showPlot):
+    if (display):
       plt.show()
-    # Close the plot to free memory.
 
-    plt.close()
+    # Close the plot to free memory.
+    plt.close(fig)
+
     # Print a message indicating where the plot was saved.
-    print(f"[Interaction Effect Plot] Saved to {outputFile}")
+    print(f"[Interaction Effect Plot] Saved to {fileName}")
     # Return the figure object.
     return fig
   else:
@@ -1051,13 +1124,17 @@ def PlotInteractionEffect(
       margin=dict(l=0, r=0, b=0, t=40),
     )
 
+    if (title and len(title) > 0):
+      fig.update_layout(title=title)  # Set overall title if provided.
+
+    # Save the plot as an interactive HTML file if requested.
     if (save):
       # Save the plot as an interactive HTML file.
-      pio.write_html(fig, file=outputFile, auto_open=showPlot)
+      pio.write_html(fig, file=fileName, auto_open=display)
       # Print a message indicating where the plot was saved.
-      print(f"[Interaction Effect Plot] Saved to {outputFile}")
+      print(f"[Interaction Effect Plot] Saved to {fileName}")
 
-    if (showPlot):
+    if (display):
       fig.show()  # Show the plot if requested.
 
     # Return the figure object.
@@ -1071,13 +1148,15 @@ def PlotCalibrationCurve(
   classNames=None,
   nBins=10,
   strategy="uniform",
+  title="Calibration Curve",
   save=False,
-  outputFile="CalibrationCurve.pdf",
-  showPlot=True,
+  fileName="CalibrationCurve.pdf",
+  display=True,
   fontSize=12,
   plotHistogram=False,
   returnFig=False,
-  cmap=None
+  cmap=None,
+  dpi=720,
 ):
   r'''
   Plot calibration curves to evaluate how well predicted probabilities align with observed outcomes.
@@ -1089,13 +1168,15 @@ def PlotCalibrationCurve(
     classNames (list or None): List of class names. If None, inferred from classifier.
     nBins (int): Number of bins to discretize the [0, 1] interval. Default is 10.
     strategy (str): Binning strategy ("uniform" or "quantile"). Default is "uniform".
-    save (bool): Whether to save the plot to outputFile. Default is False.
-    outputFile (str): File name to save the plot. Default is "CalibrationCurve.pdf".
-    showPlot (bool): Whether to display the plot. Default is True.
+    title (str): Title of the plot. Default is "Calibration Curve".
+    save (bool): Whether to save the plot to fileName. Default is False.
+    fileName (str): File name to save the plot. Default is "CalibrationCurve.pdf".
+    display (bool): Whether to display the plot. Default is True.
     fontSize (int): Font size for labels and title. Default is 12.
     plotHistogram (bool): Whether to plot a histogram of predicted probabilities below the calibration curve. Default is False.
     returnFig (bool): Whether to return the matplotlib figure object. Default is False.
-    cmap (str or Colormap or None): Colormap to use for the curves. If None, uses "tab10.
+    cmap (str or Colormap or None): Colormap to use for the curves. If None, uses "tab10". Default is None.
+    dpi (int): DPI for saving the figure. Default is 720.
 
   Returns:
     None or matplotlib.figure.Figure: The figure object if returnFig is True, otherwise None.
@@ -1103,7 +1184,7 @@ def PlotCalibrationCurve(
   Notes:
     - For binary classification, plots the calibration curve for the positive class.
     - For multiclass, plots one-vs-rest calibration curves for each class.
-    - The plot is saved to outputFile and optionally displayed.
+    - The plot is saved to fileName and optionally displayed.
     - If plotHistogram is True, a histogram of predicted probabilities is shown below the calibration curve.
     - For best results, use with probabilistic models and sufficient sample size per bin.
 
@@ -1122,14 +1203,18 @@ def PlotCalibrationCurve(
       classifier, X, y,
       classNames=classNames,
       nBins=10,
-      outputFile="CalibrationCurve.pdf",
-      showPlot=True,
+      strategy="uniform",
+      title="Calibration Curve",
+      save=True,
+      fileName="CalibrationCurve.pdf",
+      display=True,
       fontSize=14,
       plotHistogram=True,
       returnFig=False,
       cmap="tab20"
     )
   '''
+
   import random
   from sklearn.calibration import calibration_curve
 
@@ -1142,6 +1227,7 @@ def PlotCalibrationCurve(
   # Check if X and y are not empty.
   if (len(X) == 0 or len(y) == 0):
     raise ValueError("X and y must not be empty.")
+
   # Convert y to numpy array.
   y = np.array(y)
   # Get predicted probabilities from classifier.
@@ -1230,14 +1316,25 @@ def PlotCalibrationCurve(
   else:
     plt.tight_layout()
 
-  if (save):
-    fig.savefig(outputFile)
+  if (title and len(title) > 0):
+    plt.suptitle(title, fontsize=fontSize + 4)
+    plt.subplots_adjust(top=0.9)
 
-  if (showPlot):
+  # Save the plot if requested.
+  if (save):  # Save the plot.
+    ext = fileName.split(".")[-1]
+    if (ext.lower() == "pdf"):
+      try:
+        fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+      except Exception as e:
+        print(f"Error saving plot: {e}")
+    fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+
+  if (display):
     plt.show()
 
   plt.close(fig)
-  print(f"[Calibration Curve] Saved to {outputFile}")
+  print(f"[Calibration Curve] Saved to {fileName}")
 
   if (returnFig):
     return fig
@@ -1368,11 +1465,12 @@ def HistoryPlotter(
   # Save the plot if requested.
   if (doSave and savePath):  # Save plot.
     ext = savePath.split(".")[-1]
+    if (ext.lower() == "pdf"):
+      try:
+        plt.savefig(savePath, dpi=dpi, bbox_inches="tight")
+      except Exception as e:
+        print(f"Error saving plot: {e}")
     plt.savefig(savePath.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
-    try:
-      plt.savefig(savePath, dpi=dpi, bbox_inches="tight")
-    except Exception as e:
-      print(f"Error saving plot: {e}")
 
   # Display the plot if requested.
   if (display):  # Display plot.
@@ -1471,11 +1569,12 @@ def PlotCumulativeGainLiftChart(
   # Save the Cumulative Gain chart if requested.
   if (save):
     ext = fileName.split(".")[-1]
+    if (ext.lower() == "pdf"):
+      try:
+        fig.savefig(fileName.replace(f".{ext}", "_CumulativeGain.pdf"), dpi=dpi, bbox_inches="tight")
+      except Exception as e:
+        print(f"Error saving plot: {e}")
     fig.savefig(fileName.replace(f".{ext}", "_CumulativeGain.png"), dpi=dpi, bbox_inches="tight")
-    try:
-      fig.savefig(fileName.replace(f".{ext}", "_CumulativeGain.pdf"), dpi=dpi, bbox_inches="tight")
-    except Exception as e:
-      print(f"Error saving Cumulative Gain chart: {e}")
 
   # Display the Cumulative Gain chart if requested.
   if (display):
@@ -1502,11 +1601,12 @@ def PlotCumulativeGainLiftChart(
   # Save the Lift chart if requested.
   if (save):
     ext = fileName.split(".")[-1]
+    if (ext.lower() == "pdf"):
+      try:
+        fig2.savefig(fileName.replace(f".{ext}", f"_Lift.pdf"), dpi=dpi, bbox_inches="tight")
+      except Exception as e:
+        print(f"Error saving plot: {e}")
     fig2.savefig(fileName.replace(f".{ext}", f"_Lift.png"), dpi=dpi, bbox_inches="tight")
-    try:
-      fig2.savefig(fileName.replace(f".{ext}", f"_Lift.pdf"), dpi=dpi, bbox_inches="tight")
-    except Exception as e:
-      print(f"Error saving Lift chart: {e}")
 
   # Display the Lift chart if requested.
   if (display):
@@ -1666,13 +1766,20 @@ def PlotErrorAnalysis(
   plt.suptitle("Error Analysis: FP, FN, TP, TN", fontsize=fontSize + 6, fontweight="bold")
   plt.tight_layout(rect=[0, 0, 1, 0.96])
 
-  if (save):
-    plt.savefig(fileName, dpi=dpi, bbox_inches="tight")
+  # Save the plot if requested.
+  if (save):  # Save the plot.
+    ext = fileName.split(".")[-1]
+    if (ext.lower() == "pdf"):
+      try:
+        fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+      except Exception as e:
+        print(f"Error saving plot: {e}")
+    fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
 
   if (display):
     plt.show()
 
-  plt.close()
+  plt.close(fig)
 
   if (returnFig):
     return fig
@@ -1782,8 +1889,15 @@ def PlotClasswisePRFBar(
   ax.legend(fontsize=fontSize * 0.85)
   plt.tight_layout()
 
-  if (save):
-    fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+  # Save the plot if requested.
+  if (save):  # Save the plot.
+    ext = fileName.split(".")[-1]
+    if (ext.lower() == "pdf"):
+      try:
+        fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+      except Exception as e:
+        print(f"Error saving plot: {e}")
+    fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
 
   if (display):
     plt.show()
@@ -2033,8 +2147,15 @@ def PlotClassificationResiduals(
 
   plt.tight_layout()
 
-  if (save):
-    fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+  # Save the plot if requested.
+  if (save):  # Save the plot.
+    ext = fileName.split(".")[-1]
+    if (ext.lower() == "pdf"):
+      try:
+        fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+      except Exception as e:
+        print(f"Error saving plot: {e}")
+    fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
 
   if (display):
     plt.show()
