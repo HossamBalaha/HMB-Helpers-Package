@@ -1538,7 +1538,7 @@ def PlotCumulativeGainLiftChart(
     )
   '''
 
-  # Convert inputs to numpy arrays.
+  # Convert the inputs to numpy arrays.
   yTrue = np.array(yTrue)
   yScores = np.array(yScores)
 
@@ -1665,11 +1665,11 @@ def PlotErrorAnalysis(
 
     import HMB.PerformanceMetrics as pm
 
-    yTrue = [0, 1, 1, 0, 1, 0, 1]
-    yPred = [0, 1, 0, 0, 1, 1, 1]
-    pm.PlotErrorAnalysis(
+    yTrue = [0, 1, 1, 0, 1, 0, 1, 0, 1, 0]
+    yPred = [0, 1, 0, 0, 1, 1, 1, 0, 0, 0]
+    PlotErrorAnalysis(
       yTrue, yPred,
-      maxExamples=3,
+      maxExamples=5,
       display=True,
       save=False
     )
@@ -1752,7 +1752,7 @@ def PlotErrorAnalysis(
         sampleStr = str(sample)
 
         # Limit sample string length for readability.
-        if (len(sample_str) > 60):
+        if (len(sampleStr) > 60):
           sampleStr = sampleStr[:57] + "..."
         row += f" | {sampleStr}"
       ax.text(
@@ -1921,12 +1921,53 @@ def PlotErrorMatrix(
   dpi=720,
   returnFig=False,
 ):
-  """
-  Plot confusion matrix with most common errors highlighted.
-  """
+  r'''
+  Plot confusion matrix (error matrix) with highlighted most common errors.
+
+  Parameters:
+    cm (array-like): Confusion matrix (2D array).
+    classNames (list or None): List of class names. If None, uses class indices.
+    fontSize (int): Font size for labels and title. Default is 14.
+    figsize (tuple): Figure size. Default is (7, 6).
+    display (bool): Whether to display the plot. Default is True.
+    save (bool): Whether to save the plot. Default is False.
+    fileName (str): File name to save the plot. Default is "ErrorMatrix.pdf".
+    dpi (int): DPI for saving the figure. Default is 720.
+    returnFig (bool): Whether to return the figure object. Default is False.
+
+  Returns:
+    matplotlib.figure.Figure or None: The matplotlib figure object if returnFig is True, otherwise None.
+
+  Notes:
+    - Highlights the most common misclassifications in red.
+    - Saving and displaying the plot are optional and controlled by parameters.
+
+  Example
+  -------
+  .. code-block:: python
+
+    import HMB.PerformanceMetrics as pm
+    import numpy as np
+
+    cm = np.array([[50, 2, 1],
+                   [10, 45, 5],
+                   [0, 3, 47]])
+    classNames = ["Class A", "Class B", "Class C"]
+    pm.PlotErrorMatrix(
+      cm, classNames=classNames,
+      fontSize=12,
+      figsize=(8, 7),
+      display=True,
+      save=True,
+      fileName="ErrorMatrix.pdf",
+      dpi=300,
+      returnFig=False
+    )
+  '''
+
   cm = np.array(cm)
   numClasses = cm.shape[0]
-  if classNames is None:
+  if (classNames is None):
     classNames = [str(i) for i in range(numClasses)]
 
   fig, ax = plt.subplots(figsize=figsize)
@@ -1939,19 +1980,24 @@ def PlotErrorMatrix(
   plt.ylabel("True", fontsize=fontSize)
   plt.title("Error Matrix (Confusion Matrix)", fontsize=fontSize + 2)
 
-  # Highlight most common errors (off-diagonal max per row)
+  # Highlight most common errors (off-diagonal max per row).
   for i in range(numClasses):
     for j in range(numClasses):
       color = "red" if (i != j and cm[i, j] == np.max(np.delete(cm[i], i))) else "black"
       ax.text(j, i, str(cm[i, j]), ha="center", va="center", color=color, fontsize=fontSize * 0.9)
+
   plt.colorbar(im, ax=ax)
   plt.tight_layout()
-  if save:
+
+  if (save):
     fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
-  if display:
+
+  if (display):
     plt.show()
+
   plt.close(fig)
-  if returnFig:
+
+  if (returnFig):
     return fig
   return None
 
@@ -1960,7 +2006,6 @@ def PlotMisclassificationExamples(
   yTrue,
   yPred,
   X=None,
-  classNames=None,
   maxExamples=5,
   fontSize=12,
   figsize=(10, 5),
@@ -1970,9 +2015,53 @@ def PlotMisclassificationExamples(
   dpi=720,
   returnFig=False,
 ):
-  """
-  Show most frequent misclassifications as a table or text.
-  """
+  r'''
+  Plot most frequent misclassifications with example indices and optional sample data.
+
+  Parameters:
+    yTrue (array-like): True labels.
+    yPred (array-like): Predicted labels.
+    X (array-like, DataFrame, or None): Optional input samples to display. Default is None.
+    maxExamples (int): Max misclassification types to show. Default is 5.
+    fontSize (int): Font size for text. Default is 12.
+    figsize (tuple): Figure size. Default is (10, 5).
+    display (bool): Whether to display the plot. Default is True.
+    save (bool): Whether to save the plot. Default is False.
+    fileName (str): File name to save the plot. Default is "MisclassificationExamples.pdf".
+    dpi (int): DPI for saving the figure. Default is 720.
+    returnFig (bool): Whether to return the figure object. Default is False.
+
+  Returns:
+    matplotlib.figure.Figure or None: The matplotlib figure object if returnFig is True, otherwise None.
+
+  Notes:
+    - Shows the most frequent misclassification pairs (true, predicted) with counts and optional samples.
+    - Useful for qualitative error analysis and debugging.
+    - Saving and displaying the plot are optional and controlled by parameters.
+
+  Example
+  -------
+  .. code-block:: python
+
+    import HMB.PerformanceMetrics as pm
+    import numpy as np
+
+    yTrue = np.array([0, 1, 1, 0, 1, 0, 1])
+    yPred = np.array([0, 1, 0, 0, 1, 1, 1])
+    X = np.array(["sample1", "sample2", "sample3", "sample4", "sample5", "sample6", "sample7"])
+    pm.PlotMisclassificationExamples(
+      yTrue, yPred, X=X,
+      maxExamples=3,
+      fontSize=12,
+      figsize=(9, 6),
+      display=True,
+      save=True,
+      fileName="MisclassificationExamples.pdf",
+      dpi=300,
+      returnFig=False
+    )
+  '''
+
   from collections import Counter
 
   yTrue = np.array(yTrue)
@@ -1985,31 +2074,37 @@ def PlotMisclassificationExamples(
   fig, ax = plt.subplots(figsize=figsize)
   ax.axis("off")
   lines = []
+
   for idx, ((t, p), count) in enumerate(most_common):
     line = f"{idx + 1}. True: {t}  Pred: {p}  Count: {count}"
-    if X is not None:
-      sample_idxs = np.where((yTrue == t) & (yPred == p))[0][:1]
-      for si in sample_idxs:
+    if (X is not None):
+      sampleIdxs = np.where((yTrue == t) & (yPred == p))[0][:1]
+      for si in sampleIdxs:
         line += f" | Sample idx: {si} | Sample: {X[si] if not hasattr(X, 'iloc') else X.iloc[si]}"
     lines.append(line)
+
   text = "\n".join(lines) if lines else "No misclassifications."
   ax.text(0, 1, text, fontsize=fontSize, va="top")
   plt.title("Most Frequent Misclassifications", fontsize=fontSize + 2)
   plt.tight_layout()
-  if save:
+
+  if (save):
     fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
-  if display:
+
+  if (display):
     plt.show()
+
   plt.close(fig)
-  if returnFig:
+
+  if (returnFig):
     return fig
+
   return None
 
 
 def PlotPredictionConfidenceHistogram(
   yPredProba,
   yPred=None,
-  classNames=None,
   fontSize=14,
   figsize=(8, 5),
   bins=20,
@@ -2019,13 +2114,59 @@ def PlotPredictionConfidenceHistogram(
   dpi=720,
   returnFig=False,
 ):
-  """
-  Plot histogram of predicted probabilities for predicted class.
-  """
+  r'''
+  Plot histogram of prediction confidences (predicted probabilities).
+
+  Parameters:
+    yPredProba (array-like): Predicted probabilities (2D array for multi-class).
+    yPred (array-like or None): Optional predicted classes. If None, uses argmax of yPredProba.
+    fontSize (int): Font size for labels and title. Default is 14.
+    figsize (tuple): Figure size. Default is (8, 5).
+    bins (int): Number of bins for histogram. Default is 20.
+    display (bool): Whether to display the plot. Default is True.
+    save (bool): Whether to save the plot. Default is False.
+    fileName (str): File name to save the plot. Default is "PredictionConfidenceHistogram.pdf".
+    dpi (int): DPI for saving the figure. Default is 720.
+    returnFig (bool): Whether to return the figure object. Default is False.
+
+  Returns:
+    matplotlib.figure.Figure or None: The matplotlib figure object if returnFig is True, otherwise None.
+
+  Notes:
+    - Shows histogram of predicted probabilities for the predicted class.
+    - Useful for assessing model confidence and calibration.
+    - Saving and displaying the plot are optional and controlled by parameters.
+
+  Example
+  -------
+  .. code-block:: python
+
+    import HMB.PerformanceMetrics as pm
+    import numpy as np
+
+    yPredProba = np.array([[0.1, 0.7, 0.2],
+                          [0.8, 0.1, 0.1],
+                          [0.3, 0.4, 0.3],
+                          [0.2, 0.2, 0.6]])
+    yPred = np.array([1, 0, 1, 2])
+    pm.PlotPredictionConfidenceHistogram(
+      yPredProba, yPred=yPred,
+      fontSize=12,
+      figsize=(9, 6),
+      bins=10,
+      display=True,
+      save=True,
+      fileName="PredictionConfidenceHistogram.pdf",
+      dpi=300,
+      returnFig=False
+    )
+  '''
 
   yPredProba = np.array(yPredProba)
-  if yPred is None:
+
+  if (yPred is None):
     yPred = np.argmax(yPredProba, axis=1)
+
   confidences = yPredProba[np.arange(len(yPred)), yPred]
   fig, ax = plt.subplots(figsize=figsize)
   ax.hist(confidences, bins=bins, color="skyblue", edgecolor="black", alpha=0.8)
@@ -2033,9 +2174,11 @@ def PlotPredictionConfidenceHistogram(
   ax.set_ylabel("Count", fontsize=fontSize)
   ax.set_title("Prediction Confidence Histogram", fontsize=fontSize + 2)
   plt.tight_layout()
-  if save:
+
+  if (save):
     fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
-  if display:
+
+  if (display):
     plt.show()
   plt.close(fig)
   if returnFig:
@@ -2054,7 +2197,7 @@ def PlotClassificationResiduals(
   dpi=720,
   returnFig=False,
 ):
-  '''
+  r'''
   Plot residuals for classification tasks (true - predicted).
 
   Parameters:
@@ -2069,7 +2212,7 @@ def PlotClassificationResiduals(
     returnFig (bool): Whether to return the figure object. Default is False.
 
   Returns:
-    matplotlib.figure.Figure or None: The matplotlib figure object if returnFig is True, otherwise
+    matplotlib.figure.Figure or None: The matplotlib figure object if returnFig is True, otherwise None.
 
   Example
   -------
@@ -2131,11 +2274,11 @@ def PlotClassificationResiduals(
   ax2.set_title("Residuals Distribution (Swarm Plot)", fontsize=fontSize)
 
   # Summary statistics.
-  mean_res = np.mean(residuals)
-  std_res = np.std(residuals)
-  min_res = np.min(residuals)
-  max_res = np.max(residuals)
-  textstr = f"Mean: {mean_res:.2f} | Std: {std_res:.2f} | Min: {min_res} | Max: {max_res}"
+  meanRes = np.mean(residuals)
+  stdRes = np.std(residuals)
+  minRes = np.min(residuals)
+  maxRes = np.max(residuals)
+  textstr = f"Mean: {meanRes:.2f} | Std: {stdRes:.2f} | Min: {minRes} | Max: {maxRes}"
   ax1.text(
     0.98, 0.98, textstr,
     transform=ax1.transAxes,
@@ -2166,6 +2309,191 @@ def PlotClassificationResiduals(
     return fig
 
   return None
+
+
+def PlotAll(
+  X,
+  yTrue,
+  yPred,
+  yPredProba,
+  classNames,
+  classifier,
+  display=True,
+  save=False,
+  fontSize=14,
+  dpi=720,
+):
+  r'''
+  Generate all file plots.
+
+  Parameters:
+    X (array-like or DataFrame): Input samples (optional, for error analysis).
+    yTrue (array-like): True labels.
+    yPred (array-like): Predicted labels.
+    yPredProba (array-like or None): Predicted probabilities (optional, for confidence histogram).
+    classNames (list or None): List of class names. If None, uses class indices.
+    classifier (object or None): Classifier object with "predict_proba" method (optional).
+    display (bool): Whether to display the plots. Default is True.
+    save (bool): Whether to save the plots. Default is False.
+    fontSize (int): Font size for labels and titles. Default is 14.
+    dpi (int): DPI for saving the figures. Default is 720.
+
+  Example
+  -------
+  .. code-block:: python
+
+    import HMB.PerformanceMetrics as pm
+    import numpy as np
+
+    X = np.array(["sample1", "sample2", "sample3", "sample4", "sample5", "sample6", "sample7"])
+    yTrue = np.array([0, 1, 1, 0, 1, 0, 1])
+    yPred = np.array([0, 1, 0, 0, 1, 1, 1])
+    yPredProba = np.array([[0.9, 0.1],
+                          [0.2, 0.8],
+                          [0.6, 0.4],
+                          [0.3, 0.7],
+                          [0.95, 0.05],
+                          [0.4, 0.6],
+                          [0.1, 0.9]])
+    pm.PlotAll(
+      X, yTrue, yPred, yPredProba=yPredProba,
+      classNames=["Class 0", "Class 1"],
+      display=True,
+      save=True,
+      dpi=300
+    )
+  '''
+
+  # Confusion Matrix.
+  from sklearn.metrics import confusion_matrix
+
+  cm = confusion_matrix(yTrue, yPred)
+
+  PlotConfusionMatrix(
+    cm,
+    classes=classNames if (classNames) is not None else [str(i) for i in range(cm.shape[0])],
+    normalize=False,
+    title="Confusion Matrix",
+    annotate=True,
+    fontSize=fontSize,
+    figSize=(6, 6),
+    colorbar=True,
+    display=display,
+    save=save,
+    fileName="ConfusionMatrix.pdf" if (save) else "",
+    dpi=dpi,
+    returnFig=False,
+  )
+
+  PlotROCAUCCurve(
+    yTrue,
+    yPred=yPredProba if (yPredProba is not None) else yPred,
+    classes=classNames if (classNames) is not None else [str(i) for i in range(cm.shape[0])],
+    areProbabilities=True if (yPredProba is not None) else False,
+    fontSize=fontSize,
+    title="ROC Curve",
+    display=display,
+    save=save,
+    fileName="ROCAUCCurve.pdf" if (save) else "",
+    dpi=dpi,
+    returnFig=False,
+  )
+
+  PlotPRCCurve(
+    yTrue,
+    yPred=yPredProba if (yPredProba is not None) else yPred,
+    classes=classNames if (classNames) is not None else [str(i) for i in range(cm.shape[0])],
+    areProbabilities=True if (yPredProba is not None) else False,
+    fontSize=fontSize,
+    title="Precision-Recall Curve",
+    display=display,
+    save=save,
+    fileName="PRCCurve.pdf" if (save) else "",
+    dpi=dpi,
+    returnFig=False,
+  )
+
+  PlotCumulativeGainLiftChart(
+    yTrue,
+    yScores=yPredProba if (yPredProba is not None) else yPred,
+    title="Cumulative Gain & Lift Chart",
+    display=display,
+    save=save,
+    fileName="CumulativeGainLiftChart.pdf" if (save) else "",
+    dpi=dpi,
+    returnFig=False,
+  )
+
+  PlotErrorAnalysis(
+    yTrue, yPred, X=X,
+    maxExamples=5,
+    display=display,
+    save=save,
+    fileName="ErrorAnalysis.pdf" if (save) else "",
+    dpi=dpi,
+    returnFig=False,
+  )
+
+  PlotClasswisePRFBar(
+    cm, classNames=classNames if (classNames) is not None else [str(i) for i in range(cm.shape[0])],
+    fontSize=fontSize,
+    figsize=(9, 6),
+    display=display,
+    save=save,
+    fileName="ClasswisePRFBar.pdf" if (save) else "",
+    dpi=dpi,
+    returnFig=False,
+  )
+
+  PlotErrorMatrix(
+    cm, classNames=classNames if (classNames) is not None else [str(i) for i in range(cm.shape[0])],
+    fontSize=fontSize,
+    figsize=(7, 6),
+    display=display,
+    save=save,
+    fileName="ErrorMatrix.pdf" if (save) else "",
+    dpi=dpi,
+    returnFig=False,
+  )
+
+  PlotMisclassificationExamples(
+    yTrue, yPred, X=X,
+    maxExamples=5,
+    fontSize=fontSize,
+    figsize=(10, 5),
+    display=display,
+    save=save,
+    fileName="MisclassificationExamples.pdf" if (save) else "",
+    dpi=dpi,
+    returnFig=False,
+  )
+
+  if ((yPredProba is not None) or (classifier is not None)):
+    if ((yPredProba is None) and (classifier is not None) and hasattr(classifier, "predict_proba")):
+      yPredProba = classifier.predict_proba(X)
+    PlotPredictionConfidenceHistogram(
+      yPredProba,
+      yPred=yPred,
+      fontSize=fontSize,
+      figsize=(8, 5),
+      bins=20,
+      display=display,
+      save=save,
+      fileName="PredictionConfidenceHistogram.pdf" if (save) else "",
+      dpi=dpi,
+      returnFig=False,
+    )
+
+  PlotClassificationResiduals(
+    yTrue, yPred,
+    fontSize=fontSize,
+    figsize=(8, 5),
+    display=display,
+    save=save,
+    fileName="ClassificationResiduals.pdf" if (save) else "",
+    dpi=dpi,
+    returnFig=False,
+  )
 
 
 if __name__ == "__main__":
