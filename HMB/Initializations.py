@@ -211,6 +211,7 @@ def DownloadNLTKPackages():
   nltk.download("averaged_perceptron_tagger")  # Part-of-speech tagger.
   nltk.download("omw-1.4")  # Open Multilingual WordNet.
   nltk.download("punkt_tab")  # For tokenization.
+  nltk.download("words")  # For tokenization.
   nltk.download("averaged_perceptron_tagger_eng")  # For POS tagging.
   print("NLTK packages downloaded successfully.")
 
