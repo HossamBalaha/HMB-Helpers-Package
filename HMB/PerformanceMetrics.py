@@ -2356,11 +2356,13 @@ def PlotAll(
                           [0.4, 0.6],
                           [0.1, 0.9]])
     pm.PlotAll(
-      X, yTrue, yPred, yPredProba=yPredProba,
+      X, yTrue, yPred, yPredProba,
       classNames=["Class 0", "Class 1"],
+      classifier=None,
       display=True,
-      save=True,
-      dpi=300
+      save=False,
+      fontSize=12,
+      dpi=300,
     )
   '''
 
