@@ -47,7 +47,11 @@ def GetScalerObject(scalerName):
     y = data.target
 
     # Split the dataset into training and testing sets.
-    xTrain, xTest, yTrain, yTest = train_test_split(X, y, test_size=0.2, random_state=42)
+    xTrain, xTest, yTrain, yTest = train_test_split(
+      X, y,
+      test_size=0.2,
+      random_state=np.random.randint(0, 10000),
+    )
     # Get a scaler object (e.g., Standard Scaler).
     scaler = mlh.GetScalerObject("Standard")
     # Fit the scaler on the training data and transform both training and testing data.
@@ -146,6 +150,51 @@ def ListScikitMachineLearningClassifiers():
 
   # Return the dictionary containing classifier names and their class objects.
   return classifiersDict
+
+
+def ListScikitMachineLearningRegressors():
+  r'''
+  List all available machine learning regressors in scikit-learn.
+
+  This function retrieves all regressor estimators from scikit-learn's all_estimators function
+  and returns them as a dictionary containing the regressor name, class object, module name,
+  class name, and import statement for each regressor.
+
+  Returns:
+    dict: Dictionary where keys are regressor names and values are dictionaries with class object, module name, class name, and import statement.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import HMB.MachineLearningHelper as mlh
+    
+    regressors = mlh.ListScikitMachineLearningRegressors()
+    
+    for name, info in regressors.items():
+      print(f"Regressor Name: {name}")
+      print(f"Class Object: {info['class']}")
+      print(f"Module: {info['module']}")
+      print(f"Class Name: {info['name']}")
+      print(f"Import Statement: {info['import']}")
+      print("-" * 40)
+  '''
+
+  from sklearn.utils import all_estimators
+
+  regressors = all_estimators(type_filter="regressor")
+  regressorsDict = {}
+  for name, cls in regressors:
+    moduleList = cls.__module__.split(".")
+    moduleList = [m for m in moduleList if not m.startswith("_")]
+    moduleName = ".".join(moduleList)
+    regressorsDict[name] = {
+      "class" : cls,
+      "module": moduleName,
+      "name"  : cls.__name__,
+      "import": f"from {moduleName} import {cls.__name__}",
+    }
+  return regressorsDict
 
 
 def GetFilteredClassifiers(clsList=[]):
@@ -252,6 +301,88 @@ def GetFilteredClassifiers(clsList=[]):
   return estimators
 
 
+def GetFilteredRegressors(regList=[]):
+  r'''
+  Retrieve a filtered list of scikit-learn regressor classes.
+
+  This function returns a list of regressor classes from scikit-learn, excluding those that require
+  special arguments (such as "base_estimator" or "estimators") or are known to fail with certain inputs.
+  If a specific list of regressor names is provided, only those regressors are returned.
+
+  Parameters:
+    regList (list, optional): List of regressor names to include. If empty or None, all available regressors are considered.
+
+  Returns:
+    list: List of tuples containing regressor names and their corresponding class objects.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import HMB.MachineLearningHelper as mlh
+    
+    # Get all filtered regressors.
+    regressors = mlh.GetFilteredRegressors()
+    for name, reg in regressors:
+      print(f"Regressor Name: {name}, Class: {reg}")
+    # Get only specific regressors.
+    regressors = mlh.GetFilteredRegressors(["RandomForestRegressor", "LinearRegression"])
+    for name, reg in regressors:
+      print(f"Regressor Name: {name}, Class: {reg}")
+  '''
+
+  from sklearn.utils import all_estimators
+
+  if ((regList is None) or (len(regList) <= 0)):
+    estimators = all_estimators(type_filter="regressor")
+    args = ["base_estimator", "estimators"]
+
+    # Known problematic regressors or those requiring special arguments
+    toIgnore = [
+      est
+      for est in estimators
+      for varName in est[1].__init__.__code__.co_varnames
+      if (varName in args)
+    ]
+    toIgnore = toIgnore + [
+      "MultiOutputRegressor",
+      "RegressorChain",
+      "StackingRegressor",
+      "VotingRegressor",
+      "RadiusNeighborsRegressor",
+      "IsotonicRegression",  # Needs 1d input
+      "MultiTaskElasticNet",
+      "MultiTaskElasticNetCV",
+      "MultiTaskLasso",
+      "MultiTaskLassoCV",
+      "ClassifierChain",  # Not a regressor, but sometimes appears
+    ]
+
+    estimators = [
+      est
+      for est in estimators
+      if (est[0] not in toIgnore)
+    ]
+
+    for i in range(len(estimators)):
+      print(f"{i + 1}: {estimators[i][0]}")
+
+  else:
+    estimators = []
+    for reg in regList:
+      estimators.append(
+        [
+          reg,
+          [
+            est for est in all_estimators(type_filter="regressor")
+            if (est[0] == reg)
+          ][0][1]
+        ]
+      )
+
+  return estimators
+
+
 def GetClassifierClassByName(clsName):
   r'''
   Retrieve a scikit-learn classifier class by its name.
@@ -289,6 +420,46 @@ def GetClassifierClassByName(clsName):
       return est[1]
 
   # Return None if the classifier is not found.
+  return None
+
+
+def GetRegressorClassByName(regName):
+  r'''
+  Retrieve a scikit-learn regressor class by its name.
+
+  This function returns the regressor class object corresponding to the specified name from scikit-learn.
+  If the regressor is not found, None is returned.
+
+  Parameters:
+    regName (str): Name of the regressor to retrieve.
+
+  Returns:
+    class: Regressor class object corresponding to the specified name, or None if not found.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import HMB.MachineLearningHelper as mlh
+    # Get the RandomForestRegressor class.
+    rfReg = mlh.GetRegressorClassByName("RandomForestRegressor")
+    print(rfReg)
+    # Get a non-existent regressor.
+    noneReg = mlh.GetRegressorClassByName("NonExistentRegressor")
+    print(noneReg)  # None.
+  '''
+
+  from sklearn.utils import all_estimators
+
+  # Retrieve all available regressors in scikit-learn.
+  estimators = all_estimators(type_filter="regressor")
+
+  # Filter the regressors based on the provided name.
+  for est in estimators:
+    if (est[0] == regName):
+      return est[1]
+
+  # Return None if the regressor is not found.
   return None
 
 
@@ -347,7 +518,11 @@ def GetMLClassificationModelObject(modelName, hyperparameters={}):
     y = data.target
 
     # Split the dataset into training and testing sets.
-    xTrain, xTest, yTrain, yTest = train_test_split(X, y, test_size=0.2, random_state=42)
+    xTrain, xTest, yTrain, yTest = train_test_split(
+      X, y,
+      test_size=0.2,
+      random_state=np.random.randint(0, 10000),
+    )
     # Get a scaler object (e.g., Standard Scaler).
     scaler = mlh.GetScalerObject("Standard")
     # Fit the scaler on the training data and transform both training and testing data.
@@ -435,6 +610,113 @@ def GetMLClassificationModelObject(modelName, hyperparameters={}):
     raise ValueError("Invalid model name.")
 
 
+python
+
+
+def GetMLRegressorModelObject(modelName, hyperparameters={}):
+  r'''
+  Get a machine learning regressor model object based on the given name and hyperparameters.
+
+  This function returns an instance of a regression model from scikit-learn or other libraries
+  according to the provided model name and optional hyperparameters.
+
+  Supported models include:
+    - "MLP": Multi-layer Perceptron Regressor
+    - "RF": Random Forest Regressor
+    - "AB": AdaBoost Regressor
+    - "KNN": K-Nearest Neighbors Regressor
+    - "DT": Decision Tree Regressor
+    - "SVR": Support Vector Regressor
+    - "LR": Linear Regression
+    - "SGD": Stochastic Gradient Descent Regressor
+    - "GB": Gradient Boosting Regressor
+    - "Bagging": Bagging Regressor
+    - "ETs": Extra Trees Regressor
+    - "XGB": eXtreme Gradient Boosting Regressor
+    - "LGBM": Light Gradient Boosting Machine Regressor
+    - "Voting": Voting Regressor
+    - "Stacking": Stacking Regressor
+    - "CatBoost": CatBoost Regressor
+    - "HGB": HistGradientBoosting Regressor
+
+  Parameters:
+    modelName (str): Name of the regression model to retrieve.
+    hyperparameters (dict, optional): Dictionary of hyperparameters to pass to the model constructor.
+
+  Returns:
+    object: An instance of the requested regression model.
+
+  Raises:
+    ValueError: If an invalid model name is provided.
+  '''
+
+  if (modelName == "MLP"):
+    from sklearn.neural_network import MLPRegressor
+    return MLPRegressor(**hyperparameters)
+  elif (modelName == "RF"):
+    from sklearn.ensemble import RandomForestRegressor
+    return RandomForestRegressor(**hyperparameters)
+  elif (modelName == "AB"):
+    from sklearn.ensemble import AdaBoostRegressor
+    return AdaBoostRegressor(**hyperparameters)
+  elif (modelName == "KNN"):
+    from sklearn.neighbors import KNeighborsRegressor
+    return KNeighborsRegressor(**hyperparameters)
+  elif (modelName == "DT"):
+    from sklearn.tree import DecisionTreeRegressor
+    return DecisionTreeRegressor(**hyperparameters)
+  elif (modelName == "SVR"):
+    from sklearn.svm import SVR
+    return SVR(**hyperparameters)
+  elif (modelName == "LR"):
+    from sklearn.linear_model import LinearRegression
+    return LinearRegression(**hyperparameters)
+  elif (modelName == "SGD"):
+    from sklearn.linear_model import SGDRegressor
+    return SGDRegressor(**hyperparameters)
+  elif (modelName == "GB"):
+    from sklearn.ensemble import GradientBoostingRegressor
+    return GradientBoostingRegressor(**hyperparameters)
+  elif (modelName == "Bagging"):
+    from sklearn.ensemble import BaggingRegressor
+    return BaggingRegressor(**hyperparameters)
+  elif (modelName == "ETs"):
+    from sklearn.ensemble import ExtraTreesRegressor
+    return ExtraTreesRegressor(**hyperparameters)
+  elif (modelName == "XGB"):
+    from xgboost import XGBRegressor
+    return XGBRegressor(**hyperparameters)
+  elif (modelName == "LGBM"):
+    from lightgbm import LGBMRegressor
+    return LGBMRegressor(**hyperparameters)
+  elif (modelName == "Voting"):
+    from sklearn.ensemble import VotingRegressor
+    from sklearn.ensemble import RandomForestRegressor
+    from sklearn.tree import DecisionTreeRegressor
+    estimators = [
+      ("rf", RandomForestRegressor()),
+      ("dt", DecisionTreeRegressor()),
+    ]
+    return VotingRegressor(estimators, **hyperparameters)
+  elif (modelName == "Stacking"):
+    from sklearn.ensemble import StackingRegressor
+    from sklearn.ensemble import RandomForestRegressor
+    from sklearn.tree import DecisionTreeRegressor
+    estimators = [
+      ("rf", RandomForestRegressor()),
+      ("dt", DecisionTreeRegressor()),
+    ]
+    return StackingRegressor(estimators, **hyperparameters)
+  elif (modelName == "CatBoost"):
+    from catboost import CatBoostRegressor
+    return CatBoostRegressor(**hyperparameters)
+  elif (modelName == "HGB"):
+    from sklearn.ensemble import HistGradientBoostingRegressor
+    return HistGradientBoostingRegressor(**hyperparameters)
+  else:
+    raise ValueError("Invalid regressor model name.")
+
+
 def PerformFeatureSelection(tech, fsRatio, xTrain, yTrain, xTest, yTest, returnFeatures=False):
   r'''
   Perform feature selection on training and testing data using the specified technique and ratio.
@@ -486,7 +768,11 @@ def PerformFeatureSelection(tech, fsRatio, xTrain, yTrain, xTest, yTest, returnF
     y = data.target
 
     # Split the dataset into training and testing sets.
-    xTrain, xTest, yTrain, yTest = train_test_split(X, y, test_size=0.2, random_state=42)
+    xTrain, xTest, yTrain, yTest = train_test_split(
+      X, y,
+      test_size=0.2,
+      random_state=np.random.randint(0, 10000),
+    )
     # Perform feature selection using PCA to select 50% of features.
     xTrainFS, xTestFS, selector, features = mlh.PerformFeatureSelection(
       "PCA", 50, xTrain, yTrain, xTest, yTest, returnFeatures=True
@@ -696,10 +982,14 @@ def PerformDataBalancing(xTrain, yTrain, techniqueStr="SMOTE"):
       n_classes=2, class_sep=2, weights=[0.9, 0.1],
       n_informative=3, n_redundant=1, flip_y=0,
       n_features=20, n_clusters_per_class=1,
-      n_samples=1000, random_state=42
+      n_samples=1000, random_state=np.random.randint(0, 10000),
     )
     # Split the dataset into training and testing sets.
-    xTrain, xTest, yTrain, yTest = train_test_split(X, y, test_size=0.2, random_state=42)
+    xTrain, xTest, yTrain, yTest = train_test_split(
+      X, y,
+      test_size=0.2,
+      random_state=np.random.randint(0, 10000),
+    )
     # Perform data balancing using SMOTE.
     xTrainBalanced, yTrainBalanced, obj = mlh.PerformDataBalancing(xTrain, yTrain, techniqueStr="SMOTE")
     # Print the class distribution before and after balancing.
@@ -1256,7 +1546,229 @@ def MachineLearningClassification(
   return metrics, pltObject, objects
 
 
-class OptunaTuning(object):
+def MachineLearningRegression(
+  datasetFilePath,  # Dataset file name (CSV format).
+  scalerName,  # Name of the scaler to use.
+  modelName,  # Name of the machine learning regression model.
+  fsTechName,  # Feature selection technique name.
+  fsTechRatio=0.2,  # Ratio of features to select.
+  testRatio=0.2,  # Ratio of the test data.
+  testFilePath=None,  # Optional test file for evaluation.
+  targetColumn="Target",  # Name of the target column in the dataset.
+  dropFirstColumn=True,  # Whether to drop the first column (usually an index or ID).
+  dropNAColumns=True,  # Whether to drop columns with any null values.
+  encodeCategorical=True,  # Whether to encode categorical features (if any).
+):
+  r'''
+  Perform machine learning regression on a dataset with optional scaling and feature selection.
+
+  This function loads a dataset from a CSV file, applies preprocessing steps
+  (scaling, feature selection), trains a regression model, and evaluates its performance.
+  Optionally, a separate test file can be provided for evaluation.
+
+  Parameters:
+    datasetFilePath (str): Path to the CSV dataset.
+    scalerName (str): Name of the scaler to use.
+    modelName (str): Name of the regression model.
+    fsTechName (str): Feature selection technique.
+    fsTechRatio (float): Ratio of features to select.
+    testRatio (float): Test set ratio.
+    testFilePath (str, optional): Path to test CSV file.
+    targetColumn (str): Name of the target column.
+    dropFirstColumn (bool): Drop first column if True.
+    dropNAColumns (bool): Drop columns with NA if True.
+    encodeCategorical (bool): Encode categorical features if True.
+
+  Returns:
+    tuple: A tuple containing:
+      - dict: Dictionary of regression performance metrics (MSE, MAE, R2).
+      - matplotlib.figure.Figure: Matplotlib figure object with regression results plot.
+      - dict: Dictionary containing various objects used in the process (e.g., model, scaler, feature selector). Keys include:
+          - "model": Trained regression model.
+          - "scaler": Scaler object used for scaling (if any).
+          - "feature_selector": Feature selection object used (if any).
+          - "features": List of feature names used.
+          - "metrics": Dictionary of performance metrics.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import HMB.MachineLearningHelper as mlh
+
+    # Define the dataset file path and parameters.
+    datasetFilePath = "path/to/your/dataset.csv"
+    scalerName = "Standard"
+    modelName = "LR"
+    fsTechName = "PCA"
+    fsTechRatio = 0.5  # Select 50% of features.
+    testRatio = 0.2
+    targetColumn = "Target"
+
+    # Perform machine learning regression.
+    metrics, pltObject, objects = mlh.MachineLearningRegression(
+      datasetFilePath,
+      scalerName,
+      modelName,
+      fsTechName,
+      fsTechRatio,
+      testRatio,
+      targetColumn,
+      dropFirstColumn=True,
+    )
+  '''
+
+  from sklearn.preprocessing import LabelEncoder
+  from sklearn.model_selection import train_test_split
+  from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+  import HMB.PerformanceMetrics as pm
+
+  # Read the CSV file into a pandas DataFrame.
+  data = pd.read_csv(datasetFilePath)
+
+  # Drop first column if specified.
+  if (dropFirstColumn):
+    data = data.iloc[:, 1:]
+
+  # Drop columns with any null values if specified.
+  if (dropNAColumns):
+    data = data.dropna(axis=1)
+
+  # Features (X) are all columns except the target column.
+  X = data.drop(targetColumn, axis=1)
+  currentColumns = X.columns
+
+  # Target (y) is the target column.
+  y = data[targetColumn]
+
+  # Encode categorical features if any and if encodeCategorical is True.
+  featuresEncoders = {}
+  if (encodeCategorical):
+    for col in X.select_dtypes(include=["object", "category"]).columns:
+      le = LabelEncoder()
+      X[col] = le.fit_transform(X[col].astype(str))
+      featuresEncoders[col] = le
+
+  # Split train/test.
+  if (testFilePath and os.path.exists(testFilePath)):
+    testData = pd.read_csv(testFilePath)
+
+    if (dropFirstColumn):
+      testData = testData.iloc[:, 1:]
+
+    if (dropNAColumns):
+      testData = testData.dropna(axis=1)
+
+    xTest = testData.drop(targetColumn, axis=1)
+    yTest = testData[targetColumn]
+
+    if (encodeCategorical):
+      for col in xTest.select_dtypes(include=["object", "category"]).columns:
+        if (col in featuresEncoders):
+          xTest[col] = featuresEncoders[col].transform(xTest[col].astype(str))
+        else:
+          le = LabelEncoder()
+          xTest[col] = le.fit_transform(xTest[col].astype(str))
+    xTrain, yTrain = X, y
+  else:
+    xTrain, xTest, yTrain, yTest = train_test_split(
+      X, y,
+      test_size=testRatio,
+      random_state=np.random.randint(0, 10000),
+    )
+
+  # Ensure DataFrame.
+  if (not isinstance(xTrain, pd.DataFrame)):
+    xTrain = pd.DataFrame(xTrain, columns=currentColumns)
+  if (not isinstance(xTest, pd.DataFrame)):
+    xTest = pd.DataFrame(xTest, columns=currentColumns)
+
+  # Scaling.
+  if (scalerName is not None):
+    # Create a scaler object to scale the features.
+    scaler = GetScalerObject(scalerName)
+
+    # Fit the scaler on the training data and transform it.
+    xTrain = scaler.fit_transform(xTrain)
+
+    # Transform the test data using the fitted scaler.
+    xTest = scaler.transform(xTest)
+
+    # Convert the scaled arrays back to DataFrames with the original column names.
+    xTrain = pd.DataFrame(xTrain, columns=currentColumns)
+    xTest = pd.DataFrame(xTest, columns=currentColumns)
+  else:
+    scaler = None
+
+  # Perform feature selection based on the specified technique.
+  if (fsTechName is not None):
+    xTrain, xTest, fs, selectedFeatures = PerformFeatureSelection(
+      fsTechName,  # Feature selection technique.
+      fsTechRatio,  # Ratio of features to select.
+      xTrain,  # Training data.
+      yTrain,  # Training labels.
+      xTest,  # Testing data.
+      yTest,  # Testing labels.
+      returnFeatures=True,  # Return the features after feature selection.
+    )
+  else:
+    fs = None
+    # No feature selection, use all features.
+    selectedFeatures = currentColumns
+
+  # Ensure that xTrain and xTest are DataFrames after feature selection.
+  if (not isinstance(xTrain, pd.DataFrame)):
+    xTrain = pd.DataFrame(xTrain, columns=selectedFeatures)
+  if (not isinstance(xTest, pd.DataFrame)):
+    xTest = pd.DataFrame(xTest, columns=selectedFeatures)
+
+  # Train regression model.
+  model = GetMLRegressorModelObject(modelName)
+  model.fit(xTrain, yTrain)
+
+  # Predict and evaluate.
+  predTest = model.predict(xTest)
+  metrics = {
+    "MSE": mean_squared_error(yTest, predTest),
+    "MAE": mean_absolute_error(yTest, predTest),
+    "R2" : r2_score(yTest, predTest),
+  }
+
+  # Optionally, plot predictions vs. true values.
+  pltObject = pm.PlotRegressionResults(yTest, predTest)
+
+  # Objects for saving.
+  objects = {
+    "Model"                    : model,
+    "CurrentColumns"           : currentColumns,
+    "Scaler"                   : scaler,
+    "ScalerName"               : scalerName,
+    "FeatureSelector"          : fs,
+    "FeatureSelectionTechnique": fsTechName,
+    "FeatureSelectionRatio"    : fsTechRatio,
+    "SelectedFeatures"         : selectedFeatures,
+    "OutlierDetectionMask"     : dbObj,
+    "LabelEncoder"             : le,
+    "FeaturesEncoders"         : featuresEncoders,
+    "Configurations"           : {
+      "datasetFilePath"  : datasetFilePath,
+      "scalerName"       : scalerName,
+      "modelName"        : modelName,
+      "fsTechName"       : fsTechName,
+      "fsTechRatio"      : fsTechRatio,
+      "testRatio"        : testRatio,
+      "testFilePath"     : testFilePath,
+      "targetColumn"     : targetColumn,
+      "dropFirstColumn"  : dropFirstColumn,
+      "dropNAColumns"    : dropNAColumns,
+      "encodeCategorical": encodeCategorical,
+    }
+  }
+
+  return metrics, pltObject, objects
+
+
+class OptunaTuningClassification(object):
   r'''
   Hyperparameter tuning for machine learning classification using Optuna.
 
@@ -1298,7 +1810,7 @@ class OptunaTuning(object):
 
     import HMB.MachineLearningHelper as mlh
 
-    tuner = mlh.OptunaTuning(
+    tuner = mlh.OptunaTuningClassification(
       baseDir="./data",
       scalers=["Standard", "MinMax"],
       models=["RF", "LR"],
@@ -1349,7 +1861,7 @@ class OptunaTuning(object):
     verbose=False,  # Whether to print verbose output.
   ):
     '''
-    Initializes the OptunaTuning class with the provided hyperparameters.
+    Initializes the OptunaTuningClassification class with the provided hyperparameters.
 
     Parameters:
       scalers (list): List of scalers to be used in the tuning process.

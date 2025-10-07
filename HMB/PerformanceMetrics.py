@@ -267,8 +267,6 @@ def PlotConfusionMatrix(
 
   Examples
   --------
-  Here is how to use this function in a script:
-
   .. code-block:: python
 
     import numpy as np
@@ -366,6 +364,88 @@ def PlotConfusionMatrix(
   # Return the figure object if requested.
   if (returnFig):
     return fig
+
+
+def PlotRegressionResults(
+  yTrue,
+  yPred,
+  title="Regression Results",
+  fontSize=14,
+  figsize=(10, 5),
+  display=True,
+  save=False,
+  fileName="RegressionResults.pdf",
+  dpi=720,
+  returnFig=False,
+):
+  r'''
+  Plot regression results: predicted vs. true values and residuals.
+
+  Parameters:
+    yTrue (array-like): True target values.
+    yPred (array-like): Predicted target values.
+    title (str): Plot title.
+    fontSize (int): Font size for labels and title.
+    figsize (tuple): Figure size.
+    display (bool): Whether to display the plot.
+    save (bool): Whether to save the plot.
+    fileName (str): File name to save the plot.
+    dpi (int): DPI for saving the figure.
+    returnFig (bool): Whether to return the figure object.
+
+  Returns:
+    fig: The matplotlib figure object if returnFig is True, else None.
+  '''
+  yTrue = np.array(yTrue)
+  yPred = np.array(yPred)
+  residuals = yTrue - yPred
+
+  fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+
+  # Scatter plot: True vs. Predicted.
+  ax1.scatter(yTrue, yPred, alpha=0.7, color="royalblue", edgecolor="k")
+  minVal = min(np.min(yTrue), np.min(yPred))
+  maxVal = max(np.max(yTrue), np.max(yPred))
+  ax1.plot([minVal, maxVal], [minVal, maxVal], "r--", lw=2, label="Ideal")
+  ax1.set_xlabel("True Values", fontsize=fontSize)
+  ax1.set_ylabel("Predicted Values", fontsize=fontSize)
+  ax1.set_title("True vs. Predicted", fontsize=fontSize + 2)
+  ax1.legend(fontsize=fontSize * 0.8)
+  ax1.grid(alpha=0.3)
+
+  # Residuals plot.
+  ax2.scatter(yPred, residuals, alpha=0.7, color="darkorange", edgecolor="k")
+  ax2.axhline(0, color="gray", linestyle="--", lw=2)
+  ax2.set_xlabel("Predicted Values", fontsize=fontSize)
+  ax2.set_ylabel("Residuals (True - Pred)", fontsize=fontSize)
+  ax2.set_title("Residuals Plot", fontsize=fontSize + 2)
+  ax2.grid(alpha=0.3)
+
+  # Summary statistics.
+  mse = np.mean(residuals ** 2)
+  mae = np.mean(np.abs(residuals))
+  r2 = 1 - np.sum(residuals ** 2) / np.sum((yTrue - np.mean(yTrue)) ** 2)
+  stats = f"MSE: {mse:.3f}\nMAE: {mae:.3f}\nR2: {r2:.3f}"
+  ax2.text(
+    0.05, 0.95, stats, transform=ax2.transAxes,
+    fontsize=fontSize * 0.9, verticalalignment="top",
+    bbox=dict(boxstyle="round", facecolor="white", alpha=0.7)
+  )
+
+  plt.suptitle(title, fontsize=fontSize + 4)
+  plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+  if (save and fileName):
+    plt.savefig(fileName, dpi=dpi)
+  if (display):
+    plt.show()
+
+  plt.close(fig)
+
+  if (returnFig):
+    return fig
+
+  return None
 
 
 def PlotROCAUCCurve(
@@ -2311,191 +2391,116 @@ def PlotClassificationResiduals(
   return None
 
 
-def PlotAll(
-  X,
-  yTrue,
-  yPred,
-  yPredProba,
-  classNames,
-  classifier,
+def PlotFeatureImportance(
+  model,
+  featureNames,
+  title="Feature Importance",
+  fontSize=14,
+  figsize=(8, 5),
   display=True,
   save=False,
-  fontSize=14,
+  fileName="FeatureImportance.pdf",
   dpi=720,
+  returnFig=False,
+  topN=None,
 ):
   r'''
-  Generate all file plots.
+  Plot feature importance from a trained model.
 
   Parameters:
-    X (array-like or DataFrame): Input samples (optional, for error analysis).
-    yTrue (array-like): True labels.
-    yPred (array-like): Predicted labels.
-    yPredProba (array-like or None): Predicted probabilities (optional, for confidence histogram).
-    classNames (list or None): List of class names. If None, uses class indices.
-    classifier (object or None): Classifier object with "predict_proba" method (optional).
-    display (bool): Whether to display the plots. Default is True.
-    save (bool): Whether to save the plots. Default is False.
-    fontSize (int): Font size for labels and titles. Default is 14.
-    dpi (int): DPI for saving the figures. Default is 720.
+    model: Trained model with feature_importances_ or coef_ attribute.
+    featureNames (list): List of feature names.
+    title (str): Title of the plot. Default is "Feature Importance".
+    fontSize (int): Font size for labels and title. Default is 14.
+    figsize (tuple): Figure size. Default is (8, 5).
+    display (bool): Whether to display the plot. Default is True.
+    save (bool): Whether to save the plot. Default is False.
+    fileName (str): File name to save the plot. Default is "FeatureImportance.pdf".
+    dpi (int): DPI for saving the figure. Default is 720.
+    returnFig (bool): Whether to return the figure object. Default is False.
+    topN (int or None): If specified, show only the top N features. Default is None (show all).
+
+  Returns:
+    matplotlib.figure.Figure or None: The matplotlib figure object if returnFig is True, otherwise None.
+
+  Notes:
+    - Supports models with feature_importances_ (e.g., tree-based) or coef_ (e.g., linear models).
+    - Displays a bar chart of feature importances.
+    - Saving and displaying the plot are optional and controlled by parameters.
 
   Example
   -------
   .. code-block:: python
 
     import HMB.PerformanceMetrics as pm
+    from sklearn.ensemble import RandomForestClassifier
     import numpy as np
+    from sklearn.datasets import load_iris
 
-    X = np.array(["sample1", "sample2", "sample3", "sample4", "sample5", "sample6", "sample7"])
-    yTrue = np.array([0, 1, 1, 0, 1, 0, 1])
-    yPred = np.array([0, 1, 0, 0, 1, 1, 1])
-    yPredProba = np.array([[0.9, 0.1],
-                          [0.2, 0.8],
-                          [0.6, 0.4],
-                          [0.3, 0.7],
-                          [0.95, 0.05],
-                          [0.4, 0.6],
-                          [0.1, 0.9]])
-    pm.PlotAll(
-      X, yTrue, yPred, yPredProba,
-      classNames=["Class 0", "Class 1"],
-      classifier=None,
-      display=True,
-      save=False,
+    data = load_iris()
+    X = data.data
+    y = data.target
+    featureNames = data.feature_names
+
+    model = RandomForestClassifier()
+    model.fit(X, y)
+    pm.PlotFeatureImportance(
+      model, featureNames,
+      title="Iris Feature Importance",
       fontSize=12,
+      figsize=(9, 6),
+      display=True,
+      save=True,
+      fileName="IrisFeatureImportance.pdf",
       dpi=300,
+      returnFig=False,
+      topN=3
     )
   '''
 
-  # Confusion Matrix.
-  from sklearn.metrics import confusion_matrix
+  if (hasattr(model, "feature_importances_")):
+    importances = model.feature_importances_
+  elif (hasattr(model, "coef_")):
+    importances = np.abs(model.coef_.ravel())
+  else:
+    raise ValueError("Model does not have feature_importances_ or coef_ attribute.")
 
-  cm = confusion_matrix(yTrue, yPred)
+  indices = np.argsort(importances)[::-1]
+  if (topN is not None):
+    indices = indices[:topN]
 
-  PlotConfusionMatrix(
-    cm,
-    classes=classNames if (classNames) is not None else [str(i) for i in range(cm.shape[0])],
-    normalize=False,
-    title="Confusion Matrix",
-    annotate=True,
-    fontSize=fontSize,
-    figSize=(6, 6),
-    colorbar=True,
-    display=display,
-    save=save,
-    fileName="ConfusionMatrix.pdf" if (save) else "",
-    dpi=dpi,
-    returnFig=False,
+  fig, ax = plt.subplots(figsize=figsize)
+  ax.bar(range(len(indices)), importances[indices], color="royalblue")
+  ax.set_xticks(range(len(indices)))
+  ax.set_xticklabels(
+    np.array(featureNames)[indices],
+    rotation=45,
+    ha="right",
+    fontsize=fontSize * 0.8,
   )
+  ax.set_ylabel("Importance", fontsize=fontSize)
+  ax.set_title(title, fontsize=fontSize + 2)
+  plt.tight_layout()
 
-  PlotROCAUCCurve(
-    yTrue,
-    yPred=yPredProba if (yPredProba is not None) else yPred,
-    classes=classNames if (classNames) is not None else [str(i) for i in range(cm.shape[0])],
-    areProbabilities=True if (yPredProba is not None) else False,
-    fontSize=fontSize,
-    title="ROC Curve",
-    display=display,
-    save=save,
-    fileName="ROCAUCCurve.pdf" if (save) else "",
-    dpi=dpi,
-    returnFig=False,
-  )
+  # Save the plot if requested.
+  if (save):  # Save the plot.
+    ext = fileName.split(".")[-1]
+    if (ext.lower() == "pdf"):
+      try:
+        fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+      except Exception as e:
+        print(f"Error saving plot: {e}")
+    fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
 
-  PlotPRCCurve(
-    yTrue,
-    yPred=yPredProba if (yPredProba is not None) else yPred,
-    classes=classNames if (classNames) is not None else [str(i) for i in range(cm.shape[0])],
-    areProbabilities=True if (yPredProba is not None) else False,
-    fontSize=fontSize,
-    title="Precision-Recall Curve",
-    display=display,
-    save=save,
-    fileName="PRCCurve.pdf" if (save) else "",
-    dpi=dpi,
-    returnFig=False,
-  )
+  if (display):
+    plt.show()
 
-  PlotCumulativeGainLiftChart(
-    yTrue,
-    yScores=yPredProba if (yPredProba is not None) else yPred,
-    title="Cumulative Gain & Lift Chart",
-    display=display,
-    save=save,
-    fileName="CumulativeGainLiftChart.pdf" if (save) else "",
-    dpi=dpi,
-    returnFig=False,
-  )
+  plt.close(fig)
 
-  PlotErrorAnalysis(
-    yTrue, yPred, X=X,
-    maxExamples=5,
-    display=display,
-    save=save,
-    fileName="ErrorAnalysis.pdf" if (save) else "",
-    dpi=dpi,
-    returnFig=False,
-  )
+  if (returnFig):
+    return fig
 
-  PlotClasswisePRFBar(
-    cm, classNames=classNames if (classNames) is not None else [str(i) for i in range(cm.shape[0])],
-    fontSize=fontSize,
-    figsize=(9, 6),
-    display=display,
-    save=save,
-    fileName="ClasswisePRFBar.pdf" if (save) else "",
-    dpi=dpi,
-    returnFig=False,
-  )
-
-  PlotErrorMatrix(
-    cm, classNames=classNames if (classNames) is not None else [str(i) for i in range(cm.shape[0])],
-    fontSize=fontSize,
-    figsize=(7, 6),
-    display=display,
-    save=save,
-    fileName="ErrorMatrix.pdf" if (save) else "",
-    dpi=dpi,
-    returnFig=False,
-  )
-
-  PlotMisclassificationExamples(
-    yTrue, yPred, X=X,
-    maxExamples=5,
-    fontSize=fontSize,
-    figsize=(10, 5),
-    display=display,
-    save=save,
-    fileName="MisclassificationExamples.pdf" if (save) else "",
-    dpi=dpi,
-    returnFig=False,
-  )
-
-  if ((yPredProba is not None) or (classifier is not None)):
-    if ((yPredProba is None) and (classifier is not None) and hasattr(classifier, "predict_proba")):
-      yPredProba = classifier.predict_proba(X)
-    PlotPredictionConfidenceHistogram(
-      yPredProba,
-      yPred=yPred,
-      fontSize=fontSize,
-      figsize=(8, 5),
-      bins=20,
-      display=display,
-      save=save,
-      fileName="PredictionConfidenceHistogram.pdf" if (save) else "",
-      dpi=dpi,
-      returnFig=False,
-    )
-
-  PlotClassificationResiduals(
-    yTrue, yPred,
-    fontSize=fontSize,
-    figsize=(8, 5),
-    display=display,
-    save=save,
-    fileName="ClassificationResiduals.pdf" if (save) else "",
-    dpi=dpi,
-    returnFig=False,
-  )
+  return None
 
 
 if __name__ == "__main__":
