@@ -2,7 +2,6 @@ import os, timm, torch, tqdm
 import numpy as np
 import pandas as pd
 from PIL import Image
-import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, classification_report
 from torch.cuda.amp import GradScaler
@@ -159,6 +158,38 @@ def LoadCheckpoint(checkpointFile, model, optimizer, lr, device):
 
   # Print confirmation message with checkpoint file and device.
   print(f"Checkpoint loaded from {checkpointFile} and model moved to {device}.")
+
+
+def GetOptimizer(model, optimizerType="adamw", learningRate=1e-4, weightDecay=1e-4):
+  r'''
+  Create and return a PyTorch optimizer for the given model.
+
+  Parameters:
+    model (torch.nn.Module): The model whose parameters to optimize.
+    optimizerType (str): The type of optimizer ("adamw", "adam", "sgd", "rmsprop", "adadelta").
+    learningRate (float): Learning rate for the optimizer.
+    weightDecay (float): Weight decay (L2 penalty).
+
+  Returns:
+    torch.optim.Optimizer: The created optimizer.
+  '''
+
+  import torch.optim as optim
+
+  # Create an optimizer for the model parameters.
+  if (optimizerType.lower() == "adamw"):
+    optimizer = optim.AdamW(model.parameters(), lr=learningRate, weight_decay=weightDecay)
+  elif (optimizerType.lower() == "adam"):
+    optimizer = optim.Adam(model.parameters(), lr=learningRate, weight_decay=weightDecay)
+  elif (optimizerType.lower() == "sgd"):
+    optimizer = optim.SGD(model.parameters(), lr=learningRate, weight_decay=weightDecay, momentum=0.9)
+  elif (optimizerType.lower() == "rmsprop"):
+    optimizer = optim.RMSprop(model.parameters(), lr=learningRate, weight_decay=weightDecay)
+  elif (optimizerType.lower() == "adadelta"):
+    optimizer = optim.Adadelta(model.parameters(), lr=learningRate, weight_decay=weightDecay)
+  else:
+    raise ValueError(f"Unsupported optimizer type: {optimizerType}")
+  return optimizer
 
 
 class CustomDataset(torch.utils.data.Dataset):
