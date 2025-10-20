@@ -538,8 +538,8 @@ def MatchTwoImagesViaORB(
 
 # Perform Free Form Deformation (FFD) using B-spline transformation to align two images.
 def FreeFormDeformationImproved(
-  imagePath1,  # Path to the source image (HE image).
-  imagePath2,  # Path to the target image (MT image).
+  imagePath1,  # Path to the source image.
+  imagePath2,  # Path to the target image.
   gridSize=[10, 10],  # Grid size for the B-spline transform.
   numberOfHistogramBins=50,  # Number of histogram bins for the metric.
   samplingPercentage=0.1,  # Percentage of pixels to sample for the metric.
@@ -1249,3 +1249,246 @@ def PriorInformationGeneric(image, mask, startingRadius=10, stepRadius=10, start
     listOfNonIncludedMaps.append(nonIncludedProbabilityMap)
 
   return listOfIncludedMaps, listOfNonIncludedMaps
+
+
+def ReadRGBA(imgPath):
+  r'''
+  Read an image from a file and convert it to RGBA format.
+
+  Parameters:
+    imgPath (str): Path to the image file.
+
+  Returns:
+    numpy.ndarray: The image in RGBA format.
+  '''
+
+  img = cv2.imread(imgPath, cv2.IMREAD_UNCHANGED)  # returns BGR or BGRA.
+  if (img is None):
+    raise FileNotFoundError(f"Image not found: `{imgPath}`")
+  # If grayscale convert to RGBA.
+  if (img.ndim == 2):
+    rgba = cv2.cvtColor(img, cv2.COLOR_GRAY2RGBA)
+  elif (img.shape[2] == 4):
+    rgba = cv2.cvtColor(img, cv2.COLOR_BGRA2RGBA)
+  else:
+    rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    alpha = np.full((rgb.shape[0], rgb.shape[1], 1), 255, dtype=np.uint8)
+    rgba = np.concatenate((rgb, alpha), axis=2)
+  return rgba
+
+
+def SaveFigureRGBA(fig, savePath, dpi=720):
+  r'''
+  Save a Matplotlib figure as a PNG image with RGBA format.
+
+  Parameters:
+    fig (matplotlib.figure.Figure): The Matplotlib figure to save.
+    savePath (str): Path to save the PNG image.
+    dpi (int): Dots per inch for the saved image.
+  '''
+
+  from PIL import Image
+
+  fig.canvas.draw()
+  w, h = fig.canvas.get_width_height()
+  # Get ARGB buffer and convert to RGBA.
+  argb = np.frombuffer(fig.canvas.tostring_argb(), dtype=np.uint8).reshape(h, w, 4)
+  rgba = argb[:, :, [1, 2, 3, 0]]  # ARGB -> RGBA.
+  im = Image.fromarray(rgba)
+  im.save(savePath, format="PNG", dpi=(dpi, dpi))
+
+
+def ComputeAndPlotDeformationFieldViaFarneback(
+  img1,  # Path to the source image.
+  img2,  # Path to the target image.
+  step=10,  # Subsampling step for stream plot visualization.
+  pyrScale=0.5,  # Pyramid scale for Farneback optical flow.
+  levels=3,  # Number of pyramid levels for Farneback optical flow.
+  winsize=15,  # Window size for Farneback optical flow.
+  iterations=3,  # Number of iterations for Farneback optical flow.
+  polyN=5,  # Size of the pixel neighborhood for polynomial expansion in Farneback optical flow.
+  polySigma=1.2,  # Standard deviation of the Gaussian used to smooth derivatives in Farneback optical flow.
+  flags=0,  # Flags for Farneback optical flow computation.
+  backgroundAlpha=0.7,  # Alpha blending for the background image in the plot.
+  density=1.5,  # Density parameter for plt.streamplot.
+  addGradientBar=False,  # If True, adds a gradient color bar to the plot.
+  sourceTitle="Source Image",  # Title for the source image subplot.
+  targetTitle="Target Image",  # Title for the target image subplot.
+  optFlowTitle="Deformation Field via Farneback Optical Flow",  # Title of the plot.
+  showPlot=True,  # If True, displays the plot.
+  savePlotPath=None,  # If provided, saves the plot to the specified path.
+  cmap=plt.cm.viridis,  # Colormap for the plot.
+  fontSize=12,  # Font size for plot labels.
+  returnFigure=False,  # If True, returns the figure object.
+):
+  r'''
+  Compute a dense deformation field between two images using Farneback optical flow
+  and display a stream plot of the displacement vectors over the source image.
+
+  Parameters:
+    img1 (numpy.ndarray): Source image as a NumPy array.
+    img2 (numpy.ndarray): Target image as a NumPy array.
+    step (int): Subsampling step for plotting vectors to improve readability.
+    pyrScale (float): Pyramid scale parameter for Farneback optical flow.
+    levels (int): Number of pyramid levels for Farneback optical flow.
+    winsize (int): Window size for Farneback optical flow.
+    iterations (int): Number of iterations for Farneback optical flow.
+    polyN (int): Size of the pixel neighborhood for polynomial expansion in Farneback optical flow.
+    polySigma (float): Standard deviation of the Gaussian used to smooth derivatives in Farneback optical flow.
+    flags (int): Flags for Farneback optical flow computation.    
+    backgroundAlpha (float): Alpha blending for the background image in the plot.
+    density (float): Density parameter passed to plt.streamplot for vector density.
+    addGradientBar (bool): If True, adds a gradient color bar to the plot.
+    sourceTitle (str): Title for the source image subplot.
+    targetTitle (str): Title for the target image subplot.
+    optFlowTitle (str): Title of the optical flow plot.
+    showPlot (bool): If True, displays the plot.
+    savePlotPath (str or None): If provided, saves the plot to the specified path.
+    cmap (matplotlib.colors.Colormap): Colormap for the plot.
+    fontSize (int): Font size for plot labels.
+    returnFigure (bool): If True, returns the figure object.
+
+  Returns:
+    numpy.ndarray: Deformation field \(`H x W x 2`\) where channels are horizontal and vertical displacements.
+  '''
+
+  # Local import to avoid adding module at file top.
+  import matplotlib.pyplot as plt
+
+  if ((img1 is None) or (img2 is None)):
+    raise ValueError("Failed to read one or both images. Ensure the files are valid image files.")
+
+  # If sizes differ, resize target to match source for optical flow computation.
+  if ((img1.shape[:2] != img2.shape[:2])):
+    img2 = cv2.resize(img2, (img1.shape[1], img1.shape[0]), interpolation=cv2.INTER_CUBIC)
+
+  # Convert to grayscale for optical flow calculation.
+  if (img1.shape[2] == 3):
+    img1Gray = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+  elif (img1.shape[2] == 4):
+    img1Gray = cv2.cvtColor(img1[..., :3], cv2.COLOR_RGB2GRAY)
+  elif (img1.ndim == 2):
+    img1Gray = img1
+  else:
+    raise ValueError("Source image must have 2 (grayscale), 3 (BGR) or 4 (BGRA) channels.")
+  if (img2.shape[2] == 3):
+    img2Gray = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
+  elif (img2.shape[2] == 4):
+    img2Gray = cv2.cvtColor(img2[..., :3], cv2.COLOR_RGB2GRAY)
+  elif (img2.ndim == 2):
+    img2Gray = img2
+  else:
+    raise ValueError("Target image must have 2 (grayscale), 3 (BGR) or 4 (BGRA) channels.")
+
+  # Compute dense optical flow (Farneback).
+  flow = cv2.calcOpticalFlowFarneback(
+    img1Gray,  # Source image (grayscale).
+    img2Gray,  # Target image (grayscale).
+    None,  # Output flow (None to allocate new).
+    pyr_scale=pyrScale,  # Pyramid scale.
+    levels=levels,  # Number of pyramid levels.
+    winsize=winsize,  # Window size.
+    iterations=iterations,  # Number of iterations.
+    poly_n=polyN,  # Size of pixel neighborhood.
+    poly_sigma=polySigma,  # Standard deviation of Gaussian.
+    flags=flags,  # Operation flags.
+  )
+
+  # Split into horizontal (u) and vertical (v) components.
+  u = flow[..., 0]
+  v = flow[..., 1]
+
+  # Prepare downsampled grid for stream plot.
+  step = max(1, int(step))
+  x = np.arange(0, u.shape[1], step)
+  y = np.arange(0, u.shape[0], step)
+  X, Y = np.meshgrid(x, y)
+
+  # Downsample the flow vectors for plotting.
+  U = u[::step, ::step]
+  V = v[::step, ::step]
+
+  # Use default colormap if none provided.
+  if (cmap is None):
+    cmap = plt.cm.viridis
+
+  # Create 1x3 subplots: original source, original target, streamplot.
+  fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+  ax0, ax1, ax2 = axes.ravel()
+
+  # Left: source image.
+  ax0.imshow(cv2.cvtColor(img1, cv2.COLOR_BGR2RGB))
+  ax0.set_title(sourceTitle, fontsize=fontSize * 1.2)
+  ax0.axis("off")
+
+  # Middle: target image.
+  ax1.imshow(cv2.cvtColor(img2, cv2.COLOR_BGR2RGB))
+  ax1.set_title(targetTitle, fontsize=fontSize * 1.2)
+  ax1.axis("off")
+
+  # Right: streamplot overlaid on source.
+  ax2.imshow(cv2.cvtColor(img1, cv2.COLOR_BGR2RGB), alpha=backgroundAlpha)
+
+  # When gradient bar requested, color streamlines by magnitude; otherwise use a fixed color.
+  if (addGradientBar):
+    import matplotlib as mpl
+    # Magnitude for downsampled vectors and full-field for normalization.
+    mag = np.sqrt(U ** 2 + V ** 2)
+    fullMagMax = float(np.max(np.sqrt(u ** 2 + v ** 2)))
+    vmax = fullMagMax if (fullMagMax > 0) else 1e-8
+    norm = mpl.colors.Normalize(vmin=0.0, vmax=vmax)
+    # Draw streamlines colored by magnitude.
+    strm = ax2.streamplot(
+      X, Y, U, V,  # Flow field components.
+      color=mag,  # Color by magnitude.
+      cmap=cmap,  # Colormap for streamlines.
+      norm=norm,  # Normalize colors to full-field magnitude.
+      density=density,  # Density of the streamlines.
+      linewidth=1,  # Line width of the streamlines.
+      arrowsize=1.2,  # Arrow size scaling factor.
+    )
+    # Create scalar mappable for colorbar and attach to the same axes.
+    sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])  # required for colorbar.
+    cbar = fig.colorbar(
+      sm,  # mappable for colorbar.
+      ax=ax2,  # Axes to attach colorbar to.
+      orientation="vertical",  # Vertical colorbar.
+      fraction=0.046,  # Fraction of original axes size.
+      pad=0.04,  # Padding between axes and colorbar.
+    )
+    cbar.set_label(
+      "Displacement Magnitude",  # Colorbar label.
+      rotation=270,  # Rotate label vertically.
+      labelpad=15,  # Padding for label.
+      fontsize=fontSize,  # Font size for label.
+    )
+  else:
+    # Fixed-color streamplot (no colorbar).
+    ax2.streamplot(
+      X, Y, U, V,  # Flow field components.
+      color="blue",  # Fixed color for streamlines.
+      density=density,  # Density of the streamlines.
+      linewidth=1,  # Line width of the streamlines.
+      arrowsize=1.2,  # Arrow size scaling factor.
+    )
+
+  # Set title and remove axes for cleaner look.
+  ax2.set_title(optFlowTitle, fontsize=fontSize * 1.2)
+  ax2.axis("off")
+
+  # Tight layout for better spacing.
+  plt.tight_layout()
+
+  if (savePlotPath is not None):
+    fig.savefig(savePlotPath, bbox_inches="tight", dpi=720)
+  if (showPlot):
+    plt.show()
+  plt.close(fig)
+
+  # Return figure if requested.
+  if (returnFigure):
+    return flow, fig
+
+  # Return the computed deformation field.
+  return flow

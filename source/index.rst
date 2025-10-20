@@ -26,12 +26,12 @@ The HMB package provides a comprehensive suite of helper modules for image proce
 
 Features
 --------
-- Image comparison, normalization, and segmentation metrics
-- Text generation and embedding utilities
-- PDF processing helpers
-- PyTorch segmentation losses
-- Performance metrics and initializations
-- Utilities for working with whole slide images (WSI)
+- Image comparison, normalization, and segmentation metrics.
+- Text generation and embedding utilities.
+- PDF processing helpers.
+- PyTorch segmentation losses.
+- Performance metrics and initializations.
+- Utilities for working with whole slide images (WSI).
 
 Installation
 ------------
@@ -91,6 +91,7 @@ Quickstart
    MetaheuristicsHelper
    PDFHelper
    PerformanceMetrics
+   PyTorchClassificationLosses
    PyTorchHelper
    PyTorchSegmentationLosses
    StatisticalAnalysisHelper
