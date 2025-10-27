@@ -2,6 +2,7 @@
 import os  # Import os for file path operations.
 import cv2, PIL  # Import OpenCV and PIL for image processing.
 import numpy as np  # Import numpy for numerical operations.
+import matplotlib.pyplot as plt  # Import matplotlib for plotting.
 
 
 def ReadVolume(caseImgPaths, caseSegPaths, raiseErrors=True):
