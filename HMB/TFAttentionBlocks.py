@@ -495,7 +495,7 @@ class NonLocalBlock(Layer):
     return cfg
 
 
-class BAM(Layer):
+class BAMBlock(Layer):
   r'''
   Bottleneck Attention Module (BAM) - lightweight channel + spatial attention.
 
@@ -510,14 +510,14 @@ class BAM(Layer):
 
   def __init__(self, reduction=16, dilationRates=(1, 2, 4), **kwargs):
     r'''
-    Initialize BAM.
+    Initialize BAM block.
 
     Parameters:
       reduction (int): Reduction ratio for channel MLP.
       dilationRates (tuple): Dilation rates for spatial convolutions.
     '''
 
-    super(BAM, self).__init__(**kwargs)
+    super(BAMBlock, self).__init__(**kwargs)
     self.reduction = reduction
     self.dilationRates = dilationRates
 
@@ -541,7 +541,7 @@ class BAM(Layer):
     ]
     self.sigmoid = Activation("sigmoid")
     self.globalAvgPool = GlobalAveragePooling2D()
-    super(BAM, self).build(inputShape)
+    super(BAMBlock, self).build(inputShape)
 
   def call(self, inputs):
     r'''
@@ -570,7 +570,7 @@ class BAM(Layer):
     return attn
 
   def get_config(self):
-    cfg = super(BAM, self).get_config()
+    cfg = super(BAMBlock, self).get_config()
     cfg.update({"reduction": self.reduction, "dilationRates": self.dilationRates})
     return cfg
 
@@ -968,7 +968,7 @@ if __name__ == "__main__":
     ECABlock(gamma=2, b=1),
     MultiHeadSelfAttention(numHeads=8, keyDim=64),
     NonLocalBlock(),
-    BAM(reduction=16, dilationRates=(1, 2, 4)),
+    BAMBlock(reduction=16, dilationRates=(1, 2, 4)),
     GCBlock(reduction=16),
     AxialAttention(numHeads=4, keyDim=32),
     AttentionAugmentedConv(filters=256, kernelSize=3, numHeads=4, keyDim=32),
