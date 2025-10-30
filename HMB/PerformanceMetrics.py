@@ -116,14 +116,15 @@ def CalculatePerformanceMetrics(
     specificity = TN / (TN + FP)
     bac = 0.5 * (recall + specificity)
 
-    metrics.update({
-      "Per Class Precision"  : precision,
-      "Per Class Recall"     : recall,
-      "Per Class F1"         : f1,
-      "Per Class Accuracy"   : accuracy,
-      "Per Class Specificity": specificity,
-      "Per Class BAC"        : bac,
-    })
+    for i in range(len(precision)):
+      metrics.update({
+        f"Class {i} Precision"  : precision[i],
+        f"Class {i} Recall"     : recall[i],
+        f"Class {i} F1"         : f1[i],
+        f"Class {i} Accuracy"   : accuracy[i],
+        f"Class {i} Specificity": specificity[i],
+        f"Class {i} BAC"        : bac[i],
+      })
 
   # Calculate macro-averaged precision, recall, F1, accuracy, and specificity.
   precision = np.mean(TP / (TP + FP))
@@ -1934,12 +1935,14 @@ def PlotClasswisePRFBar(
     addWeightedAverage=True,  # Whether to include weighted averages in the output.
     addPerClass=True,  # Whether to include per-class metrics in the output.
   )
-  precision = pm["Per Class Precision"]
-  recall = pm["Per Class Recall"]
-  f1 = pm["Per Class F1"]
-  specificity = pm["Per Class Specificity"]
-  accuracy = pm["Per Class Accuracy"]
-  bac = pm["Per Class BAC"]
+  precision, recall, f1, specificity, accuracy, bac = [], [], [], [], [], []
+  for i in range(numClasses):
+    precision.append(pm[f"Class {i} Precision"])
+    recall.append(pm[f"Class {i} Recall"])
+    f1.append(pm[f"Class {i} F1-score"])
+    specificity.append(pm[f"Class {i} Specificity"])
+    accuracy.append(pm[f"Class {i} Accuracy"])
+    bac.append(pm[f"Class {i} BAC"])
 
   metrics = np.vstack([precision, recall, f1, specificity, accuracy, bac])
   labels = ["Precision", "Recall", "F1-score", "Specificity", "Accuracy", "BAC"]
