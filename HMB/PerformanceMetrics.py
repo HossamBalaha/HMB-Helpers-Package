@@ -101,10 +101,10 @@ def CalculatePerformanceMetrics(
 
   # Create a dictionary to hold the calculated performance metrics and the TP, FP, FN, TN vectors.
   metrics = {
-    "TP": TP,
-    "FP": FP,
-    "FN": FN,
-    "TN": TN,
+    "TP": str(TP),
+    "FP": str(FP),
+    "FN": str(FN),
+    "TN": str(TN),
   }
 
   # If requested, calculate per-class precision, recall, F1, accuracy, and specificity.
@@ -124,6 +124,10 @@ def CalculatePerformanceMetrics(
         f"Class {i} Accuracy"   : accuracy[i],
         f"Class {i} Specificity": specificity[i],
         f"Class {i} BAC"        : bac[i],
+        f"TP Class {i}"         : TP[i],
+        f"FP Class {i}"         : FP[i],
+        f"FN Class {i}"         : FN[i],
+        f"TN Class {i}"         : TN[i],
       })
 
   # Calculate macro-averaged precision, recall, F1, accuracy, and specificity.
