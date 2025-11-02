@@ -5,9 +5,10 @@ from tensorflow.keras.layers import (
   GlobalMaxPooling2D, Activation, Add, Multiply, Softmax,
   Reshape, Permute, Concatenate, DepthwiseConv2D, MultiHeadAttention
 )
+from tensorflow.keras.utils import register_keras_serializable
 
 
-# Define CBAM attention block class.
+@register_keras_serializable(package="HMB")
 class CBAMBlock(Layer):
   r'''
   Convolutional Block Attention Module (CBAM) implementation as a Keras Layer.
@@ -16,15 +17,15 @@ class CBAMBlock(Layer):
   Parameters:
     ratio (int): Reduction ratio for channel attention MLP. Default is 8.
     kernelSize (int): Kernel size for spatial attention convolution. Default is 7.
-    
+
   Examples
   --------
   .. code-block:: python
-  
+
   from HMB.TFAttentionBlocks import CBAMBlock
   from tensorflow.keras.models import Sequential
   from tensorflow.keras.layers import Conv2D, Input
-  
+
   model = Sequential([
     Input(shape=(64, 64, 128)),
     Conv2D(128, (3, 3), padding="same", activation="relu"),
@@ -46,18 +47,16 @@ class CBAMBlock(Layer):
 
     # Call parent initializer.
     super(CBAMBlock, self).__init__(**kwargs)
+
     # Set channel reduction ratio.
     self.ratio = ratio
     # Set kernel size for spatial attention.
     self.kernelSize = kernelSize
 
-    # Build layer components when input shape is known.
-
+  # Build layer components when input shape is known.
   def build(self, inputShape):
     r'''
     Build the CBAM block components based on input shape.
-    This method initializes the shared MLP layers for channel attention
-    and the convolutional layer for spatial attention.
 
     Parameters:
       inputShape (tuple): Shape of the input tensor.
@@ -73,12 +72,14 @@ class CBAMBlock(Layer):
       activation="relu",  # ReLU activation.
       kernel_initializer="he_normal",  # He normal initialization.
       use_bias=True,  # Use bias in dense layer.
+      name="cbam_shared_layer_one"
     )
 
     self.sharedLayerTwo = Dense(
       channel,  # Restore original channel dimension.
       kernel_initializer="he_normal",  # He normal initialization.
       use_bias=True,  # Use bias in dense layer.
+      name="cbam_shared_layer_two"
     )
 
     self.conv = Conv2D(
@@ -86,15 +87,18 @@ class CBAMBlock(Layer):
       padding="same",  # Ensure output size matches input size.
       activation="sigmoid",  # Sigmoid for attention map.
       kernel_initializer="he_normal",  # He normal initialization.
+      use_bias=False,  # No bias needed.
     )
 
     # Create pooling layers.
-    self.gap = GlobalAveragePooling2D()
-    self.gmp = GlobalMaxPooling2D()
+    self.gap = GlobalAveragePooling2D(name="cbam_global_avg_pool")
+    self.gmp = GlobalMaxPooling2D(name="cbam_global_max_pool")
 
-    super(CBAMBlock, self).build(inputShape)  # Finish build.
+    # Finish build.
+    super(CBAMBlock, self).build(inputShape)
 
-  # Forward pass applying channel and spatial attention.
+    # Forward pass applying channel and spatial attention.
+
   def call(self, inputs):
     # Channel attention.
     # Global average pooling across spatial dims.
@@ -134,21 +138,8 @@ class CBAMBlock(Layer):
 
     return out  # Return refined features.
 
-  # Make layer serializable by returning initialization args.
-  def get_config(self):
-    # Get base config from parent.
-    config = super(CBAMBlock, self).get_config()
-    config.update({
-      "ratio"     : self.ratio,  # Include ratio in config.
-      "kernelSize": self.kernelSize  # Include kernelSize in config.
-    })
-    return config  # Return the updated config.
 
-  # Return the output shape unchanged.
-  def compute_output_shape(self, inputShape):
-    return inputShape  # Output shape equals input shape.
-
-
+@register_keras_serializable(package="HMB")
 class SEBlock(Layer):
   r'''
   Squeeze-and-Excitation (SE) block implementation as a Keras Layer.
@@ -186,6 +177,7 @@ class SEBlock(Layer):
 
     # Call parent initializer.
     super(SEBlock, self).__init__(**kwargs)
+
     # Set reduction ratio.
     self.ratio = ratio
 
@@ -193,8 +185,6 @@ class SEBlock(Layer):
   def build(self, inputShape):
     r'''
     Build the SE block components based on input shape.
-    This method initializes the dense layers for the squeeze
-    and excitation operations.
 
     Parameters:
       inputShape (tuple): Shape of the input tensor.
@@ -210,15 +200,18 @@ class SEBlock(Layer):
       activation="relu",  # ReLU activation.
       kernel_initializer="he_normal",  # He normal initialization.
       use_bias=True,  # Use bias in dense layer.
+      name="se_dense_one"
     )
     self.denseTwo = Dense(
       channel,  # Restore original channel dimension.
       activation="sigmoid",  # Sigmoid for attention weights.
       kernel_initializer="he_normal",  # He normal initialization.
       use_bias=True,  # Use bias in dense layer.
+      name="se_dense_two"
     )
     # Global average pooling layer.
-    self.gap = GlobalAveragePooling2D()
+    self.gap = GlobalAveragePooling2D(name="se_global_avg_pool")
+
     # Finish build.
     super(SEBlock, self).build(inputShape)
 
@@ -238,22 +231,8 @@ class SEBlock(Layer):
     # Return recalibrated features.
     return out
 
-  # Make layer serializable by returning initialization args.
-  def get_config(self):
-    # Get base config from parent.
-    config = super(SEBlock, self).get_config()
-    config.update({
-      "ratio": self.ratio  # Include ratio in config.
-    })
-    # Return the updated config.
-    return config
 
-  # Return the output shape unchanged.
-  def compute_output_shape(self, inputShape):
-    # Output shape equals input shape.
-    return inputShape
-
-
+@register_keras_serializable(package="HMB")
 class ECABlock(Layer):
   r'''
   Efficient Channel Attention (ECA) block implementation as a Keras Layer.
@@ -306,9 +285,10 @@ class ECABlock(Layer):
       activation="sigmoid",
       kernel_initializer="he_normal",
       use_bias=False,
+      name="eca_conv1d"
     )
     # Global average pooling layer.
-    self.gap = GlobalAveragePooling2D()
+    self.gap = GlobalAveragePooling2D(name="eca_global_avg_pool")
     super(ECABlock, self).build(inputShape)  # Finish build.
 
   # Forward pass applying efficient channel attention.
@@ -329,25 +309,8 @@ class ECABlock(Layer):
     # Return recalibrated features.
     return out
 
-  # Make layer serializable by returning initialization args.
-  def get_config(self):
-    # Get base config from parent.
-    config = super(ECABlock, self).get_config()
-    config.update({
-      # Include gamma in config.
-      "gamma": self.gamma,
-      # Include b in config.
-      "b"    : self.b
-    })
-    # Return the updated config.
-    return config
 
-  # Return the output shape unchanged.
-  def compute_output_shape(self, inputShape):
-    # Output shape equals input shape.
-    return inputShape
-
-
+@register_keras_serializable(package="HMB")
 class MultiHeadSelfAttention(Layer):
   r'''
   Multi-head self-attention adapted for 2D feature maps.
@@ -411,12 +374,8 @@ class MultiHeadSelfAttention(Layer):
     out = tf.reshape(out, (b, h, w, c))
     return out
 
-  def get_config(self):
-    cfg = super(MultiHeadSelfAttention, self).get_config()
-    cfg.update({"numHeads": self.numHeads, "keyDim": self.keyDim})
-    return cfg
 
-
+@register_keras_serializable(package="HMB")
 class NonLocalBlock(Layer):
   r'''
   Non-local block (self-attention over feature map positions).
@@ -443,7 +402,7 @@ class NonLocalBlock(Layer):
     r'''
     Build 1x1 conv projections for theta, phi and g, and an output 1x1 conv.
     inputShape is expected as (batch, H, W, C).
-    
+
     Parameters:
       inputShape (tuple): Shape of the input tensor.
     '''
@@ -452,17 +411,17 @@ class NonLocalBlock(Layer):
     if self.interChannels is None:
       self.interChannels = max(1, c // 2)
     # Linear projections implemented as 1x1 convs.
-    self.theta = Conv2D(self.interChannels, 1, padding="same", use_bias=False)
-    self.phi = Conv2D(self.interChannels, 1, padding="same", use_bias=False)
-    self.g = Conv2D(self.interChannels, 1, padding="same", use_bias=False)
-    self.outConv = Conv2D(c, 1, padding="same", use_bias=False)
+    self.theta = Conv2D(self.interChannels, 1, padding="same", use_bias=False, name="nlb_theta_conv")
+    self.phi = Conv2D(self.interChannels, 1, padding="same", use_bias=False, name="nlb_phi_conv")
+    self.g = Conv2D(self.interChannels, 1, padding="same", use_bias=False, name="nlb_g_conv")
+    self.outConv = Conv2D(c, 1, padding="same", use_bias=False, name="nlb_out_conv")
     super(NonLocalBlock, self).build(inputShape)
 
   def call(self, inputs):
     r'''
     Forward pass: compute affinity matrix between positions and aggregate
     global context which is then projected and added to the input (residual).
-    
+
     Parameters:
       inputs (tensorflow.Tensor): Input feature map of shape (b, H, W, C).
     '''
@@ -489,12 +448,8 @@ class NonLocalBlock(Layer):
     # residual connection.
     return inputs + out
 
-  def get_config(self):
-    cfg = super(NonLocalBlock, self).get_config()
-    cfg.update({"interChannels": self.interChannels})
-    return cfg
 
-
+@register_keras_serializable(package="HMB")
 class BAMBlock(Layer):
   r'''
   Bottleneck Attention Module (BAM) - lightweight channel + spatial attention.
@@ -532,15 +487,15 @@ class BAMBlock(Layer):
     c = int(inputShape[-1])
     hidden = max(1, c // self.reduction)
     # channel branch: small MLP.
-    self.channelFc1 = Dense(hidden, activation="relu")
-    self.channelFc2 = Dense(c, activation=None)
+    self.channelFc1 = Dense(hidden, activation="relu", name="bam_channel_fc1")
+    self.channelFc2 = Dense(c, activation=None, name="bam_channel_fc2")
     # spatial branch: stack of dilated convs.
     self.spatialConvs = [
-      Conv2D(1, 3, padding="same", dilation_rate=d, activation=None)
+      Conv2D(1, 3, padding="same", dilation_rate=d, activation=None, name=f"bam_spatial_conv_d{d}")
       for d in self.dilationRates
     ]
-    self.sigmoid = Activation("sigmoid")
-    self.globalAvgPool = GlobalAveragePooling2D()
+    self.sigmoid = Activation("sigmoid", name="bam_sigmoid")
+    self.globalAvgPool = GlobalAveragePooling2D(name="bam_global_avg_pool")
     super(BAMBlock, self).build(inputShape)
 
   def call(self, inputs):
@@ -569,12 +524,8 @@ class BAMBlock(Layer):
     attn = Multiply()([attn, spat])
     return attn
 
-  def get_config(self):
-    cfg = super(BAMBlock, self).get_config()
-    cfg.update({"reduction": self.reduction, "dilationRates": self.dilationRates})
-    return cfg
 
-
+@register_keras_serializable(package="HMB")
 class GCBlock(Layer):
   r'''
   Global Context (GC) block - simplified global attention for feature maps.
@@ -603,10 +554,12 @@ class GCBlock(Layer):
     Build conv_mask and transform dense layers based on input channels.
     '''
     c = int(inputShape[-1])
-    self.convMask = Conv2D(1, 1, padding="same")
+    self.convMask = Conv2D(1, 1, padding="same", use_bias=False, name="gc_conv_mask")
     self.softmax = Softmax(axis=1)  # later applied over spatial positions.
-    self.transform = Dense(max(1, c // self.reduction), activation="relu")
-    self.transformOut = Dense(c, activation=None)
+    self.transform = Dense(max(1, c // self.reduction), activation="relu", name="gc_transform_fc1")
+    self.transformOut = Dense(c, activation=None, name="gc_transform_fc2")
+
+    # Finish build.
     super(GCBlock, self).build(inputShape)
 
   def call(self, inputs):
@@ -636,12 +589,8 @@ class GCBlock(Layer):
     contextTrans = tf.expand_dims(tf.expand_dims(contextTrans, axis=1), axis=1)
     return inputs + contextTrans
 
-  def get_config(self):
-    cfg = super(GCBlock, self).get_config()
-    cfg.update({"reduction": self.reduction})
-    return cfg
 
-
+@register_keras_serializable(package="HMB")
 class AxialAttention(Layer):
   r'''
   Axial attention: factorized attention applied along height then width axes.
@@ -695,12 +644,8 @@ class AxialAttention(Layer):
     xW = self.mhsaW.call(inputs)
     return xH + xW
 
-  def get_config(self):
-    cfg = super(AxialAttention, self).get_config()
-    cfg.update({"numHeads": self.numHeads, "keyDim": self.keyDim})
-    return cfg
 
-
+@register_keras_serializable(package="HMB")
 class AttentionAugmentedConv(Layer):
   r'''
   Attention-augmented convolutional layer.
@@ -742,7 +687,12 @@ class AttentionAugmentedConv(Layer):
     '''
 
     # conv branch output channels is total filters minus attention channels.
-    self.conv = Conv2D(self.filters - self.keyDim * self.numHeads, self.kernelSize, padding="same")
+    self.conv = Conv2D(
+      self.filters - self.keyDim * self.numHeads, self.kernelSize,
+      padding="same",
+      activation="relu",
+      name="aac_conv_branch"
+    )
     # instantiate with correct kwarg name
     self.mhsa = MultiHeadSelfAttention(numHeads=self.numHeads, keyDim=self.keyDim)
     self.concat = Concatenate(axis=-1)
@@ -761,20 +711,8 @@ class AttentionAugmentedConv(Layer):
     out = self.concat([convOut, attnOut])
     return out
 
-  def get_config(self):
-    cfg = super(AttentionAugmentedConv, self).get_config()
-    cfg.update(
-      {
-        "filters"   : self.filters,
-        "kernelSize": self.kernelSize,
-        "numHeads"  : self.numHeads,
-        "keyDim"    : self.keyDim,
-      }
-    )
-    return cfg
 
-
-# python
+@register_keras_serializable(package="HMB")
 class SKBlock(Layer):
   r'''
   Selective Kernel (SK) block: adaptively fuse multiple convolutional branches.
@@ -820,8 +758,11 @@ class SKBlock(Layer):
     # Selection MLP.
     self.globalPool = GlobalAveragePooling2D()
     hiddenUnits = max(1, self.filters // self.r)
-    self.fc1 = Dense(hiddenUnits, activation="relu")
-    self.fcs = [Dense(self.filters, activation=None) for _ in range(self.M)]
+    self.fc1 = Dense(hiddenUnits, activation="relu", name="sk_fc1")
+    self.fcs = [
+      Dense(self.filters, activation=None, name=f"sk_fc_branch_{m}")
+      for m in range(self.M)
+    ]
     # Softmax across branches (axis=1 corresponds to M after stacking).
     self.softmax = Softmax(axis=1)
 
@@ -868,15 +809,8 @@ class SKBlock(Layer):
 
     return V
 
-  def get_config(self):
-    cfg = super(SKBlock, self).get_config()
-    cfg.update({"filters": self.filters, "M": self.M, "G": self.G, "r": self.r})
-    return cfg
 
-  def compute_output_shape(self, inputShape):
-    return inputShape
-
-
+@register_keras_serializable(package="HMB")
 class TripletAttention(Layer):
   r'''
   Triplet attention: cross-dimension spatial attention using rotated inputs.
@@ -907,7 +841,7 @@ class TripletAttention(Layer):
       inputShape (tuple): Shape of the input tensor.
     '''
 
-    self.conv = Conv2D(1, self.kernelSize, padding="same", activation="sigmoid")
+    self.conv = Conv2D(1, self.kernelSize, padding="same", activation="sigmoid", name="triplet_attention_conv")
     super(TripletAttention, self).build(inputShape)
 
   def _spatial_att(self, x):
@@ -948,11 +882,6 @@ class TripletAttention(Layer):
     out = (a + b + c) / 3.0
     return out
 
-  def get_config(self):
-    cfg = super(TripletAttention, self).get_config()
-    cfg.update({"kernelSize": self.kernelSize})
-    return cfg
-
 
 if __name__ == "__main__":
   # Simple test case to verify layer instantiation.
@@ -960,8 +889,10 @@ if __name__ == "__main__":
   from tensorflow.keras.models import Sequential
   from tensorflow.keras.layers import Conv2D, Input
 
+  inputShape = (64, 64, 128)
+
   model = Sequential([
-    Input(shape=(64, 64, 128)),
+    Input(shape=inputShape),
     Conv2D(128, (3, 3), padding="same", activation="relu"),
     CBAMBlock(ratio=8, kernelSize=7),
     SEBlock(ratio=16),
@@ -973,6 +904,7 @@ if __name__ == "__main__":
     AxialAttention(numHeads=4, keyDim=32),
     AttentionAugmentedConv(filters=256, kernelSize=3, numHeads=4, keyDim=32),
     SKBlock(filters=128, M=2, G=1, r=16),
+    SKBlock(filters=256, M=2, G=1, r=16),  # <- changed from 128 to 256
     TripletAttention(kernelSize=7),
     Conv2D(256, (3, 3), padding="same", activation="relu")
   ])
@@ -982,3 +914,37 @@ if __name__ == "__main__":
   x = np.random.rand(1, 64, 64, 128).astype(np.float32)
   y = model.predict(x)
   print("Output shape:", y.shape)
+
+  # Store model to disk and load it back to verify serialization.
+  model.save("test_attention_blocks_model.keras")
+
+  from tensorflow.keras.models import load_model
+  from HMB.TFAttentionBlocks import (
+    CBAMBlock, SEBlock, ECABlock, MultiHeadSelfAttention, NonLocalBlock,
+    BAMBlock, GCBlock, AxialAttention, AttentionAugmentedConv, SKBlock, TripletAttention
+  )
+
+  customObjects = {
+    "CBAMBlock"             : CBAMBlock,
+    "SEBlock"               : SEBlock,
+    "ECABlock"              : ECABlock,
+    "MultiHeadSelfAttention": MultiHeadSelfAttention,
+    "NonLocalBlock"         : NonLocalBlock,
+    "BAMBlock"              : BAMBlock,
+    "GCBlock"               : GCBlock,
+    "AxialAttention"        : AxialAttention,
+    "AttentionAugmentedConv": AttentionAugmentedConv,
+    "SKBlock"               : SKBlock,
+    "TripletAttention"      : TripletAttention,
+  }
+
+  # Load the model back.
+  loadedModel = load_model(
+    "test_attention_blocks_model.keras",
+    compile=True,
+    custom_objects=customObjects
+  )
+
+  # Verify loaded model works.
+  y2 = loadedModel.predict(x)
+  print("Loaded model output shape:", y2.shape)
