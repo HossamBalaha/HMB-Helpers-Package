@@ -1943,13 +1943,13 @@ def PlotClasswisePRFBar(
   for i in range(numClasses):
     precision.append(pm[f"Class {i} Precision"])
     recall.append(pm[f"Class {i} Recall"])
-    f1.append(pm[f"Class {i} F1-score"])
+    f1.append(pm[f"Class {i} F1"])
     specificity.append(pm[f"Class {i} Specificity"])
     accuracy.append(pm[f"Class {i} Accuracy"])
     bac.append(pm[f"Class {i} BAC"])
 
   metrics = np.vstack([precision, recall, f1, specificity, accuracy, bac])
-  labels = ["Precision", "Recall", "F1-score", "Specificity", "Accuracy", "BAC"]
+  labels = ["Precision", "Recall", "F1", "Specificity", "Accuracy", "BAC"]
 
   x = np.arange(numClasses)
   width = 0.15
