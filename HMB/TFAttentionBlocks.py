@@ -883,6 +883,512 @@ class TripletAttention(Layer):
     return out
 
 
+@register_keras_serializable(package="HMB")
+class CoordAttention(Layer):
+  r'''
+  Coordinate Attention block implementation as a Keras Layer.
+
+  This block factorizes channel attention into two directional attention maps
+  that encode positional information along height and width respectively.
+
+  Parameters:
+    reduction (int): Reduction ratio for the internal bottleneck. Default is 32.
+  '''
+
+  def __init__(self, reduction=32, **kwargs):
+    r'''
+    Initialize CoordAttention.
+
+    Parameters:
+      reduction (int): Reduction ratio for the bottleneck. Default is 32.
+    '''
+
+    super(CoordAttention, self).__init__(**kwargs)
+    self.reduction = reduction
+
+  def build(self, inputShape):
+    r'''
+    Build 1x1 conv layers used by the block.
+    '''
+
+    # inputShape is (batch, H, W, C).
+    channel = int(inputShape[-1])
+    hidden = max(1, channel // self.reduction)
+
+    # Shared transform after concatenating directional descriptors.
+    self.conv1 = Conv2D(
+      hidden, 1, padding="same", activation="relu", use_bias=True, name="coord_conv1"
+    )
+    # Produce height and width attention maps that will be broadcast-multiplied.
+    self.convH = Conv2D(channel, 1, padding="same", activation="sigmoid", use_bias=True, name="coord_conv_h")
+    self.convW = Conv2D(channel, 1, padding="same", activation="sigmoid", use_bias=True, name="coord_conv_w")
+
+    super(CoordAttention, self).build(inputShape)
+
+  def call(self, inputs):
+    r'''
+    Forward pass for coordinate attention.
+
+    Input: (b, H, W, C).
+    Output: (b, H, W, C) where input is scaled by coordinate attention maps.
+    '''
+
+    # Compute directional pooled descriptors.
+    # Average along width -> shape (b, H, 1, C).
+    xH = tf.reduce_mean(inputs, axis=2, keepdims=True)
+    # Average along height -> shape (b, 1, W, C).
+    xW = tf.reduce_mean(inputs, axis=1, keepdims=True)
+    # Transpose xW to shape (b, W, 1, C) so it can be concatenated with xH.
+    xW = tf.transpose(xW, perm=[0, 2, 1, 3])
+
+    # Concatenate along the spatial (height) axis -> (b, H+W, 1, C).
+    cat = tf.concat([xH, xW], axis=1)
+
+    # Shared 1x1 conv to mix channel information -> (b, H+W, 1, hidden).
+    x = self.conv1(cat)
+
+    # Split back into height and width descriptors using the sizes from xH and xW.
+    xHPooled, xWPooled = tf.split(x, [tf.shape(xH)[1], tf.shape(xW)[1]], axis=1)
+
+    # Produce attention maps and reshape width attention back to (b, 1, W, C).
+    aH = self.convH(xHPooled)
+    aW = self.convW(xWPooled)
+    aW = tf.transpose(aW, perm=[0, 2, 1, 3])
+
+    # Broadcast multiply inputs by the two attention maps.
+    out = inputs * aH * aW
+    return out
+
+
+@register_keras_serializable(package="HMB")
+class SCSEBlock(Layer):
+  r'''
+  Spatial-Channel Squeeze-and-Excitation (scSE) block implementation as a Keras Layer.
+
+  This block combines channel Squeeze-and-Excitation (cSE) and a spatial
+  squeeze-and-excitation (sSE) to recalibrate features both channel-wise and
+  spatially.
+
+  Parameters:
+    ratio (int): Reduction ratio for the channel bottleneck. Default is 16.
+  '''
+
+  def __init__(self, ratio=16, **kwargs):
+    r'''
+    Initialize scSEBlock.
+
+    Parameters:
+      ratio (int): Reduction ratio for the channel bottleneck. Default is 16.
+    '''
+
+    super(SCSEBlock, self).__init__(**kwargs)
+    self.ratio = ratio
+
+  def build(self, inputShape):
+    r'''
+    Build dense layers for cSE and a 1x1 conv for sSE.
+    '''
+
+    channel = int(inputShape[-1])
+    hiddenUnits = max(1, channel // self.ratio)
+
+    # Channel SE MLP.
+    self.cseDense1 = Dense(
+      hiddenUnits, activation="relu",
+      kernel_initializer="he_normal",
+      use_bias=True,
+      name="scse_cse_dense1"
+    )
+    self.cseDense2 = Dense(
+      channel, activation="sigmoid",
+      kernel_initializer="he_normal",
+      use_bias=True,
+      name="scse_cse_dense2"
+    )
+    self.globalAvgPool = GlobalAveragePooling2D(name="scse_global_avg_pool")
+
+    # Spatial SE conv.
+    self.sseConv = Conv2D(
+      1, 1, padding="same",
+      activation="sigmoid",
+      kernel_initializer="he_normal",
+      use_bias=True,
+      name="scse_sse_conv"
+    )
+
+    super(SCSEBlock, self).build(inputShape)
+
+  def call(self, inputs):
+    r'''
+    Forward pass: compute cSE and sSE branches and fuse their outputs.
+
+    Input: (b, H, W, C).
+    Output: (b, H, W, C) fused from both branches.
+    '''
+
+    # cSE branch: global pooling -> MLP -> reshape and scale.
+    ch = self.globalAvgPool(inputs)
+    ch = self.cseDense1(ch)
+    ch = self.cseDense2(ch)
+    ch = tf.expand_dims(tf.expand_dims(ch, axis=1), axis=1)
+    cSEOut = Multiply()([inputs, ch])
+
+    # sSE branch: 1x1 conv -> scale.
+    s = self.sseConv(inputs)
+    sSEOut = Multiply()([inputs, s])
+
+    # Fuse channel and spatial recalibrations by elementwise addition.
+    out = Add()([cSEOut, sSEOut])
+    return out
+
+
+@register_keras_serializable(package="HMB")
+class PositionAttentionModule(Layer):
+  r'''
+  Position Attention Module (PAM) used in DANet as a spatial attention block.
+
+  This module computes a spatial (position) affinity across all positions and
+  aggregates context accordingly. It is lightweight and works on NHWC tensors.
+
+  Parameters:
+    interChannels (int|None): Number of channels for the internal projections. If None it defaults to max(1, C//8) where C is input channels.
+  '''
+
+  def __init__(self, interChannels=None, **kwargs):
+    r'''
+    Initialize PositionAttentionModule.
+
+    Parameters:
+      interChannels (int|None): Number of channels for internal projections.
+    '''
+
+    super(PositionAttentionModule, self).__init__(**kwargs)
+    self.interChannels = interChannels
+
+  def build(self, inputShape):
+    r'''
+    Build 1x1 conv projections for query, key and value, and an output conv.
+    '''
+
+    channel = int(inputShape[-1])
+    if (self.interChannels is None):
+      self.interChannels = max(1, channel // 8)
+
+    # 1x1 convs for query, key and value projections.
+    self.queryConv = Conv2D(self.interChannels, 1, padding="same", use_bias=False, name="pam_query_conv")
+    self.keyConv = Conv2D(self.interChannels, 1, padding="same", use_bias=False, name="pam_key_conv")
+    self.valueConv = Conv2D(self.interChannels, 1, padding="same", use_bias=False, name="pam_value_conv")
+
+    # Output projection to restore channel dimension.
+    self.outConv = Conv2D(channel, 1, padding="same", use_bias=False, name="pam_out_conv")
+
+    # Learnable scale parameter initialized to zero so the block can start as identity.
+    self.gamma = self.add_weight(name="pam_gamma", shape=(), initializer="zeros", trainable=True)
+
+    super(PositionAttentionModule, self).build(inputShape)
+
+  def call(self, inputs):
+    r'''
+    Forward pass for PAM.
+
+    Input: (b, H, W, C).
+    Output: (b, H, W, C) with position attention applied.
+    '''
+
+    b = tf.shape(inputs)[0]
+    h = tf.shape(inputs)[1]
+    w = tf.shape(inputs)[2]
+    c = tf.shape(inputs)[3]
+    n = h * w  # number of positions.
+
+    # Project inputs to query, key and value spaces.
+    projQuery = self.queryConv(inputs)  # (b, H, W, inter).
+    projQuery = tf.reshape(projQuery, (b, -1, self.interChannels))  # (b, N, inter).
+
+    projKey = self.keyConv(inputs)
+    projKey = tf.reshape(projKey, (b, -1, self.interChannels))  # (b, N, inter).
+    projKeyT = tf.transpose(projKey, perm=[0, 2, 1])  # (b, inter, N).
+
+    # Affinity across positions.
+    energy = tf.matmul(projQuery, projKeyT)  # (b, N, N).
+    attention = tf.nn.softmax(energy, axis=-1)  # (b, N, N).
+
+    # Aggregate values using attention.
+    projValue = self.valueConv(inputs)
+    projValue = tf.reshape(projValue, (b, -1, self.interChannels))  # (b, N, inter).
+
+    out = tf.matmul(attention, projValue)  # (b, N, inter).
+    out = tf.reshape(out, (b, h, w, self.interChannels))  # (b, H, W, inter).
+
+    out = self.outConv(out)  # restore to (b, H, W, C).
+
+    # Residual connection with a learnable scale.
+    return inputs + self.gamma * out
+
+
+@register_keras_serializable(package="HMB")
+class ChannelAttentionModule(Layer):
+  r'''
+  Channel Attention Module (CAM) used in DANet as a channel-wise attention block.
+
+  This module computes inter-channel affinities by treating spatial locations
+  as the feature dimension and produces channel-wise context.
+  '''
+
+  def __init__(self, **kwargs):
+    r'''
+    Initialize ChannelAttentionModule.
+    '''
+
+    super(ChannelAttentionModule, self).__init__(**kwargs)
+
+  def build(self, inputShape):
+    r'''
+    Nothing heavy to build for CAM besides a learnable scale parameter.
+    '''
+
+    channel = int(inputShape[-1])
+    self.gamma = self.add_weight(name="cam_gamma", shape=(), initializer="zeros", trainable=True)
+    super(ChannelAttentionModule, self).build(inputShape)
+
+  def call(self, inputs):
+    r'''
+    Forward pass for CAM.
+
+    Input: (b, H, W, C).
+    Output: (b, H, W, C) with channel attention applied.
+    '''
+
+    b = tf.shape(inputs)[0]
+    h = tf.shape(inputs)[1]
+    w = tf.shape(inputs)[2]
+    c = tf.shape(inputs)[3]
+    n = h * w  # number of positions.
+
+    # Reshape to (b, N, C) where N = H*W.
+    projQuery = tf.reshape(inputs, (b, -1, c))  # (b, N, C).
+    projKey = tf.transpose(projQuery, perm=[0, 2, 1])  # (b, C, N).
+
+    # Compute channel affinity matrix.
+    energy = tf.matmul(projKey, projQuery)  # (b, C, C).
+    # Normalize affinities to probabilities.
+    attention = tf.nn.softmax(energy, axis=-1)  # (b, C, C).
+
+    # Apply attention to the value (also channels viewed across spatial positions).
+    projValue = tf.transpose(projQuery, perm=[0, 2, 1])  # (b, C, N).
+    out = tf.matmul(attention, projValue)  # (b, C, N).
+    out = tf.transpose(out, perm=[0, 2, 1])  # (b, N, C).
+    out = tf.reshape(out, (b, h, w, c))  # (b, H, W, C).
+
+    # Residual connection with learnable scale.
+    return inputs + self.gamma * out
+
+
+@register_keras_serializable(package="HMB")
+class DANetBlock(Layer):
+  r'''
+  Dual Attention Network (DANet) block combining position and channel attention.
+
+  This block applies two parallel branches: a Position Attention Module (PAM)
+  and a Channel Attention Module (CAM). Their outputs are fused and returned.
+
+  Parameters:
+    interChannels (int|None): Optional internal channel size for PAM.
+  '''
+
+  def __init__(self, interChannels=None, **kwargs):
+    r'''
+    Initialize DANetBlock.
+
+    Parameters:
+      interChannels (int|None): Internal channel size for PAM.
+    '''
+
+    super(DANetBlock, self).__init__(**kwargs)
+    self.interChannels = interChannels
+
+  def build(self, inputShape):
+    r'''
+    Build internal PAM and CAM modules and small convs for feature transforms.
+    '''
+
+    channel = int(inputShape[-1])
+    # Transform convs used before feeding branches.
+    self.convPAM = Conv2D(channel, 1, padding="same", use_bias=False, name="danet_conv_pam")
+    self.convCAM = Conv2D(channel, 1, padding="same", use_bias=False, name="danet_conv_cam")
+
+    # Instantiate PAM and CAM with appropriate internal channel size.
+    self.pam = PositionAttentionModule(self.interChannels)
+    self.cam = ChannelAttentionModule()
+
+    # Fuse conv to merge branch outputs.
+    self.fuseConv = Conv2D(channel, 1, padding="same", use_bias=False, name="danet_fuse_conv")
+
+    super(DANetBlock, self).build(inputShape)
+
+  def call(self, inputs):
+    r'''
+    Forward pass: apply branch transforms, attention modules and fuse outputs.
+
+    Input: (b, H, W, C).
+    Output: (b, H, W, C) fused from PAM and CAM branches.
+    '''
+
+    # Prepare features for each branch.
+    featP = self.convPAM(inputs)
+    featC = self.convCAM(inputs)
+
+    # Apply attention modules.
+    outP = self.pam.call(featP)
+    outC = self.cam.call(featC)
+
+    # Fuse outputs by summation and a final conv.
+    out = Add()([outP, outC])
+    out = self.fuseConv(out)
+    return out
+
+
+@register_keras_serializable(package="HMB")
+class CrissCrossAttention(Layer):
+  r'''
+  Criss-Cross Attention (CCNet) layer implementation as a Keras Layer.
+
+  This module computes sparse dense contextual attention by attending along
+  each position's row and column separately, which reduces memory compared
+  to full N x N attention while still capturing long-range dependencies.
+
+  Parameters:
+    interChannels (int|None): Internal projection channels. If None it defaults to max(1, C//8) where C is the input channels.
+  '''
+
+  def __init__(self, interChannels=None, **kwargs):
+    r'''
+    Initialize CrissCrossAttention.
+
+    Parameters:
+      interChannels (int|None): Number of channels for internal projections.
+    '''
+
+    super(CrissCrossAttention, self).__init__(**kwargs)
+    self.interChannels = interChannels
+
+  def build(self, inputShape):
+    r'''
+    Build 1x1 conv projections for query, key and value and an output conv.
+    '''
+
+    channel = int(inputShape[-1])
+    if self.interChannels is None:
+      self.interChannels = max(1, channel // 8)
+
+    # 1x1 convs for query, key and value projections.
+    self.queryConv = Conv2D(self.interChannels, 1, padding="same", use_bias=False, name="cc_query_conv")
+    self.keyConv = Conv2D(self.interChannels, 1, padding="same", use_bias=False, name="cc_key_conv")
+    self.valueConv = Conv2D(self.interChannels, 1, padding="same", use_bias=False, name="cc_value_conv")
+
+    # Output projection to restore channel dimension.
+    self.outConv = Conv2D(channel, 1, padding="same", use_bias=False, name="cc_out_conv")
+
+    # Learnable scale initialized to zero so the layer can start as identity.
+    self.gamma = self.add_weight(name="cc_gamma", shape=(), initializer="zeros", trainable=True)
+
+    super(CrissCrossAttention, self).build(inputShape)
+
+  def call(self, inputs):
+    r'''
+    Forward pass for criss-cross attention.
+
+    Input: (b, H, W, C).
+    Output: (b, H, W, C) with criss-cross contextual attention applied.
+    '''
+
+    b = tf.shape(inputs)[0]
+    h = tf.shape(inputs)[1]
+    w = tf.shape(inputs)[2]
+
+    # Project to query, key and value spaces.
+    projQ = self.queryConv(inputs)  # (b, H, W, ic).
+    projK = self.keyConv(inputs)  # (b, H, W, ic).
+    projV = self.valueConv(inputs)  # (b, H, W, ic).
+
+    # Row-wise attention: treat each row as a sequence of length W.
+    qRow = tf.reshape(projQ, (-1, w, self.interChannels))  # (b*H, W, ic).
+    kRow = tf.reshape(projK, (-1, w, self.interChannels))  # (b*H, W, ic).
+    vRow = tf.reshape(projV, (-1, w, self.interChannels))  # (b*H, W, ic).
+
+    energyRow = tf.matmul(qRow, kRow, transpose_b=True)  # (b*H, W, W).
+    attnRow = tf.nn.softmax(energyRow, axis=-1)  # (b*H, W, W).
+    outRow = tf.matmul(attnRow, vRow)  # (b*H, W, ic).
+    outRow = tf.reshape(outRow, (b, h, w, self.interChannels))  # (b, H, W, ic).
+
+    # Column-wise attention: treat each column as a sequence of length H.
+    # Transpose to bring columns into the sequence axis.
+    qCol = tf.transpose(projQ, perm=[0, 2, 1, 3])  # (b, W, H, ic).
+    kCol = tf.transpose(projK, perm=[0, 2, 1, 3])  # (b, W, H, ic).
+    vCol = tf.transpose(projV, perm=[0, 2, 1, 3])  # (b, W, H, ic).
+
+    qCol = tf.reshape(qCol, (-1, h, self.interChannels))  # (b*W, H, ic).
+    kCol = tf.reshape(kCol, (-1, h, self.interChannels))  # (b*W, H, ic).
+    vCol = tf.reshape(vCol, (-1, h, self.interChannels))  # (b*W, H, ic).
+
+    energyCol = tf.matmul(qCol, kCol, transpose_b=True)  # (b*W, H, H).
+    attnCol = tf.nn.softmax(energyCol, axis=-1)  # (b*W, H, H).
+    outCol = tf.matmul(attnCol, vCol)  # (b*W, H, ic).
+    outCol = tf.reshape(outCol, (b, w, h, self.interChannels))  # (b, W, H, ic).
+    outCol = tf.transpose(outCol, perm=[0, 2, 1, 3])  # (b, H, W, ic).
+
+    # Aggregate row and column context.
+    out = outRow + outCol  # (b, H, W, ic).
+
+    # Project back to input channel dimension and apply residual with scale.
+    out = self.outConv(out)
+    return inputs + self.gamma * out
+
+
+@register_keras_serializable(package="HMB")
+class CrissCrossWrapperBlock(Layer):
+  r'''
+  Wrapper block that applies CrissCrossAttention one or more times.
+
+  Parameters:
+    repeats (int): Number of criss-cross attention passes to apply. Default is 1.
+  '''
+
+  def __init__(self, repeats=1, interChannels=None, **kwargs):
+    r'''
+    Initialize CrissCrossWrapperBlock.
+
+    Parameters:
+      repeats (int): Number of times to apply CrissCrossAttention.
+      interChannels (int|None): Internal projection channels passed to attention.
+    '''
+
+    super(CrissCrossWrapperBlock, self).__init__(**kwargs)
+    self.repeats = repeats
+    self.interChannels = interChannels
+
+  def build(self, inputShape):
+    r'''
+    Instantiate the repeated CrissCrossAttention layers.
+    '''
+
+    self.blocks = [CrissCrossAttention(self.interChannels) for _ in range(self.repeats)]
+    super(CrissCrossWrapperBlock, self).build(inputShape)
+
+  def call(self, inputs):
+    r'''
+    Forward pass: sequentially apply the CrissCrossAttention blocks.
+
+    Input: (b, H, W, C).
+    Output: (b, H, W, C) after repeated criss-cross attention.
+    '''
+
+    x = inputs
+    for blk in self.blocks:
+      x = blk.call(x)
+    return x
+
+
 if __name__ == "__main__":
   # Simple test case to verify layer instantiation.
   import numpy as np
@@ -906,6 +1412,8 @@ if __name__ == "__main__":
     SKBlock(filters=128, M=2, G=1, r=16),
     SKBlock(filters=256, M=2, G=1, r=16),  # <- changed from 128 to 256
     TripletAttention(kernelSize=7),
+    CoordAttention(reduction=32),
+    SCSEBlock(ratio=16),
     Conv2D(256, (3, 3), padding="same", activation="relu")
   ])
   model.summary()
@@ -921,21 +1429,29 @@ if __name__ == "__main__":
   from tensorflow.keras.models import load_model
   from HMB.TFAttentionBlocks import (
     CBAMBlock, SEBlock, ECABlock, MultiHeadSelfAttention, NonLocalBlock,
-    BAMBlock, GCBlock, AxialAttention, AttentionAugmentedConv, SKBlock, TripletAttention
+    BAMBlock, GCBlock, AxialAttention, AttentionAugmentedConv, SKBlock, TripletAttention,
+    PositionAttentionModule, ChannelAttentionModule, DANetBlock, CrissCrossAttention, CrissCrossWrapperBlock
   )
 
   customObjects = {
-    "CBAMBlock"             : CBAMBlock,
-    "SEBlock"               : SEBlock,
-    "ECABlock"              : ECABlock,
-    "MultiHeadSelfAttention": MultiHeadSelfAttention,
-    "NonLocalBlock"         : NonLocalBlock,
-    "BAMBlock"              : BAMBlock,
-    "GCBlock"               : GCBlock,
-    "AxialAttention"        : AxialAttention,
-    "AttentionAugmentedConv": AttentionAugmentedConv,
-    "SKBlock"               : SKBlock,
-    "TripletAttention"      : TripletAttention,
+    "CBAMBlock"              : CBAMBlock,
+    "SEBlock"                : SEBlock,
+    "ECABlock"               : ECABlock,
+    "MultiHeadSelfAttention" : MultiHeadSelfAttention,
+    "NonLocalBlock"          : NonLocalBlock,
+    "BAMBlock"               : BAMBlock,
+    "GCBlock"                : GCBlock,
+    "AxialAttention"         : AxialAttention,
+    "AttentionAugmentedConv" : AttentionAugmentedConv,
+    "SKBlock"                : SKBlock,
+    "TripletAttention"       : TripletAttention,
+    "CoordAttention"         : CoordAttention,
+    "SCSEBlock"              : SCSEBlock,
+    "PositionAttentionModule": PositionAttentionModule,
+    "ChannelAttentionModule" : ChannelAttentionModule,
+    "DANetBlock"             : DANetBlock,
+    "CrissCrossAttention"    : CrissCrossAttention,
+    "CrissCrossWrapperBlock" : CrissCrossWrapperBlock,
   }
 
   # Load the model back.

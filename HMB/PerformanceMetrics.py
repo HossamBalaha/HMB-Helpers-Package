@@ -293,6 +293,9 @@ def PlotConfusionMatrix(
     )
   '''
 
+  # Make the grid lines behind the confusion matrix.
+  plt.rcParams["axes.axisbelow"] = True
+
   # Check if normalization is requested.
   if (normalize):  # Normalize the confusion matrix.
     # Normalize the confusion matrix by row sums.
@@ -555,7 +558,7 @@ def PlotROCAUCCurve(
   # Get colors for each class from colormap.
   colors = (
     cmap(np.linspace(0, 1, numClasses))
-    if cmap else [None] * numClasses
+    if (cmap) else [None] * numClasses
   )
 
   # Create a figure.
@@ -736,7 +739,7 @@ def PlotPRCCurve(
   # Get colors for each class from colormap.
   colors = (
     cmap(np.linspace(0, 1, numClasses))
-    if cmap else [None] * numClasses
+    if (cmap) else [None] * numClasses
   )
 
   # Create a figure.
