@@ -2760,8 +2760,6 @@ def RiskCoverageCurve(
     color="blue",
     linewidth=2,
   )
-  plt.plot([0, 1], [0, 1], linestyle="--", color="gray", label="Random Guess")
-  plt.plot([0, 1], [np.mean(correctness), np.mean(correctness)], linestyle=":", color="red", label="Overall Accuracy")
 
   plt.xlabel("Coverage", fontsize=fontSize)
   plt.ylabel("Accuracy", fontsize=fontSize)
