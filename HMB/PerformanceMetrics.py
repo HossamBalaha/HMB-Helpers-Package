@@ -2513,6 +2513,276 @@ def PlotFeatureImportance(
   return None
 
 
+def ComputeECEPlotReliability(
+  confidences,
+  predictions,
+  labels,
+  nBins=15,
+  title="Expected Calibration Error (ECE)",
+  fontSize=14,
+  figSize=(6, 6),
+  display=True,
+  save=False,
+  fileName="ECE.pdf",
+  dpi=720,
+  returnFig=False,
+):
+  r'''
+  Compute Expected Calibration Error (ECE) and plot reliability diagram.
+
+  Parameters:
+    confidences (list or numpy.ndarray): List/array of predicted confidences (max class prob).
+    predictions (list or numpy.ndarray): List/array of predicted labels.
+    labels (list or numpy.ndarray): List/array of true labels.
+    nBins (int): number of bins to use.
+
+  Returns:
+    ece (float): Expected calibration error.
+    binAcc (list): List of accuracies per bin.
+    binConf (list): List of average confidences per bin.
+    binCounts (list): List of sample counts per bin.
+
+  Example
+  -------
+  .. code-block:: python
+
+  import numpy as np
+  import HMB.PerformanceMetrics as pm
+
+  confidences = np.array([0.9, 0.8, 0.7, 0.6, 0.5])
+  predictions = np.array([1, 0, 1, 1, 0])
+  labels = np.array([1, 0, 0, 1, 0])
+  ece, binAcc, binConf, binCounts = pm.ComputeECEPlotReliability(
+    confidences,
+    predictions,
+    labels,
+    nBins=5,
+    title="ECE Example",
+    fontSize=14,
+    figSize=(6, 6),
+    display=True,
+    save=False,
+    fileName="ECE_Example.pdf",
+    dpi=300,
+    returnFig=False,
+  )
+  print(f"ECE: {ece}")
+  print(f"Bin Accuracies: {binAcc}")
+  print(f"Bin Confidences: {binConf}")
+  print(f"Bin Counts: {binCounts}")
+  '''
+
+  # Ensure inputs are numpy arrays for safe indexing operations.
+  confidences = np.asarray(confidences)
+  predictions = np.asarray(predictions).astype(int)
+  labels = np.asarray(labels).astype(int)
+
+  # Build bin edges and initialize accumulators.
+  binEdges = np.linspace(0.0, 1.0, nBins + 1)
+  ece = 0.0
+  binAcc = []
+  binConf = []
+  binCounts = []
+  nSamples = len(confidences)
+
+  # Validate input lengths to avoid silent errors.
+  if ((len(predictions) != nSamples) or (len(labels) != nSamples)):
+    raise ValueError(
+      "ComputeECEPlotReliability: confidences, predictions and labels must have the same length."
+    )
+
+  # Iterate over bins and compute accuracy and average confidence per bin.
+  for i in range(nBins):
+    low = binEdges[i]
+    high = binEdges[i + 1]
+
+    # Include left edge but handle the last bin inclusively on both ends.
+    if (i < nBins - 1):
+      mask = (confidences > low) & (confidences <= high)
+    else:
+      mask = (confidences >= low) & (confidences <= high)
+
+    count = int(np.sum(mask))
+    if (count == 0):
+      binAcc.append(0.0)
+      binConf.append(0.0)
+      binCounts.append(0)
+      continue
+
+    # Compute accuracy and mean confidence for samples in this bin.
+    acc = float(np.mean(predictions[mask] == labels[mask]))
+    avgConf = float(np.mean(confidences[mask]))
+    binAcc.append(acc)
+    binConf.append(avgConf)
+    binCounts.append(count)
+
+    # Accumulate weighted calibration gap to compute ECE.
+    ece += (count / float(nSamples)) * abs(avgConf - acc)
+
+  # Create bin centers for plotting if needed.
+  bins = np.arange(len(binAcc)) + 0.5
+
+  # Create a figure.
+  fig = plt.figure(figsize=figSize)
+
+  # Plot bars for difference between acc and conf.
+  plt.plot([0, 1], [0, 1], linestyle="--", color="gray", label="Perfectly Calibrated")
+  # Plot accuracy bars.
+  plt.bar(
+    bins / float(nBins),
+    binAcc,
+    color="blue",
+    width=1.0 / nBins,
+    alpha=0.6,
+    label="Accuracy",
+  )
+  # Plot confidence bars.
+  plt.bar(
+    bins / float(nBins),
+    binConf,
+    color="orange",
+    width=1.0 / nBins,
+    alpha=0.3,
+    label="Confidence",
+  )
+  plt.xlabel("Confidence", fontsize=fontSize)
+  plt.ylabel("Accuracy", fontsize=fontSize)
+  plt.title(title, fontsize=fontSize + 2)
+
+  # Update the font of tick labels.
+  plt.xticks(fontsize=fontSize * 0.75)
+  plt.yticks(fontsize=fontSize * 0.75)
+
+  # Add legend.
+  plt.legend(fontsize=fontSize * 0.75)
+
+  # Save the plot if requested.
+  if (save):  # Save the plot.
+    ext = fileName.split(".")[-1]
+    if (ext.lower() == "pdf"):
+      try:
+        fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+      except Exception as e:
+        print(f"Error saving plot: {e}.")
+    fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+
+  if (display):
+    # Display the plot if requested.
+    plt.show()
+
+  plt.close(fig)  # Close the plot.
+
+  if (returnFig):
+    return ece, binAcc, binConf, binCounts, fig
+
+  return ece, binAcc, binConf, binCounts
+
+
+# Plot risk-coverage curve and compute AUC for selective prediction.
+def RiskCoverageCurve(
+  confidences,
+  correctness,
+  title="Risk-Coverage (Accuracy vs Coverage)",
+  fontSize=14,
+  figSize=(6, 6),
+  display=True,
+  save=False,
+  fileName="RiskCoverage.png",
+  dpi=720,
+  returnFig=False,
+):
+  '''
+  Compute and plot risk (error) vs coverage curve sorted by confidence. The risk-coverage
+  curve shows accuracy as a function of coverage when rejecting low-confidence predictions.
+  The more area under the curve (AUC), the better the selective prediction performance.
+  For example, a model that is perfectly calibrated and accurate will have AUC=1.0,
+  while a random model will have AUC close to the accuracy level.
+
+  Parameters:
+    confidences (numpy.ndarray): 1D array of prediction confidences.
+    correctness (numpy.ndarray): 1D boolean array of correctness (True=correct).
+    title (str): Plot title.
+    fontSize (int): Font size for plot.
+    figSize (tuple): Figure size.
+    display (bool): Whether to display the plot.
+    save (bool): Whether to save the plot.
+    fileName (str): File name to save the plot.
+    dpi (int): DPI for saved figure.
+    returnFig (bool): Whether to return the figure object.
+
+  Returns:
+    coverage (numpy.ndarray): coverage levels.
+
+  Example
+  -------
+  .. code-block:: python
+
+  import numpy as np
+  import HMB.PerformanceMetrics as pm
+
+  confidences = np.random.rand(1000)
+  correctness = np.random.rand(1000) < 0.7  # 70% accuracy.
+  coverage, accuracy, aucVal, fig = pm.RiskCoverageCurve(
+    confidences,
+    correctness,
+    title="Risk-Coverage Curve Example",
+    fontSize=12,
+    figSize=(5, 5),
+    display=True,
+    save=False,
+    returnFig=True,
+  )
+  '''
+
+  confidences = np.asarray(confidences)
+  correctness = np.asarray(correctness).astype(bool)
+  order = np.argsort(-confidences)
+  sortedCorrect = correctness[order]
+  n = len(sortedCorrect)
+  cumCorrect = np.cumsum(sortedCorrect)
+  coverage = np.arange(1, n + 1) / float(n)
+  accuracy = cumCorrect / np.arange(1, n + 1)
+
+  # Compute AUC under accuracy vs coverage.
+  aucVal = np.trapz(accuracy, coverage)
+
+  fig = plt.figure(figsize=figSize)
+  plt.plot(
+    coverage,
+    accuracy,
+    label=f"AUC={aucVal:.3f}",
+    color="blue",
+    linewidth=2,
+    fontsize=fontSize,
+  )
+  plt.xlabel("Coverage", fontsize=fontSize)
+  plt.ylabel("Accuracy", fontsize=fontSize)
+  plt.title(title, fontsize=fontSize + 2)
+  plt.legend()
+  plt.tight_layout()
+
+  # Save the plot if requested.
+  if (save):  # Save the plot.
+    ext = fileName.split(".")[-1]
+    if (ext.lower() == "pdf"):
+      try:
+        fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+      except Exception as e:
+        print(f"Error saving plot: {e}.")
+    fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+
+  if (display):
+    # Display the plot if requested.
+    plt.show()
+
+  plt.close(fig)  # Close the plot.
+
+  if (returnFig):
+    return coverage, accuracy, aucVal, fig
+
+  return coverage, accuracy, aucVal
+
+
 if __name__ == "__main__":
   # Example confusion matrix for a 3-class classification problem.
   confMatrix = [

@@ -2,6 +2,7 @@
 import os  # Import os for file path operations.
 import cv2, PIL  # Import OpenCV and PIL for image processing.
 import numpy as np  # Import numpy for numerical operations.
+from PIL import Image # Import Image module from PIL for image handling.
 import matplotlib.pyplot as plt  # Import matplotlib for plotting.
 
 
@@ -1493,3 +1494,28 @@ def ComputeAndPlotDeformationFieldViaFarneback(
 
   # Return the computed deformation field.
   return flow
+
+
+# Overlay a heatmap on a PIL image and return the overlay image.
+def OverlayHeatmapOnImage(origPIL, heatmap, alpha=0.4, cmap=plt.cm.jet):
+  '''
+  Overlay heatmap (2D array) over a PIL Image and return a PIL Image.
+
+  Parameters:
+    origPIL (PIL.Image): original RGB image.
+    heatmap (numpy.ndarray): heatmap 2D array.
+    alpha (float): overlay alpha.
+    cmap (matplotlib.colors.Colormap): colormap to map heatmap values to colors.
+
+  Returns.
+    overlayPIL (PIL.Image): image with heatmap overlay.
+  '''
+
+  # Resize heatmap to image size and map to colors.
+  heatmapImg = Image.fromarray(np.uint8(cmap(heatmap) * 255))
+  heatmapImg = heatmapImg.resize(origPIL.size, resample=Image.BILINEAR)
+  heatmapRGB = heatmapImg.convert("RGBA")
+
+  base = origPIL.convert("RGBA")
+  blended = Image.blend(base, heatmapRGB, alpha=alpha)
+  return blended.convert("RGB")
