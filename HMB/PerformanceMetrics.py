@@ -2627,24 +2627,30 @@ def ComputeECEPlotReliability(
 
   # Plot bars for difference between acc and conf.
   plt.plot([0, 1], [0, 1], linestyle="--", color="gray", label="Perfectly Calibrated")
+
   # Plot accuracy bars.
   plt.bar(
     bins / float(nBins),
     binAcc,
-    color="blue",
     width=1.0 / nBins,
-    alpha=0.6,
+    alpha=0.7,
+    color="blue",
+    edgecolor="black",
     label="Accuracy",
   )
-  # Plot confidence bars.
-  plt.bar(
+  # Plot confidence line.
+  plt.plot(
     bins / float(nBins),
     binConf,
-    color="orange",
-    width=1.0 / nBins,
-    alpha=0.3,
+    marker="o",
+    color="red",
     label="Confidence",
+    alpha=0.9,
   )
+  # Set limits and labels.
+  plt.xlim([-0.05, 1.05])
+  plt.ylim([-0.05, 1.05])
+
   plt.xlabel("Confidence", fontsize=fontSize)
   plt.ylabel("Accuracy", fontsize=fontSize)
   plt.title(title, fontsize=fontSize + 2)
@@ -2754,6 +2760,13 @@ def RiskCoverageCurve(
     color="blue",
     linewidth=2,
   )
+  plt.plot([0, 1], [0, 1], linestyle="--", color="gray", label="Random Guess")
+  plt.plot([0, 1], [np.mean(correctness), np.mean(correctness)], linestyle=":", color="red", label="Overall Accuracy")
+
+  # Set limits and labels.
+  plt.xlim([-0.1, 1.1])
+  plt.ylim([-0.1, 1.1])
+
   plt.xlabel("Coverage", fontsize=fontSize)
   plt.ylabel("Accuracy", fontsize=fontSize)
   plt.title(title, fontsize=fontSize + 2)
