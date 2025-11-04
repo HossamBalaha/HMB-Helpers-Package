@@ -2,6 +2,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from HMB.Utils import GetCmapColors
 
 
 def CalculatePerformanceMetrics(
@@ -2526,6 +2527,7 @@ def ComputeECEPlotReliability(
   fileName="ECE.pdf",
   dpi=720,
   returnFig=False,
+  cmap="Blues",
 ):
   r'''
   Compute Expected Calibration Error (ECE) and plot reliability diagram.
@@ -2535,12 +2537,27 @@ def ComputeECEPlotReliability(
     predictions (list or numpy.ndarray): List/array of predicted labels.
     labels (list or numpy.ndarray): List/array of true labels.
     nBins (int): number of bins to use.
+    title (str): Title of the plot. Default is "Expected Calibration Error (ECE)".
+    fontSize (int): Font size for labels and title. Default is 14.
+    figSize (tuple): Figure size. Default is (6, 6).
+    display (bool): Whether to display the plot. Default is True.
+    save (bool): Whether to save the plot. Default is False.
+    fileName (str): File name to save the plot. Default is "ECE.pdf".
+    dpi (int): DPI for saving the figure. Default is 720.
+    returnFig (bool): Whether to return the figure object. Default is False.
+    cmap (str): Colormap for the plot. Default is "Blues".
 
   Returns:
     ece (float): Expected calibration error.
     binAcc (list): List of accuracies per bin.
     binConf (list): List of average confidences per bin.
     binCounts (list): List of sample counts per bin.
+    fig (matplotlib.figure.Figure, optional): The matplotlib figure object if returnFig is True.
+
+  Notes:
+    - ECE quantifies the difference between predicted confidence and actual accuracy.
+    - The reliability diagram visualizes calibration across confidence bins.
+    - Saving and displaying the plot are optional and controlled by parameters.
 
   Example
   -------
@@ -2565,6 +2582,7 @@ def ComputeECEPlotReliability(
     fileName="ECE_Example.pdf",
     dpi=300,
     returnFig=False,
+    cmap="Blues",
   )
   print(f"ECE: {ece}")
   print(f"Bin Accuracies: {binAcc}")
@@ -2622,11 +2640,22 @@ def ComputeECEPlotReliability(
   # Create bin centers for plotting if needed.
   bins = np.arange(len(binAcc)) + 0.5
 
+  # Get colors from the specified colormap.
+  cmapColors = GetCmapColors(
+    cmap,
+    noColors=3,
+    darkColorsOnly=True,
+    darknessThreshold=0.6
+  )
+  firstColor = cmapColors[0]
+  secondColor = cmapColors[1]
+  thirdColor = cmapColors[2]
+
   # Create a figure.
   fig = plt.figure(figsize=figSize)
 
   # Plot bars for difference between acc and conf.
-  plt.plot([0, 1], [0, 1], linestyle="--", color="gray", label="Perfectly Calibrated")
+  plt.plot([0, 1], [0, 1], linestyle="--", color=firstColor, label="Perfectly Calibrated")
 
   # Plot accuracy bars.
   plt.bar(
@@ -2634,7 +2663,7 @@ def ComputeECEPlotReliability(
     binAcc,
     width=1.0 / nBins,
     alpha=0.7,
-    color="blue",
+    color=secondColor,
     edgecolor="black",
     label="Accuracy",
   )
@@ -2643,10 +2672,11 @@ def ComputeECEPlotReliability(
     bins / float(nBins),
     binConf,
     marker="o",
-    color="red",
+    color=thirdColor,
     label="Confidence",
     alpha=0.9,
   )
+
   # Set limits and labels.
   plt.xlim([-0.05, 1.05])
   plt.ylim([-0.05, 1.05])
@@ -2696,6 +2726,7 @@ def RiskCoverageCurve(
   fileName="RiskCoverage.pdf",
   dpi=720,
   returnFig=False,
+  color="blue",
 ):
   '''
   Compute and plot risk (error) vs coverage curve sorted by confidence. The risk-coverage
@@ -2715,6 +2746,7 @@ def RiskCoverageCurve(
     fileName (str): File name to save the plot.
     dpi (int): DPI for saved figure.
     returnFig (bool): Whether to return the figure object.
+    color (str): Color for the plot line.
 
   Returns:
     coverage (numpy.ndarray): coverage levels.
@@ -2731,12 +2763,15 @@ def RiskCoverageCurve(
   coverage, accuracy, aucVal, fig = pm.RiskCoverageCurve(
     confidences,
     correctness,
-    title="Risk-Coverage Curve Example",
-    fontSize=12,
-    figSize=(5, 5),
+    title="Risk-Coverage (Accuracy vs Coverage)",
+    fontSize=14,
+    figSize=(6, 6),
     display=True,
     save=False,
-    returnFig=True,
+    fileName="RiskCoverage.pdf",
+    dpi=720,
+    returnFig=False,
+    color="blue",
   )
   '''
 
@@ -2757,7 +2792,7 @@ def RiskCoverageCurve(
     coverage,
     accuracy,
     label=f"AUC={aucVal:.3f}",
-    color="blue",
+    color=color,
     linewidth=2,
   )
 

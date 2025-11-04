@@ -5,6 +5,7 @@ import yaml  # PyYAML library for YAML file parsing.
 import pickle  # Pickle library for object serialization.
 import json  # JSON library for JSON file parsing.
 import numpy as np  # NumPy library for numerical operations.
+import matplotlib.pyplot as plt  # Matplotlib library for plotting and colormaps.
 
 
 def ReadProjectConfig(configFilePath):
@@ -274,3 +275,77 @@ def Hex2RGB(hexColor, isRGBA=False):
   if (not isRGBA):
     color = color[:3]
   return color
+
+
+def GetCmapColors(cmap, noColors, darkColorsOnly=True, darknessThreshold=0.7):
+  r'''
+  Utility to get a list of unique colors from a matplotlib colormap.
+
+  Parameters:
+    cmap (str or Colormap): Name of the colormap or a Colormap object.
+    noColors (int): Number of distinct colors to generate.
+    darkColorsOnly (bool, optional): Whether to filter out light colors. Default is True.
+    darknessThreshold (float, optional): Brightness threshold to classify colors as dark. Default is 0.7.
+
+  Returns:
+    list: List of unique RGBA color tuples.
+  '''
+
+  # Filter out light colors based on perceived brightness (YIQ formula).
+  def IsDark(color):
+    r, g, b = color[:3]
+    brightness = 0.299 * r + 0.587 * g + 0.114 * b
+    return brightness < darknessThreshold
+
+  # Get the colormap object.
+  if (isinstance(cmap, str)):
+    cmapObj = plt.get_cmap(cmap)
+  else:
+    cmapObj = cmap
+
+  # To maximize uniqueness, sample evenly spaced points in the colormap.
+  allColors = [cmapObj(i / max(noColors, 1)) for i in range(noColors)]
+
+  if (darkColorsOnly):
+    # Filter to keep only dark colors.
+    darkColors = [c for c in allColors if IsDark(c)]
+
+    # If not enough dark colors, try to fill with more from the colormap.
+    if (len(darkColors) < noColors):
+      # Try to get more dark colors by oversampling.
+      extraColors = [cmapObj(i / 1000.0) for i in range(1000)]
+      extraDark = [c for c in extraColors if (IsDark(c) and c not in darkColors)]
+      darkColors.extend(extraDark)
+
+      # Remove duplicates while preserving order.
+      seen = set()
+      uniqueDark = []
+      for c in darkColors:
+        if (c not in seen):
+          uniqueDark.append(c)
+          seen.add(c)
+      darkColors = uniqueDark
+
+    # If still not enough, repeat or fallback.
+    if (len(darkColors) >= noColors):
+      return darkColors[:noColors]
+    elif (len(darkColors) > 0):
+      repeats = (noColors // len(darkColors)) + 1
+      extended = (darkColors * repeats)[:noColors]
+      return extended
+    else:
+      return allColors
+  else:
+    # Remove duplicates if any (shouldn't be, but for safety).
+    seen = set()
+    uniqueColors = []
+    for c in allColors:
+      if (c not in seen):
+        uniqueColors.append(c)
+        seen.add(c)
+    if (len(uniqueColors) >= noColors):
+      return uniqueColors[:noColors]
+    else:
+      repeats = (noColors // len(uniqueColors)) + 1
+      extended = (uniqueColors * repeats)[:noColors]
+      return extended
