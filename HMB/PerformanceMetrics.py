@@ -2753,13 +2753,17 @@ def RiskCoverageCurve(
     label=f"AUC={aucVal:.3f}",
     color="blue",
     linewidth=2,
-    fontsize=fontSize,
   )
   plt.xlabel("Coverage", fontsize=fontSize)
   plt.ylabel("Accuracy", fontsize=fontSize)
   plt.title(title, fontsize=fontSize + 2)
-  plt.legend()
-  plt.tight_layout()
+
+  # Update the font of tick labels.
+  plt.xticks(fontsize=fontSize * 0.75)
+  plt.yticks(fontsize=fontSize * 0.75)
+
+  plt.legend()  # Add legend.
+  plt.tight_layout()  # Adjust layout.
 
   # Save the plot if requested.
   if (save):  # Save the plot.
