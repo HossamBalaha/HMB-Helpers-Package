@@ -2528,6 +2528,7 @@ def ComputeECEPlotReliability(
   dpi=720,
   returnFig=False,
   cmap="Blues",
+  applyXYLimits=True,
 ):
   r'''
   Compute Expected Calibration Error (ECE) and plot reliability diagram.
@@ -2546,6 +2547,7 @@ def ComputeECEPlotReliability(
     dpi (int): DPI for saving the figure. Default is 720.
     returnFig (bool): Whether to return the figure object. Default is False.
     cmap (str): Colormap for the plot. Default is "Blues".
+    applyXYLimits (bool): Whether to apply x and y limits [0, 1]. Default is True.
 
   Returns:
     ece (float): Expected calibration error.
@@ -2583,6 +2585,7 @@ def ComputeECEPlotReliability(
     dpi=300,
     returnFig=False,
     cmap="Blues",
+    applyXYLimits=True,
   )
   print(f"ECE: {ece}")
   print(f"Bin Accuracies: {binAcc}")
@@ -2641,12 +2644,16 @@ def ComputeECEPlotReliability(
   bins = np.arange(len(binAcc)) + 0.5
 
   # Get colors from the specified colormap.
+  if (cmap is None):
+    cmap = "Blues"
   cmapColors = GetCmapColors(
     cmap,
-    noColors=3,
+    noColors=10,
     darkColorsOnly=True,
     darknessThreshold=0.6
   )
+  rndThreeIdxs = np.random.choice(len(cmapColors), size=3, replace=False)
+  cmapColors = [cmapColors[i] for i in rndThreeIdxs]
   firstColor = cmapColors[0]
   secondColor = cmapColors[1]
   thirdColor = cmapColors[2]
@@ -2655,7 +2662,12 @@ def ComputeECEPlotReliability(
   fig = plt.figure(figsize=figSize)
 
   # Plot bars for difference between acc and conf.
-  plt.plot([0, 1], [0, 1], linestyle="--", color=firstColor, label="Perfectly Calibrated")
+  plt.plot(
+    [0, 1], [0, 1],
+    linestyle="--",
+    color=firstColor,
+    label="Perfectly Calibrated"
+  )
 
   # Plot accuracy bars.
   plt.bar(
@@ -2677,9 +2689,11 @@ def ComputeECEPlotReliability(
     alpha=0.9,
   )
 
-  # Set limits and labels.
-  plt.xlim([-0.05, 1.05])
-  plt.ylim([-0.05, 1.05])
+  # Apply limits if requested.
+  if (applyXYLimits):
+    # Set limits and labels.
+    plt.xlim([-0.05, 1.05])
+    plt.ylim([-0.05, 1.05])
 
   plt.xlabel("Confidence", fontsize=fontSize)
   plt.ylabel("Accuracy", fontsize=fontSize)
