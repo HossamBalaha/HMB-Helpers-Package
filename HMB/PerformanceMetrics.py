@@ -2693,7 +2693,7 @@ def RiskCoverageCurve(
   figSize=(6, 6),
   display=True,
   save=False,
-  fileName="RiskCoverage.png",
+  fileName="RiskCoverage.pdf",
   dpi=720,
   returnFig=False,
 ):
@@ -2762,10 +2762,6 @@ def RiskCoverageCurve(
   )
   plt.plot([0, 1], [0, 1], linestyle="--", color="gray", label="Random Guess")
   plt.plot([0, 1], [np.mean(correctness), np.mean(correctness)], linestyle=":", color="red", label="Overall Accuracy")
-
-  # Set limits and labels.
-  plt.xlim([-0.1, 1.1])
-  plt.ylim([-0.1, 1.1])
 
   plt.xlabel("Coverage", fontsize=fontSize)
   plt.ylabel("Accuracy", fontsize=fontSize)
