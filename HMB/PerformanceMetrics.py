@@ -1879,6 +1879,7 @@ def PlotErrorAnalysis(
 def PlotClasswisePRFBar(
   cm,
   classNames=None,
+  title="Classwise Performance Metrics",
   fontSize=14,
   figsize=(8, 5),
   display=True,
@@ -1893,6 +1894,7 @@ def PlotClasswisePRFBar(
   Parameters:
     cm (array-like): Confusion matrix (2D array).
     classNames (list or None): List of class names. If None, uses class indices.
+    title (str): Plot title. Default is "Classwise Performance Metrics".
     fontSize (int): Font size for labels and title. Default is 14.
     figsize (tuple): Figure size. Default is (8, 5).
     display (bool): Whether to display the plot. Default is True.
@@ -1973,10 +1975,7 @@ def PlotClasswisePRFBar(
   ax.set_xticklabels(classNames, fontsize=fontSize)
   ax.set_ylim(0, 1.05)
   ax.set_ylabel("Score", fontsize=fontSize)
-  ax.set_title(
-    "Classwise Performance Metrics",
-    fontsize=fontSize + 2
-  )
+  ax.set_title(title, fontsize=fontSize + 2)
   ax.legend(fontsize=fontSize * 0.85)
   plt.tight_layout()
 
@@ -2514,6 +2513,126 @@ def PlotFeatureImportance(
   return None
 
 
+def SampleMonteCarloDirichletFromProbs(probs, T=100, concentration=50.0, rng=None):
+  '''
+  Create T Monte Carlo softmax probability samples for each row in probs
+  by sampling from a Dirichlet distribution with concentration proportional
+  to the provided probs.
+
+  Parameters:
+    probs (numpy.ndarray): 2D array of shape (N, C) with base probabilities.
+    T (int): Number of Monte Carlo samples to draw per instance. Default is 100.
+    concentration (float): Concentration parameter for the Dirichlet distribution. Higher values lead to samples closer to the base probs.
+    rng (numpy.random.Generator or None): Optional random number generator for reproducibility. If None, a new generator is created.
+
+  Returns:
+    numpy.ndarray: 3D array of shape (T, N, C) with Monte Carlo probability samples.
+
+  Example
+  -------
+  .. code-block:: python
+
+    import numpy as np
+    import HMB.PerformanceMetrics as pm
+
+    probs = np.array([[0.7, 0.2, 0.1],
+                      [0.1, 0.8, 0.1]])
+    T = 500
+    samples = pm.SampleMonteCarloDirichletFromProbs(probs, T=T, concentration=30.0)
+    print(samples.shape)  # Should be (500, 2, 3).
+  '''
+
+  if (rng is None):
+    rng = np.random.default_rng()
+
+  probs = np.asarray(probs)
+
+  if (probs.ndim != 2):
+    raise ValueError("`probs` must be a 2D array of shape (N, C).")
+
+  N, C = probs.shape
+  samples = np.empty((T, N, C), dtype=float)
+
+  for i in range(N):
+    # Alpha proportional to probs; add small epsilon to avoid zeros.
+    alpha = probs[i] * float(concentration) + 1e-8
+    # Draw T samples for this instance.
+    samples[:, i, :] = rng.dirichlet(alpha, size=T)
+  return samples
+
+
+def ComputeMonteCarloUncertaintyMeasures(probsMC, eps=1e-12):
+  '''
+  Given Monte Carlo probability samples, compute useful uncertainty measures.
+
+  Parameters:
+    probsMC (numpy.ndarray): 3D array of shape (T, N, C) with Monte Carlo probability samples.
+    eps (float): Small value to avoid log(0). Default is 1e-12.
+
+  Returns:
+    dict: Dictionary containing the following keys:
+      - "predictiveMean": (N, C) array of predictive mean probabilities.
+      - "predictiveEntropy": (N,) array of predictive entropy values.
+      - "expectedEntropy": (N,) array of expected entropy values.
+      - "mutualInformation": (N,) array of mutual information values (epistemic uncertainty).
+      - "varTop": (N,) array of variance of top class probabilities across T samples.
+      - "predictedIdx": (N,) array of predicted class indices from predictive mean.
+      - "predictedConfidence": (N,) array of predicted class confidences from predictive mean.
+
+  Example
+  -------
+  .. code-block:: python
+
+    import numpy as np
+    import HMB.PerformanceMetrics as pm
+
+    probs = np.array([[0.7, 0.2, 0.1],
+                      [0.1, 0.8, 0.1]])
+    T = 500
+    probsMC = pm.SampleMonteCarloDirichletFromProbs(probs, T=T, concentration=30.0)
+    uncertaintyMeasures = pm.ComputeMonteCarloUncertaintyMeasures(probsMC)
+    print(uncertaintyMeasures["predictiveMean"]) # Should be close to original probs.
+  '''
+
+  probsMC = np.asarray(probsMC)
+
+  if (probsMC.ndim != 3):
+    raise ValueError("`probsMC` must have shape (T, N, C).")
+
+  T, N, C = probsMC.shape
+
+  # Predictive mean (expected predictive distribution).
+  predictiveMean = probsMC.mean(axis=0)  # (N, C).
+
+  # Predictive entropy H[ p(y|x, D) ].
+  predictiveEntropy = -np.sum(predictiveMean * np.log(predictiveMean + eps), axis=1)
+
+  # Expected entropy E_t[ H[ p_t(y|x) ] ].
+  entropyPerT = -np.sum(probsMC * np.log(probsMC + eps), axis=2)  # (T, N).
+  expectedEntropy = entropyPerT.mean(axis=0)  # (N,).
+
+  # Mutual information = predictiveEntropy - expectedEntropy (epistemic uncertainty).
+  mutualInformation = predictiveEntropy - expectedEntropy
+
+  # Variance of the top class probability across T samples (another epistemic proxy).
+  topProbsPerT = np.max(probsMC, axis=2)  # (T, N).
+  varTop = np.var(topProbsPerT, axis=0)
+
+  # Predicted label and confidence from predictive mean.
+  predictedIdx = predictiveMean.argmax(axis=1)
+  predictedConfidence = predictiveMean[np.arange(N), predictedIdx]
+
+  return {
+    "predictiveMean"     : predictiveMean,
+    "predictiveEntropy"  : predictiveEntropy,
+    "expectedEntropy"    : expectedEntropy,
+    "mutualInformation"  : mutualInformation,
+    "varTop"             : varTop,
+    "predictedIdx"       : predictedIdx,
+    "predictedConfidence": predictedConfidence,
+  }
+
+
 def ComputeECEPlotReliability(
   confidences,
   predictions,
@@ -2568,9 +2687,21 @@ def ComputeECEPlotReliability(
   import numpy as np
   import HMB.PerformanceMetrics as pm
 
-  confidences = np.array([0.9, 0.8, 0.7, 0.6, 0.5])
-  predictions = np.array([1, 0, 1, 1, 0])
-  labels = np.array([1, 0, 0, 1, 0])
+  # You would typically get confidences and correctness from model predictions.
+  probs = np.array([[0.7, 0.2, 0.1],
+                      [0.1, 0.8, 0.1]])
+  T = 500
+  probsMC = pm.SampleMonteCarloDirichletFromProbs(probs, T=T, concentration=30.0)
+  uncertaintyMeasures = pm.ComputeMonteCarloUncertaintyMeasures(probsMC)
+  confidences = uncertaintyMeasures["predictedConfidence"]
+  predictions = uncertaintyMeasures["predictedIdx"]
+  labels = np.array([0, 1])  # True labels for the examples.
+
+  # Sample data for demonstration:
+  # confidences = np.array([0.9, 0.8, 0.7, 0.6, 0.5])
+  # predictions = np.array([1, 0, 1, 1, 0])
+  # labels = np.array([1, 0, 0, 1, 0])
+
   ece, binAcc, binConf, binCounts = pm.ComputeECEPlotReliability(
     confidences,
     predictions,
@@ -2772,8 +2903,21 @@ def RiskCoverageCurve(
   import numpy as np
   import HMB.PerformanceMetrics as pm
 
-  confidences = np.random.rand(1000)
-  correctness = np.random.rand(1000) < 0.7  # 70% accuracy.
+  # You would typically get confidences and correctness from model predictions.
+  probs = np.array([[0.7, 0.2, 0.1],
+                      [0.1, 0.8, 0.1]])
+  T = 500
+  probsMC = pm.SampleMonteCarloDirichletFromProbs(probs, T=T, concentration=30.0)
+  uncertaintyMeasures = pm.ComputeMonteCarloUncertaintyMeasures(probsMC)
+  confidences = uncertaintyMeasures["predictedConfidence"]
+  predictions = uncertaintyMeasures["predictedIdx"]
+  labels = np.array([0, 1])  # True labels.
+  correctness = (predictions == labels).astype(int)
+
+  # Sample data for demonstration:
+  # confidences = np.array([0.9, 0.8, 0.7, 0.6, 0.5])
+  # correctness = np.array([1, 0, 1, 1, 0])  # 1=correct, 0=incorrect.
+
   coverage, accuracy, aucVal, fig = pm.RiskCoverageCurve(
     confidences,
     correctness,
