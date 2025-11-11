@@ -97,8 +97,11 @@ Quickstart
    StatisticalAnalysisHelper
    TextGenerationMetrics
    TextHelper
+   TFAttentionBlocks
+   TFHelper
    Utils
    WSIHelper
+   YOLOHelper
 
 Getting Help
 ------------
