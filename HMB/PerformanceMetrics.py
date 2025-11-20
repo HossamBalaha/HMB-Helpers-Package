@@ -305,74 +305,75 @@ def PlotConfusionMatrix(
   if (cmap is None):
     cmap = plt.cm.Blues  # Default colormap.
 
-  # Create a new figure with the specified size.
-  fig = plt.figure(figsize=figSize)  # Create a new figure.
+  if (save or display or returnFig):
+    # Create a new figure with the specified size.
+    fig = plt.figure(figsize=figSize)  # Create a new figure.
 
-  # Display the confusion matrix as an image.
-  plt.imshow(cm, interpolation="nearest", cmap=cmap)
+    # Display the confusion matrix as an image.
+    plt.imshow(cm, interpolation="nearest", cmap=cmap)
 
-  # Set the plot title if provided.
-  if (title and len(title) > 0):
-    # Set the plot title with the specified font size.
-    plt.title(title, fontsize=fontSize)  # Set the title.
+    # Set the plot title if provided.
+    if (title and len(title) > 0):
+      # Set the plot title with the specified font size.
+      plt.title(title, fontsize=fontSize)  # Set the title.
 
-  # Add the color bar and change the color bar font size.
-  if (colorbar):
-    # Set colorbar tick label size.
-    plt.colorbar().ax.tick_params(labelsize=fontSize)
+    # Add the color bar and change the color bar font size.
+    if (colorbar):
+      # Set colorbar tick label size.
+      plt.colorbar().ax.tick_params(labelsize=fontSize)
 
-  # Create tick marks for each class label.
-  tickMarks = np.arange(len(classes))  # Create a range of values.
-  # Set x-axis tick labels with rotation and font size.
-  plt.xticks(tickMarks, classes, rotation=45, fontsize=fontSize)
-  # Set y-axis tick labels with font size.
-  plt.yticks(tickMarks, classes, fontsize=fontSize)
+    # Create tick marks for each class label.
+    tickMarks = np.arange(len(classes))  # Create a range of values.
+    # Set x-axis tick labels with rotation and font size.
+    plt.xticks(tickMarks, classes, rotation=45, fontsize=fontSize)
+    # Set y-axis tick labels with font size.
+    plt.yticks(tickMarks, classes, fontsize=fontSize)
 
-  # Choose format for cell annotation based on normalization.
-  fmt = f"0.{roundDigits}f" if normalize else "d"  # Set the format.
-  # Calculate threshold for text color contrast.
-  thresh = cm.max() / 2.0  # Threshold.
+    # Choose format for cell annotation based on normalization.
+    fmt = f"0.{roundDigits}f" if normalize else "d"  # Set the format.
+    # Calculate threshold for text color contrast.
+    thresh = cm.max() / 2.0  # Threshold.
 
-  # Annotate cells with values if requested.
-  if (annotate):
-    for i in range(cm.shape[0]):
-      for j in range(cm.shape[1]):
-        # Place text annotation in each cell.
-        plt.text(
-          j,
-          i,
-          format(cm[i, j], fmt),
-          horizontalalignment="center",
-          color="white" if cm[i, j] > thresh else "black",
-          fontsize=fontSize,
-        )
+    # Annotate cells with values if requested.
+    if (annotate):
+      for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+          # Place text annotation in each cell.
+          plt.text(
+            j,
+            i,
+            format(cm[i, j], fmt),
+            horizontalalignment="center",
+            color="white" if cm[i, j] > thresh else "black",
+            fontsize=fontSize,
+          )
 
-  # Set y-axis label.
-  plt.ylabel("True Label", fontsize=fontSize)
-  # Set x-axis label.
-  plt.xlabel("Predicted Label", fontsize=fontSize)
-  # Tight the layout to ignore wasted spaces.
-  plt.tight_layout()
+    # Set y-axis label.
+    plt.ylabel("True Label", fontsize=fontSize)
+    # Set x-axis label.
+    plt.xlabel("Predicted Label", fontsize=fontSize)
+    # Tight the layout to ignore wasted spaces.
+    plt.tight_layout()
 
-  # Save the plot if requested.
-  if (save):  # Save the plot.
-    ext = fileName.split(".")[-1]
-    if (ext.lower() == "pdf"):
-      try:
-        fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
-      except Exception as e:
-        print(f"Error saving plot: {e}")
-    fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+    # Save the plot if requested.
+    if (save):  # Save the plot.
+      ext = fileName.split(".")[-1]
+      if (ext.lower() == "pdf"):
+        try:
+          fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+        except Exception as e:
+          print(f"Error saving plot: {e}")
+      fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
 
-  # Display the plot if requested.
-  if (display):  # Display the plot.
-    plt.show()
+    # Display the plot if requested.
+    if (display):  # Display the plot.
+      plt.show()
 
-  plt.close(fig)  # Close the plot.
+    plt.close(fig)  # Close the plot.
 
-  # Return the figure object if requested.
-  if (returnFig):
-    return fig
+    # Return the figure object if requested.
+    if (returnFig):
+      return fig
 
 
 def PlotRegressionResults(
@@ -562,80 +563,81 @@ def PlotROCAUCCurve(
     if (cmap) else [None] * numClasses
   )
 
-  # Create a figure.
-  fig = plt.figure(figsize=figSize)
+  if (save or display or returnFig):
+    # Create a figure.
+    fig = plt.figure(figsize=figSize)
 
-  # Calculate the ROC curve and AUC for each class.
-  for i in range(numClasses):
-    yTrueC = (
-      yTrue[:, i]
-      if (not areProbabilities)
-      else ((yTrue == i).astype(np.float32))
-    )
-    # Calculate ROC curve and AUC.
-    aucRoc = roc_auc_score(
-      yTrueC,  # True labels for class i.
-      yPred[:, i],  # Predicted labels for class i.
-    )
-    FPR, TPR, _ = roc_curve(
-      yTrueC,  # True labels for class i.
-      yPred[:, i],  # Predicted labels for class i.
-    )
+    # Calculate the ROC curve and AUC for each class.
+    for i in range(numClasses):
+      yTrueC = (
+        yTrue[:, i]
+        if (not areProbabilities)
+        else ((yTrue == i).astype(np.float32))
+      )
+      # Calculate ROC curve and AUC.
+      aucRoc = roc_auc_score(
+        yTrueC,  # True labels for class i.
+        yPred[:, i],  # Predicted labels for class i.
+      )
+      FPR, TPR, _ = roc_curve(
+        yTrueC,  # True labels for class i.
+        yPred[:, i],  # Predicted labels for class i.
+      )
 
-    # Plot ROC curve for each class.
-    plt.plot(
-      FPR, TPR,
-      label=(
-        f"{classes[i]} (AUC={aucRoc:.3f})"
-        if (annotateAUC) else f"{classes[i]}"
-      ),
-      color=colors[i] if (colors[i] is not None) else None
-    )
+      # Plot ROC curve for each class.
+      plt.plot(
+        FPR, TPR,
+        label=(
+          f"{classes[i]} (AUC={aucRoc:.3f})"
+          if (annotateAUC) else f"{classes[i]}"
+        ),
+        color=colors[i] if (colors[i] is not None) else None
+      )
 
-  if (plotDiagonal):
-    # Plot the diagonal line.
-    plt.plot([0, 1], [0, 1], "k--")
+    if (plotDiagonal):
+      # Plot the diagonal line.
+      plt.plot([0, 1], [0, 1], "k--")
 
-  # Set the plot title with the specified font size.
-  plt.title(title, fontsize=fontSize)
-  # Set x-axis label.
-  plt.xlabel("False Positive Rate", fontsize=fontSize)
-  # Set y-axis label.
-  plt.ylabel("True Positive Rate", fontsize=fontSize)
+    # Set the plot title with the specified font size.
+    plt.title(title, fontsize=fontSize)
+    # Set x-axis label.
+    plt.xlabel("False Positive Rate", fontsize=fontSize)
+    # Set y-axis label.
+    plt.ylabel("True Positive Rate", fontsize=fontSize)
 
-  # Add grid lines to the plot.
-  plt.grid(True)
+    # Add grid lines to the plot.
+    plt.grid(True)
 
-  # Update the font of tick labels.
-  plt.xticks(fontsize=fontSize * 0.75)
-  plt.yticks(fontsize=fontSize * 0.75)
+    # Update the font of tick labels.
+    plt.xticks(fontsize=fontSize * 0.75)
+    plt.yticks(fontsize=fontSize * 0.75)
 
-  if (showLegend):
-    # Show legend if requested.
-    plt.legend(fontsize=fontSize * 0.75)
+    if (showLegend):
+      # Show legend if requested.
+      plt.legend(fontsize=fontSize * 0.75)
 
-  # Tight the layout to ignore wasted spaces.
-  plt.tight_layout()
+    # Tight the layout to ignore wasted spaces.
+    plt.tight_layout()
 
-  # Save the plot if requested.
-  if (save):  # Save the plot.
-    ext = fileName.split(".")[-1]
-    if (ext.lower() == "pdf"):
-      try:
-        fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
-      except Exception as e:
-        print(f"Error saving plot: {e}")
-    fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+    # Save the plot if requested.
+    if (save):  # Save the plot.
+      ext = fileName.split(".")[-1]
+      if (ext.lower() == "pdf"):
+        try:
+          fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+        except Exception as e:
+          print(f"Error saving plot: {e}")
+      fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
 
-  if (display):
-    # Display the plot if requested.
-    plt.show()
+    if (display):
+      # Display the plot if requested.
+      plt.show()
 
-  plt.close(fig)  # Close the plot.
+    plt.close(fig)  # Close the plot.
 
-  if (returnFig):
-    # Return the figure object if requested.
-    return fig
+    if (returnFig):
+      # Return the figure object if requested.
+      return fig
 
 
 def PlotPRCCurve(
@@ -743,78 +745,79 @@ def PlotPRCCurve(
     if (cmap) else [None] * numClasses
   )
 
-  # Create a figure.
-  fig = plt.figure(figsize=figSize)
+  if (save or display or returnFig):
+    # Create a figure.
+    fig = plt.figure(figsize=figSize)
 
-  # Calculate the PRC curve and Avg. for each class.
-  for i in range(numClasses):
-    yTrueC = (
-      yTrue[:, i]
-      if (not areProbabilities)
-      else ((yTrue == i).astype(np.float32))
-    )
-    # Calculate the average precision score.
-    avgScore = average_precision_score(
-      yTrueC,  # True labels for class i.
-      yPred[:, i],  # Predicted labels for class i.
-    )
-    # Extract the PPV and TPR values.
-    PPV, TPR, _ = precision_recall_curve(
-      yTrueC,  # True labels for class i.
-      yPred[:, i],  # Predicted labels for class i.
-    )
+    # Calculate the PRC curve and Avg. for each class.
+    for i in range(numClasses):
+      yTrueC = (
+        yTrue[:, i]
+        if (not areProbabilities)
+        else ((yTrue == i).astype(np.float32))
+      )
+      # Calculate the average precision score.
+      avgScore = average_precision_score(
+        yTrueC,  # True labels for class i.
+        yPred[:, i],  # Predicted labels for class i.
+      )
+      # Extract the PPV and TPR values.
+      PPV, TPR, _ = precision_recall_curve(
+        yTrueC,  # True labels for class i.
+        yPred[:, i],  # Predicted labels for class i.
+      )
 
-    # Plot the PPV and TPR values.
-    plt.step(
-      TPR, PPV,  # TPR and PPV values.
-      where="post",
-      label=(
-        f"{classes[i]} (AVG={avgScore:.3f})"
-        if (annotateAvg) else f"{classes[i]}"
-      ),
-      color=colors[i] if (colors[i] is not None) else None
-    )
+      # Plot the PPV and TPR values.
+      plt.step(
+        TPR, PPV,  # TPR and PPV values.
+        where="post",
+        label=(
+          f"{classes[i]} (AVG={avgScore:.3f})"
+          if (annotateAvg) else f"{classes[i]}"
+        ),
+        color=colors[i] if (colors[i] is not None) else None
+      )
 
-  # Set the plot title with the specified font size.
-  plt.title(title, fontsize=fontSize)
-  # Set the x- and y-labels.
-  plt.xlabel("Recall", fontsize=fontSize)
-  plt.ylabel("Precision", fontsize=fontSize)
+    # Set the plot title with the specified font size.
+    plt.title(title, fontsize=fontSize)
+    # Set the x- and y-labels.
+    plt.xlabel("Recall", fontsize=fontSize)
+    plt.ylabel("Precision", fontsize=fontSize)
 
-  # Set the x- and y-limits.
-  plt.ylim([0.0, 1.05])
-  plt.xlim([0.0, 1.0])
+    # Set the x- and y-limits.
+    plt.ylim([0.0, 1.05])
+    plt.xlim([0.0, 1.0])
 
-  # Update the font of tick labels.
-  plt.xticks(fontsize=fontSize * 0.75)
-  plt.yticks(fontsize=fontSize * 0.75)
+    # Update the font of tick labels.
+    plt.xticks(fontsize=fontSize * 0.75)
+    plt.yticks(fontsize=fontSize * 0.75)
 
-  if (showLegend):
-    # Show legend if requested.
-    plt.legend(fontsize=fontSize * 0.75)
+    if (showLegend):
+      # Show legend if requested.
+      plt.legend(fontsize=fontSize * 0.75)
 
-  # Tight the layout to ignore wasted spaces.
-  plt.tight_layout()
+    # Tight the layout to ignore wasted spaces.
+    plt.tight_layout()
 
-  # Save the plot if requested.
-  if (save):  # Save the plot.
-    ext = fileName.split(".")[-1]
-    if (ext.lower() == "pdf"):
-      try:
-        fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
-      except Exception as e:
-        print(f"Error saving plot: {e}")
-    fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+    # Save the plot if requested.
+    if (save):  # Save the plot.
+      ext = fileName.split(".")[-1]
+      if (ext.lower() == "pdf"):
+        try:
+          fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+        except Exception as e:
+          print(f"Error saving plot: {e}")
+      fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
 
-  if (display):
-    # Display the plot if requested.
-    plt.show()
+    if (display):
+      # Display the plot if requested.
+      plt.show()
 
-  plt.close(fig)  # Close the plot.
+    plt.close(fig)  # Close the plot.
 
-  if (returnFig):
-    # Return the figure object if requested.
-    return fig
+    if (returnFig):
+      # Return the figure object if requested.
+      return fig
 
 
 def PlotCounterfactualOutcomes(
@@ -937,62 +940,63 @@ def PlotCounterfactualOutcomes(
     else:
       classNames = [str(c) for c in np.unique(np.concatenate([yPredLow, yPredHigh]))]
 
-  plt.figure(figsize=(8, 6))  # Create new figure for plot.
-  bins = np.arange(-0.5, np.max([yPredLow.max(), yPredHigh.max()]) + 1.5, 1)  # Set histogram bins.
+  if (save or display):
+    plt.figure(figsize=(8, 6))  # Create new figure for plot.
+    bins = np.arange(-0.5, np.max([yPredLow.max(), yPredHigh.max()]) + 1.5, 1)  # Set histogram bins.
 
-  plt.hist(
-    yPredLow,
-    bins=bins,
-    alpha=0.6,
-    label=f"{treatmentCol}={lowVal}",
-    color="red",
-    rwidth=0.8,
-  )  # Plot low treatment histogram.
-  plt.hist(
-    yPredHigh,
-    bins=bins,
-    alpha=0.6,
-    label=f"{treatmentCol}={highVal}",
-    color="blue",
-    rwidth=0.8,
-  )  # Plot high treatment histogram.
+    plt.hist(
+      yPredLow,
+      bins=bins,
+      alpha=0.6,
+      label=f"{treatmentCol}={lowVal}",
+      color="red",
+      rwidth=0.8,
+    )  # Plot low treatment histogram.
+    plt.hist(
+      yPredHigh,
+      bins=bins,
+      alpha=0.6,
+      label=f"{treatmentCol}={highVal}",
+      color="blue",
+      rwidth=0.8,
+    )  # Plot high treatment histogram.
 
-  # Set x-axis label with font size.
-  plt.xlabel("Predicted Class", fontsize=fontSize)
+    # Set x-axis label with font size.
+    plt.xlabel("Predicted Class", fontsize=fontSize)
 
-  # Set x-ticks to class names if provided.
-  if (classNames is not None):
-    # If classNames is provided, set x-ticks to class names.
-    numClasses = len(classNames)
-    plt.xticks(ticks=np.arange(numClasses), labels=classNames, fontsize=fontSize)
+    # Set x-ticks to class names if provided.
+    if (classNames is not None):
+      # If classNames is provided, set x-ticks to class names.
+      numClasses = len(classNames)
+      plt.xticks(ticks=np.arange(numClasses), labels=classNames, fontsize=fontSize)
 
-  # Set y-axis label with font size.
-  plt.ylabel("Number of Samples", fontsize=fontSize)
+    # Set y-axis label with font size.
+    plt.ylabel("Number of Samples", fontsize=fontSize)
 
-  if (title and len(title) > 0):
-    plt.title(title, fontsize=fontSize + 2)  # Set plot title if provided.
-  else:
-    # Set plot title with font size.
-    plt.title(f"Counterfactual Outcome Plot: {treatmentCol}", fontsize=fontSize + 2)
+    if (title and len(title) > 0):
+      plt.title(title, fontsize=fontSize + 2)  # Set plot title if provided.
+    else:
+      # Set plot title with font size.
+      plt.title(f"Counterfactual Outcome Plot: {treatmentCol}", fontsize=fontSize + 2)
 
-  plt.legend(fontsize=fontSize)  # Show legend with font size.
-  plt.grid(axis="y", alpha=0.3)  # Add grid to y-axis.
-  plt.tight_layout()  # Adjust layout.
+    plt.legend(fontsize=fontSize)  # Show legend with font size.
+    plt.grid(axis="y", alpha=0.3)  # Add grid to y-axis.
+    plt.tight_layout()  # Adjust layout.
 
-  # Save the plot if requested.
-  if (save):  # Save the plot.
-    ext = fileName.split(".")[-1]
-    if (ext.lower() == "pdf"):
-      try:
-        plt.savefig(fileName, dpi=dpi, bbox_inches="tight")
-      except Exception as e:
-        print(f"Error saving plot: {e}")
-    plt.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+    # Save the plot if requested.
+    if (save):  # Save the plot.
+      ext = fileName.split(".")[-1]
+      if (ext.lower() == "pdf"):
+        try:
+          plt.savefig(fileName, dpi=dpi, bbox_inches="tight")
+        except Exception as e:
+          print(f"Error saving plot: {e}")
+      plt.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
 
-  if (display):
-    plt.show()  # Show plot if requested.
+    if (display):
+      plt.show()  # Show plot if requested.
 
-  plt.close()  # Close the plot to free memory.
+    plt.close()  # Close the plot to free memory.
 
   if (returnPreds):
     return yPredLow, yPredHigh  # Optionally return predictions.
@@ -1230,7 +1234,7 @@ def PlotInteractionEffect(
     return fig
 
 
-def PlotCalibrationCurve(
+def PlotCalibrationCurveFromModel(
   classifier,
   X,
   y,
@@ -1252,7 +1256,7 @@ def PlotCalibrationCurve(
 
   Parameters:
     classifier: Trained classifier with predict_proba method.
-    X (pandas.DataFrame or np.ndarray): Feature matrix.
+    X (pandas.DataFrame or numpy.ndarray): Feature matrix.
     y (array-like): True labels.
     classNames (list or None): List of class names. If None, inferred from classifier.
     nBins (int): Number of bins to discretize the [0, 1] interval. Default is 10.
@@ -1288,7 +1292,7 @@ def PlotCalibrationCurve(
     classifier = ...  # Load or train your classifier.
     classNames = []  # Specify class names.
 
-    pm.PlotCalibrationCurve(
+    pm.PlotCalibrationCurveFromModel(
       classifier, X, y,
       classNames=classNames,
       nBins=10,
@@ -1430,13 +1434,248 @@ def PlotCalibrationCurve(
   return None
 
 
+def PlotCalibrationCurve(
+  probs,
+  labels,
+  nBins=10,
+  title="Calibration Curve",
+  fontSize=14,
+  figSize=(6, 6),
+  display=True,
+  save=False,
+  fileName="CalibrationCurve.pdf",
+  dpi=720,
+  returnFig=False,
+  color="blue",
+):
+  r'''
+  Plot calibration curve given predicted probabilities and true labels.
+
+  Parameters:
+    probs (numpy.ndarray): Predicted probabilities of shape (nSamples, nClasses).
+    labels (array-like): True labels of shape (nSamples,).
+    nBins (int): Number of bins to discretize the [0, 1] interval. Default is 10.
+    title (str): Title of the plot. Default is "Calibration Curve".
+    fontSize (int): Font size for labels and title. Default is 14.
+    figSize (tuple): Figure size in inches. Default is (6, 6).
+    display (bool): Whether to display the plot. Default is True.
+    save (bool): Whether to save the plot to fileName. Default is False.
+    fileName (str): File name to save the plot. Default is "CalibrationCurve.pdf".
+    dpi (int): DPI for saving the figure. Default is 720.
+    returnFig (bool): Whether to return the matplotlib figure object. Default is False.
+    color (str): Color of the calibration curve. Default is "blue".
+
+  Returns:
+    tuple: (binCenters, accuracy, confidence, support) where:
+      - binCenters (numpy.ndarray): Centers of the bins.
+      - accuracy (numpy.ndarray): Accuracy in each bin.
+      - confidence (numpy.ndarray): Average confidence in each bin.
+      - support (numpy.ndarray): Number of samples in each bin.
+
+  Notes:
+    - The function computes the calibration data and plots the calibration curve.
+    - The plot is saved to fileName and optionally displayed.
+
+  Example
+  -------
+  .. code-block:: python
+
+    import numpy as np
+    import HMB.PerformanceMetrics as pm
+
+    # Example predicted probabilities and true labels.
+    probs = np.array([[0.1, 0.9], [0.8, 0.2], [0.4, 0.6], [0.9, 0.1]])
+    labels = np.array([1, 0, 1, 0])
+
+    pm.PlotCalibrationCurve(
+      probs, labels,
+      nBins=5,
+      title="Calibration Curve Example",
+      fontSize=12,
+      figSize=(5, 5),
+      display=True,
+      save=True,
+      fileName="CalibrationCurveExample.pdf",
+      dpi=300,
+      returnFig=False,
+      color="green"
+    )
+  '''
+
+  # Compute calibration data.
+  labels = np.asarray(labels)
+  confidences = np.max(probs, axis=1)
+  preds = np.argmax(probs, axis=1)
+  bins = np.linspace(0.0, 1.0, nBins + 1)
+  binCenters = 0.5 * (bins[:-1] + bins[1:])
+  acc = np.zeros(nBins)
+  conf = np.zeros(nBins)
+  support = np.zeros(nBins, dtype=int)
+  for i in range(nBins):
+    mask = (confidences >= bins[i]) & (confidences < bins[i + 1])
+    support[i] = np.sum(mask)
+
+    # Calculate accuracy and confidence for the bin.
+    if (support[i] > 0):
+      acc[i] = np.mean(preds[mask] == labels[mask])
+      conf[i] = np.mean(confidences[mask])
+    else:
+      acc[i] = np.nan
+      conf[i] = np.nan
+
+  # Plotting.
+  if (display or save or returnFig):
+    plt.figure(figsize=figSize)
+    plt.plot([0, 1], [0, 1], "k--", label="Perfectly Calibrated")
+    plt.plot(conf, acc, marker="o", color=color, label="Model")
+    plt.xlabel("Confidence", fontsize=fontSize)
+    plt.ylabel("Accuracy", fontsize=fontSize)
+    plt.title(title, fontsize=fontSize)
+
+    # Add grid, limits, and legend.
+    plt.xlim([0, 1])
+    plt.ylim([0, 1])
+    plt.grid(True)
+    plt.legend(fontsize=fontSize)
+    plt.tight_layout()
+
+    # Save the plot if requested.
+    if (save):
+      ext = fileName.split(".")[-1]
+      if (ext.lower() == "pdf"):
+        try:
+          plt.savefig(fileName, dpi=dpi, bbox_inches="tight")
+        except Exception as e:
+          print(f"Error saving plot: {e}")
+      plt.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+
+    # Display the plot if requested.
+    if (display):
+      plt.show()
+
+    # Close the plot to free memory.
+    plt.close()
+
+    if (returnFig):
+      return plt.gcf(), binCenters, acc, conf, support
+
+  return binCenters, acc, conf, support
+
+
+def PlotTopKAccuracyCurve(
+  probs,
+  labels,
+  maxK=10,
+  title="Top-k Accuracy Curve",
+  figSize=(6, 6),
+  save=False,
+  fileName="TopKAccuracyCurve.pdf",
+  display=True,
+  fontSize=12,
+  returnFig=False,
+  dpi=720,
+  color="blue",
+):
+  r'''
+  Plot Top-k accuracy curve given predicted probabilities and true labels.
+  
+  Parameters:
+    probs (numpy.ndarray): Predicted probabilities of shape (nSamples, nClasses).
+    labels (array-like): True labels of shape (nSamples,).
+    maxK (int): Maximum value of k for Top-k accuracy. Default is 10.
+    title (str): Title of the plot. Default is "Top-k Accuracy Curve".  
+    figSize (tuple): Figure size in inches. Default is (6, 6).
+    save (bool): Whether to save the plot to fileName. Default is False.
+    fileName (str): File name to save the plot. Default is "TopKAccuracyCurve.pdf".
+    display (bool): Whether to display the plot. Default is True.
+    fontSize (int): Font size for labels and title. Default is 12.
+    returnFig (bool): Whether to return the matplotlib figure object. Default is False.
+    dpi (int): DPI for saving the figure. Default is 720.
+    color (str): Color of the Top-k accuracy curve. Default is "blue".  
+    
+  Returns:
+    None or matplotlib.figure.Figure: The figure object if returnFig is True, otherwise None.
+    
+  Notes:
+    - The function computes Top-k accuracy for k=1 to maxK and plots the curve.
+    - The plot is saved to fileName and optionally displayed.
+    
+  Example
+  -------
+  .. code-block:: python
+  
+    import numpy as np
+    import HMB.PerformanceMetrics as pm
+    
+    # Example predicted probabilities and true labels.
+    probs = np.array([[0.1, 0.9], [0.8, 0.2], [0.4, 0.6], [0.9, 0.1]])
+    labels = np.array([1, 0, 1, 0]) 
+    
+    pm.PlotTopKAccuracyCurve(
+      probs, labels,
+      maxK=2,
+      title="Top-k Accuracy Curve Example",
+      figSize=(5, 5),
+      save=True,
+      fileName="TopKAccuracyCurveExample.pdf",
+      display=True,
+      fontSize=12,
+      returnFig=False,
+      dpi=300,
+      color="green"
+    )
+  '''
+
+  labels = np.asarray(labels)
+  N, C = probs.shape
+  ks = list(range(1, min(maxK, C) + 1))
+
+  topkAcc = []
+  order = np.argsort(probs, axis=1)[:, ::-1]  # Descending.
+
+  for k in ks:
+    topk = order[:, :k]
+    hits = np.any(topk == labels[:, None], axis=1)
+    topkAcc.append(np.mean(hits))
+
+  if (save or display or returnFig):
+    plt.figure(figsize=figSize)
+    plt.plot(ks, topkAcc, marker="o", color=color)
+    plt.xlabel("k", fontsize=fontSize)
+    plt.ylabel("Accuracy", fontsize=fontSize)
+    plt.title(title, fontsize=fontSize + 2)
+    plt.xticks(ks, fontsize=fontSize)
+    plt.tight_layout()
+    plt.grid(True, linestyle=":", alpha=0.4)
+
+    # Save the plot if requested.
+    if (save):
+      ext = fileName.split(".")[-1]
+      if (ext.lower() == "pdf"):
+        try:
+          plt.savefig(fileName, dpi=dpi, bbox_inches="tight")
+        except Exception as e:
+          print(f"Error saving plot: {e}")
+      plt.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+
+    # Display the plot if requested.
+    if (display):
+      plt.show()
+
+    # Close the plot to free memory.
+    plt.close()
+
+    if (returnFig):
+      return plt.gcf()
+
+
 def HistoryPlotter(
   history,  # Dictionary containing training history.
   title,  # Title of the plot.
   metrics=("loss",),  # Tuple or list of metrics to plot.
   xLabel="Epochs",  # Label for x-axis.
   fontSize=14,  # Font size for labels and title.
-  doSave=False,  # Whether to save the plot.
+  save=False,  # Whether to save the plot.
   savePath=None,  # Path to save the plot.
   dpi=720,  # DPI for saving the figure.
   colors=None,  # Optional dict of colors for each metric.
@@ -1454,7 +1693,7 @@ def HistoryPlotter(
     metrics (tuple or list): Metrics to plot (e.g., ("loss", "accuracy")). Default is ("loss",).
     xLabel (str): Label for x-axis. Default is "Epochs".
     fontSize (int): Font size for labels and title. Default is 14.
-    doSave (bool): Whether to save the plot. Default is False.
+    save (bool): Whether to save the plot. Default is False.
     savePath (str or None): Path to save the plot. Default is None.
     dpi (int): DPI for saving the figure. Default is 720.
     colors (dict or None): Optional dict mapping metric names to colors.
@@ -1492,84 +1731,85 @@ def HistoryPlotter(
     )
   '''
 
-  # Create a new figure with the specified size.
-  plt.figure(figsize=figSize)  # Create figure.
+  if (save or display or returnFig):
+    # Create a new figure with the specified size.
+    plt.figure(figsize=figSize)  # Create figure.
 
-  # Set default colors if not provided.
-  if (colors is None):
-    defaultColors = ["blue", "orange", "green", "red", "purple", "brown"]
-    colors = {}
-    for idx, metric in enumerate(metrics):
-      colors[f"train_{metric}"] = defaultColors[idx % len(defaultColors)]
-      colors[f"val_{metric}"] = defaultColors[(idx + 1) % len(defaultColors)]
+    # Set default colors if not provided.
+    if (colors is None):
+      defaultColors = ["blue", "orange", "green", "red", "purple", "brown"]
+      colors = {}
+      for idx, metric in enumerate(metrics):
+        colors[f"train_{metric}"] = defaultColors[idx % len(defaultColors)]
+        colors[f"val_{metric}"] = defaultColors[(idx + 1) % len(defaultColors)]
 
-  # Set default labels if not provided.
-  if (labels is None):
-    labels = {}
+    # Set default labels if not provided.
+    if (labels is None):
+      labels = {}
+      for metric in metrics:
+        labels[f"train_{metric}"] = f"Train {metric.capitalize()}"
+        labels[f"val_{metric}"] = f"Validation {metric.capitalize()}"
+
+    # Plot each metric for train and validation.
     for metric in metrics:
-      labels[f"train_{metric}"] = f"Train {metric.capitalize()}"
-      labels[f"val_{metric}"] = f"Validation {metric.capitalize()}"
+      trainKey = f"train_{metric}"
+      valKey = f"val_{metric}"
+      if (trainKey in history):
+        # Plot training metric.
+        plt.plot(
+          history[trainKey],  # Training metric values.
+          label=labels.get(trainKey, trainKey),  # Label for legend.
+          color=colors.get(trainKey, None)  # Color for line.
+        )
+      if (valKey in history):
+        # Plot validation metric.
+        plt.plot(
+          history[valKey],  # Validation metric values.
+          label=labels.get(valKey, valKey),  # Label for legend.
+          color=colors.get(valKey, None)  # Color for line.
+        )
 
-  # Plot each metric for train and validation.
-  for metric in metrics:
-    trainKey = f"train_{metric}"
-    valKey = f"val_{metric}"
-    if (trainKey in history):
-      # Plot training metric.
-      plt.plot(
-        history[trainKey],  # Training metric values.
-        label=labels.get(trainKey, trainKey),  # Label for legend.
-        color=colors.get(trainKey, None)  # Color for line.
-      )
-    if (valKey in history):
-      # Plot validation metric.
-      plt.plot(
-        history[valKey],  # Validation metric values.
-        label=labels.get(valKey, valKey),  # Label for legend.
-        color=colors.get(valKey, None)  # Color for line.
-      )
+    # Set the plot title.
+    plt.title(title, fontsize=fontSize * 1.2)  # Set title.
 
-  # Set the plot title.
-  plt.title(title, fontsize=fontSize * 1.2)  # Set title.
+    # Set x-axis label.
+    plt.xlabel(xLabel.capitalize(), fontsize=fontSize)  # Set x-label.
 
-  # Set x-axis label.
-  plt.xlabel(xLabel.capitalize(), fontsize=fontSize)  # Set x-label.
+    # Set y-axis label.
+    if (len(metrics) == 1):
+      plt.ylabel(metrics[0].capitalize(), fontsize=fontSize)  # Set y-label.
+    else:
+      # Set y-label for multiple metrics.
+      plt.ylabel("Metric Value", fontsize=fontSize)
 
-  # Set y-axis label.
-  if (len(metrics) == 1):
-    plt.ylabel(metrics[0].capitalize(), fontsize=fontSize)  # Set y-label.
-  else:
-    # Set y-label for multiple metrics.
-    plt.ylabel("Metric Value", fontsize=fontSize)
+    # Tight layout to minimize wasted space.
+    plt.tight_layout()  # Tight layout.
 
-  # Tight layout to minimize wasted space.
-  plt.tight_layout()  # Tight layout.
+    # Add legend.
+    plt.legend()  # Add legend.
 
-  # Add legend.
-  plt.legend()  # Add legend.
+    # Add grid lines.
+    plt.grid()  # Add grid.
 
-  # Add grid lines.
-  plt.grid()  # Add grid.
+    # Save the plot if requested.
+    if (save and savePath):  # Save plot.
+      ext = savePath.split(".")[-1]
+      if (ext.lower() == "pdf"):
+        try:
+          plt.savefig(savePath, dpi=dpi, bbox_inches="tight")
+        except Exception as e:
+          print(f"Error saving plot: {e}")
+      plt.savefig(savePath.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
 
-  # Save the plot if requested.
-  if (doSave and savePath):  # Save plot.
-    ext = savePath.split(".")[-1]
-    if (ext.lower() == "pdf"):
-      try:
-        plt.savefig(savePath, dpi=dpi, bbox_inches="tight")
-      except Exception as e:
-        print(f"Error saving plot: {e}")
-    plt.savefig(savePath.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+    # Display the plot if requested.
+    if (display):  # Display plot.
+      plt.show()
 
-  # Display the plot if requested.
-  if (display):  # Display plot.
-    plt.show()
+    plt.close()  # Close the plot.
 
-  plt.close()  # Close the plot.
-
-  # Return the figure or axes object if requested.
-  if (returnFig):
-    return plt.gcf()  # Return figure object.
+    # Return the figure or axes object if requested.
+    if (returnFig):
+      return plt.gcf()  # Return figure object.
 
 
 def PlotCumulativeGainLiftChart(
@@ -1787,91 +2027,92 @@ def PlotErrorAnalysis(
   errorLabels = ["FP", "FN", "TP", "TN"]
   errorColors = ["#FF6666", "#FFB266", "#66FF66", "#66B2FF"]
 
-  fig = plt.figure(figsize=figsize)
-  gs = fig.add_gridspec(3, 2, height_ratios=[0.7, 1, 1])
+  if (save or display or returnFig):
+    fig = plt.figure(figsize=figsize)
+    gs = fig.add_gridspec(3, 2, height_ratios=[0.7, 1, 1])
 
-  # Top: summary bar chart.
-  ax_bar = fig.add_subplot(gs[0, :])
-  ax_bar.bar(errorLabels, errorCounts, color=errorColors, edgecolor="black")
-  for i, count in enumerate(errorCounts):
-    ax_bar.text(
-      i, count + max(errorCounts) * 0.02,
-      str(count),
-      ha="center",
-      va="bottom",
-      fontsize=fontSize + 2,
-      fontweight="bold"
-    )
-  ax_bar.set_ylabel("Count", fontsize=fontSize)
-  ax_bar.set_title("Error Type Counts", fontsize=fontSize + 4)
-  ax_bar.spines["top"].set_visible(False)
-  ax_bar.spines["right"].set_visible(False)
-  ax_bar.grid(axis="y", alpha=0.2)
-
-  # 2x2 grid for error examples
-  axes = [
-    fig.add_subplot(gs[1, 0]),
-    fig.add_subplot(gs[1, 1]),
-    fig.add_subplot(gs[2, 0]),
-    fig.add_subplot(gs[2, 1]),
-  ]
-
-  for i, (label, idxs, color) in enumerate(types):
-    ax = axes[i]
-    n = min(maxExamples, len(idxs))
-    ax.set_title(f"{label} (n={len(idxs)})", fontsize=fontSize + 1, backgroundcolor=color, pad=8)
-    ax.axis("off")
-
-    if (n == 0):
-      ax.text(0.5, 0.5, "None", ha="center", va="center", fontsize=fontSize, color="gray")
-      continue
-
-    # Table header.
-    header = "Idx | True | Pred" + (" | Sample" if X is not None else "")
-    ax.text(0, 1, header, fontsize=fontSize, fontweight="bold", va="top", family="monospace")
-
-    for j in range(n):
-      idx = idxs[j]
-      tval = yTrue[idx]
-      pval = yPred[idx]
-      row = f"{idx:<3} | {tval:<4} | {pval:<4}"
-
-      if (X is not None):
-        sample = X.iloc[idx] if (hasattr(X, "iloc")) else X[idx]
-        sampleStr = str(sample)
-
-        # Limit sample string length for readability.
-        if (len(sampleStr) > 60):
-          sampleStr = sampleStr[:57] + "..."
-        row += f" | {sampleStr}"
-      ax.text(
-        0, 1 - (j + 1) * 0.13, row,
-        fontsize=fontSize * 0.95,
-        va="top",
-        family="monospace",
-        bbox=dict(facecolor=color, edgecolor="none", alpha=0.25)
+    # Top: summary bar chart.
+    ax_bar = fig.add_subplot(gs[0, :])
+    ax_bar.bar(errorLabels, errorCounts, color=errorColors, edgecolor="black")
+    for i, count in enumerate(errorCounts):
+      ax_bar.text(
+        i, count + max(errorCounts) * 0.02,
+        str(count),
+        ha="center",
+        va="bottom",
+        fontsize=fontSize + 2,
+        fontweight="bold"
       )
+    ax_bar.set_ylabel("Count", fontsize=fontSize)
+    ax_bar.set_title("Error Type Counts", fontsize=fontSize + 4)
+    ax_bar.spines["top"].set_visible(False)
+    ax_bar.spines["right"].set_visible(False)
+    ax_bar.grid(axis="y", alpha=0.2)
 
-  plt.suptitle("Error Analysis: FP, FN, TP, TN", fontsize=fontSize + 6, fontweight="bold")
-  plt.tight_layout(rect=[0, 0, 1, 0.96])
+    # 2x2 grid for error examples
+    axes = [
+      fig.add_subplot(gs[1, 0]),
+      fig.add_subplot(gs[1, 1]),
+      fig.add_subplot(gs[2, 0]),
+      fig.add_subplot(gs[2, 1]),
+    ]
 
-  # Save the plot if requested.
-  if (save):  # Save the plot.
-    ext = fileName.split(".")[-1]
-    if (ext.lower() == "pdf"):
-      try:
-        fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
-      except Exception as e:
-        print(f"Error saving plot: {e}")
-    fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+    for i, (label, idxs, color) in enumerate(types):
+      ax = axes[i]
+      n = min(maxExamples, len(idxs))
+      ax.set_title(f"{label} (n={len(idxs)})", fontsize=fontSize + 1, backgroundcolor=color, pad=8)
+      ax.axis("off")
 
-  if (display):
-    plt.show()
+      if (n == 0):
+        ax.text(0.5, 0.5, "None", ha="center", va="center", fontsize=fontSize, color="gray")
+        continue
 
-  plt.close(fig)
+      # Table header.
+      header = "Idx | True | Pred" + (" | Sample" if X is not None else "")
+      ax.text(0, 1, header, fontsize=fontSize, fontweight="bold", va="top", family="monospace")
 
-  if (returnFig):
-    return fig
+      for j in range(n):
+        idx = idxs[j]
+        tval = yTrue[idx]
+        pval = yPred[idx]
+        row = f"{idx:<3} | {tval:<4} | {pval:<4}"
+
+        if (X is not None):
+          sample = X.iloc[idx] if (hasattr(X, "iloc")) else X[idx]
+          sampleStr = str(sample)
+
+          # Limit sample string length for readability.
+          if (len(sampleStr) > 60):
+            sampleStr = sampleStr[:57] + "..."
+          row += f" | {sampleStr}"
+        ax.text(
+          0, 1 - (j + 1) * 0.13, row,
+          fontsize=fontSize * 0.95,
+          va="top",
+          family="monospace",
+          bbox=dict(facecolor=color, edgecolor="none", alpha=0.25)
+        )
+
+    plt.suptitle("Error Analysis: FP, FN, TP, TN", fontsize=fontSize + 6, fontweight="bold")
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+
+    # Save the plot if requested.
+    if (save):  # Save the plot.
+      ext = fileName.split(".")[-1]
+      if (ext.lower() == "pdf"):
+        try:
+          fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+        except Exception as e:
+          print(f"Error saving plot: {e}")
+      fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+
+    if (display):
+      plt.show()
+
+    plt.close(fig)
+
+    if (returnFig):
+      return fig
 
   return None
 
@@ -2789,72 +3030,73 @@ def ComputeECEPlotReliability(
   secondColor = cmapColors[1]
   thirdColor = cmapColors[2]
 
-  # Create a figure.
-  fig = plt.figure(figsize=figSize)
+  if (save or display or returnFig):
+    # Create a figure.
+    fig = plt.figure(figsize=figSize)
 
-  # Plot bars for difference between acc and conf.
-  plt.plot(
-    [0, 1], [0, 1],
-    linestyle="--",
-    color=firstColor,
-    label="Perfectly Calibrated"
-  )
+    # Plot bars for difference between acc and conf.
+    plt.plot(
+      [0, 1], [0, 1],
+      linestyle="--",
+      color=firstColor,
+      label="Perfectly Calibrated"
+    )
 
-  # Plot accuracy bars.
-  plt.bar(
-    bins / float(nBins),
-    binAcc,
-    width=1.0 / nBins,
-    alpha=0.7,
-    color=secondColor,
-    edgecolor="black",
-    label="Accuracy",
-  )
-  # Plot confidence line.
-  plt.plot(
-    bins / float(nBins),
-    binConf,
-    marker="o",
-    color=thirdColor,
-    label="Confidence",
-    alpha=0.9,
-  )
+    # Plot accuracy bars.
+    plt.bar(
+      bins / float(nBins),
+      binAcc,
+      width=1.0 / nBins,
+      alpha=0.7,
+      color=secondColor,
+      edgecolor="black",
+      label="Accuracy",
+    )
+    # Plot confidence line.
+    plt.plot(
+      bins / float(nBins),
+      binConf,
+      marker="o",
+      color=thirdColor,
+      label="Confidence",
+      alpha=0.9,
+    )
 
-  # Apply limits if requested.
-  if (applyXYLimits):
-    # Set limits and labels.
-    plt.xlim([-0.05, 1.05])
-    plt.ylim([-0.05, 1.05])
+    # Apply limits if requested.
+    if (applyXYLimits):
+      # Set limits and labels.
+      plt.xlim([-0.05, 1.05])
+      plt.ylim([-0.05, 1.05])
 
-  plt.xlabel("Confidence", fontsize=fontSize)
-  plt.ylabel("Accuracy", fontsize=fontSize)
-  plt.title(title, fontsize=fontSize + 2)
+    plt.xlabel("Confidence", fontsize=fontSize)
+    plt.ylabel("Accuracy", fontsize=fontSize)
+    plt.title(title, fontsize=fontSize + 2)
 
-  # Update the font of tick labels.
-  plt.xticks(fontsize=fontSize * 0.75)
-  plt.yticks(fontsize=fontSize * 0.75)
+    # Update the font of tick labels.
+    plt.xticks(fontsize=fontSize * 0.75)
+    plt.yticks(fontsize=fontSize * 0.75)
 
-  # Add legend.
-  plt.legend(fontsize=fontSize * 0.75)
+    # Add legend.
+    plt.legend(fontsize=fontSize * 0.75)
 
-  # Save the plot if requested.
-  if (save):  # Save the plot.
-    ext = fileName.split(".")[-1]
-    if (ext.lower() == "pdf"):
-      try:
-        fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
-      except Exception as e:
-        print(f"Error saving plot: {e}.")
-    fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+    # Save the plot if requested.
+    if (save):  # Save the plot.
+      ext = fileName.split(".")[-1]
+      if (ext.lower() == "pdf"):
+        try:
+          fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+        except Exception as e:
+          print(f"Error saving plot: {e}.")
+      fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
 
-  if (display):
-    # Display the plot if requested.
-    plt.show()
+    if (display):
+      # Display the plot if requested.
+      plt.show()
 
-  plt.close(fig)  # Close the plot.
+    plt.close(fig)  # Close the plot.
 
-  if (returnFig):
-    return ece, binAcc, binConf, binCounts, fig
+    if (returnFig):
+      return ece, binAcc, binConf, binCounts, fig
 
   return ece, binAcc, binConf, binCounts
 
@@ -2945,44 +3187,45 @@ def RiskCoverageCurve(
   # Compute AUC under accuracy vs coverage.
   aucVal = np.trapz(accuracy, coverage)
 
-  fig = plt.figure(figsize=figSize)
-  plt.plot(
-    coverage,
-    accuracy,
-    label=f"AUC={aucVal:.3f}",
-    color=color,
-    linewidth=2,
-  )
+  if (save or display or returnFig):
+    fig = plt.figure(figsize=figSize)
+    plt.plot(
+      coverage,
+      accuracy,
+      label=f"AUC={aucVal:.3f}",
+      color=color,
+      linewidth=2,
+    )
 
-  plt.xlabel("Coverage", fontsize=fontSize)
-  plt.ylabel("Accuracy", fontsize=fontSize)
-  plt.title(title, fontsize=fontSize + 2)
+    plt.xlabel("Coverage", fontsize=fontSize)
+    plt.ylabel("Accuracy", fontsize=fontSize)
+    plt.title(title, fontsize=fontSize + 2)
 
-  # Update the font of tick labels.
-  plt.xticks(fontsize=fontSize * 0.75)
-  plt.yticks(fontsize=fontSize * 0.75)
+    # Update the font of tick labels.
+    plt.xticks(fontsize=fontSize * 0.75)
+    plt.yticks(fontsize=fontSize * 0.75)
 
-  plt.legend()  # Add legend.
-  plt.tight_layout()  # Adjust layout.
+    plt.legend()  # Add legend.
+    plt.tight_layout()  # Adjust layout.
 
-  # Save the plot if requested.
-  if (save):  # Save the plot.
-    ext = fileName.split(".")[-1]
-    if (ext.lower() == "pdf"):
-      try:
-        fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
-      except Exception as e:
-        print(f"Error saving plot: {e}.")
-    fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+    # Save the plot if requested.
+    if (save):  # Save the plot.
+      ext = fileName.split(".")[-1]
+      if (ext.lower() == "pdf"):
+        try:
+          fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+        except Exception as e:
+          print(f"Error saving plot: {e}.")
+      fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
 
-  if (display):
-    # Display the plot if requested.
-    plt.show()
+    if (display):
+      # Display the plot if requested.
+      plt.show()
 
-  plt.close(fig)  # Close the plot.
+    plt.close(fig)  # Close the plot.
 
-  if (returnFig):
-    return coverage, accuracy, aucVal, fig
+    if (returnFig):
+      return coverage, accuracy, aucVal, fig
 
   return coverage, accuracy, aucVal
 
