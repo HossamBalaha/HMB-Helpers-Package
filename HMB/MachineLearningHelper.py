@@ -1963,6 +1963,12 @@ class OptunaTuningClassification(object):
     self.bestParams = None  # To store the best hyperparameters found by the study.
     self.bestValue = None  # To store the best value found by the study.
 
+    # Ensure the storage folder exists.
+    os.makedirs(self.storageFolderPath, exist_ok=True)
+
+    if (self.verbose):
+      print("OptunaTuningClassification initialized.")
+
   def ObjectiveFunction(
     self,
     trial,  # Optuna trial object.
@@ -1999,8 +2005,7 @@ class OptunaTuningClassification(object):
         outlierTech=outliersTech,  # Outlier detection technique to be applied.
         contamination=self.contamination,  # Proportion of outliers in the data (for outlier detection techniques).
         testRatio=self.testRatio,  # Ratio of the test data.
-        # Path to the test dataset file.
-        testFilePath=self.testFilePath,
+        testFilePath=self.testFilePath, # Path to the test dataset file.
         targetColumn=self.targetColumn,  # Name of the target column in the dataset.
         dropFirstColumn=self.dropFirstColumn,  # Whether to drop the first column (usually an index or ID).
         dropNAColumns=self.dropNAColumns,  # Whether to drop columns with any null values.
@@ -2052,6 +2057,14 @@ class OptunaTuningClassification(object):
         }
       )
 
+      if (self.verbose):
+        print(
+          f"Trial {trial.number}: Model={modelName}, Scaler={scalerName}, "
+          f"FS Tech={fsTech}, FS Ratio={fsRatio if (fsTech is not None) else None}, "
+          f"DB Tech={dataBalanceTech}, Outliers Tech={outliersTech if (outliersTech is not None) else None} "
+          f"=> Weighted Average={metrics['Weighted Average']}"
+        )
+
       # Return the weighted average of the metrics.
       return metrics["Weighted Average"]
     except Exception as e:
@@ -2077,6 +2090,11 @@ class OptunaTuningClassification(object):
       sampler=self.sampler,  # Setting the sampler.
     )
 
+    if (self.verbose):
+      print(f"Study Name: {self.study.study_name}")
+      print(f"Storage: {self.study.storage}")
+      print(f"Number of Trials: {len(self.study.trials)}")
+
     # Create the objective function with the arguments.
     objectiveFunction = lambda trial: self.ObjectiveFunction(trial)
 
@@ -2087,6 +2105,15 @@ class OptunaTuningClassification(object):
       n_jobs=1,  # To use all available CPUs for parallel execution. 1: Use one CPU.
       show_progress_bar=self.verbose,  # To show the progress bar.
     )
+
+    if (self.verbose):
+      print("Number of finished trials: ", len(self.study.trials))
+      print("Best trial:")
+      trial = self.study.best_trial
+      print("  Value: ", trial.value)
+      print("  Params: ")
+      for key, value in trial.params.items():
+        print(f"    {key}: {value}")
 
     # Save the performance metrics in a CSV file for future reference.
     historyDF = pd.DataFrame(self.history)
@@ -2118,6 +2145,9 @@ class OptunaTuningClassification(object):
     # Save the study object.
     with open(os.path.join(self.storageFolderPath, "Optuna Study.p"), "wb") as file:
       pickle.dump(self.study, file)
+
+    if (self.verbose):
+      print("Study saved successfully.")
 
   def GetStudy(self):
     '''
