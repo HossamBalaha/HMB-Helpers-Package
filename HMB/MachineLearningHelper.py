@@ -610,9 +610,6 @@ def GetMLClassificationModelObject(modelName, hyperparameters={}):
     raise ValueError("Invalid model name.")
 
 
-python
-
-
 def GetMLRegressorModelObject(modelName, hyperparameters={}):
   r'''
   Get a machine learning regressor model object based on the given name and hyperparameters.
@@ -1821,13 +1818,19 @@ class OptunaTuningClassification(object):
       datasetFilename="train.csv",
       storageFolderPath="./results",
       testFilename="test.csv",
+      testRatio=0.2,
+      contamination=0.05,
       numTrials=50,
       prefix="Optuna",
       samplerTech="TPE",
       targetColumn="Class",
       dropFirstColumn=True,
       dropNAColumns=True,
+      encodeCategorical=True,
+      saveFigures=True,
       eps=1e-8,
+      loadStudy=False,
+      verbose=True,
     )
     tuner.Tune()
     print(tuner.GetBestParams())
