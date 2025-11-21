@@ -281,7 +281,7 @@ def GetFilteredClassifiers(clsList=[]):
 
     for i in range(len(estimators)):
       # Print the classifier name and class and function arguments.
-      print(f"{i + 1}: {estimators[i][0]}")
+      print(f"{i + 1}: {estimators[i][0]}", flush=True)
 
   else:
     # If a specific list of classifiers is provided, filter the classifiers based on the provided list.
@@ -365,7 +365,7 @@ def GetFilteredRegressors(regList=[]):
     ]
 
     for i in range(len(estimators)):
-      print(f"{i + 1}: {estimators[i][0]}")
+      print(f"{i + 1}: {estimators[i][0]}", flush=True)
 
   else:
     estimators = []
@@ -1967,7 +1967,7 @@ class OptunaTuningClassification(object):
     os.makedirs(self.storageFolderPath, exist_ok=True)
 
     if (self.verbose):
-      print("OptunaTuningClassification initialized.")
+      print("OptunaTuningClassification initialized.", flush=True)
 
   def ObjectiveFunction(
     self,
@@ -2005,7 +2005,7 @@ class OptunaTuningClassification(object):
         outlierTech=outliersTech,  # Outlier detection technique to be applied.
         contamination=self.contamination,  # Proportion of outliers in the data (for outlier detection techniques).
         testRatio=self.testRatio,  # Ratio of the test data.
-        testFilePath=self.testFilePath, # Path to the test dataset file.
+        testFilePath=self.testFilePath,  # Path to the test dataset file.
         targetColumn=self.targetColumn,  # Name of the target column in the dataset.
         dropFirstColumn=self.dropFirstColumn,  # Whether to drop the first column (usually an index or ID).
         dropNAColumns=self.dropNAColumns,  # Whether to drop columns with any null values.
@@ -2062,14 +2062,15 @@ class OptunaTuningClassification(object):
           f"Trial {trial.number}: Model={modelName}, Scaler={scalerName}, "
           f"FS Tech={fsTech}, FS Ratio={fsRatio if (fsTech is not None) else None}, "
           f"DB Tech={dataBalanceTech}, Outliers Tech={outliersTech if (outliersTech is not None) else None} "
-          f"=> Weighted Average={metrics['Weighted Average']}"
+          f"=> Weighted Average={metrics['Weighted Average']}",
+          flush=True
         )
 
       # Return the weighted average of the metrics.
       return metrics["Weighted Average"]
     except Exception as e:
       # Uncomment the following line to print the error.
-      print(f"\nError: {e}")
+      print(f"\nError: {e}", flush=True)
       return 0.0
 
   def Tune(self):
@@ -2091,9 +2092,8 @@ class OptunaTuningClassification(object):
     )
 
     if (self.verbose):
-      print(f"Study Name: {self.study.study_name}")
-      print(f"Storage: {self.study.storage}")
-      print(f"Number of Trials: {len(self.study.trials)}")
+      print(f"Study Name: {self.study.study_name}", flush=True)
+      print(f"Number of Current/Completed Trials: {len(self.study.trials)}", flush=True)
 
     # Create the objective function with the arguments.
     objectiveFunction = lambda trial: self.ObjectiveFunction(trial)
@@ -2107,13 +2107,13 @@ class OptunaTuningClassification(object):
     )
 
     if (self.verbose):
-      print("Number of finished trials: ", len(self.study.trials))
-      print("Best trial:")
+      print("Number of finished trials: ", len(self.study.trials), flush=True)
+      print("Best trial:", flush=True)
       trial = self.study.best_trial
-      print("  Value: ", trial.value)
-      print("  Params: ")
+      print("  Value: ", trial.value, flush=True)
+      print("  Params: ", flush=True)
       for key, value in trial.params.items():
-        print(f"    {key}: {value}")
+        print(f"    {key}: {value}", flush=True)
 
     # Save the performance metrics in a CSV file for future reference.
     historyDF = pd.DataFrame(self.history)
@@ -2132,8 +2132,8 @@ class OptunaTuningClassification(object):
     # Get the best hyperparameters and the best value.
     self.bestParams = self.study.best_params
     self.bestValue = self.study.best_value
-    print("Best Parameters:", self.bestParams)
-    print("Best Value:", self.bestValue)
+    print("Best Parameters:", self.bestParams, flush=True)
+    print("Best Value:", self.bestValue, flush=True)
 
     # Save the best hyperparameters to a CSV file.
     bestParamsDF = pd.DataFrame(self.bestParams, index=[0])
@@ -2147,7 +2147,7 @@ class OptunaTuningClassification(object):
       pickle.dump(self.study, file)
 
     if (self.verbose):
-      print("Study saved successfully.")
+      print("Study saved successfully.", flush=True)
 
   def GetStudy(self):
     '''
@@ -2194,7 +2194,7 @@ class OptunaTuningClassification(object):
       self.study = pickle.load(file)
       self.bestParams = self.study.best_params
       self.bestValue = self.study.best_value
-    print("Study loaded successfully.")
+    print("Study loaded successfully.", flush=True)
     return self.study
 
 
@@ -2223,7 +2223,7 @@ if __name__ == "__main__":
   # Fit the scaler on the training data and transform both training and testing data.
   xTrain = scaler.fit_transform(xTrain)
   xTest = scaler.transform(xTest)
-  print(f"xTrain shape: {xTrain.shape}, xTest shape: {xTest.shape}")
+  print(f"xTrain shape: {xTrain.shape}, xTest shape: {xTest.shape}", flush=True)
 
   # Apply feature selection (e.g., PCA to select 50% of features).
   allFsTechs = ["PCA", "RF", "RFE", "Chi2", "MI", "ANOVA", "LDA"]
@@ -2231,23 +2231,26 @@ if __name__ == "__main__":
   xTrain, xTest, fs, features = mlh.PerformFeatureSelection(
     rndFsTech, 50, xTrain, yTrain, xTest, yTest, returnFeatures=True
   )
-  print(f"Feature Selection Technique: {rndFsTech}")
-  print(f"Selected Features: {features}")
-  print(f"xTrain shape after feature selection: {xTrain.shape}, xTest shape after feature selection: {xTest.shape}")
+  print(f"Feature Selection Technique: {rndFsTech}", flush=True)
+  print(f"Selected Features: {features}", flush=True)
+  print(
+    f"xTrain shape after feature selection: {xTrain.shape}, xTest shape after feature selection: {xTest.shape}",
+    flush=True
+  )
 
   # Apply data balancing (e.g., SMOTE).
   allBalanceTechs = ["SMOTE", "ADASYN", "BSMOTE", "SVMSMOTE", "ROS", "RUS", "NearMiss", "CCx"]
   rndBalanceTech = np.random.choice(allBalanceTechs)
   xTrain, yTrain, dbObj = mlh.PerformDataBalancing(xTrain, yTrain, techniqueStr=rndBalanceTech)
-  print(f"Data Balancing Technique: {rndBalanceTech}")
-  print(f"xTrain shape after data balancing: {xTrain.shape}")
-  print(f"yTrain distribution after data balancing: {np.bincount(yTrain)}")
+  print(f"Data Balancing Technique: {rndBalanceTech}", flush=True)
+  print(f"xTrain shape after data balancing: {xTrain.shape}", flush=True)
+  print(f"yTrain distribution after data balancing: {np.bincount(yTrain)}", flush=True)
 
   # Apply outlier detection (e.g., Z-Score).
   allOutlierTechs = ["IQR", "ZScore", "IForest", "LOF", "EllipticEnvelope", "OCSVM", "DBSCAN", "Mahalanobis"]
   rndOutlierTech = np.random.choice(allOutlierTechs)
   xTrain, mask = mlh.PerformOutlierDetection(xTrain, techniqueStr=rndOutlierTech, returnMask=True)
   yTrain = yTrain[mask]
-  print(f"Outlier Detection Technique: {rndOutlierTech}")
-  print(f"xTrain shape after outlier detection: {xTrain.shape}")
-  print(f"yTrain distribution after outlier detection: {np.bincount(yTrain)}")
+  print(f"Outlier Detection Technique: {rndOutlierTech}", flush=True)
+  print(f"xTrain shape after outlier detection: {xTrain.shape}", flush=True)
+  print(f"yTrain distribution after outlier detection: {np.bincount(yTrain)}", flush=True)
