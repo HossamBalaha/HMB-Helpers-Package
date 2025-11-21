@@ -2177,8 +2177,8 @@ if __name__ == "__main__":
 
   # Load the Iris dataset.
   data = load_iris()
-  X = data.data
-  y = data.target
+  X = data.data  # Features.
+  y = data.target  # Target labels.
 
   # Split the dataset into training and testing sets.
   xTrain, xTest, yTrain, yTest = train_test_split(
