@@ -1,6 +1,7 @@
 import os, optuna, pickle
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 
 def GetScalerObject(scalerName):
@@ -840,11 +841,12 @@ def PerformFeatureSelection(tech, fsRatio, xTrain, yTrain, xTest, yTest, returnF
       testCols = xTest.columns[indices[:noOfFeatures]]  # Select the top features from the testing data.
       xTrainFS = xTrain[trainCols]  # Filter the training data to keep only the selected features.
       xTestFS = xTest[testCols]  # Filter the testing data to keep only the selected features.
-      features = trainCols
+      features = trainCols.tolist()  # Convert to list for consistency.
     else:
       xTrainFS = xTrain[:, indices[:noOfFeatures]]
       xTestFS = xTest[:, indices[:noOfFeatures]]
       features = [f"Feature_{i + 1}" for i in range(noOfFeatures)]
+
   # Perform Recursive Feature Elimination (RFE) if the specified technique is "RFE".
   elif (tech == "RFE"):
     from sklearn.feature_selection import RFE  # Import RFE from sklearn.
@@ -2032,7 +2034,7 @@ class OptunaTuningClassification(object):
 
           # pltObject.figure.show()  # Display the confusion matrix plot.
           pltObject.figure.clf()  # Clear the figure to free up memory.
-          plt.close()  # Close the figure to free up memory.
+          plt.close(pltObject.figure)  # Close the plot to free up memory.
 
       # Added to check if the objects are not None before saving.
       if (objects is not None):
