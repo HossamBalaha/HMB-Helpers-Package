@@ -817,7 +817,14 @@ def PerformFeatureSelection(tech, fsRatio, xTrain, yTrain, xTest, yTest, returnF
   # If the number of features equals the total number of features,
   # return the original data without feature selection.
   if (noOfFeatures == xTrain.shape[1]):
-    return xTrain, xTest
+    if (returnFeatures):
+      features = (
+        xTrain.columns.tolist()
+        if (hasattr(xTrain, "columns"))
+        else [f"Feature_{i + 1}" for i in range(xTrain.shape[1])]
+      )
+      return xTrain, xTest, None, features
+    return xTrain, xTest, None
 
   # Perform PCA for dimensionality reduction if the specified technique is "PCA".
   if (tech == "PCA"):
