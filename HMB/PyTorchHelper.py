@@ -305,6 +305,7 @@ def TrainEvaluateModel(
   resumeFromCheckpoint=False,  # Whether to resume training from a checkpoint.
   finalModelStoragePath=None,  # Path to save the final model after training.
   judgeBy="both",  # Criterion to judge the best model ("val_loss", "val_accuracy", or "both").
+  earlyStoppingPatience=None,  # Patience for early stopping.
   verbose=True,  # Verbosity flag to control logging.
 ):
   r'''
@@ -325,6 +326,7 @@ def TrainEvaluateModel(
     resumeFromCheckpoint (bool, optional): Flag to indicate if training should resume from a checkpoint. Defaults to False.
     finalModelStoragePath (str, optional): Path to save the final model after training. Defaults to None.
     judgeBy (str, optional): Criterion to judge the best model ("val_loss", "val_accuracy", or "both"). Defaults to "both".
+    earlyStoppingPatience (int, optional): Patience for early stopping. Defaults to None.
     verbose (bool, optional): Verbosity flag to control logging. Defaults to True.
 
   Returns:
@@ -374,6 +376,7 @@ def TrainEvaluateModel(
       resumeFromCheckpoint=False,
       finalModelStoragePath="final_model.pth",
       judgeBy="both",
+      earlyStoppingPatience=None,
       verbose=True
     )
   '''
@@ -402,6 +405,8 @@ def TrainEvaluateModel(
     bestValAccuracy = stateDict.get("best_val_accuracy", 0.0)
   else:
     startEpoch = 0
+
+  currentPatience = 0  # Initialize patience counter for early stopping.
 
   # Training loop for the specified number of epochs.
   for epoch in range(startEpoch, numEpochs):
@@ -472,6 +477,17 @@ def TrainEvaluateModel(
           f"Saved new best model with val loss: {bestValLoss:.4f} "
           f"and val accuracy: {bestValAccuracy:.4f}"
         )
+      currentPatience = 0  # Reset patience counter on improvement.
+    else:
+      if (earlyStoppingPatience is not None):
+        currentPatience += 1
+        if (currentPatience >= earlyStoppingPatience):
+          if (verbose):
+            print(
+              f"Early stopping triggered after {earlyStoppingPatience} epochs "
+              f"without improvement."
+            )
+          break
 
     # Update learning rate scheduler.
     scheduler.step()
