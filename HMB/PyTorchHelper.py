@@ -327,14 +327,60 @@ def TrainEvaluateModel(
 
   Returns:
     dict: History dictionary containing training and validation metrics.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import torch
+    from torch import nn, optim
+    from torch.cuda.amp import GradScaler
+    from torch.utils.data import DataLoader
+    from HMB.PyTorchHelper import TrainEvaluateModel
+
+    # Prepare the data loaders.
+    # Replace with actual dataset and DataLoader code.
+    trainLoader = DataLoader(...)
+    valLoader = DataLoader(...)
+
+    # Create the model.
+    # Replace with actual model creation code.
+    model = pth.CreateTimmModel("resnet18", numClasses=10, pretrained=True)
+
+    # Define loss function, optimizer, scaler, and scheduler.
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
+    scaler = GradScaler()
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
+
+    # Define device.
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Train and evaluate the model.
+    history = TrainEvaluateModel(
+      model,
+      criterion,
+      device,
+      bestModelStoragePath="best_model.pth",
+      noOfClasses=10,
+      numEpochs=25,
+      optimizer=optimizer,
+      scaler=scaler,
+      scheduler=scheduler,
+      trainLoader=trainLoader,
+      valLoader=valLoader,
+      resumeFromCheckpoint=False,
+      finalModelStoragePath="final_model.pth",
+      verbose=True
+    )
   '''
 
   # Initialize history dictionary to store training and validation metrics.
   history = {
-    "train_accuracy": [],
-    "val_accuracy"  : [],
-    "train_loss"    : [],
-    "val_loss"      : [],
+    "train_accuracy": [],  # List to store training accuracy for each epoch.
+    "val_accuracy"  : [],  # List to store validation accuracy for each epoch.
+    "train_loss"    : [],  # List to store training loss for each epoch.
+    "val_loss"      : [],  # List to store validation loss for each epoch.
   }
 
   # Variables to track the best validation loss and accuracy.
@@ -361,12 +407,23 @@ def TrainEvaluateModel(
 
     # Train for one epoch.
     avgTrainEpochLoss, avgTrainEpochTrain = TrainOneEpoch(
-      model, trainLoader, criterion, device, epoch,
-      noOfClasses, numEpochs, optimizer, scaler
+      model,  # Model to train.
+      trainLoader,  # DataLoader for training data.
+      criterion,  # Loss function.
+      device,  # Device to run training on (CPU or GPU).
+      epoch,  # Current epoch number.
+      noOfClasses,  # Number of classes in the classification task.
+      numEpochs,  # Total number of epochs for training.
+      optimizer,  # Optimizer for updating model parameters.
+      scaler,  # Gradient scaler for mixed precision training.
     )
 
     avgValEpochLoss, avgValEpochAccuracy = EvaluateOneEpoch(
-      model, valLoader, criterion, device, noOfClasses
+      model,  # Model to evaluate.
+      valLoader,  # DataLoader for evaluation data.
+      criterion,  # Loss function.
+      device,  # Device to run evaluation on (CPU or GPU).
+      noOfClasses  # Number of classes in the classification task.
     )
 
     if (verbose):
@@ -631,7 +688,10 @@ def InferenceWithPlots(
     return
 
   # Set device.
-  device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+  if (device is None):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+  elif (isinstance(device, str)):
+    device = torch.device(device)
 
   # Set overall results file path.
   overallPath = os.path.join(baseDir, overallResultsFile)
