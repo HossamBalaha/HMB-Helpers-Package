@@ -690,8 +690,6 @@ def InferenceWithPlots(
   # Set device.
   if (device is None):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-  elif (isinstance(device, str)):
-    device = torch.device(device)
 
   # Set overall results file path.
   overallPath = os.path.join(baseDir, overallResultsFile)
