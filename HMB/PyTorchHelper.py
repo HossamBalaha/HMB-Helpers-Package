@@ -304,6 +304,7 @@ def TrainEvaluateModel(
   valLoader,  # DataLoader for validation data.
   resumeFromCheckpoint=False,  # Whether to resume training from a checkpoint.
   finalModelStoragePath=None,  # Path to save the final model after training.
+  judgeBy="both",  # Criterion to judge the best model ("val_loss", "val_accuracy", or "both").
   verbose=True,  # Verbosity flag to control logging.
 ):
   r'''
@@ -323,6 +324,7 @@ def TrainEvaluateModel(
     valLoader (torch.utils.data.DataLoader): DataLoader for validation data.
     resumeFromCheckpoint (bool, optional): Flag to indicate if training should resume from a checkpoint. Defaults to False.
     finalModelStoragePath (str, optional): Path to save the final model after training. Defaults to None.
+    judgeBy (str, optional): Criterion to judge the best model ("val_loss", "val_accuracy", or "both"). Defaults to "both".
     verbose (bool, optional): Verbosity flag to control logging. Defaults to True.
 
   Returns:
@@ -371,6 +373,7 @@ def TrainEvaluateModel(
       valLoader=valLoader,
       resumeFromCheckpoint=False,
       finalModelStoragePath="final_model.pth",
+      judgeBy="both",
       verbose=True
     )
   '''
@@ -440,7 +443,19 @@ def TrainEvaluateModel(
     history["val_accuracy"].append(avgValEpochAccuracy)
 
     # Save the model if validation loss improves.
-    if ((avgValEpochLoss < bestValLoss) or (avgValEpochAccuracy > bestValAccuracy)):
+    lossCondition = avgValEpochLoss < bestValLoss
+    accuracyCondition = avgValEpochAccuracy > bestValAccuracy
+    bothCondition = lossCondition and accuracyCondition
+    if (judgeBy == "val_loss"):
+      conditionToSave = lossCondition
+    elif (judgeBy == "val_accuracy"):
+      conditionToSave = accuracyCondition
+    elif (judgeBy == "both"):
+      conditionToSave = bothCondition
+    else:
+      raise ValueError(f"Invalid judgeBy value: {judgeBy}. Must be 'val_loss', 'val_accuracy', or 'both'.")
+
+    if (conditionToSave):
       bestValLoss = avgValEpochLoss
       bestValAccuracy = avgValEpochAccuracy
       # SaveModel(model, bestModelStoragePath)
