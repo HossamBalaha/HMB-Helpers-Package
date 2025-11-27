@@ -676,7 +676,6 @@ def EvaluateOneEpoch(
 
 
 def InferenceWithPlots(
-  baseDir,  # Base directory containing experiment folders.
   dataDir,  # Directory containing dataset.
   model,  # Model architecture.
   modelCheckpointName=None,  # Path to model checkpoint.
@@ -685,7 +684,7 @@ def InferenceWithPlots(
   batchSize=1,  # Batch size for inference.
   imageSize=448,  # Image size for transforms.
   expDirs=[],  # List of experiment directories.
-  overallResultsFile="Overall_Results.csv",  # Output CSV file for overall results.
+  overallResultsPath="Overall_Results.csv",  # Output CSV path for overall results.
   plotFontSize=16,  # Font size for plots.
   plotFigSize=(8, 8),  # Figure size for confusion matrix.
   rocFigSize=(5, 5),  # Figure size for ROC/PRC curves.
@@ -696,7 +695,6 @@ def InferenceWithPlots(
   Perform inference on all experiment directories and generate performance plots.
 
   Parameters:
-    baseDir (str): Base directory containing experiment folders.
     dataDir (str): Directory containing dataset.
     model (torch.nn.Module): Model architecture.
     modelCheckpointName (str, optional): Name of the model checkpoint.
@@ -705,7 +703,7 @@ def InferenceWithPlots(
     batchSize (int, optional): Batch size for inference.
     imageSize (int, optional): Image size for transforms.
     expDirs (list, optional): List of experiment directories.
-    overallResultsFile (str, optional): Output CSV file for overall results.
+    overallResultsPath (str, optional): Output CSV file for overall results.
     plotFontSize (int, optional): Font size for plots.
     plotFigSize (tuple, optional): Figure size for confusion matrix.
     rocFigSize (tuple, optional): Figure size for ROC/PRC curves.
@@ -721,9 +719,6 @@ def InferenceWithPlots(
   # Set device.
   if (device is None):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-  # Set overall results file path.
-  overallPath = os.path.join(baseDir, overallResultsFile)
 
   if (not transform):
     if (verbose):
@@ -743,9 +738,7 @@ def InferenceWithPlots(
   overallHistory = []
 
   # Loop through each experiment directory.
-  for expDir in expDirs:
-    # Check if experiment directory exists.
-    expDirPath = os.path.join(baseDir, expDir)
+  for expDirPath in expDirs:
     if (not os.path.exists(expDirPath)):
       if (verbose):
         print(f"Experiment directory not found: {expDirPath}")
@@ -907,4 +900,4 @@ def InferenceWithPlots(
   # Save overall metrics to CSV.
   df = pd.DataFrame(overallHistory)
   df = df[["File"] + [col for col in df.columns if col != "File"]]
-  df.to_csv(overallPath, index=False)
+  df.to_csv(overallResultsPath, index=False)
