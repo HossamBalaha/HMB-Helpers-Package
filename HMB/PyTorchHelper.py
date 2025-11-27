@@ -747,7 +747,7 @@ def InferenceWithPlots(
       continue
 
     if (verbose):
-      print(f"Processing directory: {expDir}")
+      print(f"Processing directory: {expDirPath}")
 
     if (modelCheckpointName):
       modelPath = os.path.join(expDirPath, modelCheckpointName)
@@ -800,7 +800,8 @@ def InferenceWithPlots(
     cm = confusion_matrix(yTrue, yPred)
     # Calculate performance metrics using the confusion matrix.
     metrics = pm.CalculatePerformanceMetrics(cm, addWeightedAverage=True)
-    metrics["File"] = expDir
+    metrics["Path"] = expDirPath
+    metrics["File"] = os.path.basename(expDirPath)
     overallHistory.append(metrics)
 
     # Plot and save the confusion matrix.
