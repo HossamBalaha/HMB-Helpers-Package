@@ -349,3 +349,63 @@ def GetCmapColors(cmap, noColors, darkColorsOnly=True, darknessThreshold=0.7):
       repeats = (noColors // len(uniqueColors)) + 1
       extended = (uniqueColors * repeats)[:noColors]
       return extended
+
+
+def AppendOrCreateNewCSV(
+  fileName,  # Path to the CSV file.
+  data,  # Data to append or create.
+  header=None,  # Header for the CSV file.
+  mode="a",  # Mode to open the file (default is append).
+):
+  '''
+  Append data to a CSV file or create a new one if it doesn't exist.
+
+  Parameters:
+    fileName (str): Path to the CSV file.
+    data (list or dict): Data to append to the CSV file. Can be a list of rows (list of lists) or a dictionary.
+    header (list, optional): Header for the CSV file. Required if creating a new file.
+    mode (str, optional): Mode to open the file. Default is "a" (append).
+  '''
+
+  # Append data to a CSV file or create a new one if it doesn't exist.
+  if (not os.path.exists(fileName)):
+    # Create a new CSV file with the specified header.
+    with open(fileName, "w", newline="") as f:
+      writer = csv.writer(f)
+      if (header is not None):
+        writer.writerow(header)  # Write the header to the CSV file.
+
+  # Append data to the CSV file.
+  # newline="" is used to avoid extra blank lines in the CSV file.
+  with open(fileName, mode, newline="") as f:
+    writer = csv.writer(f)
+    if (isinstance(data, list)):
+      for row in data:
+        writer.writerow(row)  # Write each row of data to the CSV file.
+    else:
+      writer.writerow(list(data.values()))  # Write the data to the CSV file.
+
+
+def AppendOrCreateNewDataFrameCSV(
+  fileName,  # Path to the CSV file.
+  data,  # Data to append or create.
+  header=None,  # Header for the CSV file.
+):
+  '''
+  Append a pandas DataFrame to a CSV file or create a new one if it doesn't exist.
+
+  Parameters:
+    fileName (str): Path to the CSV file.
+    data (pandas.DataFrame): DataFrame to append to the CSV file.
+    header (list, optional): Header for the CSV file. Required if creating a new file
+  '''
+
+  import pandas as pd
+
+  # Append a pandas DataFrame to a CSV file or create a new one if it doesn't exist.
+  if (not os.path.exists(fileName)):
+    # Create a new CSV file with the specified header.
+    data.to_csv(fileName, index=False, header=header)
+  else:
+    # Append data to the CSV file.
+    data.to_csv(fileName, mode="a", index=False, header=False)
