@@ -1,11 +1,9 @@
 # Import the required libraries.
 import os  # Standard library for file and directory operations.
-import cv2  # OpenCV library for image processing.
 import yaml  # PyYAML library for YAML file parsing.
 import pickle  # Pickle library for object serialization.
 import json  # JSON library for JSON file parsing.
-import numpy as np  # NumPy library for numerical operations.
-import matplotlib.pyplot as plt  # Matplotlib library for plotting and colormaps.
+
 
 
 def ReadProjectConfig(configFilePath):
@@ -83,6 +81,8 @@ def IsPointInsideContour(point, contour):
     bool: True if the point is inside the contour, otherwise False.
   '''
 
+  import cv2  # OpenCV library for image processing.
+
   # Extract the x and y coordinates of the point.
   x, y = point
   # Convert x to an integer.
@@ -118,6 +118,8 @@ def IsIntersectingWithOtherContours(point, anListCoords):
   Returns:
     bool: True if the point intersects with any contour, False otherwise.
   '''
+
+  import numpy as np  # NumPy library for numerical operations.
 
   # Iterate through each set of coordinates in the list.
   for coords in anListCoords:
@@ -290,6 +292,8 @@ def GetCmapColors(cmap, noColors, darkColorsOnly=True, darknessThreshold=0.7):
   Returns:
     list: List of unique RGBA color tuples.
   '''
+
+  import matplotlib.pyplot as plt  # Matplotlib library for plotting and colormaps.
 
   # Filter out light colors based on perceived brightness (YIQ formula).
   def IsDark(color):

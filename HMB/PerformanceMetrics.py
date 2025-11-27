@@ -1812,6 +1812,105 @@ def HistoryPlotter(
       return plt.gcf()  # Return figure object.
 
 
+def PlotMetricCurve(
+  dataToPlot,  # Data to plot.
+  xData=None,  # X-axis data.
+  title="Metric Curve",  # Title of the plot.
+  xLabel="X",  # X-axis label.
+  yLabel="Y",  # Y-axis label.
+  fontSize=15,  # Font size.
+  xTicks=None,  # X-axis ticks.
+  yTicks=None,  # Y-axis ticks.
+  xTicksRotation=0,  # X-axis ticks rotation.
+  yTicksRotation=0,  # Y-axis ticks rotation.
+  save=False,  # Whether to save the plot.
+  savePath=None,  # Path to save the plot.
+  dpi=720,  # DPI for saving the figure.
+  display=True,  # Whether to display the plot.
+  figSize=(5, 5),  # Figure size.
+  returnFig=False,  # Whether to return the figure object.
+):
+  r'''
+  Plot a metric curve given data and optional x-axis values.
+
+  Parameters:
+    dataToPlot (array-like): Data to plot on the y-axis.
+    xData (array-like or None): Data for the x-axis. If None, uses indices of dataToPlot. Default is None.
+    title (str): Title of the plot. Default is "Metric Curve".
+    xLabel (str): Label for the x-axis. Default is "X".
+    yLabel (str): Label for the y-axis. Default is "Y".
+    fontSize (int): Font size for labels and title. Default is 15.
+    xTicks (array-like or None): Ticks for the x-axis. Default is None.
+    yTicks (array-like or None): Ticks for the y-axis. Default is None.
+    xTicksRotation (int): Rotation angle for x-axis ticks. Default is 0.
+    yTicksRotation (int): Rotation angle for y-axis ticks. Default is 0.
+    save (bool): Whether to save the plot. Default is False.
+    savePath (str or None): Path to save the plot. Default is None.
+    dpi (int): DPI for saving the figure. Default is 720.
+    display (bool): Whether to display the plot. Default is True.
+    figSize (tuple): Figure size in inches. Default is (5, 5).
+    returnFig (bool): Whether to return the matplotlib figure object. Default is False.
+
+  Returns:
+    matplotlib.figure.Figure or None: The figure object if returnFig is True, otherwise None
+  '''
+
+  # Get old font size.
+  oldFontSize = plt.rcParams.get("font.size")
+
+  # Update the overall font size.
+  plt.rcParams.update({"font.size": fontSize})
+
+  # Create a figure.
+  plt.figure(1, figsize=figSize)
+
+  # Plot the data.
+  if (xData is None):
+    xData = np.arange(len(dataToPlot))
+
+  # Plot the data.
+  plt.plot(xData, dataToPlot)
+
+  # Set the x- and y-labels.
+  plt.xlabel(xLabel, fontsize=fontSize)
+  plt.ylabel(yLabel, fontsize=fontSize)
+
+  # Set the title of the plot.
+  plt.title(title, fontsize=fontSize)
+
+  # Set the x- and y-ticks.
+  if (xTicks is not None):
+    plt.xticks(xTicks, rotation=xTicksRotation, fontsize=fontSize)
+  if (yTicks is not None):
+    plt.yticks(yTicks, rotation=yTicksRotation, fontsize=fontSize)
+
+  plt.grid()  # Show the grid.
+  plt.tight_layout()  # Tight the layout to ignore wasted spaces.
+
+  # Save the plot if requested.
+  if (save and savePath):  # Save plot.
+    ext = savePath.split(".")[-1]
+    if (ext.lower() == "pdf"):
+      try:
+        plt.savefig(savePath, dpi=dpi, bbox_inches="tight")
+      except Exception as e:
+        print(f"Error saving plot: {e}")
+    plt.savefig(savePath.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+
+  # Display the plot if requested.
+  if (display):  # Display plot.
+    plt.show()
+
+  plt.close()  # Close the plot.
+
+  # Restore the old font size.
+  plt.rcParams.update({"font.size": oldFontSize})
+
+  # Return the figure or axes object if requested.
+  if (returnFig):
+    return plt.gcf()  # Return figure object.
+
+
 def PlotCumulativeGainLiftChart(
   yTrue,
   yScores,
