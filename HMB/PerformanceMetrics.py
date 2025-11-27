@@ -109,7 +109,7 @@ def CalculatePerformanceMetrics(
   }
 
   # If requested, calculate per-class precision, recall, F1, accuracy, and specificity.
-  if (addPerClass):
+  if (addPerClass and noOfClasses > 2):
     precision = TP / (TP + FP)
     recall = TP / (TP + FN)
     f1 = 2.0 * precision * recall / (precision + recall)
