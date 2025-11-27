@@ -685,6 +685,7 @@ def InferenceWithPlots(
   imageSize=448,  # Image size for transforms.
   expDirs=[],  # List of experiment directories.
   overallResultsPath="Overall_Results.csv",  # Output CSV path for overall results.
+  appendResults=True,  # Whether to append to existing overall results CSV.
   plotFontSize=16,  # Font size for plots.
   plotFigSize=(8, 8),  # Figure size for confusion matrix.
   rocFigSize=(5, 5),  # Figure size for ROC/PRC curves.
@@ -704,6 +705,7 @@ def InferenceWithPlots(
     imageSize (int, optional): Image size for transforms.
     expDirs (list, optional): List of experiment directories.
     overallResultsPath (str, optional): Output CSV file for overall results.
+    appendResults (bool, optional): Whether to append to existing overall results CSV.
     plotFontSize (int, optional): Font size for plots.
     plotFigSize (tuple, optional): Figure size for confusion matrix.
     rocFigSize (tuple, optional): Figure size for ROC/PRC curves.
@@ -897,7 +899,20 @@ def InferenceWithPlots(
       dpi=dpi,  # DPI for saving the figure.
     )
 
-  # Save overall metrics to CSV.
-  df = pd.DataFrame(overallHistory)
-  df = df[["File"] + [col for col in df.columns if col != "File"]]
-  df.to_csv(overallResultsPath, index=False)
+  if ((not appendResults) or (not os.path.exists(overallResultsPath))):
+    # Save overall metrics to CSV.
+    df = pd.DataFrame(overallHistory)
+    df = df[["File"] + [col for col in df.columns if col != "File"]]
+    df.to_csv(overallResultsPath, index=False)
+    if (verbose):
+      print(f"Overall results saved to {overallResultsPath}.")
+  else:
+    # Append overall metrics to existing CSV.
+    if (os.path.exists(overallResultsPath)):
+      dfExisting = pd.read_csv(overallResultsPath)
+      dfNew = pd.DataFrame(overallHistory)
+      dfNew = dfNew[["File"] + [col for col in dfNew.columns if col != "File"]]
+      dfCombined = pd.concat([dfExisting, dfNew], ignore_index=True)
+      dfCombined.to_csv(overallResultsPath, index=False)
+      if (verbose):
+        print(f"Overall results appended to {overallResultsPath}.")
