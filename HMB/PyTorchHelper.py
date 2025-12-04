@@ -518,6 +518,7 @@ def TrainEvaluateModel(
       useAmp=useAmp,  # Whether to use automatic mixed precision.
       useMixupFn=useMixupFn,  # Whether to use MixUp data augmentation.
       ema=ema,  # Exponential moving average for model parameters.
+      verbose=verbose,  # Verbosity flag to control logging.
     )
 
     avgValEpochLoss, avgValEpochAccuracy = EvaluateOneEpoch(
@@ -655,6 +656,7 @@ def TrainOneEpoch(
   useAmp=True,  # Whether to use automatic mixed precision.
   useMixupFn=False,  # Whether to use MixUp data augmentation.
   ema=None,  # Exponential moving average for model parameters.
+  verbose=True,  # Verbosity flag to control logging.
 ):
   r'''
   Train the model for one epoch.
@@ -674,6 +676,7 @@ def TrainOneEpoch(
     useAmp (bool, optional): Whether to use automatic mixed precision. Defaults to True.
     useMixupFn (bool, optional): Whether to use MixUp data augmentation. Defaults to False.
     ema (object, optional): Exponential moving average for model parameters. Defaults to None.
+    verbose (bool, optional): Verbosity flag to control logging. Defaults to True.
 
   Returns:
     tuple: (avgTrainLoss, avgTrainAccuracy) for the epoch.
