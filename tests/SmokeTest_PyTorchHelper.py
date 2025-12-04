@@ -60,7 +60,7 @@ criterion = nn.CrossEntropyLoss()
 scaler = GradScaler()
 scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=numEpochs)
 
-# Run training for 2 epochs on `cuda`.
+# Run training for N epochs on `cuda`.
 device = torch.device("cuda")
 
 # Make sure model is on the correct device.
