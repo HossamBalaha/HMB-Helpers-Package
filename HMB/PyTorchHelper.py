@@ -293,6 +293,21 @@ def CreateTimmModel(modelName, numClasses, pretrained=True):
 
 
 def MixupFn(inputs, targets, alpha=0.4, numClasses=None):
+  r'''
+  Apply MixUp data augmentation to inputs and targets.
+
+  Parameters:
+    inputs (torch.Tensor): Input data of shape (batch_size, ...).
+    targets (torch.Tensor): Target labels of shape (batch_size,) or (batch_size, num_classes).
+    alpha (float): MixUp alpha parameter for Beta distribution. Default is 0.4.
+    numClasses (int, optional): Number of classes for one-hot encoding if targets are indices.
+
+  Returns:
+    tuple: Mixed inputs and mixed targets.
+      - mixedInputs (torch.Tensor): Mixed input data.
+      - mixedTargets (torch.Tensor): Mixed target labels.
+  '''
+
   if (alpha <= 0):
     # If no mixup, ensure targets are one-hot floats if possible.
     if (targets.dim() == 1):
@@ -315,7 +330,7 @@ def MixupFn(inputs, targets, alpha=0.4, numClasses=None):
     tA = F.one_hot(targets, num_classes=numClasses).float().to(inputs.device)
     tB = F.one_hot(targets[index], num_classes=numClasses).float().to(inputs.device)
   else:
-    # targets already one-hot / soft
+    # Targets already one-hot / soft.
     tA = targets.float().to(inputs.device)
     tB = targets[index].float().to(inputs.device)
 
@@ -360,7 +375,7 @@ def TrainEvaluateModel(
   gradAccumSteps=1,  # Number of gradient accumulation steps.
   maxGradNorm=None,  # Maximum gradient norm for clipping.
   useAmp=True,  # Whether to use automatic mixed precision.
-  mixupFn=None,  # Mixup function for data augmentation.
+  useMixupFn=False,  # Whether to use MixUp data augmentation.
   ema=None,  # Exponential moving average for model parameters.
   saveEvery=None,  # Save model every N epochs.
 ):
@@ -387,7 +402,7 @@ def TrainEvaluateModel(
     gradAccumSteps (int, optional): Number of gradient accumulation steps. Defaults to 1.
     maxGradNorm (float, optional): Maximum gradient norm for clipping. Defaults to None.
     useAmp (bool, optional): Whether to use automatic mixed precision. Defaults to True.
-    mixupFn (callable, optional): Mixup function for data augmentation. Defaults to None.
+    useMixupFn (bool, optional): Whether to use MixUp data augmentation. Defaults to False.
     ema (object, optional): Exponential moving average for model parameters. Defaults to None.
     saveEvery (int, optional): Save model every N epochs. Defaults to None.
 
@@ -443,7 +458,7 @@ def TrainEvaluateModel(
       gradAccumSteps=1,
       maxGradNorm=None,
       useAmp=True,
-      mixupFn=None,
+      useMixupFn=False,
       ema=None,
       saveEvery=None
     )
@@ -501,7 +516,7 @@ def TrainEvaluateModel(
       gradAccumSteps=gradAccumSteps,  # Number of gradient accumulation steps.
       maxGradNorm=maxGradNorm,  # Maximum gradient norm for clipping.
       useAmp=useAmp,  # Whether to use automatic mixed precision.
-      mixupFn=mixupFn,  # Mixup function for data augmentation.
+      useMixupFn=useMixupFn,  # Whether to use MixUp data augmentation.
       ema=ema,  # Exponential moving average for model parameters.
     )
 
@@ -638,7 +653,7 @@ def TrainOneEpoch(
   gradAccumSteps=1,  # Number of gradient accumulation steps.
   maxGradNorm=None,  # Maximum gradient norm for clipping.
   useAmp=True,  # Whether to use automatic mixed precision.
-  mixupFn=None,  # Mixup function for data augmentation.
+  useMixupFn=False,  # Whether to use MixUp data augmentation.
   ema=None,  # Exponential moving average for model parameters.
 ):
   r'''
@@ -657,7 +672,7 @@ def TrainOneEpoch(
     gradAccumSteps (int, optional): Number of gradient accumulation steps. Defaults to 1.
     maxGradNorm (float, optional): Maximum gradient norm for clipping. Defaults to None.
     useAmp (bool, optional): Whether to use automatic mixed precision. Defaults to True.
-    mixupFn (callable, optional): Mixup function for data augmentation. Defaults to None.
+    useMixupFn (bool, optional): Whether to use MixUp data augmentation. Defaults to False.
     ema (object, optional): Exponential moving average for model parameters. Defaults to None.
 
   Returns:
@@ -688,15 +703,20 @@ def TrainOneEpoch(
     data = data.to(device, non_blocking=True)
     labels = labels.to(device, non_blocking=True)
 
-    if (mixupFn is not None):
-      data, labels = mixupFn(data, labels)
+    if (useMixupFn):
+      # Apply MixUp data augmentation.
+      data, labels = MixupFn(data, labels, alpha=0.4, numClasses=noOfClasses)
 
     # Use automatic mixed precision for the forward pass.
     with autocast(enabled=useAmp):
       # Forward pass through the model to get outputs.
       outputs = model(data)
-      # Compute the loss using the specified criterion.
-      loss = criterion(outputs, labels)
+      if (useMixupFn and isinstance(labels, torch.Tensor) and labels.dim() > 1):
+        # Compute the MixUp loss.
+        loss = MixupCriterion(outputs, labels)
+      else:
+        # Compute the loss using the specified criterion.
+        loss = criterion(outputs, labels)
 
     # Get the batch size.
     batchSize = data.size(0)
