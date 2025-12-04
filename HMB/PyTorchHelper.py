@@ -532,7 +532,7 @@ def TrainEvaluateModel(
     noOfClasses (int): Number of classes in the classification task.
     numEpochs (int): Total number of epochs for training.
     optimizer (torch.optim.Optimizer): Optimizer for updating model parameters.
-    scaler (torch.cuda.amp.GradScaler): Gradient scaler for mixed precision training.
+    scaler (torch.amp.GradScaler): Gradient scaler for mixed precision training.
     scheduler (torch.optim.lr_scheduler._LRScheduler): Learning rate scheduler.
     trainLoader (torch.utils.data.DataLoader): DataLoader for training data.
     valLoader (torch.utils.data.DataLoader): DataLoader for validation data.
@@ -557,7 +557,7 @@ def TrainEvaluateModel(
 
     import torch
     from torch import nn, optim
-    from torch.cuda.amp import GradScaler
+    from torch.amp import GradScaler
     from torch.utils.data import DataLoader
     from HMB.PyTorchHelper import TrainEvaluateModel
 
@@ -817,7 +817,7 @@ def TrainOneEpoch(
     noOfClasses (int): Number of classes in the classification task.
     numEpochs (int): Total number of epochs for training.
     optimizer (torch.optim.Optimizer): Optimizer for updating model parameters.
-    scaler (torch.cuda.amp.GradScaler): Gradient scaler for mixed precision training.
+    scaler (torch.amp.GradScaler): Gradient scaler for mixed precision training.
     gradAccumSteps (int, optional): Number of gradient accumulation steps. Defaults to 1.
     maxGradNorm (float, optional): Maximum gradient norm for clipping. Defaults to None.
     useAmp (bool, optional): Whether to use automatic mixed precision. Defaults to True.
