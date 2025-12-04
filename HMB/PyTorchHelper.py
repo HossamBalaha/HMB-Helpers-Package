@@ -7,7 +7,7 @@ from sklearn.metrics import confusion_matrix, classification_report
 from torch.amp import autocast, GradScaler
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, CosineAnnealingLR
 import torch.nn.functional as F
 
 import HMB.PerformanceMetrics as pm
@@ -299,7 +299,7 @@ def MixupFn(inputs, targets, alpha=0.4, numClasses=None):
   Parameters:
     inputs (torch.Tensor): Input data of shape (batch_size, ...).
     targets (torch.Tensor): Target labels of shape (batch_size,) or (batch_size, num_classes).
-    alpha (float): MixUp alpha parameter for Beta distribution. Default is 0.4.
+    alpha (float): MixUp alpha parameter for Beta distribution. Default is 0.4. If alpha > 0.5, stronger mixing is applied.
     numClasses (int, optional): Number of classes for one-hot encoding if targets are indices.
 
   Returns:
@@ -518,6 +518,7 @@ def TrainEvaluateModel(
   maxGradNorm=None,  # Maximum gradient norm for clipping.
   useAmp=True,  # Whether to use automatic mixed precision.
   useMixupFn=False,  # Whether to use MixUp data augmentation.
+  mixUpAlpha=0.5,  # Value of alpha for MixUp data augmentation.
   useEma=False,  # Whether to use Exponential Moving Average for model parameters.
   saveEvery=None,  # Save model every N epochs.
 ):
@@ -542,9 +543,12 @@ def TrainEvaluateModel(
     earlyStoppingPatience (int, optional): Patience for early stopping. Defaults to None.
     verbose (bool, optional): Verbosity flag to control logging. Defaults to True.
     gradAccumSteps (int, optional): Number of gradient accumulation steps. Defaults to 1.
+      When >1, gradients are accumulated over multiple batches before performing an optimizer step.
+      When using gradient accumulation, ensure that the effective batch size (batchSize * gradAccumSteps) fits in memory.
     maxGradNorm (float, optional): Maximum gradient norm for clipping. Defaults to None.
     useAmp (bool, optional): Whether to use automatic mixed precision. Defaults to True.
     useMixupFn (bool, optional): Whether to use MixUp data augmentation. Defaults to False.
+    mixUpAlpha (float, optional): Value of alpha for MixUp data augmentation. Defaults to 0.5.
     useEma (object, optional): Whether to use Exponential Moving Average for model parameters. Defaults to False.
     saveEvery (int, optional): Save model every N epochs. Defaults to None.
 
@@ -601,6 +605,7 @@ def TrainEvaluateModel(
       maxGradNorm=None,
       useAmp=True,
       useMixupFn=False,
+      mixUpAlpha=0.5,
       useEma=False,
       saveEvery=None
     )
@@ -638,6 +643,11 @@ def TrainEvaluateModel(
     else:
       if (verbose):
         print("Failed to load checkpoint. Starting training from scratch.")
+
+    if (verbose):
+      print(f"Resumed training from epoch {startEpoch}.")
+      if (startEpoch >= numEpochs):
+        print("Warning: `startEpoch` is greater than or equal to `numEpochs`. No training will be performed.")
   else:
     if (verbose):
       print("Starting training from scratch.")
@@ -664,6 +674,7 @@ def TrainEvaluateModel(
       maxGradNorm=maxGradNorm,  # Maximum gradient norm for clipping.
       useAmp=useAmp,  # Whether to use automatic mixed precision.
       useMixupFn=useMixupFn,  # Whether to use MixUp data augmentation.
+      mixUpAlpha=mixUpAlpha,  # Value of alpha for MixUp data augmentation.
       ema=ema,  # Exponential Moving Average object.
       verbose=verbose,  # Verbosity flag to control logging.
     )
@@ -745,16 +756,14 @@ def TrainEvaluateModel(
             )
           break
 
+    # For ReduceLROnPlateau we need to step with the validation loss after evaluation.
     try:
-      if (isinstance(scheduler, ReduceLROnPlateau)):
+      if (isinstance(scheduler, (ReduceLROnPlateau,))):
         scheduler.step(avgValEpochLoss)
       else:
         scheduler.step()
     except Exception:
-      try:
-        scheduler.step()
-      except Exception:
-        pass
+      pass
 
     if (saveEvery is not None and (epoch + 1) % saveEvery == 0):
       epochPath = os.path.join(
@@ -802,6 +811,7 @@ def TrainOneEpoch(
   maxGradNorm=None,  # Maximum gradient norm for clipping.
   useAmp=True,  # Whether to use automatic mixed precision.
   useMixupFn=False,  # Whether to use MixUp data augmentation.
+  mixUpAlpha=0.5,  # Value of alpha for MixUp data augmentation.
   ema=None,  # Exponential Moving Average object.
   verbose=True,  # Verbosity flag to control logging.
 ):
@@ -822,6 +832,7 @@ def TrainOneEpoch(
     maxGradNorm (float, optional): Maximum gradient norm for clipping. Defaults to None.
     useAmp (bool, optional): Whether to use automatic mixed precision. Defaults to True.
     useMixupFn (bool, optional): Whether to use MixUp data augmentation. Defaults to False.
+    mixUpAlpha (float, optional): Value of alpha for MixUp data augmentation. Defaults to 0.5.
     ema (object, optional): Exponential Moving Average object. Defaults to None.
     verbose (bool, optional): Verbosity flag to control logging. Defaults to True.
 
@@ -837,13 +848,15 @@ def TrainOneEpoch(
   # Initialize total loss and accuracy for the epoch.
   totalEpochLoss = 0.0
   totalEpochAccuracy = 0.0
-  totalEpochSamples = 0
 
   # Zero the gradients of the optimizer.
   optimizer.zero_grad()
 
   # Determine device type for autocast.
-  deviceType = "cuda" if ((hasattr(device, "type") and device.type == "cuda") or ("cuda" in str(device))) else "cpu"
+  deviceType = "cuda" if (
+    (hasattr(device, "type") and device.type == "cuda") or
+    ("cuda" in str(device))
+  ) else "cpu"
 
   # Iterate over the training data loader with a progress bar.
   for batchIdx, batch in tqdm.tqdm(
@@ -858,7 +871,7 @@ def TrainOneEpoch(
 
     if (useMixupFn):
       # Apply MixUp data augmentation.
-      data, labels = MixupFn(data, labels, alpha=0.4, numClasses=noOfClasses)
+      data, labels = MixupFn(data, labels, alpha=mixUpAlpha, numClasses=noOfClasses)
 
     # Use automatic mixed precision for the forward pass.
     with autocast(enabled=useAmp, device_type=deviceType):
@@ -872,22 +885,30 @@ def TrainOneEpoch(
         # Compute the loss using the specified criterion.
         loss = criterion(outputs, labels)
 
-    # Get the batch size.
-    batchSize = data.size(0)
-    totalEpochSamples += batchSize
+    if (outputs.dim() == 1 or outputs.size(1) == 1):
+      # Binary classification case.
+      outputIdx = (outputs.cpu() > 0.5).long().squeeze()
+    else:
+      # Get the predicted class indices.
+      outputIdx = outputs.cpu().argmax(dim=1)
 
-    # Get the predicted class indices.
-    outputIdx = outputs.argmax(dim=1)
+    if (labels.dim() > 1):
+      # If labels are soft/one-hot, convert to hard labels for accuracy calculation.
+      hardLabels = labels.cpu().argmax(dim=1)
+    else:
+      hardLabels = labels.cpu()
 
     # If loss is a tensor, convert it to a scalar value.
     lossScalar = loss.item() if (isinstance(loss, torch.Tensor)) else loss
+    # Get the batch size.
+    batchSize = data.size(0)
     # Accumulate the total loss for the epoch.
     totalEpochLoss += lossScalar * batchSize
 
     # Compute the confusion matrix and accuracy.
     cm = confusion_matrix(
-      labels.cpu(),  # True labels.
-      outputIdx.cpu(),  # Predicted labels.
+      hardLabels,  # True labels.
+      outputIdx,  # Predicted labels.
       labels=list(range(noOfClasses)),  # List of class labels.
     )
     # Calculate performance metrics from the confusion matrix.
@@ -925,8 +946,8 @@ def TrainOneEpoch(
             print(f"EMA update on model.module also failed: {e2}")
 
   # Calculate average loss and accuracy for the epoch.
-  avgTrainLoss = totalEpochLoss / max(1, totalEpochSamples)
-  avgTrainAccuracy = totalEpochAccuracy / max(1, totalEpochSamples)
+  avgTrainLoss = totalEpochLoss / max(1, len(dataLoader))
+  avgTrainAccuracy = totalEpochAccuracy / max(1, len(dataLoader))
 
   return avgTrainLoss, avgTrainAccuracy
 
@@ -970,26 +991,38 @@ def EvaluateOneEpoch(
     ):
       # Get data and labels from the batch and move them to the specified device.
       data, labels = batch
-      data = data.to(device)
-      labels = labels.to(device)
+      data = data.to(device, non_blocking=True)
+      labels = labels.to(device, non_blocking=True)
 
       # Forward pass through the model to get outputs.
       outputs = model(data)
 
-      # Get the predicted class indices.
-      outputIdx = outputs.argmax(dim=1)
+      if (outputs.dim() == 1 or outputs.size(1) == 1):
+        # Binary classification case.
+        outputIdx = (outputs.cpu() > 0.5).long().squeeze()
+      else:
+        # Get the predicted class indices.
+        outputIdx = outputs.cpu().argmax(dim=1)
+
+      if (labels.dim() > 1):
+        # If labels are soft/one-hot, convert to hard labels for accuracy calculation.
+        hardLabels = labels.cpu().argmax(dim=1)
+      else:
+        hardLabels = labels.cpu()
 
       # Compute the loss using the specified criterion.
       loss = criterion(outputs, labels)
+      # Get the batch size.
+      batchSize = data.size(0)
       # If loss is a tensor, convert it to a scalar value.
       loss = loss.item() if isinstance(loss, torch.Tensor) else loss
       # Accumulate the total loss for the validation epoch.
-      totalLoss += loss
+      totalLoss += loss * batchSize
 
-      # Compute the confusion matrix and accuracy.
+      # Compute the confusion matrix and accuracy using hard labels.
       cm = confusion_matrix(
-        labels.cpu(),  # True labels.
-        outputIdx.cpu(),  # Predicted labels.
+        hardLabels,  # True labels.
+        outputIdx,  # Predicted labels.
         labels=list(range(noOfClasses)),  # List of class labels.
       )
       # Calculate performance metrics from the confusion matrix.
@@ -1000,8 +1033,8 @@ def EvaluateOneEpoch(
       totalAccuracy += accuracy
 
   # Calculate average loss and accuracy for the validation epoch.
-  avgValLoss = totalLoss / len(dataLoader)
-  avgValAccuracy = totalAccuracy / len(dataLoader)
+  avgValLoss = totalLoss / max(1, len(dataLoader))
+  avgValAccuracy = totalAccuracy / max(1, len(dataLoader))
 
   return avgValLoss, avgValAccuracy
 
