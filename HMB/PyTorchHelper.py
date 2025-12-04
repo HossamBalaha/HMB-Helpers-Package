@@ -4,7 +4,8 @@ import pandas as pd
 from PIL import Image
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, classification_report
-from torch.cuda.amp import GradScaler, autocast
+from torch.cuda.amp import GradScaler
+from torch.amp import autocast
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -842,6 +843,8 @@ def TrainOneEpoch(
   # Zero the gradients of the optimizer.
   optimizer.zero_grad()
 
+  deviceType = "cuda" if ((hasattr(device, "type") and device.type == "cuda") or ("cuda" in str(device))) else "cpu"
+
   # Iterate over the training data loader with a progress bar.
   for batchIdx, batch in tqdm.tqdm(
     enumerate(dataLoader),  # Enumerate over batches.
@@ -858,7 +861,7 @@ def TrainOneEpoch(
       data, labels = MixupFn(data, labels, alpha=0.4, numClasses=noOfClasses)
 
     # Use automatic mixed precision for the forward pass.
-    with autocast(enabled=useAmp):
+    with autocast(enabled=useAmp, device_type=deviceType):
       # Forward pass through the model to get outputs.
       outputs = model(data)
       if (useMixupFn and isinstance(labels, torch.Tensor) and labels.dim() > 1):
