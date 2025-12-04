@@ -1085,6 +1085,7 @@ def InferenceWithPlots(
   if (not transform):
     if (verbose):
       print("No transform provided. Using default transform.")
+
     # Prepare image transform.
     transform = transforms.Compose([
       transforms.Resize((imageSize, imageSize)),  # Resize images.

@@ -21,7 +21,8 @@ imageSize = (8, 8)
 x = torch.randn(numSamples, 3, imageSize[0], imageSize[1])  # Random images.
 y = torch.randint(0, numClasses, (numSamples,))  # Random labels.
 
-dataDir = "tests/SyntheticDataset"
+dataDir = "tests/PyTorchHelper/SyntheticDataset"
+
 if (os.path.exists(dataDir)):
   shutil.rmtree(dataDir)
 os.makedirs(dataDir, exist_ok=True)
@@ -46,6 +47,13 @@ model = nn.Sequential(
   nn.Flatten(),
   nn.Linear(3 * 8 * 8, 32),
   nn.ReLU(),
+  nn.Dropout(0.5),
+  nn.Linear(32, 64),
+  nn.ReLU(),
+  nn.Dropout(0.5),
+  nn.Linear(64, 32),
+  nn.ReLU(),
+  nn.Dropout(0.5),
   nn.Linear(32, numClasses)
 )
 
@@ -70,7 +78,7 @@ history = TrainEvaluateModel(
   model=model,
   criterion=criterion,
   device=device,
-  bestModelStoragePath="tests/best_model.pth",
+  bestModelStoragePath="tests/PyTorchHelper/best_model.pth",
   noOfClasses=numClasses,
   numEpochs=numEpochs,
   optimizer=optimizer,
@@ -103,11 +111,15 @@ InferenceWithPlots(
   device="cuda" if (torch.cuda.is_available()) else "cpu",  # Device to run inference on.
   batchSize=1,  # Batch size for inference.
   imageSize=imageSize[0],  # Image size for transforms.
-  expDirs=["tests"],  # List of experiment directories.
-  overallResultsPath="tests/Overall_Results.csv",  # Output CSV path for overall results.
+  expDirs=["tests/PyTorchHelper"],  # List of experiment directories.
+  overallResultsPath="tests/PyTorchHelper/Overall_Results.csv",  # Output CSV path for overall results.
   plotFontSize=16,  # Font size for plots.
   plotFigSize=(8, 8),  # Figure size for confusion matrix.
   rocFigSize=(5, 5),  # Figure size for ROC/PRC curves.
   dpi=720,  # DPI for saving plots.
   verbose=True,  # Whether to print progress.
 )
+
+# Clean up synthetic dataset and model checkpoint.
+shutil.rmtree("tests/PyTorchHelper")
+print("Smoke test for PyTorchHelper passed successfully.")
