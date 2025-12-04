@@ -1100,6 +1100,9 @@ def InferenceWithPlots(
   dataset = CustomDataset(dataDir, transform=transform)
   dataloader = DataLoader(dataset, batch_size=batchSize, shuffle=False)
 
+  if (verbose):
+    print(f"Dataset contains {len(dataset)} images across {len(dataset.classToIdx)} classes.")
+
   # Initialize overall history.
   overallHistory = []
 

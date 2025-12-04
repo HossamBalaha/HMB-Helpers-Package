@@ -1,29 +1,45 @@
-import torch, random
+import torch, random, os, shutil, cv2
 import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 from torch.amp import GradScaler
 
-from HMB.PyTorchHelper import TrainEvaluateModel, GetOptimizer
+from HMB.PyTorchHelper import TrainEvaluateModel, GetOptimizer, InferenceWithPlots
 from HMB.Initializations import SeedEverything
 
 SeedEverything(42)
 
 # Small synthetic dataset.
-numSamples = 256
-numClasses = 10
-batchSize = 8
-numEpochs = 1000
+numSamples = 100
+numClasses = 3
+batchSize = 16
+numEpochs = 100
+imageSize = (8, 8)
 
-# Inputs: 3x8x8 images flattened.
-x = torch.randn(numSamples, 3, 8, 8)
-# Targets: integers 0..num_classes-1.
-y = torch.randint(0, numClasses, (numSamples,))
+# Create synthetic dataset for inference and store it in the specified directory.
+x = torch.randn(numSamples, 3, imageSize[0], imageSize[1])  # Random images.
+y = torch.randint(0, numClasses, (numSamples,))  # Random labels.
 
+dataDir = "tests/SyntheticDataset"
+if (os.path.exists(dataDir)):
+  shutil.rmtree(dataDir)
+os.makedirs(dataDir, exist_ok=True)
+for i in range(numSamples):
+  img = x[i].permute(1, 2, 0).numpy()  # Convert to HWC format.
+  label = y[i].item()
+  classDir = os.path.join(dataDir, str(label))
+  os.makedirs(classDir, exist_ok=True)
+  imgPath = os.path.join(classDir, f"img_{i}.png")
+  cv2.imwrite(imgPath, (img * 255).astype(np.uint8))
+
+# Create DataLoader.
 dataset = TensorDataset(x, y)
-trainLoader = DataLoader(dataset, batch_size=batchSize, shuffle=True)
-valLoader = DataLoader(dataset, batch_size=batchSize, shuffle=False)
+trainSize = int(0.8 * numSamples)
+valSize = numSamples - trainSize
+trainDataset, valDataset = torch.utils.data.random_split(dataset, [trainSize, valSize])
+trainLoader = DataLoader(trainDataset, batch_size=batchSize, shuffle=True)
+valLoader = DataLoader(valDataset, batch_size=batchSize, shuffle=False)
 
 # Simple model.
 model = nn.Sequential(
@@ -36,13 +52,13 @@ model = nn.Sequential(
 # Optimizer, criterion, scaler, scheduler.
 optimizer = GetOptimizer(
   model,
-  optimizerType="Adam",
+  optimizerType="adamw",
   learningRate=0.001,
   weightDecay=1e-4
 )
 criterion = nn.CrossEntropyLoss()
 scaler = GradScaler()
-scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.9)
+scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=numEpochs)
 
 # Run training for 2 epochs on `cuda`.
 device = torch.device("cuda")
@@ -65,7 +81,7 @@ history = TrainEvaluateModel(
   resumeFromCheckpoint=False,
   finalModelStoragePath=None,
   judgeBy="val_loss",
-  earlyStoppingPatience=3,
+  earlyStoppingPatience=None,
   verbose=True,
   gradAccumSteps=1,
   maxGradNorm=5.0,
@@ -77,3 +93,21 @@ history = TrainEvaluateModel(
 )
 
 # print("History:", history)
+
+
+InferenceWithPlots(
+  dataDir=dataDir,  # Directory containing dataset.
+  model=model,  # Model architecture.
+  modelCheckpointName="best_model.pth",  # Path to model checkpoint.
+  transform=None,  # Image transform to apply.
+  device="cuda" if (torch.cuda.is_available()) else "cpu",  # Device to run inference on.
+  batchSize=1,  # Batch size for inference.
+  imageSize=imageSize[0],  # Image size for transforms.
+  expDirs=["tests"],  # List of experiment directories.
+  overallResultsPath="tests/Overall_Results.csv",  # Output CSV path for overall results.
+  plotFontSize=16,  # Font size for plots.
+  plotFigSize=(8, 8),  # Figure size for confusion matrix.
+  rocFigSize=(5, 5),  # Figure size for ROC/PRC curves.
+  dpi=720,  # DPI for saving plots.
+  verbose=True,  # Whether to print progress.
+)
