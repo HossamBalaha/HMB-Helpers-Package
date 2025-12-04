@@ -900,10 +900,8 @@ def TrainOneEpoch(
 
     # If loss is a tensor, convert it to a scalar value.
     lossScalar = loss.item() if (isinstance(loss, torch.Tensor)) else loss
-    # Get the batch size.
-    batchSize = data.size(0)
     # Accumulate the total loss for the epoch.
-    totalEpochLoss += lossScalar * batchSize
+    totalEpochLoss += lossScalar
 
     # Compute the confusion matrix and accuracy.
     cm = confusion_matrix(
@@ -1012,12 +1010,10 @@ def EvaluateOneEpoch(
 
       # Compute the loss using the specified criterion.
       loss = criterion(outputs, labels)
-      # Get the batch size.
-      batchSize = data.size(0)
       # If loss is a tensor, convert it to a scalar value.
       loss = loss.item() if isinstance(loss, torch.Tensor) else loss
       # Accumulate the total loss for the validation epoch.
-      totalLoss += loss * batchSize
+      totalLoss += loss
 
       # Compute the confusion matrix and accuracy using hard labels.
       cm = confusion_matrix(
