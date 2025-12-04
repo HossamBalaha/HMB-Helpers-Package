@@ -1,4 +1,4 @@
-import os, timm, torch, tqdm
+import os, timm, torch, tqdm, copy
 import numpy as np
 import pandas as pd
 from PIL import Image
@@ -355,6 +355,148 @@ def MixupCriterion(logits, softTargets):
   return loss
 
 
+class ExponentialMovingAverage(object):
+  r'''
+  Implements Exponential Moving Average (EMA) for model parameters.
+
+  Parameters:
+    model (torch.nn.Module, optional): Model to initialize EMA with. If None, EMA will be initialized on first update.
+    decay (float): Decay rate for EMA. Default is 0.9999.
+    device (str or torch.device, optional): Device to store EMA weights. If None, uses the same device as the model.
+  '''
+
+  def __init__(self, model=None, decay=0.9999, device=None):
+    self.decay = float(decay)
+    self.numUpdates = 0
+    self.device = torch.device(device) if device is not None else None
+    self.module = None
+    self._backup = None
+
+    if (model is not None):
+      # Keep a CPU/GPU copy of the model to expose EMA weights easily.
+      self.module = copy.deepcopy(model)
+      self.module.eval()
+      for p in self.module.parameters():
+        p.requires_grad = False
+      if (self.device is not None):
+        self.module.to(self.device)
+
+  def update(self, model):
+    r'''
+    Update EMA weights using the current model parameters.
+
+    Parameters:
+      model (torch.nn.Module): Model with current parameters to update EMA from.
+    '''
+
+    if (self.module is None):
+      self.module = copy.deepcopy(model)
+      self.module.eval()
+      for p in self.module.parameters():
+        p.requires_grad = False
+      if self.device is not None:
+        self.module.to(self.device)
+
+    self.numUpdates += 1
+    decay = self.decay
+
+    # Update each parameter: ema = decay * ema + (1 - decay) * param.
+    with torch.no_grad():
+      for emaP, modelData in zip(self.module.parameters(), model.parameters()):
+        modelData = modelData.detach().to(emaP.device)
+        emaP.data.mul_(decay).add_(modelData, alpha=(1.0 - decay))
+
+  def to(self, device):
+    r'''
+    Move EMA weights to the specified device.
+
+    Parameters:
+      device (str or torch.device): Device to move EMA weights to.
+    '''
+
+    self.device = torch.device(device)
+    if (self.module is not None):
+      self.module.to(self.device)
+
+  def state_dict(self):
+    r'''
+    Get the state dictionary for EMA.
+
+    Returns:
+      dict: State dictionary containing decay, num_updates, and module_state_dict.
+    '''
+
+    sd = {
+      "decay"            : self.decay,
+      "num_updates"      : self.numUpdates,
+      "module_state_dict": self.module.state_dict() if (self.module is not None) else None,
+    }
+    return sd
+
+  def load_state_dict(self, sd):
+    r'''
+    Load the state dictionary for EMA.
+
+    Parameters:
+      sd (dict): State dictionary to load.
+    '''
+
+    self.decay = float(sd.get("decay", self.decay))
+    self.numUpdates = int(sd.get("num_updates", self.numUpdates))
+    mstate = sd.get("module_state_dict", None)
+
+    if (mstate is not None):
+      if (self.module is None):
+        # lazy: create a module by deep-copying nothing isn't possible; caller should initialize EMA with a model first.
+        raise RuntimeError(
+          "EMA module is not initialized. "
+          "Initialize `ExponentialMovingAverage` with a model before loading module state."
+        )
+      self.module.load_state_dict(mstate)
+
+  def apply_shadow(self, model):
+    r'''
+    Apply EMA weights to the given model, backing up original weights.
+
+    Parameters:
+      model (torch.nn.Module): Model to apply EMA weights to.
+    '''
+
+    if (self.module is None):
+      raise RuntimeError("No EMA weights available. Call update() at least once or initialize EMA with a model.")
+    self._backup = {}
+    for (name, param), ema_p in zip(model.named_parameters(), self.module.parameters()):
+      self._backup[name] = param.detach().clone()
+      param.data.copy_(ema_p.data.to(param.device))
+
+  def restore(self, model):
+    r'''
+    Restore original model weights from backup.
+
+    Parameters:
+      model (torch.nn.Module): Model to restore original weights to.
+    '''
+
+    if (self._backup is None):
+      return
+    nameToParam = {n: p for n, p in model.named_parameters()}
+    for name, orig in self._backup.items():
+      if (name in nameToParam):
+        nameToParam[name].data.copy_(orig.to(nameToParam[name].device))
+    self._backup = None
+
+  # Convenience alias.
+  def update_from(self, model):
+    r'''
+    Alias for update() method.
+
+    Parameters:
+      model (torch.nn.Module): Model with current parameters to update EMA from.
+    '''
+
+    return self.update(model)
+
+
 def TrainEvaluateModel(
   model,  # Model to train and evaluate.
   criterion,  # Loss function.
@@ -376,7 +518,7 @@ def TrainEvaluateModel(
   maxGradNorm=None,  # Maximum gradient norm for clipping.
   useAmp=True,  # Whether to use automatic mixed precision.
   useMixupFn=False,  # Whether to use MixUp data augmentation.
-  ema=None,  # Exponential moving average for model parameters.
+  useEma=False,  # Whether to use Exponential Moving Average for model parameters.
   saveEvery=None,  # Save model every N epochs.
 ):
   r'''
@@ -403,7 +545,7 @@ def TrainEvaluateModel(
     maxGradNorm (float, optional): Maximum gradient norm for clipping. Defaults to None.
     useAmp (bool, optional): Whether to use automatic mixed precision. Defaults to True.
     useMixupFn (bool, optional): Whether to use MixUp data augmentation. Defaults to False.
-    ema (object, optional): Exponential moving average for model parameters. Defaults to None.
+    useEma (object, optional): Whether to use Exponential Moving Average for model parameters. Defaults to False.
     saveEvery (int, optional): Save model every N epochs. Defaults to None.
 
   Returns:
@@ -459,7 +601,7 @@ def TrainEvaluateModel(
       maxGradNorm=None,
       useAmp=True,
       useMixupFn=False,
-      ema=None,
+      useEma=False,
       saveEvery=None
     )
   '''
@@ -476,6 +618,11 @@ def TrainEvaluateModel(
   bestValLoss = float("inf")
   bestValAccuracy = 0.0
   startEpoch = 0
+
+  if (useEma):
+    ema = ExponentialMovingAverage(model, decay=0.9999, device=device)
+  else:
+    ema = None
 
   # If resuming from checkpoint, load the model and optimizer state.
   if (resumeFromCheckpoint and os.path.exists(bestModelStoragePath)):
@@ -517,7 +664,7 @@ def TrainEvaluateModel(
       maxGradNorm=maxGradNorm,  # Maximum gradient norm for clipping.
       useAmp=useAmp,  # Whether to use automatic mixed precision.
       useMixupFn=useMixupFn,  # Whether to use MixUp data augmentation.
-      ema=ema,  # Exponential moving average for model parameters.
+      ema=ema,  # Exponential Moving Average object.
       verbose=verbose,  # Verbosity flag to control logging.
     )
 
@@ -559,7 +706,7 @@ def TrainEvaluateModel(
       bestValLoss = avgValEpochLoss
       bestValAccuracy = avgValEpochAccuracy
       try:
-        if (ema is not None):
+        if (useEma and ema is not None):
           try:
             modelState = ema.module.state_dict()
           except Exception:
@@ -655,7 +802,7 @@ def TrainOneEpoch(
   maxGradNorm=None,  # Maximum gradient norm for clipping.
   useAmp=True,  # Whether to use automatic mixed precision.
   useMixupFn=False,  # Whether to use MixUp data augmentation.
-  ema=None,  # Exponential moving average for model parameters.
+  ema=None,  # Exponential Moving Average object.
   verbose=True,  # Verbosity flag to control logging.
 ):
   r'''
@@ -675,7 +822,7 @@ def TrainOneEpoch(
     maxGradNorm (float, optional): Maximum gradient norm for clipping. Defaults to None.
     useAmp (bool, optional): Whether to use automatic mixed precision. Defaults to True.
     useMixupFn (bool, optional): Whether to use MixUp data augmentation. Defaults to False.
-    ema (object, optional): Exponential moving average for model parameters. Defaults to None.
+    ema (object, optional): Exponential Moving Average object. Defaults to None.
     verbose (bool, optional): Verbosity flag to control logging. Defaults to True.
 
   Returns:
