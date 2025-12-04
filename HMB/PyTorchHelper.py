@@ -4,9 +4,11 @@ import pandas as pd
 from PIL import Image
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, classification_report
-from torch.cuda.amp import GradScaler
+from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 from torchvision import transforms
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+import torch.nn.functional as F
 
 import HMB.PerformanceMetrics as pm
 
@@ -290,6 +292,54 @@ def CreateTimmModel(modelName, numClasses, pretrained=True):
   return model
 
 
+def MixupFn(inputs, targets, alpha=0.4, numClasses=None):
+  if (alpha <= 0):
+    # If no mixup, ensure targets are one-hot floats if possible.
+    if (targets.dim() == 1):
+      if (numClasses is None):
+        numClasses = int(targets.max().item()) + 1
+      return inputs, F.one_hot(targets, num_classes=numClasses).float().to(inputs.device)
+    else:
+      return inputs, targets.float().to(inputs.device)
+
+  lam = float(np.random.beta(alpha, alpha))
+  batchSize = inputs.size(0)
+  index = torch.randperm(batchSize, device=inputs.device)
+
+  mixedInputs = inputs * lam + inputs[index] * (1.0 - lam)
+
+  # Convert index targets to one-hot if needed, else assume targets already soft/one-hot.
+  if (targets.dim() == 1):
+    if (numClasses is None):
+      numClasses = int(targets.max().item()) + 1
+    tA = F.one_hot(targets, num_classes=numClasses).float().to(inputs.device)
+    tB = F.one_hot(targets[index], num_classes=numClasses).float().to(inputs.device)
+  else:
+    # targets already one-hot / soft
+    tA = targets.float().to(inputs.device)
+    tB = targets[index].float().to(inputs.device)
+
+  mixedTargets = tA * lam + tB * (1.0 - lam)
+  return mixedInputs, mixedTargets
+
+
+def MixupCriterion(logits, softTargets):
+  r'''
+  Compute the MixUp loss given logits and soft targets.
+
+  Parameters:
+    logits (torch.Tensor): Model output logits of shape (batch_size, num_classes).
+    softTargets (torch.Tensor): Soft target labels of shape (batch_size, num_classes).
+
+  Returns:
+    torch.Tensor: Computed MixUp loss.
+  '''
+
+  logProbs = F.log_softmax(logits, dim=1)
+  loss = - (softTargets * logProbs).sum(dim=1).mean()
+  return loss
+
+
 def TrainEvaluateModel(
   model,  # Model to train and evaluate.
   criterion,  # Loss function.
@@ -307,6 +357,12 @@ def TrainEvaluateModel(
   judgeBy="both",  # Criterion to judge the best model ("val_loss", "val_accuracy", or "both").
   earlyStoppingPatience=None,  # Patience for early stopping.
   verbose=True,  # Verbosity flag to control logging.
+  gradAccumSteps=1,  # Number of gradient accumulation steps.
+  maxGradNorm=None,  # Maximum gradient norm for clipping.
+  useAmp=True,  # Whether to use automatic mixed precision.
+  mixupFn=None,  # Mixup function for data augmentation.
+  ema=None,  # Exponential moving average for model parameters.
+  saveEvery=None,  # Save model every N epochs.
 ):
   r'''
   Train and evaluate a classification model for a specified number of epochs.
@@ -328,6 +384,12 @@ def TrainEvaluateModel(
     judgeBy (str, optional): Criterion to judge the best model ("val_loss", "val_accuracy", or "both"). Defaults to "both".
     earlyStoppingPatience (int, optional): Patience for early stopping. Defaults to None.
     verbose (bool, optional): Verbosity flag to control logging. Defaults to True.
+    gradAccumSteps (int, optional): Number of gradient accumulation steps. Defaults to 1.
+    maxGradNorm (float, optional): Maximum gradient norm for clipping. Defaults to None.
+    useAmp (bool, optional): Whether to use automatic mixed precision. Defaults to True.
+    mixupFn (callable, optional): Mixup function for data augmentation. Defaults to None.
+    ema (object, optional): Exponential moving average for model parameters. Defaults to None.
+    saveEvery (int, optional): Save model every N epochs. Defaults to None.
 
   Returns:
     dict: History dictionary containing training and validation metrics.
@@ -377,7 +439,13 @@ def TrainEvaluateModel(
       finalModelStoragePath="final_model.pth",
       judgeBy="both",
       earlyStoppingPatience=None,
-      verbose=True
+      verbose=True,
+      gradAccumSteps=1,
+      maxGradNorm=None,
+      useAmp=True,
+      mixupFn=None,
+      ema=None,
+      saveEvery=None
     )
   '''
 
@@ -392,19 +460,25 @@ def TrainEvaluateModel(
   # Variables to track the best validation loss and accuracy.
   bestValLoss = float("inf")
   bestValAccuracy = 0.0
+  startEpoch = 0
 
   # If resuming from checkpoint, load the model and optimizer state.
   if (resumeFromCheckpoint and os.path.exists(bestModelStoragePath)):
     print(f"Resuming from checkpoint: {resumeFromCheckpoint}")
     stateDict = LoadPyTorchDict(bestModelStoragePath, device=device)
-    model.load_state_dict(stateDict["model_state_dict"])
-    optimizer.load_state_dict(stateDict["optimizer_state_dict"])
-    scaler.load_state_dict(stateDict["scaler_state_dict"])
-    startEpoch = stateDict["epoch"]
-    bestValLoss = stateDict.get("best_val_loss", float("inf"))
-    bestValAccuracy = stateDict.get("best_val_accuracy", 0.0)
+    if (stateDict):
+      model.load_state_dict(stateDict["model_state_dict"])
+      optimizer.load_state_dict(stateDict["optimizer_state_dict"])
+      scaler.load_state_dict(stateDict["scaler_state_dict"])
+      startEpoch = stateDict.get("epoch", 0)
+      bestValLoss = stateDict.get("best_val_loss", float("inf"))
+      bestValAccuracy = stateDict.get("best_val_accuracy", 0.0)
+    else:
+      if (verbose):
+        print("Failed to load checkpoint. Starting training from scratch.")
   else:
-    startEpoch = 0
+    if (verbose):
+      print("Starting training from scratch.")
 
   currentPatience = 0  # Initialize patience counter for early stopping.
 
@@ -424,6 +498,11 @@ def TrainEvaluateModel(
       numEpochs,  # Total number of epochs for training.
       optimizer,  # Optimizer for updating model parameters.
       scaler,  # Gradient scaler for mixed precision training.
+      gradAccumSteps=gradAccumSteps,  # Number of gradient accumulation steps.
+      maxGradNorm=maxGradNorm,  # Maximum gradient norm for clipping.
+      useAmp=useAmp,  # Whether to use automatic mixed precision.
+      mixupFn=mixupFn,  # Mixup function for data augmentation.
+      ema=ema,  # Exponential moving average for model parameters.
     )
 
     avgValEpochLoss, avgValEpochAccuracy = EvaluateOneEpoch(
@@ -463,12 +542,26 @@ def TrainEvaluateModel(
     if (conditionToSave):
       bestValLoss = avgValEpochLoss
       bestValAccuracy = avgValEpochAccuracy
+      try:
+        if (ema is not None):
+          try:
+            modelState = ema.module.state_dict()
+          except Exception:
+            try:
+              modelState = ema.state_dict()
+            except Exception:
+              modelState = model.state_dict()
+        else:
+          modelState = model.state_dict()
+      except Exception:
+        modelState = model.state_dict()
+
       # SaveModel(model, bestModelStoragePath)
       SavePyTorchDict({
-        "model_state_dict"    : model.state_dict(),
-        "optimizer_state_dict": optimizer.state_dict(),
+        "model_state_dict"    : modelState,
+        "optimizer_state_dict": optimizer.state_dict() if (optimizer is not None) else None,
         "epoch"               : epoch + 1,
-        "scaler_state_dict"   : scaler.state_dict(),
+        "scaler_state_dict"   : scaler.state_dict() if (scaler is not None) else None,
         "best_val_loss"       : bestValLoss,
         "best_val_accuracy"   : bestValAccuracy,
       }, filename=bestModelStoragePath)
@@ -489,12 +582,35 @@ def TrainEvaluateModel(
             )
           break
 
-    # Update learning rate scheduler.
-    scheduler.step()
+    try:
+      if (isinstance(scheduler, ReduceLROnPlateau)):
+        scheduler.step(avgValEpochLoss)
+      else:
+        scheduler.step()
+    except Exception:
+      try:
+        scheduler.step()
+      except Exception:
+        pass
+
+    if (saveEvery is not None and (epoch + 1) % saveEvery == 0):
+      epochPath = os.path.join(
+        os.path.dirname(bestModelStoragePath),
+        f"ModelEpoch.epoch{epoch + 1}.pth"
+      )
+      SavePyTorchDict({
+        "model_state_dict"    : model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "epoch"               : epoch + 1,
+        "scaler_state_dict"   : scaler.state_dict(),
+        "best_val_loss"       : bestValLoss,
+        "best_val_accuracy"   : bestValAccuracy,
+      }, filename=epochPath)
+      if (verbose):
+        print(f"Saved model at epoch {epoch + 1} to {epochPath}")
 
   # Save the final model after training if a path is provided.
   if (finalModelStoragePath):
-    # SaveModel(model, finalModelStoragePath)
     SavePyTorchDict({
       "model_state_dict"    : model.state_dict(),
       "optimizer_state_dict": optimizer.state_dict(),
@@ -519,6 +635,11 @@ def TrainOneEpoch(
   numEpochs,  # Total number of epochs for training.
   optimizer,  # Optimizer for updating model parameters.
   scaler,  # Gradient scaler for mixed precision training.
+  gradAccumSteps=1,  # Number of gradient accumulation steps.
+  maxGradNorm=None,  # Maximum gradient norm for clipping.
+  useAmp=True,  # Whether to use automatic mixed precision.
+  mixupFn=None,  # Mixup function for data augmentation.
+  ema=None,  # Exponential moving average for model parameters.
 ):
   r'''
   Train the model for one epoch.
@@ -533,6 +654,11 @@ def TrainOneEpoch(
     numEpochs (int): Total number of epochs for training.
     optimizer (torch.optim.Optimizer): Optimizer for updating model parameters.
     scaler (torch.cuda.amp.GradScaler): Gradient scaler for mixed precision training.
+    gradAccumSteps (int, optional): Number of gradient accumulation steps. Defaults to 1.
+    maxGradNorm (float, optional): Maximum gradient norm for clipping. Defaults to None.
+    useAmp (bool, optional): Whether to use automatic mixed precision. Defaults to True.
+    mixupFn (callable, optional): Mixup function for data augmentation. Defaults to None.
+    ema (object, optional): Exponential moving average for model parameters. Defaults to None.
 
   Returns:
     tuple: (avgTrainLoss, avgTrainAccuracy) for the epoch.
@@ -546,6 +672,10 @@ def TrainOneEpoch(
   # Initialize total loss and accuracy for the epoch.
   totalEpochLoss = 0.0
   totalEpochAccuracy = 0.0
+  totalEpochSamples = 0
+
+  # Zero the gradients of the optimizer.
+  optimizer.zero_grad()
 
   # Iterate over the training data loader with a progress bar.
   for batchIdx, batch in tqdm.tqdm(
@@ -555,24 +685,30 @@ def TrainOneEpoch(
   ):
     # Get data and labels from the batch and move them to the specified device.
     data, labels = batch
-    data = data.to(device)
-    labels = labels.to(device)
+    data = data.to(device, non_blocking=True)
+    labels = labels.to(device, non_blocking=True)
 
-    # Zero the gradients of the optimizer.
-    optimizer.zero_grad()
+    if (mixupFn is not None):
+      data, labels = mixupFn(data, labels)
 
-    # Forward pass through the model to get outputs.
-    outputs = model(data)
+    # Use automatic mixed precision for the forward pass.
+    with autocast(enabled=useAmp):
+      # Forward pass through the model to get outputs.
+      outputs = model(data)
+      # Compute the loss using the specified criterion.
+      loss = criterion(outputs, labels)
+
+    # Get the batch size.
+    batchSize = data.size(0)
+    totalEpochSamples += batchSize
 
     # Get the predicted class indices.
     outputIdx = outputs.argmax(dim=1)
 
-    # Compute the loss using the specified criterion.
-    loss = criterion(outputs, labels)
     # If loss is a tensor, convert it to a scalar value.
-    lossScalar = loss.item() if isinstance(loss, torch.Tensor) else loss
+    lossScalar = loss.item() if (isinstance(loss, torch.Tensor)) else loss
     # Accumulate the total loss for the epoch.
-    totalEpochLoss += lossScalar
+    totalEpochLoss += lossScalar * batchSize
 
     # Compute the confusion matrix and accuracy.
     cm = confusion_matrix(
@@ -586,16 +722,37 @@ def TrainOneEpoch(
     # Accumulate the total accuracy for the epoch.
     totalEpochAccuracy += accuracy
 
+    loss = loss / gradAccumSteps  # Normalize loss for gradient accumulation.
     # Backward pass and optimization step with mixed precision.
     scaler.scale(loss).backward()
-    # Make an optimization step using the scaled gradients.
-    scaler.step(optimizer)
-    # Update the gradient scaler.
-    scaler.update()
+
+    if ((batchIdx + 1) % gradAccumSteps == 0 or (batchIdx + 1) == len(dataLoader)):
+      # Clip gradients if maxGradNorm is specified.
+      if (maxGradNorm is not None):
+        scaler.unscale_(optimizer)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), maxGradNorm)
+      # Perform optimizer step.
+      scaler.step(optimizer)
+      scaler.update()
+      # Zero the gradients for the next iteration.
+      optimizer.zero_grad()
+
+    # Update exponential moving average of model parameters if provided.
+    if (ema is not None):
+      try:
+        ema.update(model)
+      except Exception as e:
+        if (verbose):
+          print(f"EMA update failed: {e}")
+        try:
+          ema.update(model.module)
+        except Exception as e2:
+          if (verbose):
+            print(f"EMA update on model.module also failed: {e2}")
 
   # Calculate average loss and accuracy for the epoch.
-  avgTrainLoss = totalEpochLoss / len(dataLoader)
-  avgTrainAccuracy = totalEpochAccuracy / len(dataLoader)
+  avgTrainLoss = totalEpochLoss / max(1, len(totalEpochSamples))
+  avgTrainAccuracy = totalEpochAccuracy / max(1, len(totalEpochSamples))
 
   return avgTrainLoss, avgTrainAccuracy
 
