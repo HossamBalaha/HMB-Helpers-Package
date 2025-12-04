@@ -1578,12 +1578,12 @@ def PlotTopKAccuracyCurve(
 ):
   r'''
   Plot Top-k accuracy curve given predicted probabilities and true labels.
-  
+
   Parameters:
     probs (numpy.ndarray): Predicted probabilities of shape (nSamples, nClasses).
     labels (array-like): True labels of shape (nSamples,).
     maxK (int): Maximum value of k for Top-k accuracy. Default is 10.
-    title (str): Title of the plot. Default is "Top-k Accuracy Curve".  
+    title (str): Title of the plot. Default is "Top-k Accuracy Curve".
     figSize (tuple): Figure size in inches. Default is (6, 6).
     save (bool): Whether to save the plot to fileName. Default is False.
     fileName (str): File name to save the plot. Default is "TopKAccuracyCurve.pdf".
@@ -1591,26 +1591,26 @@ def PlotTopKAccuracyCurve(
     fontSize (int): Font size for labels and title. Default is 12.
     returnFig (bool): Whether to return the matplotlib figure object. Default is False.
     dpi (int): DPI for saving the figure. Default is 720.
-    color (str): Color of the Top-k accuracy curve. Default is "blue".  
-    
+    color (str): Color of the Top-k accuracy curve. Default is "blue".
+
   Returns:
     None or matplotlib.figure.Figure: The figure object if returnFig is True, otherwise None.
-    
+
   Notes:
     - The function computes Top-k accuracy for k=1 to maxK and plots the curve.
     - The plot is saved to fileName and optionally displayed.
-    
+
   Example
   -------
   .. code-block:: python
-  
+
     import numpy as np
     import HMB.PerformanceMetrics as pm
-    
+
     # Example predicted probabilities and true labels.
     probs = np.array([[0.1, 0.9], [0.8, 0.2], [0.4, 0.6], [0.9, 0.1]])
-    labels = np.array([1, 0, 1, 0]) 
-    
+    labels = np.array([1, 0, 1, 0])
+
     pm.PlotTopKAccuracyCurve(
       probs, labels,
       maxK=2,
@@ -2230,7 +2230,7 @@ def PlotClasswisePRFBar(
 ):
   '''
   Plot classwise Precision, Recall, and F1-score as a grouped bar chart.
-  
+
   Parameters:
     cm (array-like): Confusion matrix (2D array).
     classNames (list or None): List of class names. If None, uses class indices.
@@ -2242,21 +2242,21 @@ def PlotClasswisePRFBar(
     fileName (str): File name to save the plot. Default is "ClasswisePRFBar.pdf".
     dpi (int): DPI for saving the figure. Default is 720.
     returnFig (bool): Whether to return the figure object. Default is False.
-    
+
   Returns:
     matplotlib.figure.Figure or None: The matplotlib figure object if returnFig is True, otherwise None.
-    
+
   Notes:
     - Computes precision, recall, and F1-score from the confusion matrix.
     - Displays a grouped bar chart for each class.
     - Saving and displaying the plot are optional and controlled by parameters.
-    
+
   Example
   -------
   .. code-block:: python
-  
+
     import HMB.PerformanceMetrics as pm
-    
+
     cm = [[50, 2, 1],
           [10, 45, 5],
           [0, 3, 47]]
@@ -2676,7 +2676,7 @@ def PlotClassificationResiduals(
     gridspec_kw={"height_ratios": [2, 1]}
   )
 
-  # Histogram of residuals
+  # Histogram of residuals.
   bins = np.arange(residuals.min() - 0.5, residuals.max() + 1.5, 1)
   ax1.hist(
     residuals,
@@ -2758,7 +2758,7 @@ def PlotFeatureImportance(
   Plot feature importance from a trained model.
 
   Parameters:
-    model: Trained model with feature_importances_ or coef_ attribute.
+    model: Trained model with `feature_importances_` or `coef_` attribute.
     featureNames (list): List of feature names.
     title (str): Title of the plot. Default is "Feature Importance".
     fontSize (int): Font size for labels and title. Default is 14.
@@ -2774,7 +2774,7 @@ def PlotFeatureImportance(
     matplotlib.figure.Figure or None: The matplotlib figure object if returnFig is True, otherwise None.
 
   Notes:
-    - Supports models with feature_importances_ (e.g., tree-based) or coef_ (e.g., linear models).
+    - Supports models with `feature_importances_` (e.g., tree-based) or `coef_` (e.g., linear models).
     - Displays a bar chart of feature importances.
     - Saving and displaying the plot are optional and controlled by parameters.
 
@@ -3024,44 +3024,43 @@ def ComputeECEPlotReliability(
   -------
   .. code-block:: python
 
-  import numpy as np
-  import HMB.PerformanceMetrics as pm
+    import numpy as np
+    import HMB.PerformanceMetrics as pm
 
-  # You would typically get confidences and correctness from model predictions.
-  probs = np.array([[0.7, 0.2, 0.1],
-                      [0.1, 0.8, 0.1]])
-  T = 500
-  probsMC = pm.SampleMonteCarloDirichletFromProbs(probs, T=T, concentration=30.0)
-  uncertaintyMeasures = pm.ComputeMonteCarloUncertaintyMeasures(probsMC)
-  confidences = uncertaintyMeasures["predictedConfidence"]
-  predictions = uncertaintyMeasures["predictedIdx"]
-  labels = np.array([0, 1])  # True labels for the examples.
+    # You would typically get confidences and correctness from model predictions.
+    probs = np.array([[0.7, 0.2, 0.1], [0.1, 0.8, 0.1]])
+    T = 500
+    probsMC = pm.SampleMonteCarloDirichletFromProbs(probs, T=T, concentration=30.0)
+    uncertaintyMeasures = pm.ComputeMonteCarloUncertaintyMeasures(probsMC)
+    confidences = uncertaintyMeasures["predictedConfidence"]
+    predictions = uncertaintyMeasures["predictedIdx"]
+    labels = np.array([0, 1])  # True labels for the examples.
 
-  # Sample data for demonstration:
-  # confidences = np.array([0.9, 0.8, 0.7, 0.6, 0.5])
-  # predictions = np.array([1, 0, 1, 1, 0])
-  # labels = np.array([1, 0, 0, 1, 0])
+    # Sample data for demonstration:
+    # confidences = np.array([0.9, 0.8, 0.7, 0.6, 0.5])
+    # predictions = np.array([1, 0, 1, 1, 0])
+    # labels = np.array([1, 0, 0, 1, 0])
 
-  ece, binAcc, binConf, binCounts = pm.ComputeECEPlotReliability(
-    confidences,
-    predictions,
-    labels,
-    nBins=5,
-    title="ECE Example",
-    fontSize=14,
-    figSize=(6, 6),
-    display=True,
-    save=False,
-    fileName="ECE_Example.pdf",
-    dpi=300,
-    returnFig=False,
-    cmap="Blues",
-    applyXYLimits=True,
-  )
-  print(f"ECE: {ece}")
-  print(f"Bin Accuracies: {binAcc}")
-  print(f"Bin Confidences: {binConf}")
-  print(f"Bin Counts: {binCounts}")
+    ece, binAcc, binConf, binCounts = pm.ComputeECEPlotReliability(
+      confidences,
+      predictions,
+      labels,
+      nBins=5,
+      title="ECE Example",
+      fontSize=14,
+      figSize=(6, 6),
+      display=True,
+      save=False,
+      fileName="ECE_Example.pdf",
+      dpi=300,
+      returnFig=False,
+      cmap="Blues",
+      applyXYLimits=True
+    )
+    print(f"ECE: {ece}")
+    print(f"Bin Accuracies: {binAcc}")
+    print(f"Bin Confidences: {binConf}")
+    print(f"Bin Counts: {binCounts}")
   '''
 
   # Ensure inputs are numpy arrays for safe indexing operations.
@@ -3241,37 +3240,37 @@ def RiskCoverageCurve(
   -------
   .. code-block:: python
 
-  import numpy as np
-  import HMB.PerformanceMetrics as pm
+    import numpy as np
+    import HMB.PerformanceMetrics as pm
 
-  # You would typically get confidences and correctness from model predictions.
-  probs = np.array([[0.7, 0.2, 0.1],
-                      [0.1, 0.8, 0.1]])
-  T = 500
-  probsMC = pm.SampleMonteCarloDirichletFromProbs(probs, T=T, concentration=30.0)
-  uncertaintyMeasures = pm.ComputeMonteCarloUncertaintyMeasures(probsMC)
-  confidences = uncertaintyMeasures["predictedConfidence"]
-  predictions = uncertaintyMeasures["predictedIdx"]
-  labels = np.array([0, 1])  # True labels.
-  correctness = (predictions == labels).astype(int)
+    # You would typically get confidences and correctness from model predictions.
+    probs = np.array([[0.7, 0.2, 0.1],
+                        [0.1, 0.8, 0.1]])
+    T = 500
+    probsMC = pm.SampleMonteCarloDirichletFromProbs(probs, T=T, concentration=30.0)
+    uncertaintyMeasures = pm.ComputeMonteCarloUncertaintyMeasures(probsMC)
+    confidences = uncertaintyMeasures["predictedConfidence"]
+    predictions = uncertaintyMeasures["predictedIdx"]
+    labels = np.array([0, 1])  # True labels.
+    correctness = (predictions == labels).astype(int)
 
-  # Sample data for demonstration:
-  # confidences = np.array([0.9, 0.8, 0.7, 0.6, 0.5])
-  # correctness = np.array([1, 0, 1, 1, 0])  # 1=correct, 0=incorrect.
+    # Sample data for demonstration:
+    # confidences = np.array([0.9, 0.8, 0.7, 0.6, 0.5])
+    # correctness = np.array([1, 0, 1, 1, 0])  # 1=correct, 0=incorrect.
 
-  coverage, accuracy, aucVal, fig = pm.RiskCoverageCurve(
-    confidences,
-    correctness,
-    title="Risk-Coverage (Accuracy vs Coverage)",
-    fontSize=14,
-    figSize=(6, 6),
-    display=True,
-    save=False,
-    fileName="RiskCoverage.pdf",
-    dpi=720,
-    returnFig=False,
-    color="blue",
-  )
+    coverage, accuracy, aucVal, fig = pm.RiskCoverageCurve(
+      confidences,
+      correctness,
+      title="Risk-Coverage (Accuracy vs Coverage)",
+      fontSize=14,
+      figSize=(6, 6),
+      display=True,
+      save=False,
+      fileName="RiskCoverage.pdf",
+      dpi=720,
+      returnFig=False,
+      color="blue"
+    )
   '''
 
   confidences = np.asarray(confidences)

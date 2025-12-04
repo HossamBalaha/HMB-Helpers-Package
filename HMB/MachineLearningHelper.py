@@ -1134,6 +1134,7 @@ def PerformOutlierDetection(
 
     import HMB.MachineLearningHelper as mlh
     import numpy as np
+
     X = np.random.randn(100, 5)
     xFiltered = mlh.PerformOutlierDetection(X, techniqueStr="ZScore")
   '''
@@ -1194,7 +1195,7 @@ def PerformOutlierDetection(
     minSamples = max(2, int(contamination * X.shape[0]))
     clf = DBSCAN(eps=0.5, min_samples=minSamples)
     labels = clf.fit_predict(X)
-    # DBSCAN labels -1 as outliers
+    # DBSCAN labels -1 as outliers.
     mask = labels != -1
 
   elif (techniqueStr == "Mahalanobis"):
@@ -1203,7 +1204,7 @@ def PerformOutlierDetection(
     cov = np.cov(X, rowvar=False)
     covInv = np.linalg.pinv(cov)
     mahal = np.array([distance.mahalanobis(x, mean, covInv) for x in X])
-    # Use 99th percentile as threshold for outliers
+    # Use 99th percentile as threshold for outliers.
     threshold = np.percentile(mahal, 100 * (1 - contamination))
     mask = mahal < threshold
   else:
@@ -2040,7 +2041,7 @@ class OptunaTuningClassification(object):
           )
 
           # pltObject.figure.show()  # Display the confusion matrix plot.
-          pltObject.figure.clf()  # Clear the figure to free up memory.
+          # pltObject.figure.clf()  # Clear the figure to free up memory.
           plt.close(pltObject.figure)  # Close the plot to free up memory.
 
       # Added to check if the objects are not None before saving.

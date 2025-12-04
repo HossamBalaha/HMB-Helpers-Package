@@ -77,12 +77,16 @@ Quickstart
    :maxdepth: 1
    :caption: Contents:
 
+   AgentsHelper
+   ArabicTextHelper
    AttentionMapsHelper
+   AudioHelper
+   CompressionsHelper
    EmbeddingsToTextHelper
    ExplainabilityHelper
    HandCraftedFeatures
-   ImagesComparisonMetrics
    ImageSegmentationMetrics
+   ImagesComparisonMetrics
    ImagesHelper
    ImagesNormalization
    ImagesToEmbeddings
@@ -95,11 +99,15 @@ Quickstart
    PyTorchHelper
    PyTorchSegmentationLosses
    StatisticalAnalysisHelper
-   TextGenerationMetrics
-   TextHelper
+   StringsHelper
    TFAttentionBlocks
    TFHelper
+   TextGenerationMetrics
+   TextHelper
    Utils
+   VectorsHelper
+   VideosHelper
+   VotingHelper
    WSIHelper
    YOLOHelper
 
@@ -133,7 +141,7 @@ Here is an example of a matrix using LaTeX math in Sphinx:
 
 .. math::
   H = \begin{bmatrix}
-  h_{11} & h_{12} & h_{13} \\
-  h_{21} & h_{22} & h_{23} \\
-  h_{31} & h_{32} & h_{33}
+    h_{11} & h_{12} & h_{13} \\
+    h_{21} & h_{22} & h_{23} \\
+    h_{31} & h_{32} & h_{33}
   \end{bmatrix}

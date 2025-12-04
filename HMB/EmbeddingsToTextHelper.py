@@ -33,8 +33,9 @@ class EmbeddingsToTextModel(nn.Module):
       hiddenDim=512,
       generationMaxLength=512,
       dropoutRatio=0.1,
-      numPromptTokens=5,
+      numPromptTokens=5
     )
+
     # Print the model architecture.
     print(model)
     # Example input features (batch size of 2, feature dimension of 6144).
@@ -251,6 +252,7 @@ def TrainModel(
     valLoader = ...    # Your validation DataLoader here.
     # Print the model architecture.
     print(model)
+
     # Train the model using the training and validation data loaders.
     e2tt.TrainModel(
       model=model,
@@ -260,7 +262,7 @@ def TrainModel(
       learningRate=1e-4,
       optimizerType="adamw",
       modelStoragePath="BestModel.pth",
-      verbose=True,
+      verbose=True
     )
   '''
 

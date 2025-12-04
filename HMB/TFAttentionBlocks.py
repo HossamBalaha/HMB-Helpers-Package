@@ -22,17 +22,17 @@ class CBAMBlock(Layer):
   --------
   .. code-block:: python
 
-  from HMB.TFAttentionBlocks import CBAMBlock
-  from tensorflow.keras.models import Sequential
-  from tensorflow.keras.layers import Conv2D, Input
+    from HMB.TFAttentionBlocks import CBAMBlock
+    from tensorflow.keras.models import Sequential
+    from tensorflow.keras.layers import Conv2D, Input
 
-  model = Sequential([
-    Input(shape=(64, 64, 128)),
-    Conv2D(128, (3, 3), padding="same", activation="relu"),
-    CBAMBlock(ratio=8, kernelSize=7),
-    Conv2D(256, (3, 3), padding="same", activation="relu")
-  ])
-  model.summary()
+    model = Sequential([
+      Input(shape=(64, 64, 128)),
+      Conv2D(128, (3, 3), padding="same", activation="relu"),
+      CBAMBlock(ratio=8, kernelSize=7),
+      Conv2D(256, (3, 3), padding="same", activation="relu")
+    ])
+    model.summary()
   '''
 
   # Store initialization args for later serialization.
@@ -153,17 +153,17 @@ class SEBlock(Layer):
   --------
   .. code-block:: python
 
-  from HMB.TFAttentionBlocks import SEBlock
-  from tensorflow.keras.models import Sequential
-  from tensorflow.keras.layers import Conv2D, Input
+    from HMB.TFAttentionBlocks import SEBlock
+    from tensorflow.keras.models import Sequential
+    from tensorflow.keras.layers import Conv2D, Input
 
-  model = Sequential([
-    Input(shape=(64, 64, 128)),
-    Conv2D(128, (3, 3), padding="same", activation="relu"),
-    SEBlock(ratio=16),
-    Conv2D(256, (3, 3), padding="same", activation="relu")
-  ])
-  model.summary()
+    model = Sequential([
+      Input(shape=(64, 64, 128)),
+      Conv2D(128, (3, 3), padding="same", activation="relu"),
+      SEBlock(ratio=16),
+      Conv2D(256, (3, 3), padding="same", activation="relu")
+    ])
+    model.summary()
   '''
 
   # Store initialization args for later serialization.

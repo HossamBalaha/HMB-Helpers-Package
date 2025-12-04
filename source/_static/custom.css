@@ -1,0 +1,23 @@
+/* custom.css - right-align display LaTeX/math for HTML (MathJax/KaTeX) */
+
+/* Right-align Sphinx/MathJax display math blocks */
+div.math, .math.display, .math.block, .display-math {
+  text-align: center;
+}
+
+/* MathJax v3 places displayed equations in .MathJax_Display; ensure its contents are center-aligned */
+.MathJax_Display, .MathJax_Display .mjx-chtml {
+  text-align: center !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* If numbering pushes content, ensure the equation block itself aligns center */
+.math .number, .MathJax_Display .number {
+  float: left; /* keep numbers on the left if present; adjust to center if you prefer */
+}
+
+/* Small adjustment for Sphinx themes that center container elements */
+div.math {
+  display: block;
+}

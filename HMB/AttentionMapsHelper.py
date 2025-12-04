@@ -77,7 +77,7 @@ def HuggingFaceModel(
       size=224,
       device="cuda",
       meanValues=[0.485, 0.456, 0.406],
-      stdValues=[0.229, 0.224, 0.225],
+      stdValues=[0.229, 0.224, 0.225]
     )
   '''
 
@@ -112,7 +112,7 @@ def HuggingFaceModel(
 
 
 def GetDefaultVitTargetLayer(model):
-  '''
+  r'''
   Dynamically select a suitable target layer for CAM from a timm model.
   Tries common patterns for ViT, Swin, MaxViT, ConvNeXtV2, etc.
   Skips Identity layers as they are not suitable for CAM.
@@ -340,7 +340,7 @@ class AttentionMapsVisualizer(object):
       modelCheckpointPath="/path/to/checkpoint.pth",
       modelType="Timm",
       size=448,
-      device="cuda",
+      device="cuda"
     )
     visualizer.VisualizeAttentionMaps(
       cams=["GradCAM", "ScoreCAM"],
@@ -353,7 +353,7 @@ class AttentionMapsVisualizer(object):
       fontSize=10,
       alpha=0.4,
       selectImages=None,
-      allowedExtensions=(".jpg", ".jpeg", ".png", ".bmp"),
+      allowedExtensions=(".jpg", ".jpeg", ".png", ".bmp")
     )
   '''
 

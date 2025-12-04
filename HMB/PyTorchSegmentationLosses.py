@@ -201,7 +201,7 @@ class FocalLoss(nn.Module):
   Focal loss focuses training on hard examples and addresses class imbalance.
 
   .. math::
-    \text{Focal}(p_t) = -\alpha \times (1 - p_t)^{\gamma} \times \log(p_t)
+    \text{Focal}(p_t) = - \alpha \times (1-p_t)^{\gamma} \times \log(p_t)
 
   Parameters:
     alpha (float): Weighting factor for the rare class. Default is 0.25.
@@ -225,9 +225,6 @@ class FocalLoss(nn.Module):
   def forward(self, inputs, targets):
     '''
     Computes the Focal loss between predictions and targets for binary segmentation.
-
-    .. math::
-      \text{Focal}(p_t) = -\alpha \times (1 - p_t)^{\gamma} \times \log(p_t)
 
     Parameters:
       inputs (torch.Tensor): Model outputs (logits).

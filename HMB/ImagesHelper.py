@@ -1066,6 +1066,8 @@ def PriorInformationTestingGeneric(image, histogramsDict, startingSigma=1, stepS
 
       # Initialize the starting histogram included range.
       histIncludedRange = 0
+      # Ensure rangeIntensity is defined for static analysis (will be set in the loop).
+      rangeIntensity = np.array([])
 
       # Calculate the intensity range for included probability while ensuring it's not zero.
       while (histIncludedRange == 0):
@@ -1082,7 +1084,10 @@ def PriorInformationTestingGeneric(image, histogramsDict, startingSigma=1, stepS
         sigma += stepSigma
 
       # Calculate the non-included probability within the same intensity range.
-      histNonIncludedRange = np.sum(histNonIncluded[rangeIntensity])
+      if (rangeIntensity.size == 0):
+        histNonIncludedRange = 0
+      else:
+        histNonIncludedRange = np.sum(histNonIncluded[rangeIntensity])
 
       # Calculate the denominator of the probability map.
       den = histIncludedRange + histNonIncludedRange
@@ -1207,6 +1212,8 @@ def PriorInformationGeneric(image, mask, startingRadius=10, stepRadius=10, start
 
       # Initialize the starting histogram included range.
       histIncludedRange = 0
+      # Ensure rangeIntensity is defined for static analysis (will be set in the loop).
+      rangeIntensity = np.array([])
 
       # Calculate the intensity range for included probability while ensuring it's not zero.
       while (histIncludedRange == 0):
@@ -1223,7 +1230,10 @@ def PriorInformationGeneric(image, mask, startingRadius=10, stepRadius=10, start
         sigma += stepSigma
 
       # Calculate the non-included probability within the same intensity range.
-      histNonIncludedRange = np.sum(histNonIncluded[rangeIntensity])
+      if (rangeIntensity.size == 0):
+        histNonIncludedRange = 0
+      else:
+        histNonIncludedRange = np.sum(histNonIncluded[rangeIntensity])
 
       # Calculate the denominator of the probability map.
       den = histIncludedRange + histNonIncludedRange
@@ -1498,7 +1508,7 @@ def ComputeAndPlotDeformationFieldViaFarneback(
 
 # Overlay a heatmap on a PIL image and return the overlay image.
 def OverlayHeatmapOnImage(origPIL, heatmap, alpha=0.4, cmap=plt.cm.jet):
-  '''
+  r'''
   Overlay heatmap (2D array) over a PIL Image and return a PIL Image.
 
   Parameters:

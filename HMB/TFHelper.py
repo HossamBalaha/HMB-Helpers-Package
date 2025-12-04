@@ -101,21 +101,21 @@ def SaveGradCamsForSamples(
   -------
   .. code-block:: python
 
-  import HMB.TFHelper as tfh
+    import HMB.TFHelper as tfh
 
-  model = ...  # Load or build model.
-  imgPaths = [...]  # List of image file paths.
-  sampleIndices = [0, 5, 10]  # Indices of samples to visualize.
-  outFolder = "GradCAM_Overlays"
+    model = ...  # Load or build model.
+    imgPaths = [...]  # List of image file paths.
+    sampleIndices = [0, 5, 10]  # Indices of samples to visualize.
+    outFolder = "GradCAM_Overlays"
 
-  tfh.SaveGradCamsForSamples(
-    model,
-    imgPaths,
-    sampleIndices,
-    outFolder,
-    imgSize=(512, 512),
-    lastConvLayerName=None,
-  )
+    tfh.SaveGradCamsForSamples(
+      model,
+      imgPaths,
+      sampleIndices,
+      outFolder,
+      imgSize=(512, 512),
+      lastConvLayerName=None
+    )
   '''
 
   from HMB.ImagesHelper import OverlayHeatmapOnImage

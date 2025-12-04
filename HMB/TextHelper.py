@@ -1,5 +1,6 @@
 # Import the required libraries.
-import re, contractions, nltk
+import os, re, contractions, nltk
+from nltk.tokenize import sent_tokenize, word_tokenize
 
 
 # Define a function to clean and normalize text based on several options.
@@ -308,9 +309,592 @@ class Summarizer(object):
       return summary
 
 
+class TextHelper:
+  r'''
+  TextHelper: Small collection of common text-processing utilities.
+
+  This class provides thin wrappers around NLTK, gensim and scikit-learn
+  helpers for tokenization, stopword removal, stemming, lemmatization,
+  simple POS/chunking helpers, and common vectorization examples.
+
+  Notes:
+    - Methods are convenience wrappers and try to preserve original behavior.
+    - Many methods assume NLTK corpora (punkt, stopwords) are available.
+    - You need to pip install nltk, gensim, wordcloud, gtts, and scikit-learn to use this class.
+  '''
+
+  def SentenceTokeize(self, document):
+    r'''
+    Tokenize a document into word tokens using NLTK's word_tokenize.
+
+    Parameters:
+      document (str): Input text to tokenize.
+
+    Returns:
+      list: Word tokens.
+    '''
+
+    document = word_tokenize(document)
+    return document
+
+  def WordTokenize(self, document):
+    r'''
+    Split a document into sentences using NLTK's sent_tokenize.
+
+    Note: method name is historical; it returns sentence-level tokens.
+
+    Parameters:
+      document (str): Input text.
+
+    Returns:
+      list: Sentence strings.
+    '''
+
+    document = sent_tokenize(document)
+    return document
+
+  def RemoveStopWords(self, document):
+    r'''
+    Remove English stopwords from an iterable of tokens.
+
+    Parameters:
+      document (iterable): Iterable of token strings.
+
+    Returns:
+      list: Tokens with stopwords removed.
+    '''
+
+    from nltk.corpus import stopwords
+
+    stop_words = set(stopwords.words("english"))
+
+    filteredSentence = [w for w in document if not w in stop_words]
+    return filteredSentence
+
+  def Stemming(self, document):
+    r'''
+    Return Porter stems for each token in the input.
+
+    Parameters:
+      document (iterable): Iterable of token strings.
+
+    Returns:
+      list of tuple: Each tuple is (token, stem).
+    '''
+
+    from nltk.stem import PorterStemmer
+
+    ps = PorterStemmer()
+    return [(w, ps.stem(w)) for w in document]
+
+  def Lemmatization(self, document):
+    r'''
+    Return WordNet lemma for each token.
+
+    Parameters:
+      document (iterable): Iterable of token strings.
+
+    Returns:
+      list of tuple: Each tuple is (token, lemma).
+    '''
+
+    from nltk.stem import WordNetLemmatizer
+
+    lemmatizer = WordNetLemmatizer()
+    return [(w, lemmatizer.lemmatize(w)) for w in document]
+
+  def POS(self, document):
+    r'''
+    Part-of-speech tagging using NLTK's averaged perceptron tagger.
+
+    Parameters:
+      document (iterable): Iterable of token strings.
+
+    Returns:
+      list of tuple: POS tags as returned by nltk.pos_tag.
+    '''
+
+    import nltk
+
+    nltk.download("averaged_perceptron_tagger")
+
+    return nltk.pos_tag(document)
+
+  def Chunking(self, document):
+    r'''
+    Named-entity chunking helper using NLTK's ne_chunk.
+
+    Parameters:
+      document (iterable): Iterable of token strings (POS-tagged preferred).
+
+    Returns:
+      nltk.Tree: Chunked parse tree produced by ne_chunk.
+    '''
+
+    import nltk
+    from nltk import ne_chunk
+
+    # Try to ensure required resources are available; be tolerant if a specific chunker table is missing.
+    try:
+      nltk.download("maxent_ne_chunker")
+      nltk.download("words")
+    except Exception:
+      # Downloads may fail in restricted environments; we'll try to proceed and catch LookupError below.
+      pass
+
+    try:
+      return ne_chunk(document)
+    except LookupError:
+      # Some NLTK installs are missing the compiled chunker table; try the more specific resource name then retry.
+      try:
+        nltk.download("maxent_ne_chunker_tab")
+        return ne_chunk(document)
+      except Exception:
+        # As a graceful fallback, return the input tokens when chunking can't be performed.
+        return document
+
+  def BagOfWords(self, document):
+    r'''
+    Vectorize documents using CountVectorizer and return the vectorizer and dense matrix.
+
+    Parameters:
+      document (list of str): Iterable of documents.
+
+    Returns:
+      (vectorizer, numpy.ndarray): The fitted CountVectorizer instance and the dense array.
+    '''
+
+    from sklearn.feature_extraction.text import CountVectorizer
+
+    vectorizer = CountVectorizer()
+    X = vectorizer.fit_transform(document)
+    return vectorizer, X.toarray()
+
+  def TFIDF(self, document):
+    r'''
+    Vectorize documents using TfidfVectorizer and return the vectorizer and dense matrix.
+
+    Parameters:
+      document (list of str): Iterable of documents.
+
+    Returns:
+      (vectorizer, numpy.ndarray): The fitted TfidfVectorizer instance and the dense array.
+    '''
+
+    from sklearn.feature_extraction.text import TfidfVectorizer
+
+    vectorizer = TfidfVectorizer()
+    X = vectorizer.fit_transform(document)
+    return vectorizer, X.toarray()
+
+  def Word2Vec(self, document):
+    r'''
+    Train a Word2Vec model and return the model and vocabulary list.
+
+    Parameters:
+      document (list of list of str): Tokenized sentences.
+
+    Returns:
+      (model, list): Trained gensim Word2Vec model and list of vocabulary words.
+    '''
+
+    from gensim.models import Word2Vec
+
+    # Use modern gensim API: explicitly pass sentences and vector_size, then build vocab and train.
+    try:
+      model = Word2Vec(sentences=document, vector_size=20, min_count=1, epochs=50)
+      # In some gensim versions, training occurs during initialization when 'sentences' passed; ensure wv exists.
+      try:
+        words = list(model.wv.index_to_key)
+      except Exception:
+        # Older gensim: fallback to vocab attribute
+        words = list(model.wv.vocab)
+    except Exception as e:
+      # Fallback: create an untrained model and attempt to build vocab/train safely
+      model = Word2Vec(vector_size=20, min_count=1)
+      model.build_vocab(document)
+      model.train(document, total_examples=model.corpus_count, epochs=50)
+      try:
+        words = list(model.wv.index_to_key)
+      except Exception:
+        words = list(model.wv.vocab)
+
+    return model, words
+
+  def Doc2Vec(self, document, saveModel=False, savePath="d2v.model", epochs=100, vecSize=20, alpha=0.025):
+    r'''
+    Train a Doc2Vec model on provided documents and return the model.
+
+    Parameters:
+      document (list of str): Iterable of documents (strings).
+
+    Returns:
+      model: Trained gensim Doc2Vec model.
+    '''
+    from gensim.models.doc2vec import Doc2Vec, TaggedDocument
+
+    tagged_data = [
+      TaggedDocument(words=word_tokenize(_d.lower()), tags=[str(i)])
+      for i, _d in enumerate(document)
+    ]
+    # Use modern gensim parameter names (vector_size instead of size)
+    model = Doc2Vec(vector_size=vecSize, alpha=alpha, min_alpha=0.00025, min_count=1, dm=1)
+    model.build_vocab(tagged_data)
+
+    # Train in small epoch increments to allow alpha decay similar to older examples.
+    try:
+      for epoch in range(epochs):
+        model.train(tagged_data, total_examples=model.corpus_count, epochs=1)
+        model.alpha -= 0.0002
+        model.min_alpha = model.alpha
+    except Exception:
+      # Fallback: single train call
+      model.train(tagged_data, total_examples=model.corpus_count, epochs=epochs)
+
+    if (saveModel):
+      model.save(savePath)
+    return model
+
+  def LDA(self, document):
+    r'''
+    Fit a simple LDA model using gensim's LdaModel and return the model and topics.
+
+    Parameters:
+      document (list of list of str): Tokenized documents.
+
+    Returns:
+      (model, list): LdaModel instance and printed topics list.
+    '''
+
+    from gensim import corpora
+    from gensim.models.ldamodel import LdaModel
+
+    dictionary = corpora.Dictionary(document)
+    docTermMatrix = [dictionary.doc2bow(doc) for doc in document]
+
+    Lda = LdaModel
+    ldamodel = Lda(docTermMatrix, num_topics=3, id2word=dictionary, passes=50)
+    topics = ldamodel.print_topics(num_topics=3, num_words=3)
+    return ldamodel, topics
+
+  def LSA(self, document):
+    r'''
+    Fit a simple LSI model using gensim and return the model and topics.
+
+    Parameters:
+      document (list of list of str): Tokenized documents.
+
+    Returns:
+      (model, list): LsiModel instance and printed topics list.
+    '''
+
+    from gensim import corpora, models
+
+    dictionary = corpora.Dictionary(document)
+    docTermMatrix = [dictionary.doc2bow(doc) for doc in document]
+    lsi = models.LsiModel(docTermMatrix, num_topics=3, id2word=dictionary)
+    topics = lsi.print_topics(num_topics=3, num_words=3)
+    return lsi, topics
+
+  def TextSummarization(self, document):
+    r'''
+    Extractive summarization wrapper using gensim.summarization.summarize.
+
+    Parameters:
+      document (str): Text to summarize.
+
+    Returns:
+      str: Summary string.
+    '''
+
+    try:
+      from gensim.summarization import summarize
+      return summarize(document)
+    except Exception:
+      # gensim.summarization may be unavailable in newer gensim installs; fallback to a simple heuristic.
+      try:
+        from nltk.tokenize import sent_tokenize
+        sents = sent_tokenize(document)
+        return sents[0] if sents else ""
+      except Exception:
+        return ""
+
+  def TextRank(self, document):
+    r'''
+    Alias for TextSummarization (uses gensim.summarization.summarize).
+
+    Parameters:
+      document (str): Text to summarize.
+
+    Returns:
+      str: Summary string.
+    '''
+
+    try:
+      from gensim.summarization import summarize
+      return summarize(document)
+    except Exception:
+      # Fallback to first sentence
+      try:
+        from nltk.tokenize import sent_tokenize
+        sents = sent_tokenize(document)
+        return sents[0] if sents else ""
+      except Exception:
+        return ""
+
+  def TopicModeling(self, document):
+    r'''
+    Extract keywords from a document using gensim's keywords function.
+
+    Parameters:
+      document (str): Input text.
+
+    Returns:
+      str: Keywords extracted from the document.
+    '''
+
+    try:
+      from gensim.summarization import keywords
+      return keywords(document)
+    except Exception:
+      # Fallback: return top-n frequent words as a simple keyword approximation.
+      try:
+        words = [w.lower() for w in re.findall(r"\w+", document)]
+        freq = {}
+        for w in words:
+          freq[w] = freq.get(w, 0) + 1
+        top = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:10]
+        return " ".join([w for w, _ in top])
+      except Exception:
+        return ""
+
+  def CosineSimilarity(self, text1, text2):
+    r'''
+    Demonstrate cosine similarity between two example texts and return the matrix.
+
+    Parameters:
+      text1 (str): First input text.
+      text2 (str): Second input text.
+
+    Returns:
+      numpy.ndarray: Cosine similarity matrix.
+    '''
+    from sklearn.feature_extraction.text import CountVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity
+
+    text = [text1, text2]
+    cv = CountVectorizer()
+    count_matrix = cv.fit_transform(text)
+    return cosine_similarity(count_matrix)
+
+  def JaccardSimilarity(self, text1, text2):
+    r'''
+    Demonstrate Jaccard similarity between two example texts and return the score.
+
+    Parameters:
+      text1 (str): First input text.
+      text2 (str): Second input text.
+
+    Returns:
+      float: Jaccard similarity score between example texts (binary presence).
+    '''
+
+    from sklearn.feature_extraction.text import CountVectorizer
+    from sklearn.metrics import jaccard_score
+
+    text = [text1, text2]
+    cv = CountVectorizer()
+    countMatrix = cv.fit_transform(text).toarray()
+    # Convert to binary presence vectors and compute Jaccard on flattened arrays.
+    a = (countMatrix[0] > 0).astype(int)
+    b = (countMatrix[1] > 0).astype(int)
+
+    try:
+      return jaccard_score(a, b)
+    except Exception:
+      # Fallback: compute set-based Jaccard.
+      sa = set([w for w, v in zip(cv.get_feature_names_out(), a) if v])
+      sb = set([w for w, v in zip(cv.get_feature_names_out(), b) if v])
+      if (not sa and not sb):
+        return 0.0
+      return len(sa & sb) / float(len(sa | sb))
+
+  def EuclideanDistance(self, text1, text2):
+    r'''
+    Demonstrate Euclidean distance between two example texts and return the matrix.
+
+    Parameters:
+      text1 (str): First input text.
+      text2 (str): Second input text.
+
+    Returns:
+      numpy.ndarray: Euclidean distance matrix.
+    '''
+
+    from sklearn.metrics.pairwise import euclidean_distances
+    from sklearn.feature_extraction.text import CountVectorizer
+
+    text = [text1, text2]
+    cv = CountVectorizer()
+    countMatrix = cv.fit_transform(text)
+    return euclidean_distances(countMatrix)
+
+  def ManhattanDistance(self, text1, text2):
+    r'''
+    Demonstrate Manhattan (L1) distance between two example texts and return the matrix.
+
+    Parameters:
+      text1 (str): First input text.
+      text2 (str): Second input text.
+
+    Returns:
+      numpy.ndarray: Manhattan distance matrix.
+    '''
+
+    from sklearn.metrics.pairwise import manhattan_distances
+    from sklearn.feature_extraction.text import CountVectorizer
+
+    text = [text1, text2]
+    cv = CountVectorizer()
+    countMatrix = cv.fit_transform(text)
+    return manhattan_distances(countMatrix)
+
+  def WordCloud(self, document):
+    r'''
+    Generate a word cloud object for the given text and return it.
+
+    Parameters:
+      document (str): Input text from which to build the word cloud.
+
+    Returns:
+      WordCloud: The generated WordCloud instance (from wordcloud package).
+    '''
+
+    from wordcloud import WordCloud
+
+    wordcloud = WordCloud().generate(document)
+    return wordcloud
+
+  def TextToSpeech(self, document, outFile="good.mp3"):
+    r'''
+    Convert text to speech using gTTS, save to an MP3 file, and return filename.
+
+    Parameters:
+      document (str): Input text to convert to speech.
+      outFile (str): Output file path for MP3.
+
+    Returns:
+      str: Path to the saved MP3 file.
+    '''
+
+    from gtts import gTTS
+    tts = gTTS(text=document, lang="en")
+    tts.save(outFile)
+    return outFile
+
+  def SentimentAnalysis(self, document):
+    r'''
+    Perform sentiment analysis using TextBlob and return the sentiment object.
+
+    Parameters:
+      document (str): Input text.
+
+    Returns:
+      object: TextBlob sentiment result (polarity, subjectivity).
+    '''
+
+    from textblob import TextBlob
+
+    testimonial = TextBlob(document)
+    return testimonial.sentiment
+
+  def LanguageDetection(self, document):
+    r'''
+    Detect the language of the input text using langdetect.
+
+    Parameters:
+      document (str): Input text.
+
+    Returns:
+      str: Detected language code.
+    '''
+
+    from langdetect import detect
+    return detect(document)
+
+  def SpellingCorrection(self, document):
+    r'''
+    Perform spelling correction using TextBlob and return corrected string.
+
+    Parameters:
+      document (str): Input text.
+
+    Returns:
+      str: Corrected text.
+    '''
+
+    from textblob import TextBlob
+
+    return str(TextBlob(document).correct())
+
+  def LanguageTranslation(self, document, to="es"):
+    r'''
+    Translate text using TextBlob's translation wrapper and return the result.
+
+    Parameters:
+      document (str): Input text.
+      to (str): Target language code (default "es").
+
+    Returns:
+      str: Translated text.
+    '''
+
+    from textblob import TextBlob
+
+    try:
+      # TextBlob.translate may not be available or may require extra dependencies; attempt and fallback.
+      return str(TextBlob(document).translate(to=to))
+    except Exception:
+      # Fallback: return original text (no translation available in environment)
+      return document
+
+  def Tokenization(self, document):
+    r'''
+    Return sentence and word tokenization using NLTK utilities.
+
+    Parameters:
+      document (str): Input text.
+
+    Returns:
+      (list, list): Tuple of (sentences, words).
+    '''
+
+    from nltk.tokenize import sent_tokenize, word_tokenize
+    return sent_tokenize(document), word_tokenize(document)
+
+  def NER(self, document):
+    r'''
+    Named-entity recognition using spaCy's small English model; returns list of entities.
+
+    Parameters:
+      document (str): Input text.
+
+    Returns:
+      list of tuple: Each tuple is (text, start_char, end_char, label).
+    '''
+
+    import spacy
+
+    nlp = spacy.load("en_core_web_sm")
+    doc = nlp(document)
+    return [
+      (ent.text, ent.start_char, ent.end_char, ent.label_)
+      for ent in doc.ents
+    ]
+
+
 if __name__ == "__main__":
-  # Example usage of the CleanText function.
-  # Define a sample text with various elements for cleaning demonstration.
+  # Lightweight demo and tests for TextHelper and CleanText.
   sampleText = """
   This is an example text! It includes various elements:
   - Contractions like don't and it's.
@@ -340,8 +924,21 @@ if __name__ == "__main__":
   # Print the cleaned text after processing.
   print("\nCleaned Text:\n", cleaned)
 
-  # Example usage of the Summarizer class.
-  # Define a sample long text for summarization demonstration.
+
+  # SafeCall helper used to call methods and gracefully report failures.
+  def SafeCall(name, fn, *args, **kwargs):
+    try:
+      res = fn(*args, **kwargs)
+      print(f"{name} ->", res)
+      print("-" * 40)
+      return res
+    except Exception as e:
+      print(f"{name} raised {type(e).__name__}:", e)
+      print("-" * 40)
+      return None
+
+
+  # Summarizer demo (guarded because it requires transformers/torch and model weights).
   sampleLongText = (
     "This is an example text! "
     "The quick brown fox jumps over the lazy dog. "
@@ -351,20 +948,92 @@ if __name__ == "__main__":
     "The fox is known for its cunning and agility, while the dog represents loyalty and patience. "
     "Together, they create a vivid image that captures the imagination."
   )
-  # Create a Summarizer instance with default parameters.
-  summarizer = Summarizer(
-    modelName="facebook/bart-large-cnn",  # Use the BART model for summarization.
-    maxLength=150,  # Set maximum summary length to 130 tokens.
-    minLength=25,  # Set minimum summary length to 30 tokens.
-    maxInputLength=1024,  # Set maximum input length to 1024 characters before chunking.
-  )
-  # Summarize the sample long text using the Summarizer instance.
-  summary = summarizer.Summarize(sampleLongText)
-  # Print the length of the original text.
-  print("Length of Original Text:", len(sampleLongText))  # Output the length of the original text.
-  # Print the length of the generated summary.
-  print("Length of Summary:", len(summary))  # Output the length of the summary.
-  # Print the original text for reference.
-  print("\nOriginal Text:\n", sampleLongText)  # Output the original text.
-  # Print the generated summary.
-  print("\nSummary:\n", summary)  # Output the summary.
+  try:
+    summarizer = Summarizer(
+      modelName="facebook/bart-large-cnn",
+      maxLength=150,
+      minLength=25,
+      maxInputLength=1024,
+    )
+    try:
+      summary = summarizer.Summarize(sampleLongText)
+      print("Length of Original Text:", len(sampleLongText))
+      print("Length of Summary:", len(summary))
+      print("\nSummary:\n", summary)
+    except Exception as e:
+      print("Summarizer Summarize failed:", type(e).__name__, e)
+  except Exception as e:
+    print("Summarizer init skipped:", type(e).__name__, e)
+
+  th = TextHelper()
+
+  # Simple tests for tokenizer and basic helpers.
+  sampleSentence = "Hello world. This is a test."
+  SafeCall("SentenceTokeize", th.SentenceTokeize, sampleSentence)
+  SafeCall("WordTokenize", th.WordTokenize, sampleSentence)
+  SafeCall("Tokenization", th.Tokenization, sampleSentence)
+
+  # Stopwords removal demonstration on token list.
+  tokens = th.SentenceTokeize("This is a simple sentence for testing stopwords removal.")
+  SafeCall("RemoveStopWords", th.RemoveStopWords, tokens)
+
+  # N-grams demo (bigrams).
+  # SafeCall("Ngrams (bigrams)", th.Ngrams, ["this", "is", "a", "test"])
+
+  # Stemming and Lemmatization.
+  SafeCall("Stemming", th.Stemming, ["running", "jumps", "easily"])
+  SafeCall("Lemmatization", th.Lemmatization, ["running", "jumps", "easily"])
+
+  # POS tagging and Chunking (try to get POS tags first, fall back to token list).
+  try:
+    posTokens = th.POS(word_tokenize("Apple is looking at buying U.K. startup for $1 billion"))
+  except Exception:
+    posTokens = None
+  SafeCall("POS", th.POS, ["This", "is", "a", "test"])
+  SafeCall("Chunking", th.Chunking, posTokens if posTokens else ["Apple", "is", "buying", "startup"])
+
+  # Vectorizers and embedding demos (use small safe inputs).
+  SafeCall("BagOfWords", th.BagOfWords, ["this is a doc", "this is another doc"])
+  SafeCall("TFIDF", th.TFIDF, ["this is a doc", "this is another doc"])
+  SafeCall("Word2Vec", th.Word2Vec, [["this", "is"], ["another", "doc"]])
+  SafeCall("Doc2Vec", th.Doc2Vec, ["This is doc one", "This is doc two"], False)
+
+  # Topic models (small inputs) - these may be slow or require gensim.
+  SafeCall("LDA", th.LDA, [["apple", "banana"], ["banana", "carrot"]])
+  SafeCall("LSA", th.LSA, [["apple", "banana"], ["banana", "carrot"]])
+
+  # Summarization / TextRank / TopicModeling (may require gensim).
+  SafeCall("TextSummarization", th.TextSummarization,
+           "This is a short text. It has multiple sentences. It might be too short for gensim.summarize.")
+  SafeCall("TextRank", th.TextRank,
+           "This is a short text. It has multiple sentences. It might be too short for gensim.summarize.")
+  SafeCall("TopicModeling", th.TopicModeling, sampleLongText)
+
+  # Similarity and distances - provide valid strings instead of None.
+  SafeCall("CosineSimilarity", th.CosineSimilarity, "hello world", "hello")
+  SafeCall("JaccardSimilarity", th.JaccardSimilarity, "apple banana", "banana carrot")
+  SafeCall("EuclideanDistance", th.EuclideanDistance, "hello world", "hello")
+  SafeCall("ManhattanDistance", th.ManhattanDistance, "hello world", "hello")
+
+  # WordCloud demo (may require pillow and wordcloud).
+  try:
+    SafeCall("WordCloud", th.WordCloud, "hello world hello")
+  except Exception as e:
+    print("WordCloud demo skipped:", type(e).__name__, e)
+
+  # Text to speech (guarded because it creates a file and requires gTTS).
+  try:
+    SafeCall("TextToSpeech", th.TextToSpeech, "Hello world from HMB TextHelper", "hmb_test_tts.mp3")
+  except Exception as e:
+    print("TextToSpeech demo skipped:", type(e).__name__, e)
+
+  # TextBlob / langdetect demos.
+  SafeCall("SentimentAnalysis", th.SentimentAnalysis, "I love this product. It's great!")
+  SafeCall("LanguageDetection", th.LanguageDetection, "Bonjour tout le monde")
+  SafeCall("SpellingCorrection", th.SpellingCorrection, "I havv goood speling")
+  SafeCall("LanguageTranslation", th.LanguageTranslation, "Hello world", to="es")
+
+  # NER (spaCy - may require model).
+  SafeCall("NER", th.NER, "Apple is looking at buying U.K. startup for $1 billion")
+
+  print("TextHelper tests completed.")

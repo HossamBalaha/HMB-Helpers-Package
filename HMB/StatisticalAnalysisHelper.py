@@ -3,17 +3,1338 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import scipy.stats as stats
+import statsmodels.api as sm
 import matplotlib.pyplot as plt
 from statsmodels.stats.weightstats import zconfint
 from sklearn.linear_model import LinearRegression
 from statsmodels.stats.diagnostic import acorr_ljungbox
 from statsmodels.stats.power import TTestPower
-import statsmodels.api as sm
 from scipy.stats import skew, kurtosis, bootstrap, wilcoxon
+from skimage.measure import shannon_entropy, moments
 from HMB.Initializations import IgnoreWarnings
 from HMB.Utils import GetCmapColors
 
 IgnoreWarnings()  # Suppress all warnings globally.
+
+
+class GeneralStatisticsHelper(object):
+  r'''
+  GeneralStatisticsHelper: Collection of general-purpose statistical utilities.
+
+  This helper groups descriptive and inferential statistical routines commonly used
+  in data analysis and scientific computing. The class provides convenience wrappers
+  around NumPy, SciPy and statsmodels functionality and also implements a number
+  of custom summary and dynamic aggregation helpers that operate along flexible axes.
+
+  Key capabilities:
+    - Central tendency: mean, median, mode, percentiles, quantiles.
+    - Dispersion and shape: variance, standard deviation, IQR, skewness, kurtosis.
+    - Frequency and distribution: histogram, empirical and cumulative distribution functions, relative frequency.
+    - Inferential measures: chi-squared, one-way ANOVA F-value, bootstrap utilities, hypothesis helpers.
+    - Signal/image helpers: area, centroid, moments-based utilities and entropy measures.
+    - Dynamic helpers: vectorized "Dynamic" wrappers that apply numpy/scipy functions along configurable axes and optionally return aggregated means.
+
+  Inputs and outputs:
+    - Inputs are typically numpy arrays, Python lists or pandas Series/DataFrames where appropriate.
+    - Outputs vary by method and include scalars (floats/ints), 1-D/2-D numpy arrays or tuples containing summary statistics.
+
+  Notes:
+    - Most methods accept an axis argument or provide a dynamic variant (e.g., MeanDynamic) to compute results along specific axes.
+    - Methods are thin wrappers and aim to preserve the semantics and edge-case behavior of the underlying libraries (NumPy, SciPy, statsmodels).
+
+  References:
+    - SciPy statistics reference: https://docs.scipy.org/doc/scipy/reference/stats.html
+    - NumPy documentation: https://numpy.org/doc/stable/
+    - Statsmodels documentation: https://www.statsmodels.org/
+  '''
+
+  # Shape (N, ROWS, COLS, CH)
+  # axis = None => all elements.
+  # axis = 0 => alongside N.
+  # axis = 1 => alongside ROWS.
+  # axis = 2 => alongside COLS.
+  # axis = 3 => alongside CH.
+
+  def AffineCovariance(self, data, A, b, isCovariance=True):
+    r'''
+    Compute the covariance after an affine transform.
+
+    This implements Var[A*X + b] = A * Var[X] * A.T when provided with a
+    covariance matrix, or computes the covariance of `data` first when
+    isCovariance=False.
+
+    Parameters:
+      data (numpy.ndarray or numpy.ndarray-like): Either a covariance matrix (2-D)
+        or raw data with samples along axis 0 when isCovariance=False.
+      A (numpy.ndarray): Linear transform matrix to apply.
+      b (numpy.ndarray): Additive bias (ignored for covariance calculation).
+      isCovariance (bool): If True `data` is treated as a covariance matrix;
+        if False `data` is treated as raw samples and the covariance will be
+        computed first.
+
+    Returns:
+      numpy.ndarray: Transformed covariance matrix.
+
+    Notes:
+      - The additive term `b` does not affect covariance but is kept for API
+        symmetry with affine mean.
+    '''
+
+    # Var[D] = Var[D + a]
+    # Var[b * D] = b^2 * Var[D]
+    # Var[A * D + b] = A * Var[D] * A.T
+    if (not isCovariance):
+      data = self.CovarianceMatrix(data)
+    result = A @ data @ A.T
+    return result
+
+  def AffineMean(self, data, A, b, isMean=True):
+    r'''
+    Compute the mean after an affine transform.
+
+    Implements E[A*X + b] = A * E[X] + b. If isMean=False the method will
+    compute the mean from raw samples first.
+
+    Parameters:
+      data (numpy.ndarray): Either a mean vector (1-D) or raw samples (2-D) if isMean=False.
+      A (numpy.ndarray): Linear transform matrix.
+      b (numpy.ndarray or scalar): Additive bias.
+      isMean (bool): If True `data` is treated as a mean vector; if False the
+        mean will be computed via RowsMean.
+
+    Returns:
+      numpy.ndarray: Transformed mean vector.
+    '''
+
+    # E[b * D] = b * E[D]
+    # E[D + a] = E[D] + a
+    # E[b * D + a] = b * E[D] + a
+    if (not isMean):
+      data = self.RowsMean(data)
+    result = A @ data + b
+    return result
+
+  def Area(self, data):
+    r'''
+    Compute the area (zeroth moment) of an image or 2D array.
+
+    Parameters:
+      data (numpy.ndarray): 2D array representing an image or spatial distribution.
+
+    Returns:
+      float: Zeroth spatial moment (sum over pixels) which corresponds to area.
+
+    References:
+      - skimage.measure.moments
+    '''
+
+    M = moments(data)
+    return M[0, 0]
+
+  def Centroid(self, data):
+    r'''
+    Compute the centroid coordinates of a 2D image/array using spatial moments.
+
+    Parameters:
+      data (numpy.ndarray): 2D array representing an image or spatial distribution.
+
+    Returns:
+      tuple: (x_centroid, y_centroid) as floats.
+
+    Notes:
+      - Uses raw (not central) moments so typical centroid formula applies: (M10/M00, M01/M00).
+    '''
+
+    M = moments(data)
+    return (M[1, 0] / M[0, 0], M[0, 1] / M[0, 0])
+
+  def ChiSquared(self, X, y, withCorrection=False):
+    r'''
+    Compute the Pearson chi-squared statistic from two categorical arrays.
+
+    Parameters:
+      X (array-like): Categorical observations for variable X.
+      y (array-like): Categorical observations for variable Y.
+      withCorrection (bool): If True apply Yates' continuity correction.
+
+    Returns:
+      float: Chi-squared statistic.
+
+    Notes:
+      - This function returns the test statistic only (no p-value).
+    '''
+    # Find the unique elements from the X and y.
+    setX, setY = list(set(X)), list(set(y))
+
+    # Create the observed frequency matrix.
+    O = np.zeros((len(setX), len(setY)))
+
+    # Add a very small value to avoid any zero divisions.
+    O += np.finfo(float).eps
+
+    # Generate the O table.
+    for i in range(len(X)):
+      O[setX.index(X[i]), setY.index(y[i])] += 1.0
+
+    totalRows = np.sum(O, axis=1)  # Calculate RT.
+
+    totalColumns = np.sum(O, axis=0)  # Calculate CT.
+
+    N = np.sum(O)  # Calculate N.
+
+    # Calculate the E table.
+    E = np.array(
+      [
+        [el1 * el2 for el1 in totalColumns]
+        for el2 in totalRows
+      ]
+    ) / float(N)
+
+    # Calculate the chi-squared value with or without correction.
+    if (withCorrection):
+      chi2 = np.sum(np.square(np.abs(O - E) - 0.5) / E)
+    else:
+      chi2 = np.sum(np.square(O - E) / E)
+
+    return chi2
+
+  def ColumnsMean(self, data):
+    r'''
+    Compute the mean for each column of a 2D array.
+
+    Parameters:
+      data (numpy.ndarray): 2D array with shape (rows, cols).
+
+    Returns:
+      numpy.ndarray: 1-D array with mean computed along axis=1.
+    '''
+
+    # Calculate the mean of the data.
+    assert len(data.shape) == 2
+    result = self.Mean(data, axis=1)
+    return result
+
+  def Count(self, data):
+    r'''
+    Return the total number of elements in the input.
+
+    Parameters:
+      data (array-like): Input array or sequence.
+
+    Returns:
+      int: Number of elements.
+    '''
+
+    result = np.size(data)
+    return result
+
+  def CountDynamic(self, data, returnMean=False, perLastAxis=False, axis=None, keepdims=False):
+    r'''
+    Count non-masked elements using a dynamic wrapper.
+
+    This delegates to Dynamic(np.ma.count, ...), allowing axis and aggregation control.
+
+    Parameters:
+      data (array-like): Input data.
+      returnMean (bool): If True return the mean of the counts.
+      perLastAxis (bool): If True count along the last axis.
+      axis (int, optional): Axis to count along.
+      keepdims (bool): Whether to keep dimension for reduction.
+
+    Returns:
+      int or numpy.ndarray: Count or aggregated count depending on flags.
+    '''
+
+    result = self.Dynamic(np.ma.count, data, returnMean, perLastAxis, axis, keepdims)
+    return result
+
+  def CovarianceMatrix(self, data):
+    r'''
+    Compute the sample covariance matrix of row-wise observations.
+
+    Parameters:
+      data (numpy.ndarray): 2-D array with samples along axis 0 (shape: N x D).
+
+    Returns:
+      numpy.ndarray: Covariance matrix (D x D) computed as (X - mean).T @ (X - mean) / N.
+    '''
+
+    mue = self.RowsMean(data)
+    temp = data - mue
+    result = temp.T @ temp / data.shape[0]
+    return result
+
+  def CumulativeDistributionFunction(self, data, bins=10, range=None):
+    r'''
+    Compute a discrete cumulative distribution function by binning data.
+
+    Parameters:
+      data (array-like): Input samples.
+      bins (int): Number of histogram bins.
+      range (tuple or None): Range for histogram bins.
+
+    Returns:
+      numpy.ndarray: CDF values for the histogram bins.
+    '''
+
+    hist, binEdges = self.Histogram(data, bins=bins, range=range)
+    pdf = hist / np.sum(hist)
+    cdf = np.cumsum(pdf)
+    return cdf
+
+  def CumulativeFrequency(self, data, bins=10, returnFreqOnly=True, returnMean=False):
+    r'''
+    Wrapper around scipy.stats.cumfreq to compute cumulative frequencies.
+
+    Parameters:
+      data (array-like): Input samples.
+      bins (int): Number of bins to use for cumulative frequency.
+      returnFreqOnly (bool): If True return only the frequency array.
+      returnMean (bool): If True return the mean of returned arrays instead of arrays.
+
+    Returns:
+      array or tuple: Depending on flags returns frequency array or full cumfreq output.
+    '''
+
+    a, lowerLimit, binWidth, extraPoints = stats.cumfreq(data, numbins=bins)
+    if (returnFreqOnly):
+      if (returnMean):
+        return np.mean(a)
+      return a
+    if (returnMean):
+      return (np.mean(a), np.mean(lowerLimit), np.mean(binWidth), np.mean(extraPoints))
+    return (a, lowerLimit, binWidth, extraPoints)
+
+  def DescriptiveStatistics(self, data, returnMean=False):
+    r'''
+    Return a tuple of descriptive statistics using scipy.stats.describe.
+
+    Parameters:
+      data (array-like): Input data sample.
+      returnMean (bool): If True aggregate vector results into means.
+
+    Returns:
+      tuple: (nobs, mean, variance, kurtosis) where elements may be scalars or arrays depending on input.
+    '''
+
+    result = stats.describe(data)
+    if (returnMean):
+      return (result.nobs, np.mean(result.mean), np.mean(result.variance), np.mean(result.kurtosis))
+    return (result.nobs, result.mean, result.variance, result.kurtosis)
+
+  def DispersionRatio(self, X):
+    r'''
+    Compute the dispersion ratio between arithmetic and geometric means.
+
+    Parameters:
+      X (numpy.ndarray): Input 2D array with samples along axis 0.
+
+    Returns:
+      numpy.ndarray: Ratio of arithmetic mean to geometric mean for each column.
+    '''
+
+    # The arithmetic mean (AM).
+    am = np.mean(X, axis=0)
+
+    # The geometric mean (GM).
+    gm = np.power(np.prod(X, axis=0), (1.0 / float(X.shape[0])))
+    gm += np.finfo(float).eps  # Avoid zero divisions.
+
+    # Calculate the dispersion ratio.
+    rm = am / gm
+
+    return rm
+
+  def Dynamic(self, func, data, returnMean=False, perLastAxis=False, axis=None, keepdims=False, **kwargs):
+    r'''
+    Generic dynamic wrapper to apply a reduction function along configurable axes.
+
+    Parameters:
+      func (callable): Reduction function (e.g., np.mean, np.sum).
+      data (array-like): Input array.
+      returnMean (bool): If True return the mean of the reduced result.
+      perLastAxis (bool): If True apply reduction along the last axis.
+      axis (int or None): Axis to apply the reduction.
+      keepdims (bool): Whether to keep reduced dimensions.
+      **kwargs: Additional keyword args forwarded to func.
+
+    Returns:
+      scalar or numpy.ndarray: The reduced result (optionally averaged).
+    '''
+
+    if (perLastAxis):
+      result = func(data, axis=data.shape[-1], keepdims=keepdims, **kwargs)
+    elif (axis is not None):
+      result = func(data, axis=axis, keepdims=keepdims, **kwargs)
+    else:
+      result = func(data, **kwargs)
+    if (returnMean):
+      result = np.mean(result)
+    return result
+
+  def EmpiricalCumulativeDistributionFunction(self, data, returnMean=False):
+    r'''
+    Compute the empirical cumulative distribution function (ECDF) values for data.
+
+    Parameters:
+      data (array-like): Input samples.
+      returnMean (bool): If True return the mean of ECDF values.
+
+    Returns:
+      numpy.ndarray or float: ECDF values array or its mean.
+    '''
+
+    xs = np.sort(data)
+    ys = np.arange(1, len(xs) + 1) / float(len(xs))
+    if (returnMean):
+      return np.mean(ys)
+    return ys
+
+  def Entropy(self, data):
+    r'''
+    Compute Shannon entropy using scipy.stats.entropy averaged over provided distribution(s).
+
+    Parameters:
+      data (array-like): Input probabilities or counts.
+
+    Returns:
+      float: Mean entropy value.
+    '''
+
+    from scipy.stats import entropy
+    scipyEntropy = np.mean(entropy(data))
+    return scipyEntropy
+
+  def HistEntropy(self, pdf):
+    r'''
+    Compute entropy from a discrete probability mass function (base 2).
+
+    Parameters:
+      pdf (array-like): Discrete probability distribution (must sum to 1).
+
+    Returns:
+      float: Entropy in bits.
+    '''
+
+    en = pdf * np.log2(pdf)
+    en[np.isnan(en)] = 0
+    en = -np.sum(en)
+    return en
+
+  def HistEnergy(self, pdf):
+    r'''
+    Compute the energy of a discrete distribution (sum of squared probabilities).
+
+    Parameters:
+      pdf (array-like): Probability distribution.
+
+    Returns:
+      float: Energy value (sum of squares).
+    '''
+
+    en = pdf * pdf
+    en = np.sum(en)
+    return en
+
+  def FValueUsingOneWayANOVA(self, X, y):
+    r'''
+    Compute the one-way ANOVA F statistic for groups defined by `y`.
+
+    Parameters:
+      X (array-like): Numeric observations (1-D or 2-D flattened to 1-D).
+      y (array-like): Group labels for each observation.
+
+    Returns:
+      float: F-statistic computed from between- and within-group variances.
+    '''
+
+    classes = list(set(y))
+    X, y = np.array(X), np.array(y)
+
+    # Grouping the data by class.
+    xG = np.array([X[y == c] for c in classes], dtype=object)
+
+    # Calculate the mean for each group.
+    xMean = np.array([el.mean() for el in xG])
+
+    # Calculate the variance and sum of squares between the samples.
+    grandAvg = np.mean(X)
+    C = [
+      ((xMean[i] - grandAvg) ** 2) * len(xG[i])
+      for i in range(len(classes))
+    ]
+    SSC = np.sum(C)
+
+    # Calculate the variance and sum of squares within the samples.
+    S = [
+      (xG[i] - xMean[i]) ** 2
+      for i in range(len(classes))
+    ]
+    SSE = np.sum(
+      [np.sum(S[i]) for i in range(len(classes))]
+    )
+
+    # Calculate the degrees of freedom.
+    df1 = len(classes) - 1
+    df2 = X.shape[0] - len(classes)
+
+    # Calculate the mean sum of squares.
+    MSC = SSC / df1
+    MSE = SSE / df2
+
+    # Calculate the F-value.
+    F = MSC / MSE
+    return F
+
+  def Histogram(self, data, bins=10, range=None, returnMean=False):
+    r'''
+    Compute a histogram using numpy and optionally return averaged results.
+
+    Parameters:
+      data (array-like): Input data.
+      bins (int): Number of bins.
+      range (tuple): Range for histogram.
+      returnMean (bool): If True return means of histogram counts and bin edges.
+
+    Returns:
+      tuple: (hist, binEdges) or their means if returnMean=True.
+    '''
+
+    # DeprecationWarning: scipy.histogram is deprecated. Use numpy.histogram instead.
+    hist, binEdges = np.histogram(data, bins=bins, range=range)
+    if (returnMean):
+      return (np.mean(hist), np.mean(binEdges))
+    return (hist, binEdges)
+
+  def InterquartileRange(self, X, axis=None):
+    r'''
+    Compute the interquartile range (IQR) along the specified axis.
+
+    Parameters:
+      X (array-like): Input data.
+      axis (int or None): Axis along which to compute percentiles.
+
+    Returns:
+      numpy.ndarray or scalar: IQR value(s).
+    '''
+
+    # Calculate the interquartile range.
+    # q75, q25 = np.percentile(data, [75, 25])
+    q75, q25 = np.percentile(X, [75, 25], axis=axis)
+    iqr = q75 - q25
+    return iqr
+
+  def KurtosisDynamic(self, data, ddof=0, returnMean=False, perLastAxis=False, axis=None, keepdims=False):
+    r'''
+    Compute kurtosis using a dynamic (axis-flexible) implementation.
+
+    Parameters:
+      data (array-like): Input samples.
+      ddof (int): Delta degrees of freedom for variance.
+      returnMean (bool): If True return mean of the result.
+      perLastAxis (bool): If True operate along the last axis.
+      axis (int): Axis to operate over.
+      keepdims (bool): Whether to keep reduced dimensions.
+
+    Returns:
+      numpy.ndarray or scalar: Kurtosis values.
+    '''
+
+    # bias=False => The calculations are corrected for statistical bias.
+    # fisher=False => Pearson’s definition is used.
+    # kurtosis(el, fisher=False, bias=False)
+    mue = self.MeanDynamic(data, returnMean, perLastAxis, axis, keepdims)
+    N = self.CountDynamic(data, returnMean, perLastAxis, axis, keepdims)
+    diff = data - mue
+    std = self.StandardDeviationDynamic(data, ddof, returnMean, perLastAxis, axis, keepdims)
+    num = self.SumDynamic(np.power(diff, 4), returnMean, perLastAxis, axis, keepdims)
+    den = N * np.power(std, 4)
+    result = num / den
+    if (returnMean):
+      result = np.mean(result)
+    return result
+
+  def Max(self, data):
+    r'''
+    Return the maximum value in the input.
+
+    Parameters:
+      data (array-like): Input data.
+
+    Returns:
+      scalar: Maximum value.
+    '''
+
+    result = np.max(data)
+    return result
+
+  def MaxDynamic(self, data, returnMean=False, perLastAxis=False, axis=None, keepdims=False):
+    r'''
+    Dynamic wrapper for np.max with axis control.
+
+    Parameters and returns mirror Dynamic's contract.
+    '''
+
+    result = self.Dynamic(np.max, data, returnMean, perLastAxis, axis, keepdims)
+    return result
+
+  def Mean(self, data, axis=None):
+    r'''
+    Compute the arithmetic mean along the specified axis.
+
+    Parameters:
+      data (array-like): Input array.
+      axis (int or None): Axis to compute the mean over.
+
+    Returns:
+      numpy.ndarray or scalar: Mean value(s).
+    '''
+
+    # Calculate the mean of the data.
+    return np.mean(data, axis=axis)
+
+  def HistMean(self, pdf, range):
+    r'''
+    Compute the mean of a discrete histogram (pdf weighted by bin centers).
+
+    Parameters:
+      pdf (array-like): Probability per bin.
+      range (array-like): Bin center locations or range values.
+
+    Returns:
+      float: Histogram mean.
+    '''
+
+    # Calculate the mean of the data.
+    mean = np.sum(pdf * range)
+    return mean
+
+  def MeanAbsoluteDifference(self, X, axis=0):
+    r'''
+    Compute the mean absolute deviation from the mean along the given axis.
+
+    Parameters:
+      X (array-like): Input data.
+      axis (int): Axis along which to compute MAD.
+
+    Returns:
+      numpy.ndarray or scalar: Mean absolute deviation.
+    '''
+
+    # Absolute / Mean Deviation.
+    # Calculate the mean absolute difference between the target and the predicted values.
+    absDiff = np.abs(X - X.mean(axis=axis))
+    mad = np.mean(absDiff, axis=axis)
+    return mad
+
+  def MeanAbsoluteDifferenceDynamic(self, data, returnMean=False, perLastAxis=False, axis=None, keepdims=False):
+    r'''
+    Dynamic variant of mean absolute difference.
+
+    Mirrors MeanDynamic signature.
+
+    Parameters:
+      data (array-like): Input data.
+      returnMean (bool): If True return mean of the result.
+      perLastAxis (bool): If True operate along the last axis.
+      axis (int): Axis to operate over.
+      keepdims (bool): Whether to keep reduced dimensions.
+
+    Returns:
+      numpy.ndarray or scalar: MAD values.
+    '''
+
+    mean = self.MeanDynamic(data, returnMean, perLastAxis, axis, keepdims)
+    mad = self.MeanDynamic(np.abs(data - mean), returnMean, perLastAxis, axis, keepdims)
+    return mad
+
+  def RobustMeanAbsoluteDifference(self, X, axis=0, keepdims=False):
+    r'''
+    Compute median-based mean absolute deviation (robust MAD).
+
+    Parameters:
+      X (array-like): Input array.
+      axis (int): Axis along which to compute the measure.
+      keepdims (bool): Keep reduced dimensions.
+
+    Returns:
+      numpy.ndarray or scalar: Robust MAD.
+    '''
+
+    # Absolute / Mean Deviation.
+    # Calculate the mean absolute difference between
+    # the target and the predicted values.
+    absDiff = np.abs(X - np.median(X, axis=axis, keepdims=keepdims))
+    mad = np.mean(absDiff, axis=axis)
+    return mad
+
+  def RobustMeanAbsoluteDifferenceDynamic(self, data, returnMean=False, perLastAxis=False, axis=None, keepdims=False):
+    r'''
+    Dynamic wrapper for the robust MAD function.
+
+    Parameters:
+      data (array-like): Input data.
+      returnMean (bool): If True return mean of the result.
+      perLastAxis (bool): If True operate along the last axis.
+      axis (int): Axis to operate over.
+      keepdims (bool): Whether to keep reduced dimensions.
+
+    Returns:
+      numpy.ndarray or scalar: Robust MAD values.
+    '''
+
+    result = self.Dynamic(self.RobustMeanAbsoluteDifference, data, returnMean, perLastAxis, axis, keepdims)
+    return result
+
+  def MeanDynamic(self, data, returnMean=False, perLastAxis=False, axis=None, keepdims=False):
+    r'''
+    Dynamic wrapper for numpy mean with axis control.
+
+    Parameters:
+      data (array-like): Input data.
+      returnMean (bool): If True return mean of the result.
+      perLastAxis (bool): If True operate along the last axis.
+      axis (int): Axis to operate over.
+      keepdims (bool): Whether to keep reduced dimensions.
+
+    Returns:
+      numpy.ndarray or scalar: Mean values.
+    '''
+
+    result = self.Dynamic(np.mean, data, returnMean, perLastAxis, axis, keepdims)
+    return result
+
+  def Median(self, X, axis=None):
+    r'''
+    Compute the median along an axis.
+
+    Parameters:
+      X (array-like): Input data.
+      axis (int or None): Axis along which to compute the median.
+
+    Returns:
+      scalar or array: Median value(s).
+    '''
+
+    # Equal to np.median(data)
+    # result = np.median(hypsecant.median(data))
+    # Calculate the median of the data.
+    median = np.median(X, axis=axis)
+    return median
+
+  def MedianAbsoluteDeviation(self, data):
+    r'''
+    Compute the median absolute deviation (MAD) for 1-D data.
+
+    Parameters:
+      data (array-like): Input 1-D array.
+
+    Returns:
+      float: Median absolute deviation.
+    '''
+
+    median = self.Median(data)
+    mad = self.Median(np.abs(data - median))
+    return mad
+
+  def MedianAbsoluteDeviationDynamic(self, data, returnMean=False, perLastAxis=False, axis=None, keepdims=False):
+    r'''
+    Dynamic wrapper for MAD.
+
+    Parameters:
+      data (array-like): Input data.
+      returnMean (bool): If True return mean of the result.
+      perLastAxis (bool): If True operate along the last axis.
+      axis (int): Axis to operate over.
+      keepdims (bool): Whether to keep reduced dimensions.
+
+    Returns:
+      numpy.ndarray or scalar: MAD values.
+    '''
+
+    median = self.MedianDynamic(data, returnMean, perLastAxis, axis, keepdims)
+    mad = self.MedianDynamic(np.abs(data - median), returnMean, perLastAxis, axis, keepdims)
+    return mad
+
+  def MedianDynamic(self, data, returnMean=False, perLastAxis=False, axis=None, keepdims=False):
+    r'''
+    Dynamic wrapper for numpy.median.
+
+    Parameters:
+      data (array-like): Input data.
+      returnMean (bool): If True return mean of the result.
+      perLastAxis (bool): If True operate along the last axis.
+      axis (int): Axis to operate over.
+      keepdims (bool): Whether to keep reduced dimensions.
+
+    Returns:
+      numpy.ndarray or scalar: Median values.
+    '''
+
+    result = self.Dynamic(np.median, data, returnMean, perLastAxis, axis, keepdims)
+    return result
+
+  def RootMeanSquare(self, data, axis=None, keepdims=False):
+    r'''
+    Compute the root mean square along an axis.
+
+    Parameters:
+      data (array-like): Input data.
+      axis (int or None): Axis over which to compute RMS.
+      keepdims (bool): Whether to keep reduced dimensions.
+
+    Returns:
+      numpy.ndarray or scalar: RMS values.
+    '''
+
+    # Calculate the root mean square of the data.
+    rms = np.sqrt(np.mean(np.square(data), axis=axis, keepdims=keepdims))
+    return rms
+
+  def RootMeanSquareDynamic(self, data, returnMean=False, perLastAxis=False, axis=None, keepdims=False):
+    r'''
+    Dynamic wrapper for RMS computation.
+
+    Parameters:
+      data (array-like): Input data.
+      returnMean (bool): If True return mean of the result.
+      perLastAxis (bool): If True operate along the last axis.
+      axis (int): Axis to operate over.
+      keepdims (bool): Whether to keep reduced dimensions.
+
+    Returns:
+      numpy.ndarray or scalar: RMS values.
+    '''
+
+    result = self.Dynamic(self.RootMeanSquare, data, returnMean, perLastAxis, axis, keepdims)
+    return result
+
+  def Min(self, data):
+    r'''
+    Return the minimum value from the input.
+
+    Parameters:
+      data (array-like): Input data.
+
+    Returns:
+      scalar: Minimum value.
+    '''
+
+    result = np.min(data)
+    return result
+
+  def MinDynamic(self, data, returnMean=False, perLastAxis=False, axis=None, keepdims=False):
+    r'''
+    Dynamic wrapper for np.min.
+
+    Parameters:
+      data (array-like): Input data.
+      returnMean (bool): If True return mean of the result.
+      perLastAxis (bool): If True operate along the last axis.
+      axis (int): Axis to operate over.
+      keepdims (bool): Whether to keep reduced dimensions.
+
+    Returns:
+      numpy.ndarray or scalar: Minimum values.
+    '''
+
+    result = self.Dynamic(np.min, data, returnMean, perLastAxis, axis, keepdims)
+    return result
+
+  def Mode(self, X):
+    r'''
+    Compute the mode of integer-valued data using bincount.
+
+    Parameters:
+      X (array-like): 1-D integer-valued data.
+
+    Returns:
+      int: The mode (most frequent value).
+    '''
+
+    # Calculate the mode of the data.
+    mode = np.argmax(np.bincount(X))
+    return mode
+
+  def Percentile(self, X, p, axis=0):
+    r'''
+    Compute the p-th percentile of data.
+
+    Parameters:
+      X (array-like): Input data.
+      p (float): Percentile to compute (0-100).
+      axis (int): Axis along which to compute percentile.
+
+    Returns:
+      scalar or array: Percentile value(s).
+    '''
+
+    # Calculate the percentile of the data.
+    pr = np.percentile(X, p, axis=axis)
+    return pr
+
+  def Percentiles(self, data, ranges=[10, 20, 30, 40, 50, 60, 70, 80, 90, 100]):
+    r'''
+    Convenience to compute multiple percentiles at once.
+
+    Parameters:
+      data (array-like): Input data.
+      ranges (list): List of percentiles to compute.
+
+    Returns:
+      numpy.ndarray: Percentile values corresponding to `ranges`.
+    '''
+
+    result = np.nanpercentile(data, ranges)
+    return result
+
+  def Quantile(self, X, q, axis=0):
+    r'''
+    Compute quantiles of the data.
+
+    Parameters:
+      X (array-like): Input data.
+      q (float or array-like): Quantile(s) in [0, 1].
+      axis (int): Axis to compute quantile along.
+
+    Returns:
+      scalar or array: Quantile values.
+    '''
+
+    # Calculate the quantile of the data.
+    qr = np.quantile(X, q, axis=axis)
+    return qr
+
+  def Range(self, X, axis=0):
+    r'''
+    Compute range (max - min) along an axis.
+
+    Parameters:
+      X (array-like): Input data.
+      axis (int): Axis along which to compute range.
+
+    Returns:
+      numpy.ndarray or scalar: Range value(s).
+    '''
+
+    # Calculate the range of the data.
+    rng = np.max(X, axis=axis) - np.min(X, axis=axis)
+    return rng
+
+  def RelativeFrequency(self, data, bins=10, returnFreqOnly=True, returnMean=False):
+    r'''
+    Compute relative frequency using scipy.stats.relfreq.
+
+    Parameters:
+      data (array-like): Input data.
+      bins (int): Number of bins.
+      returnFreqOnly (bool): If True return only frequency array.
+      returnMean (bool): If True return mean of results.
+
+    Returns:
+      array or tuple: Relative frequency outputs depending on flags.
+    '''
+
+    a, lowerLimit, binWidth, extraPoints = stats.relfreq(data, numbins=bins)
+    if (returnFreqOnly):
+      if (returnMean):
+        return np.mean(a)
+      return a
+    if (returnMean):
+      return (np.mean(a), np.mean(lowerLimit), np.mean(binWidth), np.mean(extraPoints))
+    return (a, lowerLimit, binWidth, extraPoints)
+
+  def RowsMean(self, data):
+    r'''
+    Compute the mean per row for a 2D array (asserts 2D input).
+
+    Parameters:
+      data (numpy.ndarray): 2D input array.
+
+    Returns:
+      numpy.ndarray: Mean per row.
+    '''
+
+    # Calculate the mean of the data.
+    assert len(data.shape) == 2
+    result = self.Mean(data, axis=0)
+    return result
+
+  def SciPyFisherKurtosis(self, data, returnMean=False):
+    r'''
+    Compute Fisher (excess) kurtosis via scipy.stats.kurtosis.
+
+    Parameters:
+      data (array-like): Input data.
+      returnMean (bool): If True return mean of kurtosis results.
+
+    Returns:
+      float or numpy.ndarray: Kurtosis values.
+    '''
+
+    result = stats.kurtosis(data, fisher=True, bias=True)
+    if (returnMean):
+      result = np.mean(result)
+    return result
+
+  def SciPyFisherKurtosisDynamic(self, data, returnMean=False, perLastAxis=False, axis=None, keepdims=False):
+    r'''
+    Dynamic wrapper around scipy kurtosis (Fisher definition).
+
+    Parameters:
+      data (array-like): Input samples.
+      returnMean (bool): If True return mean of the result.
+      perLastAxis (bool): If True operate along the last axis.
+      axis (int): Axis to operate over.
+      keepdims (bool): Whether to keep reduced dimensions.
+
+    Returns:
+      numpy.ndarray or scalar: Kurtosis values.
+    '''
+
+    result = self.Dynamic(stats.kurtosis, data, returnMean, perLastAxis, axis, keepdims, fisher=True, bias=True)
+    return result
+
+  def SciPyPearsonKurtosisDynamic(self, data, returnMean=False, perLastAxis=False, axis=None, keepdims=False):
+    r'''
+    Dynamic wrapper around scipy kurtosis (Pearson definition).
+
+    Parameters:
+      data (array-like): Input samples.
+      returnMean (bool): If True return mean of the result.
+      perLastAxis (bool): If True operate along the last axis.
+      axis (int): Axis to operate over.
+      keepdims (bool): Whether to keep reduced dimensions.
+
+    Returns:
+      numpy.ndarray or scalar: Kurtosis values.
+    '''
+
+    result = self.Dynamic(stats.kurtosis, data, returnMean, perLastAxis, axis, keepdims, fisher=False, bias=True)
+    return result
+
+  def SciPyPearsonKurtosis(self, data, returnMean=False):
+    r'''
+    Compute Pearson kurtosis via scipy.stats.kurtosis.
+
+    Parameters:
+      data (array-like): Input data.
+      returnMean (bool): If True return mean of kurtosis results.
+
+    Returns:
+      float or numpy.ndarray: Kurtosis values.
+    '''
+
+    result = stats.kurtosis(data, fisher=False, bias=True)
+    if (returnMean):
+      result = np.mean(result)
+    return result
+
+  def HistPearsonKurtosis(self, pdf, range):
+    r'''
+    Compute kurtosis from a histogram PDF and bin locations.
+
+    Parameters:
+      pdf (array-like): Probability mass per bin.
+      range (array-like): Bin centers.
+
+    Returns:
+      float: Pearson kurtosis estimate from histogram.
+    '''
+
+    mean = self.HistMean(pdf, range)
+    std = self.HistVariance(pdf, range) ** 0.5
+    kurtosis = np.sum((range - mean) ** 4 * pdf) / (std ** 4)
+    return kurtosis
+
+  def SciPySkewnessDynamic(self, data, returnMean=False, perLastAxis=False, axis=None, keepdims=False):
+    r'''
+    Dynamic wrapper around scipy.stats.skew.
+
+    Parameters:
+      data (array-like): Input samples.
+      returnMean (bool): If True return mean of the result.
+      perLastAxis (bool): If True operate along the last axis.
+      axis (int): Axis to operate over.
+      keepdims (bool): Whether to keep reduced dimensions.
+
+    Returns:
+      numpy.ndarray or scalar: Skewness values.
+    '''
+
+    result = self.Dynamic(stats.skew, data, returnMean, perLastAxis, axis, keepdims, bias=True)
+    return result
+
+  def SciPySkewness(self, data, returnMean=False):
+    r'''
+    Compute skewness using scipy.stats.skew.
+
+    Parameters:
+      data (array-like): Input data.
+      returnMean (bool): If True return mean of skewness results.
+
+    Returns:
+      float or numpy.ndarray: Skewness values.
+    '''
+
+    result = stats.skew(data, bias=True)
+    if (returnMean):
+      result = np.mean(result)
+    return result
+
+  def HistSkewness(self, pdf, range):
+    r'''
+    Estimate skewness from a histogram PDF.
+
+    Parameters:
+      pdf (array-like): Probability mass per bin.
+      range (array-like): Bin center locations.
+
+    Returns:
+      float: Skewness of the histogram distribution.
+    '''
+
+    mean = self.HistMean(pdf, range)
+    std = self.HistVariance(pdf, range) ** 0.5
+    skew = np.sum((range - mean) ** 3 * pdf) / (std ** 3)
+    return skew
+
+  def ShannonEntropy(self, data):
+    r'''
+    Compute Shannon entropy using skimage.measure.shannon_entropy averaged over inputs.
+
+    Parameters:
+      data (array-like): Input image or distribution to compute entropy for.
+
+    Returns:
+      float: Mean Shannon entropy.
+    '''
+
+    shannonEntropy = np.mean(shannon_entropy(data))
+    return shannonEntropy
+
+  def SkewnessDynamic(self, data, ddof=0, returnMean=False, perLastAxis=False, axis=None, keepdims=False):
+    r'''
+    Compute skewness using moment-based formula with flexible axes.
+
+    Parameters:
+      data (array-like): Input samples.
+      ddof (int): Delta degrees of freedom for variance.
+      returnMean (bool): If True return mean of the result.
+      perLastAxis (bool): If True operate along the last axis.
+      axis (int): Axis to operate over.
+      keepdims (bool): Whether to keep reduced dimensions.
+
+    Returns:
+      numpy.ndarray or scalar: Skewness values.
+    '''
+
+    # bias=False => The calculations are corrected for statistical bias.
+    # skew(el, bias=False)
+    mue = self.MeanDynamic(data, returnMean, perLastAxis, axis, keepdims)
+    N = self.CountDynamic(data, returnMean, perLastAxis, axis, keepdims)
+    diff = data - mue
+    std = self.StandardDeviationDynamic(data, ddof, returnMean, perLastAxis, axis, keepdims)
+    num = self.SumDynamic(np.power(diff, 3), returnMean, perLastAxis, axis, keepdims)
+    den = N * np.power(std, 3)
+    result = num / den
+    if (returnMean):
+      result = np.mean(result)
+    return result
+
+  def StandardDeviation(self, X, axis=0, ddof=0):
+    r'''
+    Compute standard deviation.
+
+    Parameters:
+      X (array-like): Input data.
+      axis (int): Axis to compute along.
+      ddof (int): Degrees of freedom correction.
+
+    Returns:
+      numpy.ndarray or scalar: Standard deviation.
+    '''
+
+    # Calculate the standard deviation of the data.
+    return np.std(X, axis=axis, ddof=ddof)
+
+  def StandardDeviationDynamic(self, data, ddof=0, returnMean=False, perLastAxis=False, axis=None, keepdims=False):
+    r'''
+    Dynamic wrapper computing standard deviation via VarianceDynamic.
+    '''
+    result = np.sqrt(self.VarianceDynamic(data, ddof, returnMean, perLastAxis, axis, keepdims))
+    return result
+
+  def Sum(self, data):
+    r'''
+    Compute the total sum of elements.
+
+    Parameters:
+      data (array-like): Input data.
+
+    Returns:
+      scalar: Sum of all elements.
+    '''
+
+    result = np.sum(data)
+    return result
+
+  def SumDynamic(self, data, returnMean=False, perLastAxis=False, axis=None, keepdims=False):
+    r'''
+    Dynamic wrapper for np.sum.
+    '''
+    result = self.Dynamic(np.sum, data, returnMean, perLastAxis, axis, keepdims)
+    return result
+
+  def TValueUsingTwoGroups(self, X, y):
+    r'''
+    Compute an approximate independent two-sample t-value between two groups.
+
+    Parameters:
+      X (array-like): First sample array.
+      y (array-like): Second sample array.
+
+    Returns:
+      float: t-statistic.
+    '''
+
+    # Calculate the N for each group.
+    nX = float(len(X))
+    nY = float(len(y))
+
+    # Calculate the mean for each group.
+    meanX = np.mean(X)
+    meanY = np.mean(y)
+
+    # Calculate the std. for each group.
+    # ddof=1 is used to correct for the sample size.
+    # ddof=0 is used to correct for the population size.
+    stdX = np.std(X, ddof=1)
+    stdY = np.std(y, ddof=1)
+
+    num = np.abs(meanX - meanY)
+    den = np.sqrt((stdX ** 2 / nX) + (stdY ** 2 / nY))
+    tValue = num / den
+
+    return tValue
+
+  def Variance(self, X, axis=0, ddof=0):
+    r'''
+    Compute variance along an axis.
+
+    Parameters:
+      X (array-like): Input data.
+      axis (int): Axis along which to compute.
+      ddof (int): Degrees of freedom correction.
+
+    Returns:
+      numpy.ndarray or scalar: Variance value(s).
+    '''
+
+    # Calculate the variance of the data.
+    var = np.var(X, axis=axis, ddof=ddof)
+    return var
+
+  def HistVariance(self, pdf, range):
+    r'''
+    Compute variance for a histogram-defined distribution.
+
+    Parameters:
+      pdf (array-like): Probability mass per bin.
+      range (array-like): Bin center locations.
+
+    Returns:
+      float: Variance of the histogram distribution.
+    '''
+
+    # Calculate the variance of the data.
+    mean = self.HistMean(pdf, range)
+    var = np.sum(np.power(range - mean, 2) * pdf)
+    return var
+
+  def VarianceDynamic(self, data, ddof=0, returnMean=False, perLastAxis=False, axis=None, keepdims=False):
+    r'''
+    Dynamic variance computation supporting flexible axes.
+
+    Parameters:
+      data (array-like): Input samples.
+      ddof (int): Delta degrees of freedom for variance.
+      returnMean (bool): If True return mean of the result.
+      perLastAxis (bool): If True operate along the last axis.
+      axis (int): Axis to operate over.
+      keepdims (bool): Whether to keep reduced dimensions.
+
+    Returns:
+      numpy.ndarray or scalar: Variance values.
+    '''
+
+    # Var[D] = Var[D + a]
+    # Var[b * D] = b^2 * Var[D]
+    # Var[A * D + b] = A * Var[D] * A.T
+    mue = self.MeanDynamic(data, returnMean=returnMean, perLastAxis=perLastAxis, axis=axis, keepdims=keepdims)
+    diff = data - mue
+    diffPow = np.power(diff, 2)
+    num = self.SumDynamic(diffPow, returnMean=returnMean, perLastAxis=perLastAxis, axis=axis, keepdims=keepdims)
+    N = self.CountDynamic(data, returnMean=returnMean, perLastAxis=perLastAxis, axis=axis, keepdims=keepdims)
+    result = num / (N - ddof)
+    if (returnMean):
+      result = np.mean(result)
+    return result
+
+  def ZValueUsingTwoGroups(self, X, y, value=0.0):
+    r'''
+    Compute Z-statistic for difference of two group means (assuming known population std).
+
+    Parameters:
+      X (array-like): First sample.
+      y (array-like): Second sample.
+      value (float): Hypothesized difference (default 0.0).
+
+    Returns:
+      float: z-statistic.
+    '''
+
+    # Calculate the N for each group.
+    nX = float(len(X))
+    nY = float(len(y))
+
+    # Calculate the mean for each group.
+    meanX = np.mean(X)
+    meanY = np.mean(y)
+
+    # Calculate the std. for each group.
+    # ddof=1 is used to correct for the sample size.
+    # ddof=0 is used to correct for the population size.
+    stdX = np.std(X, ddof=0)
+    stdY = np.std(y, ddof=0)
+
+    num = np.abs(meanX - meanY) - value
+    den = np.sqrt((stdX ** 2 / nX) + (stdY ** 2 / nY))
+    zValue = num / den
+
+    return zValue
+
+  def ConfidenceInterval(self, data, confidence=0.95):
+    r'''
+    Compute a Student-t based confidence interval for the mean.
+
+    Parameters:
+      data (array-like): Sample observations.
+      confidence (float): Confidence level (0-1).
+
+    Returns:
+      tuple: (lower bound, upper bound)
+        - float: Lower bound of the confidence interval.
+        - float: Upper bound of the confidence interval.
+    '''
+
+    n = len(data)
+    m = np.mean(data)
+    stdErr = stats.sem(data)
+    h = stdErr * stats.t.ppf((1 + confidence) / 2, n - 1)
+    start = m - h
+    end = m + h
+    return (start, end)
 
 
 def StatisticalAnalysis(results, hypothesizedMean=0, secondMetricList=None, confidenceLevel=0.95, nBootstraps=1000):
@@ -1771,7 +3092,8 @@ def PlotMetrics(
         plt.subplot(noRows, noCols, i + 1)
         sns.swarmplot(
           data=[dataset[metric]["Trials"] for dataset in data],
-          palette=cmapColors
+          palette=cmapColors,
+          alpha=0.7
         )
         color = cmapColors[i]
         plt.title(
@@ -2222,7 +3544,7 @@ def PlotMetrics(
         # Show the figure if requested.
         if (showFigures):
           plt.show()
-        plt.close()  # Close the current figure.
+        plt.close()  # Close the figure to free memory.
         plt.clf()  # Clear the current figure.
       else:
         print("Histogram2DPlots: Not enough metrics to generate pairs for plotting.")
@@ -2234,7 +3556,7 @@ def PlotMetrics(
 
   # ==============================================================================================================
   # StepPlots
-  # 2D histograms for all unique pairs of metrics.
+  # Step plots for all unique pairs of metrics.
   # ==============================================================================================================
   try:
     if ("StepPlots" in whichToPlot):
@@ -2276,7 +3598,7 @@ def PlotMetrics(
       plt.savefig(f"StepPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
-      plt.close()  # Close the current figure.
+      plt.close()  # Close the figure to free memory.
       plt.clf()  # Clear the current figure.
   except Exception as e:
     print(f"Error generating Step Plots: {str(e)}")
