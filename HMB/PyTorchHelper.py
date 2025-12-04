@@ -4,8 +4,7 @@ import pandas as pd
 from PIL import Image
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, classification_report
-from torch.cuda.amp import GradScaler
-from torch.amp import autocast
+from torch.amp import autocast, GradScaler
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -843,6 +842,7 @@ def TrainOneEpoch(
   # Zero the gradients of the optimizer.
   optimizer.zero_grad()
 
+  # Determine device type for autocast.
   deviceType = "cuda" if ((hasattr(device, "type") and device.type == "cuda") or ("cuda" in str(device))) else "cpu"
 
   # Iterate over the training data loader with a progress bar.
@@ -864,6 +864,7 @@ def TrainOneEpoch(
     with autocast(enabled=useAmp, device_type=deviceType):
       # Forward pass through the model to get outputs.
       outputs = model(data)
+      # Check if labels are soft/one-hot for MixUp.
       if (useMixupFn and isinstance(labels, torch.Tensor) and labels.dim() > 1):
         # Compute the MixUp loss.
         loss = MixupCriterion(outputs, labels)
@@ -924,8 +925,8 @@ def TrainOneEpoch(
             print(f"EMA update on model.module also failed: {e2}")
 
   # Calculate average loss and accuracy for the epoch.
-  avgTrainLoss = totalEpochLoss / max(1, len(totalEpochSamples))
-  avgTrainAccuracy = totalEpochAccuracy / max(1, len(totalEpochSamples))
+  avgTrainLoss = totalEpochLoss / max(1, totalEpochSamples)
+  avgTrainAccuracy = totalEpochAccuracy / max(1, totalEpochSamples)
 
   return avgTrainLoss, avgTrainAccuracy
 
