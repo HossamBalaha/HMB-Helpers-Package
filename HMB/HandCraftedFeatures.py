@@ -19,6 +19,7 @@ Usage:
 '''
 # Import the required libraries.
 import cv2  # OpenCV for image processing.
+import math  # Math module for mathematical operations.
 import numpy as np  # NumPy for numerical operations.
 
 
@@ -1861,6 +1862,9 @@ def ComputeLocalEntropy(imgGray, winSize=9):
   Returns:
     numpy.ndarray: Local entropy map as a uint8 image.
   '''
+
+  from skimage.filters import rank
+  from skimage.morphology import disk
 
   # Validate input.
   if (imgGray is None):
