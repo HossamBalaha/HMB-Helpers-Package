@@ -1223,7 +1223,8 @@ def CalculateGLSZMSizeZoneMatrix3D(volume, connectivity=6, isNorm=True, ignoreZe
 
 
 # ===========================================================================================
-# Function(s) for handling the local binary patterns (LBP).
+# Function(s) for handling the local binary patterns (LBP) and other functions that
+# generate kernels, layers, or patterns. Such as LBP, Gabor, HOG, etc.
 # ===========================================================================================
 def BuildLBPKernel(
   distance=1,  # Distance parameter to determine the size of the kernel.
@@ -1495,6 +1496,498 @@ def UniformLocalBinaryPattern2D(
 
   # Return the computed uniform LBP matrix.
   return uniformMatrix
+
+
+# Define a function to compute a HOG-like visualization from a grayscale image.
+def ComputeHogImage(imgGray, pixelsPerCell=(8, 8), orientations=9, eps=1e-5):
+  r'''
+  Compute a HOG-like visualization image from a grayscale input image.
+
+  Parameters:
+    imgGray (numpy.ndarray): Input grayscale image as a 2D NumPy array.
+    pixelsPerCell (tuple): Size of each cell in pixels (height, width).
+    orientations (int): Number of orientation bins for the histogram.
+    eps (float): Small value to avoid division by zero during normalization.
+
+  Returns:
+    numpy.ndarray: HOG visualization image as a 2D NumPy array (uint8).
+  '''
+
+  # Validate the input image is provided.
+  if (imgGray is None):
+    # Raise an informative error when imgGray is missing.
+    raise ValueError("`imgGray` is None")
+
+  # Compute horizontal gradient using Sobel operator.
+  gx = cv2.Sobel(imgGray, cv2.CV_32F, 1, 0, ksize=1)
+  # Compute vertical gradient using Sobel operator.
+  gy = cv2.Sobel(imgGray, cv2.CV_32F, 0, 1, ksize=1)
+  # Convert cartesian gradients to polar magnitude and angle.
+  mag, ang = cv2.cartToPolar(gx, gy, angleInDegrees=True)
+
+  # Normalize gradient angles to the range [0, 180) degrees.
+  ang = np.mod(ang, 180.0)
+
+  # Unpack cell size supplied by the caller.
+  cellH, cellW = pixelsPerCell
+  # Validate that cell dimensions are positive.
+  if (cellH <= 0 or cellW <= 0):
+    # Raise an informative error for invalid cell sizes.
+    raise ValueError("`pixelsPerCell` must be positive integers")
+
+  # Compute the number of complete cells that fit vertically.
+  nCellsY = imgGray.shape[0] // cellH
+  # Compute the number of complete cells that fit horizontally.
+  nCellsX = imgGray.shape[1] // cellW
+
+  # If the image is smaller than one cell in any direction, return zeros.
+  if ((nCellsY <= 0) or (nCellsX <= 0)):
+    # Return a zero image matching the input shape when too small.
+    return np.zeros_like(imgGray)
+
+  # Compute orientation bin width in degrees.
+  binWidth = 180.0 / float(orientations)
+
+  # Allocate histogram storage per cell and orientation bin.
+  hogCells = np.zeros((nCellsY, nCellsX, orientations), dtype=np.float32)
+
+  # Iterate over cell rows.
+  for i in range(nCellsY):
+    # Compute vertical pixel bounds for this cell.
+    y0, y1 = i * cellH, (i + 1) * cellH
+    # Iterate over cell columns.
+    for j in range(nCellsX):
+      # Compute horizontal pixel bounds for this cell.
+      x0, x1 = j * cellW, (j + 1) * cellW
+      # Extract magnitudes for the cell and flatten.
+      cellMag = mag[y0:y1, x0:x1].ravel()
+      # Extract angles for the cell and flatten.
+      cellAng = ang[y0:y1, x0:x1].ravel()
+      # Skip empty cells (should not usually occur but safe to check).
+      if (cellMag.size == 0):
+        # Continue to next cell when no pixels are present.
+        continue
+
+      # Map continuous angles into discrete bin indices.
+      bins = np.floor(cellAng / binWidth).astype(int)
+      # Clamp any out-of-range bin indices to the last bin.
+      bins[bins >= orientations] = orientations - 1
+
+      # Accumulate gradient magnitudes into the histogram bins.
+      for b, m in zip(bins, cellMag):
+        # Add the weighted vote to the corresponding bin.
+        hogCells[i, j, b] += m
+
+  # Compute L2 norm per-cell histogram for normalization.
+  norms = np.linalg.norm(hogCells, axis=2, keepdims=True)
+  # Normalize histograms with small epsilon for numerical stability.
+  hogCells = hogCells / (norms + eps)
+
+  # For visualization, collapse orientation dimension by summing magnitudes.
+  hogCellMagnitude = hogCells.sum(axis=2)  # Shape (nCellsY, nCellsX).
+
+  # Upsample cell magnitudes back to the original image resolution using kron.
+  hogImage = np.kron(hogCellMagnitude, np.ones((cellH, cellW), dtype=np.float32))
+  # Crop the upsampled image to match original dimensions.
+  hogImage = hogImage[:imgGray.shape[0], :imgGray.shape[1]]
+
+  # Compute min and max for normalization to 0..255.
+  minv, maxv = hogImage.min(), hogImage.max()
+  # Normalize to the [0,1] range when dynamic range is non-zero.
+  if (maxv - minv > 1e-8):
+    # Scale the image to [0,1].
+    hogImage = (hogImage - minv) / (maxv - minv)
+  # When no variation is present, return zeros.
+  else:
+    # Create a zero image matching hogImage shape.
+    hogImage = np.zeros_like(hogImage)
+
+  # Convert normalized float image into uint8 0..255 format.
+  hogImage = (hogImage * 255).astype(np.uint8)
+  # Return the computed HOG visualization image.
+  return hogImage
+
+
+# Define a function to compute Gabor filter bank responses for an image.
+def ComputeGaborResponses(imgGray, scales=3, orientations=4, ksize=31, sigma=None, gamma=0.5, psi=0):
+  r'''
+  Compute Gabor filter bank responses for a grayscale image.
+
+  Parameters:
+    imgGray (numpy.ndarray): Input grayscale image as a 2D NumPy array.
+    scales (int): Number of scales (wavelengths) for the Gabor filters.
+    orientations (int): Number of orientations for the Gabor filters.
+    ksize (int): Size of the Gabor kernel (must be odd).
+    sigma (float or None): Standard deviation of the Gaussian envelope. If None, a default heuristic is used.
+    gamma (float): Spatial aspect ratio of the Gabor filter.
+    psi (float): Phase offset of the Gabor filter in radians.
+
+  Returns:
+    list: A list of tuples, each containing (scaleIndex, orientationIndex, responseImage).
+  '''
+
+  # Validate input image is given.
+  if (imgGray is None):
+    # Raise error when image is not provided.
+    raise ValueError("`imgGray` is None")
+
+  # Convert input image to float32 for filtering stability.
+  imgF = imgGray.astype(np.float32)
+  # Prepare a list to hold responses.
+  responses = []
+
+  # Choose base wavelengths and compute list across scales.
+  baseLambda = 4.0
+  # Create wavelength values doubling each scale.
+  wavelengths = [baseLambda * (2 ** s) for s in range(scales)]
+
+  # Compute default sigma when not provided using a heuristic.
+  if (sigma is None):
+    # Use heuristic scaling of sigma from kernel size.
+    sigma = 0.56 * ksize  # heuristic.
+
+  # Iterate over each scale and orientation to build the filter bank.
+  for sIdx, lam in enumerate(wavelengths):
+    # Iterate through orientations for the current scale.
+    for oIdx in range(orientations):
+      # Compute filter orientation angle in radians.
+      theta = (oIdx / float(orientations)) * np.pi
+      # Build a Gabor kernel with the computed parameters.
+      kernel = cv2.getGaborKernel((ksize, ksize), sigma, theta, lam, gamma, psi, ktype=cv2.CV_32F)
+      # Filter the image with the created kernel.
+      filtered = cv2.filter2D(imgF, cv2.CV_32F, kernel)
+      # Compute absolute response to obtain magnitude-like output.
+      absResp = np.abs(filtered)
+      # Normalize the response to the 0..1 range when possible.
+      minr, maxr = absResp.min(), absResp.max()
+      # Scale to [0,1] when dynamic range exists.
+      if (maxr - minr > 1e-8):
+        # Subtract min and divide by range.
+        normResp = (absResp - minr) / (maxr - minr)
+      # Otherwise use a zero array to avoid division by zero.
+      else:
+        # Provide a zero response when there's no variation.
+        normResp = np.zeros_like(absResp)
+      # Append uint8-scaled response along with its scale and orientation indices.
+      responses.append((sIdx, oIdx, (normResp * 255).astype(np.uint8)))
+
+  # Return the list of Gabor responses.
+  return responses
+
+
+# Define a function to compute LPQ code image from a grayscale image.
+def ComputeLPQImage(imgGray, winSize=7):
+  r'''
+  Compute the Local Phase Quantization (LPQ) code image from a grayscale input image.
+
+  Parameters:
+    imgGray (numpy.ndarray): Input grayscale image as a 2D NumPy array.
+    winSize (int): Size of the local window (must be odd).
+
+  Returns:
+    numpy.ndarray: LPQ code image as a 2D NumPy array (uint8).
+  '''
+
+  # Validate provided image argument.
+  if (imgGray is None):
+    # Raise error when image is missing.
+    raise ValueError("imgGray is None")
+
+  # Ensure window size is odd to center the kernel.
+  if (winSize % 2 == 0):
+    # Raise error for even window sizes.
+    raise ValueError("winSize must be odd")
+
+  # Convert image to float32 for filter operations.
+  img = imgGray.astype(np.float32)
+  # Set local variables for window construction.
+  w = winSize
+  # Compute radius from window size.
+  radius = w // 2
+  # Build coordinate arrays for kernel creation.
+  xs = np.arange(-radius, radius + 1)
+  # Build coordinate arrays for kernel creation vertically.
+  ys = np.arange(-radius, radius + 1)
+  # Create 2D meshgrid for phase calculation.
+  X, Y = np.meshgrid(xs, ys)
+
+  # Frequency scale for LPQ kernels.
+  rho = 1.0 / float(w)
+  # Define the four short-frequency points used by LPQ.
+  freqs = [(rho, 0.0), (0.0, rho), (rho, rho), (rho, -rho)]
+
+  # Create a rectangular window function of ones.
+  window = np.ones((w, w), dtype=np.float32)
+
+  # Prepare lists for real and imaginary kernels.
+  kernelsReal = []
+  # Prepare list for imaginary part of kernels.
+  kernelsImag = []
+  # Precompute 2*pi constant.
+  twoPi = 2.0 * math.pi
+  # Construct complex-valued kernels for the chosen frequencies.
+  for (ux, uy) in freqs:
+    # Compute the phase pattern for the frequency.
+    phase = twoPi * (ux * X + uy * Y)
+    # Real part of the kernel is cosine-weighted window.
+    kReal = window * np.cos(phase)
+    # Imaginary part of the kernel is sine-weighted window.
+    kImag = window * np.sin(phase)
+    # Append kernels as float32 arrays.
+    kernelsReal.append(kReal.astype(np.float32))
+    # Append imaginary kernels as float32 arrays.
+    kernelsImag.append(kImag.astype(np.float32))
+
+  # Apply each kernel to the image using filter2D with replicate border.
+  responsesReal = []
+  # Store imaginary responses separately.
+  responsesImag = []
+  # Filter the image with each precomputed kernel pair.
+  for kR, kI in zip(kernelsReal, kernelsImag):
+    # Real response correlation.
+    r = cv2.filter2D(img, cv2.CV_32F, kR, borderType=cv2.BORDER_REPLICATE)
+    # Imag response correlation.
+    i = cv2.filter2D(img, cv2.CV_32F, kI, borderType=cv2.BORDER_REPLICATE)
+    # Append computed responses to the lists.
+    responsesReal.append(r)
+    # Append imaginary response to list.
+    responsesImag.append(i)
+
+  # Build LPQ code by thresholding real and imaginary parts at zero.
+  h, wimg = img.shape[:2]
+  # Initialize code image with zeros.
+  codeImg = np.zeros((h, wimg), dtype=np.uint8)
+  # Iterate over four frequency responses to build the 8-bit code.
+  for kIdx in range(4):
+    # Access the real component for this kernel.
+    r = responsesReal[kIdx]
+    # Access the imaginary component for this kernel.
+    i = responsesImag[kIdx]
+    # Threshold real part to create a binary bit.
+    bitReal = (r > 0).astype(np.uint8)
+    # Threshold imaginary part to create a binary bit.
+    bitImag = (i > 0).astype(np.uint8)
+    # Set the appropriate bit positions in the code image.
+    codeImg |= (bitReal << (2 * kIdx))
+    # Set the imaginary bit position in the code image.
+    codeImg |= (bitImag << (2 * kIdx + 1))
+
+  # Return the LPQ code image.
+  return codeImg
+
+
+# Define function to compute Sobel magnitude and angle maps as uint8 images.
+def ComputeSobelMaps(imgGray, ksize=3):
+  r'''
+  Compute Sobel gradient magnitude and angle maps from a grayscale image.
+
+  Parameters:
+    imgGray (numpy.ndarray): Input grayscale image as a 2D NumPy array.
+    ksize (int): Size of the Sobel kernel (must be odd and positive).
+
+  Returns:
+    tuple: A tuple containing two 2D NumPy arrays (magN, angN) as uint8 images.
+      - magN (numpy.ndarray): Gradient magnitude map (uint8).
+      - angN (numpy.ndarray): Gradient angle map (uint8), mapped to [0, 255].
+  '''
+
+  # Validate input.
+  if (imgGray is None):
+    # Raise error for missing image.
+    raise ValueError("`imgGray` is None")
+
+  # Compute horizontal Sobel gradient as float32.
+  gx = cv2.Sobel(imgGray, cv2.CV_32F, 1, 0, ksize=ksize)
+  # Compute vertical Sobel gradient as float32.
+  gy = cv2.Sobel(imgGray, cv2.CV_32F, 0, 1, ksize=ksize)
+  # Compute gradient magnitude per pixel.
+  mag = np.sqrt(gx * gx + gy * gy)
+  # Compute gradient angle in degrees and map range.
+  ang = (np.arctan2(gy, gx) * 180.0 / np.pi)  # -180..180.
+  # Fold angles into 0..180 range.
+  ang = np.mod(ang + 360.0, 180.0)  # Map to 0..180.
+
+  # Normalize magnitude map to uint8 range 0..255.
+  minv, maxv = mag.min(), mag.max()
+  # Scale when dynamic range exists.
+  if (maxv - minv > 1e-8):
+    # Convert normalized magnitude to uint8.
+    magN = ((mag - minv) / (maxv - minv) * 255.0).astype(np.uint8)
+  # Otherwise use zeros to avoid divide-by-zero.
+  else:
+    # Create zero magnitude map with same shape as input.
+    magN = np.zeros_like(imgGray, dtype=np.uint8)
+
+  # Map angle range 0..180 to 0..255 and convert to uint8.
+  angN = (ang / 180.0 * 255.0).astype(np.uint8)
+  # Return magnitude and angle uint8 maps.
+  return magN, angN
+
+
+# Define a wrapper for Canny edge detector with arguments validation.
+def ComputeCanny(imgGray, lowThresh=50, highThresh=150, apertureSize=3):
+  r'''
+  Compute Canny edge map from a grayscale image.
+
+  Parameters:
+    imgGray (numpy.ndarray): Input grayscale image as a 2D NumPy array.
+    lowThresh (int): Lower threshold for hysteresis.
+    highThresh (int): Upper threshold for hysteresis.
+    apertureSize (int): Aperture size for the Sobel operator (must be odd).
+
+  Returns:
+    numpy.ndarray: Canny edge map as a binary uint8 image.
+  '''
+  # Validate input exists.
+  if (imgGray is None):
+    # Raise error when image is missing.
+    raise ValueError("`imgGray` is None")
+
+  # Run OpenCV's Canny and return edge image.
+  edges = cv2.Canny(imgGray, lowThresh, highThresh, apertureSize=apertureSize)
+  # Return edges as an uint8 binary image.
+  return edges
+
+
+# Define function to compute local entropy using skimage if available.
+def ComputeLocalEntropy(imgGray, winSize=9):
+  r'''
+  Compute local entropy map from a grayscale image.
+
+  Parameters:
+    imgGray (numpy.ndarray): Input grayscale image as a 2D NumPy array.
+    winSize (int): Size of the local neighborhood window (must be odd).
+
+  Returns:
+    numpy.ndarray: Local entropy map as a uint8 image.
+  '''
+
+  # Validate input.
+  if (imgGray is None):
+    # Raise error when image is missing.
+    raise ValueError("`imgGray` is None")
+  # When skimage is importable use rank.entropy for entropy computation.
+  if (rank is not None and disk is not None):
+    # Ensure input is uint8 as expected by skimage.rank.
+    imgU8 = imgGray.astype(np.uint8)
+    # Compute entropy with a disk-shaped neighborhood.
+    ent = rank.entropy(imgU8, disk(winSize // 2))
+    # Normalize entropy image to 0..255 for compatibility.
+    minv, maxv = ent.min(), ent.max()
+    # Scale when dynamic range exists.
+    if (maxv - minv > 1e-8):
+      # Convert to uint8 after normalization.
+      entN = ((ent - minv) / (maxv - minv) * 255.0).astype(np.uint8)
+    # Otherwise return zeros matching input dtype.
+    else:
+      # Return zero entropy map when no variation exists.
+      entN = np.zeros_like(imgU8)
+    # Return the normalized entropy map.
+    return entN
+  # Fallback path when skimage is not available.
+  else:
+    # Convert input to float for local variance computation.
+    imgF = imgGray.astype(np.float32)
+    # Create a uniform box kernel of size winSize x winSize.
+    kernel = np.ones((winSize, winSize), dtype=np.float32)
+    # Compute local mean using normalized kernel.
+    mean = cv2.filter2D(imgF, cv2.CV_32F, kernel / (winSize * winSize), borderType=cv2.BORDER_REPLICATE)
+    # Compute local mean of squared values for variance estimation.
+    meanSq = cv2.filter2D(imgF * imgF, cv2.CV_32F, kernel / (winSize * winSize), borderType=cv2.BORDER_REPLICATE)
+    # Estimate variance from mean of squares minus square of mean.
+    var = meanSq - mean * mean
+    # Ensure numerical stability by clipping negative small values to zero.
+    var[var < 0] = 0
+    # Compute standard deviation from variance.
+    std = np.sqrt(var)
+    # Normalize std map to 0..255 for visualization.
+    minv, maxv = std.min(), std.max()
+    # Scale when dynamic range exists.
+    if (maxv - minv > 1e-8):
+      # Convert normalized std map to uint8.
+      stdN = ((std - minv) / (maxv - minv) * 255.0).astype(np.uint8)
+    # Otherwise return zero map of correct dtype.
+    else:
+      # Return zeros when no variation exists.
+      stdN = np.zeros_like(imgGray, dtype=np.uint8)
+    # Return the fallback standard-deviation map.
+    return stdN
+
+
+# Define a function to compute signed or unsigned distance transform from a mask.
+def ComputeDistanceTransform(maskImg, signed=True):
+  r'''
+  Compute signed or unsigned distance transform from a binary mask image.
+
+  Parameters:
+    maskImg (numpy.ndarray): Input binary mask image as a 2D NumPy array.
+    signed (bool): Flag to compute signed distance (True) or unsigned distance (False).
+
+  Returns:
+    numpy.ndarray: Distance transform image as a uint8 image (0..255).
+  '''
+
+  # Validate mask input.
+  if (maskImg is None):
+    # Raise error when mask is missing.
+    raise ValueError("`maskImg` is None")
+
+  # Threshold mask to binary using a low threshold of 1.
+  _, binMask = cv2.threshold(maskImg, 1, 255, cv2.THRESH_BINARY)
+  # Compute distance transform inside the mask using Euclidean distance.
+  distInside = cv2.distanceTransform(binMask, cv2.DIST_L2, 5).astype(np.float32)
+  # When signed distance is requested, compute outside distances too.
+  if (signed):
+    # Compute inverse mask for outside distances.
+    invMask = cv2.bitwise_not(binMask)
+    # Compute distance transform on the inverted mask.
+    distOutside = cv2.distanceTransform(invMask, cv2.DIST_L2, 5).astype(np.float32)
+    # Compute signed distance as inside minus outside.
+    signedDist = distInside - distOutside
+    # Use signed distances as the output.
+    imgOut = signedDist
+  # For unsigned case just use inside distances.
+  else:
+    # Use inside distances for unsigned output.
+    imgOut = distInside
+  # Normalize the distance map to 0..255 for visualization.
+  minv, maxv = imgOut.min(), imgOut.max()
+  # Scale when dynamic range exists.
+  if (maxv - minv > 1e-8):
+    # Convert normalized distances to uint8.
+    imgN = ((imgOut - minv) / (maxv - minv) * 255.0).astype(np.uint8)
+  # Otherwise return zeros with same shape as mask.
+  else:
+    # Provide zero image when no variation exists.
+    imgN = np.zeros_like(maskImg, dtype=np.uint8)
+  # Return the visualized distance map.
+  return imgN
+
+
+# Compute CLAHE enhanced image with given parameters.
+def ComputeCLAHE(imgGray, clipLimit=2.0, tileGridSize=(8, 8)):
+  r'''
+  Compute CLAHE (Contrast Limited Adaptive Histogram Equalization) enhanced image.
+
+  Parameters:
+    imgGray (numpy.ndarray): Input grayscale image as a 2D NumPy array.
+    clipLimit (float): Threshold for contrast limiting.
+    tileGridSize (tuple): Size of grid for histogram equalization (height, width).
+
+  Returns:
+    numpy.ndarray: CLAHE enhanced image as a 2D NumPy array (uint8).
+  '''
+
+  # Validate input image.
+  if (imgGray is None):
+    # Raise error when image is missing.
+    raise ValueError("`imgGray` is None")
+  # Create CLAHE object with provided clip limit and tile grid.
+  clahe = cv2.createCLAHE(clipLimit=clipLimit, tileGridSize=tileGridSize)
+  # Apply CLAHE to the grayscale image.
+  out = clahe.apply(imgGray)
+  # Return the contrast-enhanced image.
+  return out
 
 
 # ===========================================================================================
