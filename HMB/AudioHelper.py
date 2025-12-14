@@ -532,7 +532,7 @@ class AudiosHelper(object):
     # Return result.
     return np.mean(librosa.feature.zero_crossing_rate(y=y).T, axis=0)
 
-  def GenerateScaledMelSpectrogram(self, y, sr, hopLength=512, nFFT=2048):
+  def GenerateScaledMelSpectrogram(self, y, sr, hopLength=512, nFFT=2048, numMels=128):
     r'''
     Create a log-scaled Mel spectrogram (dB) suitable for visualization or model input.
 
@@ -541,6 +541,7 @@ class AudiosHelper(object):
       sr (int): Sampling rate.
       hopLength (int): Hop length for STFT.
       nFFT (int): FFT size.
+      numMels (int): Number of Mel bands to generate.
 
     Returns:
       numpy.ndarray: Mel spectrogram in decibels (shape: n_mels x frames).
@@ -552,7 +553,7 @@ class AudiosHelper(object):
     '''
 
     # Compute mel spectrogram using librosa.
-    mel = librosa.feature.melspectrogram(y=y, sr=sr, hop_length=hopLength, n_fft=nFFT)
+    mel = librosa.feature.melspectrogram(y=y, sr=sr, hop_length=hopLength, n_fft=nFFT, n_mels=numMels)
     # Convert the mel spectrogram to magnitude.
     spectrogram = np.abs(mel)
     # Convert power spectrogram to decibel units.
@@ -1263,3 +1264,41 @@ class AudiosHelper(object):
     # Return the assembled feature dictionary.
     # Return result.
     return R
+
+  def GetMelImage(self, y, sr=16000, numMels=128, hopLength=512, nFFT=2048, outFrames=128, axisLast=True):
+    r'''
+    Generate a Mel spectrogram image (2D numpy array) from audio time series.
+
+    Parameters:
+      y (numpy.ndarray): Audio time series.
+      sr (int): Sampling rate.
+      numMels (int): Number of Mel bands.
+      hopLength (int): Hop length for STFT.
+      nFFT (int): FFT size.
+      outFrames (int): Desired number of output frames (time dimension).
+
+    Returns:
+      numpy.ndarray: Mel spectrogram image with shape (numMels, outFrames, 3) if axisLast is True, else (3, numMels, outFrames).
+    '''
+
+    # Generate Mel spectrogram in dB.
+    melDB = self.GenerateScaledMelSpectrogram(y, sr, hopLength, nFFT, numMels)
+
+    if (melDB.shape[1] < outFrames):
+      # Pad with zeros if there are fewer frames than outFrames.
+      padWidth = outFrames - melDB.shape[1]
+      melDB = np.pad(melDB, ((0, 0), (0, padWidth)), mode="constant", constant_values=(melDB.min(),))
+    elif (melDB.shape[1] > outFrames):
+      # Truncate to outFrames if there are more frames.
+      melDB = melDB[:, :outFrames]
+
+    delta = librosa.feature.delta(melDB)
+    delta2 = librosa.feature.delta(melDB, order=2)
+    # Stack the Mel spectrogram and its deltas to create a 3-channel image.
+    melImage = np.stack([melDB, delta, delta2], axis=-1)
+
+    # Normalize the image to zero mean and unit variance.
+    melImage = (melImage - np.mean(melImage)) / np.std(melImage)
+
+    # Return the Mel spectrogram image.
+    return melImage
