@@ -3,9 +3,9 @@ shutup==0.2.0
 torch==2.7.1+cu128
 torchvision==0.22.1+cu128
 torchaudio==2.7.1+cu128
-tensorflow==2.10.1
-keras==2.10.0
-tensorboard==2.10.1
+tensorflow
+keras
+tensorboard
 numpy==1.26.4
 matplotlib==3.10.6
 scikit-learn==1.6.1
