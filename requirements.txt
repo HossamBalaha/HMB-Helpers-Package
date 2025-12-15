@@ -53,7 +53,7 @@ tabula-py==2.10.0
 jpype1==1.6.0
 grad-cam==1.5.5
 pydicom==3.0.1
-ptitprince==0.2.7
+ptitprince==0.3.1
 squarify==0.4.4
 plotly==6.2.0
 kaleido==1.1.0
