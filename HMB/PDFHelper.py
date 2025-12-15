@@ -181,6 +181,9 @@ def SplitPDF(filePath, startPage, endPage, outputPath):
   '''
 
   doc = fitz.open(filePath)
+  if ((startPage < 0) or (endPage < 0) or (startPage >= endPage) or (startPage >= doc.page_count)):
+    doc.close()
+    raise IndexError("Invalid page range.")
   newDoc = fitz.open()
   # Insert the specified range of pages into the new PDF.
   for i in range(startPage, min(endPage, doc.page_count)):
@@ -239,10 +242,17 @@ def RotatePDFPages(filePath, rotation, outputPath, pages=None):
     pages (list or None): List of 0-based page indices to rotate. If None, rotate all.
   '''
 
+  # Validate rotation.
+  if (rotation not in (90, 180, 270)):
+    raise ValueError("Invalid rotation angle.")
   doc = fitz.open(filePath)
-  # If no pages specified, rotate all pages.
   if (pages is None):
     pages = list(range(doc.page_count))
+  # Validate pages.
+  for p in pages:
+    if (p < 0 or p >= doc.page_count):
+      doc.close()
+      raise IndexError("Page index out of range.")
   for i in pages:
     page = doc.load_page(i)
     page.set_rotation(rotation)
@@ -346,7 +356,12 @@ def AddPDFBookmark(filePath, pageNum, title, outputPath):
   '''
 
   doc = fitz.open(filePath)
-  doc.set_toc(doc.get_toc() + [[1, title, pageNum]])
+  if ((pageNum < 0) or (pageNum >= doc.page_count)):
+    doc.close()
+    raise IndexError("Page number out of range.")
+  toc = doc.get_toc() or []
+  toc.append([1, title, pageNum])
+  doc.set_toc(toc)
   doc.save(outputPath)
   doc.close()
 
@@ -384,9 +399,13 @@ def HighlightPDFText(filePath, searchText, outputPath, color=(1, 1, 0)):
     searchText (str): Text to highlight.
     outputPath (str): Path to save the highlighted PDF.
     color (tuple): RGB color tuple for highlight (default yellow).
+
+  Returns:
+    bool: True if any text was highlighted, False otherwise.
   '''
 
   doc = fitz.open(filePath)
+  anyHighlighted = False
   # Iterate through each page and search for the text.
   for page in doc:
     areas = page.search_for(searchText)
@@ -394,8 +413,11 @@ def HighlightPDFText(filePath, searchText, outputPath, color=(1, 1, 0)):
       annot = page.add_highlight_annot(area)
       annot.set_colors(stroke=color)
       annot.update()
+      anyHighlighted = True
+  # Always save output even if no matches.
   doc.save(outputPath)
   doc.close()
+  return anyHighlighted
 
 
 # Define a function to encrypt the PDF with a password.
@@ -443,7 +465,7 @@ def ExtractPDFFonts(filePath):
     filePath (str): Path to the PDF file.
 
   Returns:
-    set: Set of font names.
+    list: List of font names.
   '''
 
   doc = fitz.open(filePath)
@@ -453,7 +475,7 @@ def ExtractPDFFonts(filePath):
     for font in page.get_fonts():
       fonts.add(font[3])
   doc.close()
-  return fonts
+  return sorted(list(fonts))
 
 
 # Main block for example usage.

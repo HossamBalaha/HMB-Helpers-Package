@@ -120,7 +120,20 @@ def SaveGradCamsForSamples(
 
   from HMB.ImagesHelper import OverlayHeatmapOnImage
 
-  os.makedirs(outFolder, exist_ok=True)
+  # Input validation.
+  if ((model is None) or (imgPaths is None) or (sampleIndices is None) or (outFolder is None)):
+    raise ValueError("Model, imgPaths, sampleIndices, and outFolder are required.")
+  if (not isinstance(imgPaths, list) or (len(imgPaths) == 0)):
+    raise ValueError("imgPaths must be a non-empty list.")
+  if (not isinstance(outFolder, str) or (len(outFolder.strip()) == 0)):
+    raise ValueError("Invalid output folder.")
+  # Raise if path exists and is a file, or cannot be created.
+  if (os.path.exists(outFolder) and not os.path.isdir(outFolder)):
+    raise ValueError("Output path is not a directory.")
+  try:
+    os.makedirs(outFolder, exist_ok=True)
+  except Exception:
+    raise ValueError("Failed to create output folder.")
 
   for idx in sampleIndices:
     imgPath = imgPaths[int(idx)]

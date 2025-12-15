@@ -2,7 +2,7 @@
 import os  # Import os for file path operations.
 import cv2, PIL  # Import OpenCV and PIL for image processing.
 import numpy as np  # Import numpy for numerical operations.
-from PIL import Image # Import Image module from PIL for image handling.
+from PIL import Image  # Import Image module from PIL for image handling.
 import matplotlib.pyplot as plt  # Import matplotlib for plotting.
 
 
@@ -245,12 +245,11 @@ def ExtractMultipleObjectsFromROI(
     # Add cropped ROI to the collection of extracted regions.
     regions.append(cropped)
 
-  if (sortByX):  # Check if sorting by x-coordinate is requested.
-    # Sort extracted regions by their x-coordinate to maintain left-to-right order.
-    regions = sorted(regions, key=lambda x: cv2.boundingRect(x)[0], reverse=False)
-
-  # Return the list of extracted regions for further processing.
-  return regions
+  # After collecting regions, resize each to targetSize
+  resized = [cv2.resize(r, targetSize, interpolation=cv2.INTER_CUBIC) for r in regions]
+  if (sortByX):
+    resized = sorted(resized, key=lambda x: cv2.boundingRect(x)[0] if x.ndim == 2 else 0, reverse=False)
+  return resized
 
 
 def GetEmptyPercentage(img, shape=(256, 256), inverse=False):
@@ -267,8 +266,14 @@ def GetEmptyPercentage(img, shape=(256, 256), inverse=False):
   '''
 
   # Convert the input image to grayscale.
-  imgGray = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2GRAY)
-
+  if (len(img.shape) == 2):
+    imgGray = img.copy()
+  else:
+    imgGray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+  # Convert float images to uint8 range [0,255] for thresholding.
+  if (imgGray.dtype == np.float32 or imgGray.dtype == np.float64):
+    # Assume image is in [0,1] range; scale to [0,255]
+    imgGray = (imgGray * 255.0).clip(0, 255).astype(np.uint8)
   # Resize the grayscale image to the specified shape if needed.
   if ((shape is not None) and (imgGray.shape[0] != shape[0]) or (imgGray.shape[1] != shape[1])):
     imgGray = cv2.resize(imgGray, shape, interpolation=cv2.INTER_CUBIC)
@@ -307,7 +312,10 @@ def GetEmptyPercentageHistogram(img, shape=(256, 256), inverse=False, thresholdL
   '''
 
   # Convert the input image to grayscale.
-  imgGray = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2GRAY)
+  if (len(np.array(img).shape) == 2):
+    imgGray = np.array(img).copy()
+  else:
+    imgGray = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2GRAY)
 
   # Resize the grayscale image to the specified shape if needed.
   if ((shape is not None) and (imgGray.shape[0] != shape[0]) or (imgGray.shape[1] != shape[1])):
@@ -349,8 +357,18 @@ def ExtractLargestContour(img):
     tuple: Masked image, contour, mask, and visualization.
   '''
 
-  # Convert the input RGB image to grayscale.
-  imgGray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+  # Support grayscale images directly
+  if (len(img.shape) == 2):
+    imgGray = img.copy()
+    imgColor = cv2.cvtColor(imgGray, cv2.COLOR_GRAY2RGB)
+  else:
+    imgColor = img.copy()
+    imgGray = cv2.cvtColor(imgColor, cv2.COLOR_RGB2GRAY)
+  # If the image is completely black, there is no meaningful contour.
+  if (np.count_nonzero(imgGray) == 0):
+    mask = np.zeros(imgGray.shape, np.uint8)
+    draw = imgColor.copy()
+    return imgColor, None, mask, draw
   # Apply Gaussian blur to reduce noise using a 5x5 kernel.
   imgGray = cv2.GaussianBlur(imgGray, (5, 5), 0)
   # Apply Otsu's thresholding to create a binary image.
@@ -359,6 +377,10 @@ def ExtractLargestContour(img):
   contours, _ = cv2.findContours(
     imgThresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
   )
+  if (len(contours) == 0):
+    mask = np.zeros(imgGray.shape, np.uint8)
+    draw = imgColor.copy()
+    return imgColor, None, mask, draw
   # Sort the contours by area in descending order.
   contours = sorted(contours, key=cv2.contourArea, reverse=True)[:]
   # Select the largest contour.
@@ -368,7 +390,7 @@ def ExtractLargestContour(img):
   # Draw the contour on the mask.
   cv2.drawContours(mask, [contour], -1, 255, -1)
   # Apply the mask to the original image.
-  img = cv2.bitwise_and(img, img, mask=mask)
+  img = cv2.bitwise_and(imgColor, imgColor, mask=mask)
   # Fill any black regions in the masked image with white.
   img[img == 0] = 255
   # Draw the contour on a copy of the image for visualization.
@@ -765,22 +787,24 @@ def MinMaxNormalization(image, mapToUint8=True):
     numpy.ndarray: The normalized image. If mapToUint8 is True, the output will be of type uint8.
   '''
 
+  arr = np.array(image)
+  if (arr.ndim < 2):
+    raise ValueError("Invalid image input for MinMaxNormalization: expected 2D/3D array.")
   # Calculate the delta between the maximum and minimum pixel intensities.
-  delta = image.max() - image.min()
-
-  # Normalize the image to range source 0 to 1.
-  normSim = (image - image.min()) / delta
+  delta = arr.max() - arr.min()
+  if (delta == 0):
+    # Degenerate constant image, return safe mapping
+    normSim = np.zeros_like(arr, dtype=np.float32)
+  else:
+    # Normalize the image to range source 0 to 1.
+    normSim = (arr - arr.min()) / float(delta)
 
   if (not mapToUint8):
-    return normSim
+    return normSim.astype(np.float32)
 
   # Scale the image to range source 0 to 255.
   normSim = normSim * 255.0
-
-  # Convert the image to unsigned 8-bit integers.
-  image = normSim.astype(np.uint8)
-
-  return image
+  return normSim.astype(np.uint8)
 
 
 def CalculateCDF(image):
@@ -796,8 +820,12 @@ def CalculateCDF(image):
       - bins (numpy.ndarray): The bin values as integers.
   '''
 
+  # Validate input shape: expect 2D or 3D image arrays
+  arr = np.array(image)
+  if (arr.ndim < 2 or arr.size == 0):
+    raise ValueError("Invalid image input for CDF: expected non-empty 2D/3D array.")
   # Flatten the image to a 1D array.
-  flattened = image.flatten()
+  flattened = arr.flatten()
 
   # Get the maximum and minimum pixel intensities.
   maxInt = int(flattened.max())
@@ -807,7 +835,7 @@ def CalculateCDF(image):
   # The number of bins is determined by the maximum value in the image.
   histogram, bins = np.histogram(
     flattened,  # Source image.
-    bins=maxInt,  # Number of bins.
+    bins=max(1, maxInt),  # Number of bins.
     range=[minInt, maxInt],  # Range of values.
   )
 
@@ -815,7 +843,7 @@ def CalculateCDF(image):
   cdf = histogram.cumsum()
 
   # Normalize the cumulative sum to range source 0 to 1.
-  cdfNormalized = cdf / cdf.max()
+  cdfNormalized = cdf / cdf.max() if (cdf.max() != 0) else cdf
 
   # Return the normalized CDF and the bins as integers.
   return cdfNormalized, bins.astype(int)

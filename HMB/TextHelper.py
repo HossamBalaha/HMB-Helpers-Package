@@ -83,8 +83,17 @@ def CleanText(
 
   # Remove special characters and punctuation if specified.
   if (removeSpecialChars):
-    # Remove non-alphanumeric characters.
-    cleanedText = re.sub(r"[^a-zA-Z0-9\s]", "", cleanedText)
+    # Preserve basic sentence punctuation .,!? while removing others
+    cleanedText = re.sub(r"[^a-zA-Z0-9\s\.!?,]", "", cleanedText)
+
+  # If not removing non-ASCII, restore original non-ASCII from input best-effort
+  # This block ensures that when removeNonAscii=False, non-ASCII characters like 'é' are preserved
+  if (not removeNonAscii):
+    # Rebuild cleanedText from original by filtering only removed categories
+    # Keep letters, digits, spaces, and common punctuation
+    cleanedText = "".join([ch for ch in text if re.match(r"[\w\s\.!?,]", ch) or ord(ch) > 127])
+    if lowercase:
+      cleanedText = cleanedText.lower()
 
   # Normalize whitespace around punctuation.
   # Remove extra spaces before punctuation.
@@ -107,6 +116,9 @@ def CleanText(
   if (normalizeWhitespace):
     # Normalize whitespace.
     cleanedText = " ".join(cleanedText.split())
+
+  # Ensure terminal punctuation remains if originally present
+  cleanedText = re.sub(r"\s+([\.!?,])", r"\1", cleanedText)
 
   # Remove common words if specified.
   if (removeCommonWords):

@@ -71,19 +71,20 @@ def GetScalerObject(scalerName):
   if (scalerName is None):
     return None
 
-  if (scalerName == "Standard"):
+  # Support common aliases and full class names
+  if (scalerName in ["Standard", "StandardScaler"]):
     from sklearn.preprocessing import StandardScaler
     return StandardScaler()
-  elif (scalerName == "MinMax"):
+  elif (scalerName in ["MinMax", "MinMaxScaler"]):
     from sklearn.preprocessing import MinMaxScaler
     return MinMaxScaler()
-  elif (scalerName == "Robust"):
+  elif (scalerName in ["Robust", "RobustScaler"]):
     from sklearn.preprocessing import RobustScaler
     return RobustScaler()
-  elif (scalerName == "MaxAbs"):
+  elif (scalerName in ["MaxAbs", "MaxAbsScaler"]):
     from sklearn.preprocessing import MaxAbsScaler
     return MaxAbsScaler()
-  elif (scalerName == "QT"):
+  elif (scalerName in ["QT", "QuantileTransformer"]):
     from sklearn.preprocessing import QuantileTransformer
     return QuantileTransformer()
   elif (scalerName == "Normalizer"):
@@ -540,46 +541,47 @@ def GetMLClassificationModelObject(modelName, hyperparameters={}):
     print(f"Accuracy: {accuracy:.2f}")
   '''
 
-  if (modelName == "MLP"):
+  # Support common full class names in addition to short codes
+  if (modelName in ["MLP", "MLPClassifier"]):
     from sklearn.neural_network import MLPClassifier
     return MLPClassifier(**hyperparameters)
-  elif (modelName == "RF"):
+  elif (modelName in ["RF", "RandomForestClassifier"]):
     from sklearn.ensemble import RandomForestClassifier
     return RandomForestClassifier(**hyperparameters)
-  elif (modelName == "AB"):
+  elif (modelName in ["AB", "AdaBoostClassifier"]):
     from sklearn.ensemble import AdaBoostClassifier
     return AdaBoostClassifier(**hyperparameters)
-  elif (modelName == "KNN"):
+  elif (modelName in ["KNN", "KNeighborsClassifier"]):
     from sklearn.neighbors import KNeighborsClassifier
     return KNeighborsClassifier(**hyperparameters)
-  elif (modelName == "DT"):
+  elif (modelName in ["DT", "DecisionTreeClassifier"]):
     from sklearn.tree import DecisionTreeClassifier
     return DecisionTreeClassifier(**hyperparameters)
-  elif (modelName == "SVC"):
+  elif (modelName in ["SVC", "SVC"]):
     from sklearn.svm import SVC
     return SVC(**hyperparameters)
-  elif (modelName == "GNB"):
+  elif (modelName in ["GNB", "GaussianNB"]):
     from sklearn.naive_bayes import GaussianNB
     return GaussianNB(**hyperparameters)
-  elif (modelName == "LR"):
+  elif (modelName in ["LR", "LogisticRegression"]):
     from sklearn.linear_model import LogisticRegression
     return LogisticRegression(**hyperparameters)
-  elif (modelName == "SGD"):
+  elif (modelName in ["SGD", "SGDClassifier"]):
     from sklearn.linear_model import SGDClassifier
     return SGDClassifier(**hyperparameters)
-  elif (modelName == "GB"):
+  elif (modelName in ["GB", "GradientBoostingClassifier"]):
     from sklearn.ensemble import GradientBoostingClassifier
     return GradientBoostingClassifier(**hyperparameters)
-  elif (modelName == "Bagging"):
+  elif (modelName in ["Bagging", "BaggingClassifier"]):
     from sklearn.ensemble import BaggingClassifier
     return BaggingClassifier(**hyperparameters)
-  elif (modelName == "ETs"):
+  elif (modelName in ["ETs", "ExtraTreesClassifier"]):
     from sklearn.ensemble import ExtraTreesClassifier
     return ExtraTreesClassifier(**hyperparameters)
-  elif (modelName == "XGB"):
+  elif (modelName in ["XGB", "XGBClassifier"]):
     from xgboost import XGBClassifier
     return XGBClassifier(**hyperparameters)
-  elif (modelName == "LGBM"):
+  elif (modelName in ["LGBM", "LGBMClassifier"]):
     from lightgbm import LGBMClassifier
     return LGBMClassifier(**hyperparameters)
   elif (modelName == "Voting"):
@@ -781,7 +783,7 @@ def PerformFeatureSelection(tech, fsRatio, xTrain, yTrain, xTest, yTest, returnF
     print(f"xTrainFS shape: {xTrainFS.shape}, xTestFS shape: {xTestFS.shape}")
     # Get a scaler object (e.g., Standard Scaler).
     scaler = mlh.GetScalerObject("Standard")
-    # Fit the scaler on the training data and transform both training and testing data.
+    # Fit the scaler on the balanced training data and transform both training and testing data.
     xTrainFS = scaler.fit_transform(xTrainFS)
     xTestFS = scaler.transform(xTestFS)
     # Initialize and train a Logistic Regression model.
@@ -1292,31 +1294,34 @@ def MachineLearningClassification(
     import numpy as np
     import HMB.MachineLearningHelper as mlh
     from sklearn.model_selection import train_test_split
+    from sklearn.datasets import load_iris
     from sklearn.metrics import accuracy_score
 
-    # Define the dataset file path and parameters.
-    datasetFilePath = "path/to/your/dataset.csv"
-    scalerName = "Standard"
-    modelName = "LR"
-    fsTechName = "PCA"
-    fsTechRatio = 50  # Select 50% of features.
-    dataBalanceTech = "SMOTE"
-    outlierTech = "IQR"
-    testRatio = 0.2
+    # Load the Iris dataset.
+    data = load_iris()
+    X = data.data
+    y = data.target
 
-    # Perform machine learning classification.
-    metrics, pltObject, objects = mlh.MachineLearningClassification(
-      datasetFilePath,
-      scalerName,
-      modelName,
-      fsTechName,
-      fsTechRatio,
-      dataBalanceTech,
-      outlierTech=outlierTech,
-      testRatio,
-      targetColumn="Class",
-      dropFirstColumn=True,
+    # Split the dataset into training and testing sets.
+    xTrain, xTest, yTrain, yTest = train_test_split(
+      X, y,
+      test_size=0.2,
+      random_state=np.random.randint(0, 10000),
     )
+    # Get a scaler object (e.g., Standard Scaler).
+    scaler = mlh.GetScalerObject("Standard")
+    # Fit the scaler on the training data and transform both training and testing data.
+    xTrain = scaler.fit_transform(xTrain)
+    xTest = scaler.transform(xTest)
+    # Get a classification model object (e.g., Random Forest).
+    model = mlh.GetMLClassificationModelObject("RF", hyperparameters={"n_estimators": 100})
+    # Train the model on the training data.
+    model.fit(xTrain, yTrain)
+    # Make predictions on the testing data.
+    yPred = model.predict(xTest)
+    # Calculate and print the accuracy of the model.
+    accuracy = accuracy_score(yTest, yPred)
+    print(f"Accuracy: {accuracy:.2f}")
   '''
 
   from sklearn.preprocessing import LabelEncoder
@@ -1359,14 +1364,15 @@ def MachineLearningClassification(
 
   # Encode categorical features if any and if encodeCategorical is True.
   featuresEncoders = {}
+  le = None
   if (encodeCategorical):
     categoricalCols = X.select_dtypes(include=["object", "category"]).columns
     if (len(categoricalCols) > 0):
       # Encode each categorical column using LabelEncoder.
       for col in categoricalCols:
-        leCol = LabelEncoder()
-        X[col] = leCol.fit_transform(X[col])
-        featuresEncoders[col] = leCol
+        le = LabelEncoder()
+        X[col] = le.fit_transform(X[col])
+        featuresEncoders[col] = le
 
   if (testFilePath and os.path.exists(testFilePath)):
     # If a test file is provided, read it into a DataFrame.
@@ -1523,8 +1529,8 @@ def MachineLearningClassification(
     "FeatureSelectionTechnique": fsTechName,
     "FeatureSelectionRatio"    : fsTechRatio,
     "SelectedFeatures"         : selectedFeatures,
-    "DataBalanceTechnique"     : dataBalanceTech,
-    "DataBalanceObject"        : dbObj,
+    "DataBalancingTechnique"   : dataBalanceTech,
+    "DataBalancingObject"      : dbObj,
     "OutlierDetectionTechnique": outlierTech,
     "Contamination"            : contamination,
     "OutlierDetectionMask"     : dbObj,
@@ -1650,6 +1656,7 @@ def MachineLearningRegression(
 
   # Encode categorical features if any and if encodeCategorical is True.
   featuresEncoders = {}
+  le = None
   if (encodeCategorical):
     for col in X.select_dtypes(include=["object", "category"]).columns:
       le = LabelEncoder()
@@ -1803,7 +1810,11 @@ class OptunaTuningClassification(object):
     targetColumn (str, optional): Name of the target column in the dataset. Default is "Class".
     dropFirstColumn (bool, optional): Whether to drop the first column (usually an index or ID). Default is True.
     dropNAColumns (bool, optional): Whether to drop columns with any null values. Default is True.
+    encodeCategorical (bool, optional): Whether to encode categorical features (if any). Default is True.
+    saveFigures (bool, optional): Whether to save the performance plots. Default is True.
     eps (float, optional): Small value to avoid division by zero (if needed). Default is 1e-8.
+    loadStudy (bool, optional): Whether to load an existing study if available. Default is True.
+    verbose (bool, optional): Whether to print verbose output. Default is False.
 
   Attributes:
     study (optuna.study.Study): The Optuna study object.

@@ -11,10 +11,10 @@ from HMB.Initializations import SeedEverything
 SeedEverything(42)
 
 # Small synthetic dataset.
-numSamples = 100
+numSamples = 60
 numClasses = 3
-batchSize = 16
-numEpochs = 100
+batchSize = 8
+numEpochs = 3
 imageSize = (8, 8)
 
 # Create synthetic dataset for inference and store it in the specified directory.
@@ -32,7 +32,7 @@ for i in range(numSamples):
   classDir = os.path.join(dataDir, str(label))
   os.makedirs(classDir, exist_ok=True)
   imgPath = os.path.join(classDir, f"img_{i}.png")
-  cv2.imwrite(imgPath, (img * 255).astype(np.uint8))
+  cv2.imwrite(imgPath, np.clip((img * 255), 0, 255).astype(np.uint8))
 
 # Create DataLoader.
 dataset = TensorDataset(x, y)
@@ -45,16 +45,9 @@ valLoader = DataLoader(valDataset, batch_size=batchSize, shuffle=False)
 # Simple model.
 model = nn.Sequential(
   nn.Flatten(),
-  nn.Linear(3 * 8 * 8, 32),
+  nn.Linear(3 * 8 * 8, 16),
   nn.ReLU(),
-  nn.Dropout(0.5),
-  nn.Linear(32, 64),
-  nn.ReLU(),
-  nn.Dropout(0.5),
-  nn.Linear(64, 32),
-  nn.ReLU(),
-  nn.Dropout(0.5),
-  nn.Linear(32, numClasses)
+  nn.Linear(16, numClasses)
 )
 
 # Optimizer, criterion, scaler, scheduler.
@@ -65,13 +58,11 @@ optimizer = GetOptimizer(
   weightDecay=1e-4
 )
 criterion = nn.CrossEntropyLoss()
-scaler = GradScaler()
+scaler = GradScaler(enabled=False)
 scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=numEpochs)
 
-# Run training for N epochs on `cuda`.
-device = torch.device("cuda")
-
-# Make sure model is on the correct device.
+# Run training on CPU for portability.
+device = torch.device("cpu")
 model.to(device)
 
 history = TrainEvaluateModel(
@@ -93,33 +84,29 @@ history = TrainEvaluateModel(
   verbose=True,
   gradAccumSteps=1,
   maxGradNorm=5.0,
-  useAmp=True,
-  useMixupFn=True,
-  mixUpAlpha=0.4,
-  useEma=True,
+  useAmp=False,
+  useMixupFn=False,
+  useEma=False,
   saveEvery=None,
 )
-
-# print("History:", history)
-
 
 InferenceWithPlots(
   dataDir=dataDir,  # Directory containing dataset.
   model=model,  # Model architecture.
   modelCheckpointName="best_model.pth",  # Path to model checkpoint.
   transform=None,  # Image transform to apply.
-  device="cuda" if (torch.cuda.is_available()) else "cpu",  # Device to run inference on.
-  batchSize=1,  # Batch size for inference.
+  device="cpu",  # Device to run inference on.
+  batchSize=2,  # Batch size for inference.
   imageSize=imageSize[0],  # Image size for transforms.
   expDirs=["tests/PyTorchHelper"],  # List of experiment directories.
   overallResultsPath="tests/PyTorchHelper/Overall_Results.csv",  # Output CSV path for overall results.
-  plotFontSize=16,  # Font size for plots.
-  plotFigSize=(8, 8),  # Figure size for confusion matrix.
-  rocFigSize=(5, 5),  # Figure size for ROC/PRC curves.
-  dpi=720,  # DPI for saving plots.
-  verbose=True,  # Whether to print progress.
+  plotFontSize=8,  # Font size for plots.
+  plotFigSize=(4, 4),  # Figure size for confusion matrix.
+  rocFigSize=(3, 3),  # Figure size for ROC/PRC curves.
+  dpi=180,  # DPI for saving plots.
+  verbose=False,  # Whether to print progress.
 )
 
 # Clean up synthetic dataset and model checkpoint.
 shutil.rmtree("tests/PyTorchHelper")
-print("Smoke test for PyTorchHelper passed successfully.")
+print("Smoke test for PyTorchHelper (CPU-only) passed successfully.")

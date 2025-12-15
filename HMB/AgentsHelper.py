@@ -115,7 +115,9 @@ class QAgent(object):
       int: Index of the action with maximal Q-value for the state. Ties are resolved by numpy.argmax (first occurrence).
     '''
 
-    # Return the index of the maximum Q-value for the provided state.
+    # Clip out-of-range state index to last valid.
+    if ((state < 0) or (state >= self.qTable.shape[0])):
+      state = min(max(state, 0), self.qTable.shape[0] - 1)
     return np.argmax(self.qTable[state, :])
 
 

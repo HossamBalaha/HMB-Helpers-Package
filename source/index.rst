@@ -82,6 +82,7 @@ Quickstart
    AttentionMapsHelper
    AudioHelper
    CompressionsHelper
+   DataAugmentationHelper
    EmbeddingsToTextHelper
    ExplainabilityHelper
    HandCraftedFeatures

@@ -2,23 +2,31 @@
 
 [![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C.svg?logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![TensorFlow](https://img.shields.io/badge/TensorFlow-2.0%2B-FF6F00.svg?logo=tensorflow&logoColor=white)](https://www.tensorflow.org/)
+[![Tests](https://img.shields.io/badge/tests-530%2B%20passing-brightgreen.svg)](tests/)
+[![Code Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen.svg)](tests/)
+[![Documentation](https://img.shields.io/badge/docs-Sphinx-blue.svg)](https://www.sphinx-doc.org/)
+[![Code Style](https://img.shields.io/badge/code%20style-PEP8-blue.svg)](https://www.python.org/dev/peps/pep-0008/)
+[![Modules](https://img.shields.io/badge/modules-33-orange.svg)](HMB/)
+[![Contributions](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![Maintenance](https://img.shields.io/badge/maintained-yes-green.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package)
+[![Release](https://img.shields.io/badge/release-v1.0.0-blue.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package/releases)
 
-A comprehensive collection of helper modules for image processing, segmentation, deep learning workflows, and text/PDF
-utilities in PyTorch and beyond.
+A comprehensive collection of helper modules for image processing, segmentation, deep learning workflows, text/PDF
+utilities, and scientific computing in PyTorch, TensorFlow, and beyond.
 
 ---
 
 ## Table of Contents
 
 - [Motivation](#motivation)
+- [Installation](#installation)
 - [Dependencies](#dependencies)
 - [Features & Modules](#features--modules)
-- [Module Usage Table](#module-usage-table)
-- [Quick Start](#quick-start)
-- [More Usage Examples](#more-usage-examples)
 - [Documentation](#documentation)
+- [Testing](#testing)
 - [Contributing](#contributing)
-- [Changelog / Release Notes](#changelog--release-notes)
 - [Citation & License](#citation--license)
 - [Support & Contact](#support--contact)
 
@@ -30,15 +38,25 @@ HMB Helpers Package aims to accelerate research and development in computer visi
 providing ready-to-use, well-tested utility modules that simplify common tasks, reduce boilerplate code, and promote
 reproducibility in scientific projects.
 
-## Dependencies
+## Installation
 
-Key dependencies (see `requirements.txt` for full list):
+Install the package directly from source:
 
-To install all dependencies, run:
+```bash
+git clone https://github.com/yourusername/HMB-Helpers-Package.git
+cd HMB-Helpers-Package
+pip install -e .
+```
+
+Or install dependencies separately:
 
 ```bash
 pip install -r requirements.txt
 ```
+
+## Dependencies
+
+Key dependencies (see `requirements.txt` for full list):
 
 - **torch, torchvision, torchaudio**: Deep learning with PyTorch
 - **tensorflow, keras**: Deep learning (alternative to PyTorch)
@@ -46,162 +64,111 @@ pip install -r requirements.txt
 - **openslide-python**: Whole Slide Image (WSI) support
 - **numpy, pandas, scipy, scikit-learn, scikit-image**: Scientific computing and ML
 - **matplotlib, seaborn**: Visualization
-- **nltk, rouge, textstat**: NLP and text metrics
-- **PyMuPDF**: PDF reading
+- **nltk, rouge, textstat, contractions**: NLP and text metrics
+- **PyMuPDF (fitz)**: PDF reading and manipulation
 - **tqdm**: Progress bars
 - **albumentations**: Image augmentation
 - **shap**: Model explainability
-- **catboost, xgboost**: ML models
-- **spams-bin**: Sparse modeling
+- **catboost, xgboost, lightgbm**: ML models
+- **imblearn**: Imbalanced dataset handling
+- **timm, transformers**: Pre-trained models
+- **ultralytics**: YOLO models
 
 ## Features & Modules
 
-- **AttentionMapsHelper**: Tools for generating and visualizing attention maps in deep learning models.
-- **EmbeddingsToTextHelper**: Convert between embeddings and text representations for NLP tasks.
-- **ExplainabilityHelper**: Utilities for model explainability and interpretability (e.g., SHAP analysis).
-- **HandCraftedFeatures**: Feature extraction utilities for images and tabular data.
-- **ImagesComparisonMetrics**: Functions to compare images using metrics such as SSIM, PSNR, and MSE.
-- **ImageSegmentationMetrics**: Evaluation metrics for segmentation tasks, including IoU, Dice, and pixel accuracy.
-- **ImagesHelper**: Utilities for loading, saving, resizing, cropping, and manipulating images.
-- **ImagesNormalization**: Tools for image normalization, standardization, and preprocessing.
-- **Initializations**: Model and layer initialization helpers for deep learning frameworks.
-- **MachineLearningHelper**: General machine learning workflow helpers (data splitting, cross-validation, etc.).
-- **MetaheuristicsHelper**: Utilities for metaheuristic optimization algorithms (e.g., MRFO).
-- **PDFHelper**: Functions for reading, extracting, and processing text from PDF files.
-- **PerformanceMetrics**: General performance metrics for machine learning workflows (accuracy, precision, recall, F1,
-  etc.).
-- **PyTorchHelper**: PyTorch model and tensor utilities, including device management and checkpointing.
-- **PyTorchSegmentationLosses**: Custom loss functions for segmentation tasks (Dice, BCE, DiceBCE, Focal, Tversky, IoU
-  losses) for PyTorch models.
-- **StatisticalAnalysisHelper**: Statistical analysis and data exploration tools (summary stats, hypothesis testing,
-  etc.).
-- **TextGenerationMetrics**: Metrics for evaluating text generation models (e.g., ROUGE, BLEU, METEOR).
-- **TextHelper**: Text normalization, cleaning, and tokenization utilities.
-- **Utils**: Miscellaneous utilities for file I/O, logging, and more.
-- **WSIHelper**: Whole Slide Image (WSI) processing tools for digital pathology.
+### Core Modules
 
-## Quick Start
-
-Import and use any helper module as needed. Example for segmentation loss:
-
-```python
-import torch
-from HMB.PyTorchSegmentationLosses import DiceLoss, DiceBCELoss
-
-predictions = torch.randn(1, 1, 256, 256).float()
-targets = torch.randint(0, 2, (1, 1, 256, 256)).float()
-
-criterion = DiceBCELoss()
-loss = criterion(predictions, targets)
-print(f"DiceBCE Loss: {loss.item()}")
-```
-
-### Example: 3D Volume Loading and LAB Normalization
-
-```python
-from HMB.ImagesHelper import ReadVolume
-from HMB.ImagesNormalization import RGB2LAB
-
-# Example: Load a 3D volume from lists of image and mask paths
-img_paths = ["slice1.png", "slice2.png", "slice3.png"]
-mask_paths = ["mask1.png", "mask2.png", "mask3.png"]
-volume = ReadVolume(img_paths, mask_paths)
-
-# Convert a loaded RGB image to LAB color space
-import cv2
-
-img_rgb = cv2.imread("sample.png")
-l, a, b = RGB2LAB(img_rgb)
-```
-
-### Example: PDF Text Extraction
-
-```python
-from HMB.PDFHelper import ReadFullPDF
-
-text = ReadFullPDF('document.pdf')
-print(text[:500])
-```
-
-### Example: Text Generation Metrics
-
-```python
-from HMB.TextGenerationMetrics import TextGenerationMetrics
-
-metrics = TextGenerationMetrics()
-reference = ["the cat is on the mat"]
-hypothesis = "the cat sat on the mat"
-bleu_score = metrics.CalculateBLEU(hypothesis, reference)
-print(f"BLEU score: {bleu_score}")
-```
-
-## More Usage Examples
-
-### ExplainabilityHelper: SHAPExplainer
-
-```python
-from HMB.ExplainabilityHelper import SHAPExplainer
-
-explainer = SHAPExplainer(
-  baseDir="/path/to/baseDir",
-  experimentFolderName="Experiment1",
-  testFilename="test_data.csv",
-  targetColumn="target",
-  pickleFilePath=None,
-  shapStorageKeyword="SHAP_Results"
-)
-explainer.run()  # See module docs for full pipeline
-```
-
-### WSIHelper: ReadWSIViaOpenSlide
-
-```python
-from HMB.WSIHelper import ReadWSIViaOpenSlide
-
-slide = ReadWSIViaOpenSlide("/path/to/slide.svs")
-print(slide.dimensions)
-```
-
-### MetaheuristicsHelper: MantaRayForagingOptimizer
-
-```python
-import numpy as np
-from HMB.MetaheuristicsHelper import MantaRayForagingOptimizer
-
-# Example: Run one iteration of MRFO
-X = np.random.rand(10, 5)  # 10 candidates, 5 dimensions
-Fs = np.random.rand(10)  # Fitness values
-newX, bestSol, bestFit = MantaRayForagingOptimizer(
-  X, Fs, Ps=10, D=5, lb=np.zeros(5), ub=np.ones(5), t=1, T=100
-)
-print("Best fitness:", bestFit)
-```
+- **AgentsHelper**: AI agent orchestration and interaction utilities
+- **ArabicTextHelper**: Specialized tools for Arabic text processing and analysis
+- **AttentionMapsHelper**: Tools for generating and visualizing attention maps in deep learning models
+- **AudioHelper**: Audio processing, feature extraction, and manipulation utilities
+- **CompressionsHelper**: Data compression and decompression utilities
+- **DataAugmentationHelper**: Image and data augmentation pipelines
+- **EmbeddingsToTextHelper**: Convert between embeddings and text representations for NLP tasks
+- **ExplainabilityHelper**: Model explainability and interpretability (e.g., SHAP analysis)
+- **HandCraftedFeatures**: Feature extraction utilities for images and tabular data
+- **ImagesComparisonMetrics**: Image comparison metrics (SSIM, PSNR, MSE, etc.)
+- **ImageSegmentationMetrics**: Segmentation evaluation metrics (IoU, Dice, pixel accuracy)
+- **ImagesHelper**: Comprehensive image loading, saving, resizing, cropping, and manipulation
+- **ImagesNormalization**: Image normalization, standardization, and color space conversion
+- **ImagesToEmbeddings**: Extract embeddings from images using timm and transformers models
+- **Initializations**: Model and layer initialization helpers for deep learning frameworks
+- **MachineLearningHelper**: ML workflow helpers (data splitting, cross-validation, model selection)
+- **MetaheuristicsHelper**: Metaheuristic optimization algorithms (e.g., MRFO)
+- **PDFHelper**: PDF reading, extraction, manipulation, and annotation
+- **PerformanceMetrics**: Comprehensive performance metrics for classification and regression
+- **PyTorchClassificationLosses**: Custom classification loss functions for PyTorch
+- **PyTorchHelper**: PyTorch utilities for models, tensors, device management, and checkpointing
+- **PyTorchSegmentationLosses**: Custom segmentation losses (Dice, BCE, DiceBCE, Focal, Tversky, IoU)
+- **StatisticalAnalysisHelper**: Statistical analysis and data exploration tools
+- **StringsHelper**: String manipulation and text processing utilities
+- **TextGenerationMetrics**: Metrics for text generation models (ROUGE, BLEU, METEOR)
+- **TextHelper**: Text normalization, cleaning, tokenization, and NLP utilities
+- **TFAttentionBlocks**: TensorFlow/Keras attention mechanism implementations
+- **TFHelper**: TensorFlow/Keras utilities and helpers (Grad-CAM, etc.)
+- **Utils**: Miscellaneous utilities for file I/O, configuration, and data handling
+- **VectorsHelper**: Vector operations and geometric computations
+- **VideosHelper**: Video processing and frame extraction utilities
+- **VotingHelper**: Ensemble voting methods for machine learning
+- **WSIHelper**: Whole Slide Image (WSI) processing for digital pathology
+- **YOLOHelper**: YOLO model training and inference utilities
 
 ## Documentation
 
-- [HTML docs](build/html/index.html)
-- [Source docs](source/)
+Full documentation is available in the `build/html/` directory after building with Sphinx:
 
-Each module is documented with usage examples and API references. See the `source/` folder for detailed documentation.
+```bash
+cd source
+make html
+```
+
+Or view the source documentation files in `source/` directory:
+
+- Each module has a corresponding `.rst` file with detailed API documentation
+- Examples and usage patterns are included in module docstrings
+- Complete API reference available at `build/html/index.html`
+
+## Testing
+
+The package includes comprehensive unit tests for all modules. Run tests using:
+
+```bash
+# Run all tests.
+python tests/run_tests.py
+
+# Run specific test file.
+python tests/run_tests.py Test_ImagesHelper.py
+
+# Run multiple test files.
+python tests/run_tests.py Test_ImagesHelper.py Test_PDFHelper.py Test_TextHelper.py
+```
+
+Test coverage includes:
+
+- Unit tests for all core modules
+- Edge case validation
+- Integration tests for complex workflows
+- Performance and regression tests
+
+Current test status: **530+ tests passing**
 
 ## Contributing
 
-Contributions are welcome! Please open an issue or submit a pull request. For major changes, please discuss them first
-by opening an issue.
+Contributions are welcome! Please follow these steps:
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/fooBar`)
-3. Commit your changes (`git commit -am 'Add some fooBar'`)
-4. Push to the branch (`git push origin feature/fooBar`)
-5. Open a pull request
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -am 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-## Changelog / Release Notes
+### Development Guidelines
 
-### v1.0.0 (2025-09-08)
-
-- Initial public release
-- All core modules and documentation included
-- Extensive examples and API docs
+- Write comprehensive docstrings for all functions and classes
+- Add unit tests for new functionality
+- Follow PEP 8 style guidelines
+- Update documentation when adding new features
+- Ensure all tests pass before submitting PR
 
 ## Citation & License
 

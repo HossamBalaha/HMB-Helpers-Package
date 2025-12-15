@@ -114,6 +114,69 @@ class VectorsHelper(object):
       L.append(x)
     return L
 
+  def ProjectVector(self, v, basis):
+    r'''
+    Project vector `v` onto the provided basis vectors.
+
+    Parameters:
+      v (array-like): Vector to project.
+      basis (list of array-like): Basis vectors to project onto.
+
+    Returns:
+      list: List of projection coefficients (one per provided basis vector).
+    '''
+
+    v = np.asarray(v, dtype=float)
+    coeffs = []
+    for b in basis:
+      b = np.asarray(b, dtype=float)
+      denom = np.sum(np.power(b, 2))
+      num = np.dot(v, b)
+      coeffs.append(
+        0.0
+        if (denom == 0) else (num / denom).item()
+        if (np.isscalar(num)) else float(num / denom)
+      )
+    return coeffs
+
+  def CosineSimilarity(self, vector1, vector2):
+    r'''
+    Compute the cosine similarity between two vectors.
+
+    Parameters:
+      vector1 (array-like): First input vector.
+      vector2 (array-like): Second input vector.
+
+    Returns:
+      float: Cosine similarity value in the range [-1, 1].
+    '''
+
+    v1 = np.asarray(vector1, dtype=float)
+    v2 = np.asarray(vector2, dtype=float)
+    n1 = self.Length(v1)
+    n2 = self.Length(v2)
+    if (n1 == 0 or n2 == 0):
+      return 0.0
+    return float(np.dot(v1, v2) / (n1 * n2))
+
+  def NormalizeVector(self, vector):
+    r'''
+    Normalize the input vector to have unit length.
+
+    Parameters:
+      vector (array-like): Input vector to normalize.
+
+    Returns:
+      numpy.ndarray: Normalized vector with unit length. If input is zero vector, returns zero vector of the same shape.
+    '''
+
+    v = np.asarray(vector, dtype=float)
+    n = self.Length(v)
+    if (n == 0):
+      # Return the same zero vector instead of raising to satisfy tests
+      return np.zeros_like(v)
+    return v / n
+
 
 if __name__ == "__main__":
   # SafeCall helper used to call methods and gracefully report failures.

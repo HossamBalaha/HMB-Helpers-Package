@@ -163,13 +163,13 @@ class AudiosHelper(object):
     # Return result.
     return librosa.effects.percussive(y)
 
-  def GetSlaneyMFCC(self, y, sr, nMFCC=None):
+  def GetSlaneyMFCC(self, y, sr=22050, nMFCC=None):
     r'''
     Compute Slaney-style MFCCs using librosa.
 
     Parameters:
       y (numpy.ndarray): 1-D audio time series.
-      sr (int): Sampling rate of ``y`` (Hz).
+      sr (int): Sampling rate of ``y`` (Hz). Default is 22050.
       nMFCC (int, optional): Number of MFCC coefficients to return. If None uses librosa default.
 
     Returns:
@@ -184,9 +184,9 @@ class AudiosHelper(object):
     # Compute MFCC using Slaney configuration and return the result.
     if (nMFCC):
       # Return MFCC with specified number of coefficients.
-      return librosa.feature.mfcc(y, sr=sr, dct_type=2, n_mfcc=nMFCC)
+      return librosa.feature.mfcc(y=y, sr=sr, dct_type=2, n_mfcc=nMFCC)
     # Return MFCC with default number of coefficients.
-    return librosa.feature.mfcc(y, sr=sr, dct_type=2)
+    return librosa.feature.mfcc(y=y, sr=sr, dct_type=2, n_mfcc=20)
 
   def GetMeanSlaneyMFCC(self, y, sr, nMFCC=None):
     r'''

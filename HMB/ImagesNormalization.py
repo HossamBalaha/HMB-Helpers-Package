@@ -16,12 +16,22 @@ def RGB2LAB(img, isNorm=True):
       tuple: Normalized LAB channels (L, A, B).
   '''
 
+  # Validate input image shape.
+  if ((img.ndim != 3) or (img.shape[2] != 3)):
+    raise ValueError("RGB2LAB expects an HxWx3 image.")
+
+  # Convert image to uint8 if it is in uint16 or float format.
+  if (img.dtype == np.uint16):
+    img = (img / 257).astype(np.uint8)
+  elif ((img.dtype == np.float32) or (img.dtype == np.float64)):
+    img = np.clip(img * 255.0, 0, 255).astype(np.uint8)
+
   # Convert the input RGB image to LAB color space using OpenCV.
   I = cv2.cvtColor(img, cv2.COLOR_RGB2LAB)  # Convert RGB to LAB color space.
-  # Convert the LAB image to float32 for further processing.
-  I = I.astype(np.float32)  # Convert to float32 for further processing.
+
   # Split the LAB image into its three channels: L, A, and B.
   I1, I2, I3 = cv2.split(I)  # Split the LAB image into its three channels: L, A, and B.
+
   # If normalization is requested, normalize each channel accordingly.
   if (isNorm):  # Normalize the LAB channels.
     # Normalize the L channel to the range [0, 100].
@@ -30,6 +40,7 @@ def RGB2LAB(img, isNorm=True):
     I2 = I2 - 128.0  # Normalize the A channel to the range [-128, 127].
     # Normalize the B channel to the range [-128, 127].
     I3 = I3 - 128.0  # Normalize the B channel to the range [-128, 127].
+
   # Return the normalized LAB channels as a tuple.
   return I1, I2, I3  # Return the normalized LAB channels.
 
@@ -47,6 +58,13 @@ def LAB2RGB(I1, I2, I3, isNorm=True):
       numpy.ndarray: RGB image.
   '''
 
+  # Validate inputs are numpy arrays with matching shapes
+  for arr in (I1, I2, I3):
+    if (arr is None or not hasattr(arr, "shape")):
+      raise ValueError("LAB2RGB expects numpy arrays for I1, I2, I3.")
+  if (I1.shape != I2.shape or I1.shape != I3.shape):
+    raise ValueError("LAB2RGB channel shapes must match.")
+
   # If denormalization is requested, reverse the normalization for each channel.
   if (isNorm):
     # Denormalize the L channel back to the range [0, 255].
@@ -55,6 +73,7 @@ def LAB2RGB(I1, I2, I3, isNorm=True):
     I2 = I2 + 128.0  # Denormalize the A channel back to the range [0, 255].
     # Denormalize the B channel back to the range [0, 255].
     I3 = I3 + 128.0  # Denormalize the B channel back to the range [0, 255].
+
   # Merge the LAB channels back into a single image.
   I = cv2.merge((I1, I2, I3))  # Merge the LAB channels back into a single image.
   # Clip the pixel values to ensure they are within the valid range [0, 255].

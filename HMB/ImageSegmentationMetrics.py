@@ -1,6 +1,5 @@
 import numpy as np
 
-
 def ComputeIoU(preds, targets, smooth=1.0, iouType="binary", weight=None):
   r'''
   Compute the Intersection over Union (IoU) metric.
@@ -64,12 +63,12 @@ def ComputeIoU(preds, targets, smooth=1.0, iouType="binary", weight=None):
   elif (iouType == "weighted"):
     if (weight is None):
       raise ValueError("Weight must be provided for weighted IoU.")
-    intersection = (weight * preds * targets).sum()
-    union = (
-      (weight * preds).sum() +
-      (weight * targets).sum() -
-      intersection
-    )
+    # Broadcast weight over spatial dims and optionally channels
+    w = np.array(weight, dtype=np.float32)
+    while (w.ndim < preds.ndim):
+      w = w[:, None]
+    intersection = (w * preds * targets).sum()
+    union = ((w * preds).sum() + (w * targets).sum() - intersection)
   else:
     raise ValueError("Invalid iouType. Must be 'binary', 'soft', or 'weighted'.")
   # Calculate the IoU using the formula.
@@ -559,7 +558,7 @@ def ComputeBoundaryF1Score(preds, targets, dilationRatio=0.02, eps=1e-7):
     print(f"Boundary F1 Score: {bfScore}")
   '''
 
-  from scipy.ndimage import binary_dilation
+  from scipy.ndimage import binary_dilation, binary_erosion
 
   preds = np.float32(preds > 0.5)
   targets = np.float32(targets > 0.5)
