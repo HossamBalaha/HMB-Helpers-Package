@@ -2080,7 +2080,7 @@ def PlotDistributionEDA(
     # Save plot as a PDF file in the specified base directory.
     filename = (
       f"{keyword}_EDA_Distribution_Numeric_Plots.pdf"
-      if numeric else f"{keyword}_EDA_Distribution_NonNumeric_Plots.pdf"
+      if (numeric) else f"{keyword}_EDA_Distribution_NonNumeric_Plots.pdf"
     )
     plt.savefig(
       os.path.join(baseDir, filename),  # Save path for the plot.
@@ -2135,6 +2135,7 @@ def PlotMetrics(
   differentColors=True,  # Whether to use different colors for different plots.
   fixedTicksColors=True,  # Whether to use fixed ticks colors for consistency across plots.
   fixedTicksColor="black",  # Color to use for fixed ticks if fixedTicksColors is True.
+  extension=".pdf",  # File extension for saved plots.
 ):
   r'''
   Plot boxplots, violin plots, Q-Q plots, histograms, density plots, scatter plots,
@@ -2159,6 +2160,7 @@ def PlotMetrics(
     differentColors (bool, optional): Whether to use different colors for different plots.
     fixedTicksColors (bool, optional): Whether to use fixed ticks colors for consistency across plots.
     fixedTicksColor (str, optional): Color to use for fixed ticks if fixedTicksColors is True.
+    extension (str, optional): File extension for saved plots (default: ".pdf").
 
   Notes:
     - The function uses Seaborn and Matplotlib for plotting.
@@ -2418,7 +2420,7 @@ def PlotMetrics(
 
         plt.tight_layout(pad=1.0)  # Add padding to prevent title overlap.
         keywordRep = keyword.replace("\n", "_")
-        plt.savefig(f"ResidualPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+        plt.savefig(f"ResidualPlot_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
         if (showFigures):
           plt.show()
         plt.close()
@@ -2512,7 +2514,7 @@ def PlotMetrics(
 
         plt.tight_layout(pad=1.5)  # Increase padding due to longer titles.
         keywordRep = keyword.replace("\n", "_")
-        plt.savefig(f"QQResidualPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+        plt.savefig(f"QQResidualPlot_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
         if (showFigures):
           plt.show()
         plt.close()
@@ -2569,7 +2571,7 @@ def PlotMetrics(
                   plotIndex += 1
           plt.tight_layout()
           keywordRep = keyword.replace("\n", "_")
-          plt.savefig(f"BlandAltmanPlot_{keywordRep}_{names[k]}.pdf", dpi=dpi, bbox_inches="tight")
+          plt.savefig(f"BlandAltmanPlot_{keywordRep}_{names[k]}{extension}", dpi=dpi, bbox_inches="tight")
           if (showFigures):
             plt.show()
           plt.close()
@@ -2614,7 +2616,7 @@ def PlotMetrics(
         plt.legend()
       plt.tight_layout()
       keywordRep = keyword.replace("\n", "_")
-      plt.savefig(f"Histogram_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+      plt.savefig(f"Histogram_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()
@@ -2670,7 +2672,7 @@ def PlotMetrics(
         plt.ylabel("Performance Metric", color=GetTickColor(i))
       plt.tight_layout()
       keywordRep = keyword.replace("\n", "_")
-      plt.savefig(f"BoxPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+      plt.savefig(f"BoxPlot_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()  # Close the figure to free memory.
@@ -2713,7 +2715,7 @@ def PlotMetrics(
         plt.ylabel("Performance Metric", color=GetTickColor(i))
       plt.tight_layout()
       keywordRep = keyword.replace("\n", "_")
-      plt.savefig(f"ViolinPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+      plt.savefig(f"ViolinPlot_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()  # Close the figure to free memory.
@@ -2749,7 +2751,7 @@ def PlotMetrics(
         plt.yticks(color=GetTickColor(i))
       plt.tight_layout()
       keywordRep = keyword.replace("\n", "_")
-      plt.savefig(f"QQPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+      plt.savefig(f"QQPlot_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()  # Close the figure to free memory.
@@ -2797,7 +2799,7 @@ def PlotMetrics(
         plt.legend()
       plt.tight_layout()
       keywordRep = keyword.replace("\n", "_")
-      plt.savefig(f"DensityPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+      plt.savefig(f"DensityPlot_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()  # Close the figure to free memory.
@@ -2861,7 +2863,7 @@ def PlotMetrics(
 
         plt.tight_layout()
         keywordRep = keyword.replace("\n", "_")
-        plt.savefig(f"ScatterPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+        plt.savefig(f"ScatterPlot_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
         if (showFigures):
           plt.show()
         plt.close()
@@ -2903,7 +2905,7 @@ def PlotMetrics(
         plt.legend()
       plt.tight_layout()
       keywordRep = keyword.replace("\n", "_")
-      plt.savefig(f"LinePlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+      plt.savefig(f"LinePlot_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()  # Close the figure to free memory.
@@ -2938,7 +2940,7 @@ def PlotMetrics(
         plt.yticks(color=GetTickColor(i))
       plt.tight_layout()
       keywordRep = keyword.replace("\n", "_")
-      plt.savefig(f"BarPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+      plt.savefig(f"BarPlot_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()  # Close the figure to free memory.
@@ -2966,7 +2968,7 @@ def PlotMetrics(
         plt.xticks(color=GetTickColor(i))
         plt.yticks(color=GetTickColor(i))
         keywordRep = keyword.replace("\n", "_")
-        plt.savefig(f"CorrelationHeatmap_{names[i]}_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+        plt.savefig(f"CorrelationHeatmap_{names[i]}_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
         if (showFigures):
           plt.show()
         plt.close()  # Close the figure to free memory.
@@ -2994,7 +2996,7 @@ def PlotMetrics(
         plt.xticks(color=GetTickColor(i))
         plt.yticks(color=GetTickColor(i))
         keywordRep = keyword.replace("\n", "_")
-        plt.savefig(f"PairPlot_{names[i]}_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+        plt.savefig(f"PairPlot_{names[i]}_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
         if (showFigures):
           plt.show()
         plt.close()  # Close the figure to free memory.
@@ -3031,7 +3033,7 @@ def PlotMetrics(
         plt.legend()
       plt.tight_layout()
       keywordRep = keyword.replace("\n", "_")
-      plt.savefig(f"CDF_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+      plt.savefig(f"CDF_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()  # Close the figure to free memory.
@@ -3068,7 +3070,7 @@ def PlotMetrics(
         plt.legend()
       plt.tight_layout()
       keywordRep = keyword.replace("\n", "_")
-      plt.savefig(f"ECDF_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+      plt.savefig(f"ECDF_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()  # Close the figure to free memory.
@@ -3105,7 +3107,7 @@ def PlotMetrics(
         plt.ylabel("Performance Metric", color=GetTickColor(i))
       plt.tight_layout()
       keywordRep = keyword.replace("\n", "_")
-      plt.savefig(f"SwarmPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+      plt.savefig(f"SwarmPlot_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()  # Close the figure to free memory.
@@ -3172,7 +3174,7 @@ def PlotMetrics(
         # Improve layout to prevent label clipping (though pie charts can be tricky).
         plt.tight_layout()
         keywordRep = keyword.replace("\n", "_")
-        plt.savefig(f"PieChart_{names[i]}_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+        plt.savefig(f"PieChart_{names[i]}_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
         if (showFigures):
           plt.show()
         plt.close()  # Close the figure to free memory.
@@ -3212,7 +3214,7 @@ def PlotMetrics(
         plt.legend()
       plt.tight_layout()
       keywordRep = keyword.replace("\n", "_")
-      plt.savefig(f"AreaPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+      plt.savefig(f"AreaPlot_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()  # Close the figure to free memory.
@@ -3285,7 +3287,7 @@ def PlotMetrics(
 
         plt.tight_layout()
         keywordRep = keyword.replace("\n", "_")
-        plt.savefig(f"HexbinPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+        plt.savefig(f"HexbinPlot_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
         if (showFigures):
           plt.show()
         plt.close()  # Close the figure to free memory.
@@ -3320,7 +3322,7 @@ def PlotMetrics(
         plt.xticks(color=GetTickColor(i))
         plt.yticks(color=GetTickColor(i))
         keywordRep = keyword.replace("\n", "_")
-        plt.savefig(f"ContourPlot_{names[i]}_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+        plt.savefig(f"ContourPlot_{names[i]}_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
         if (showFigures):
           plt.show()
         plt.close()  # Close the figure to free memory.
@@ -3355,7 +3357,7 @@ def PlotMetrics(
         plt.ylabel("Performance Metric", color=GetTickColor(i))
       plt.tight_layout()
       keywordRep = keyword.replace("\n", "_")
-      plt.savefig(f"StripPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+      plt.savefig(f"StripPlot_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()  # Close the figure to free memory.
@@ -3387,7 +3389,7 @@ def PlotMetrics(
         plt.ylabel("Performance Metric", color=GetTickColor(i))
       plt.tight_layout()
       keywordRep = keyword.replace("\n", "_")
-      plt.savefig(f"DotPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+      plt.savefig(f"DotPlot_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()  # Close the figure to free memory.
@@ -3426,7 +3428,7 @@ def PlotMetrics(
       plt.tight_layout()
       # Save the stacked bar plot as a PDF file.
       keywordRep = keyword.replace("\n", "_")
-      plt.savefig(f"StackedBarPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+      plt.savefig(f"StackedBarPlot_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()  # Close the figure to free memory.
@@ -3475,7 +3477,7 @@ def PlotMetrics(
         plt.tight_layout()
         # Save the stacked area plot as a PDF file.
         keywordRep = keyword.replace("\n", "_")
-        plt.savefig(f"StackedAreaPlot_{names[i]}_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+        plt.savefig(f"StackedAreaPlot_{names[i]}_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
         if (showFigures):
           plt.show()
         plt.close()  # Close the figure to free memory.
@@ -3540,7 +3542,7 @@ def PlotMetrics(
         plt.tight_layout()
         # Save the 2D histogram plot as a PDF file.
         keywordRep = keyword.replace("\n", "_")
-        plt.savefig(f"Histogram2DPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+        plt.savefig(f"Histogram2DPlot_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
         # Show the figure if requested.
         if (showFigures):
           plt.show()
@@ -3595,7 +3597,7 @@ def PlotMetrics(
       plt.tight_layout()
       # Save the step plot as a PDF file.
       keywordRep = keyword.replace("\n", "_")
-      plt.savefig(f"StepPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+      plt.savefig(f"StepPlot_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()  # Close the figure to free memory.
@@ -3641,7 +3643,7 @@ def PlotMetrics(
           plt.yticks(color=GetTickColor(i))
           plt.tight_layout()
           keywordRep = keyword.replace("\n", "_")
-          plt.savefig(f"RaincloudPlot_{metric}_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+          plt.savefig(f"RaincloudPlot_{metric}_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
           if (showFigures):
             plt.show()
           plt.close()  # Close the figure to free memory.
@@ -3669,7 +3671,7 @@ def PlotMetrics(
           plt.title(f"Andrews Curves for {names[i]}", color=cmapColors[i])
           plt.tight_layout()
           keywordRep = keyword.replace("\n", "_")
-          plt.savefig(f"AndrewsCurves_{names[i]}_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+          plt.savefig(f"AndrewsCurves_{names[i]}_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
           if (showFigures):
             plt.show()
           plt.close()
@@ -3688,7 +3690,7 @@ def PlotMetrics(
         plt.title("Combined Andrews Curves", color="black")
         plt.tight_layout()
         keywordRep = keyword.replace("\n", "_")
-        plt.savefig(f"AndrewsCurves_Combined_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+        plt.savefig(f"AndrewsCurves_Combined_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
         if (showFigures):
           plt.show()
         plt.close()  # Close the figure to free memory.
@@ -3716,7 +3718,7 @@ def PlotMetrics(
           plt.title(f"Parallel Coordinates for {names[i]}", color=cmapColors[i])
           plt.tight_layout()
           keywordRep = keyword.replace("\n", "_")
-          plt.savefig(f"ParallelCoordinates_{names[i]}_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+          plt.savefig(f"ParallelCoordinates_{names[i]}_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
           if (showFigures):
             plt.show()
           plt.close()  # Close the figure to free memory.
@@ -3757,7 +3759,7 @@ def PlotMetrics(
         plt.title(f"Radar Plot for {names[i]}", color=cmapColors[i])
         plt.tight_layout()
         keywordRep = keyword.replace("\n", "_")
-        plt.savefig(f"RadarPlot_{names[i]}_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+        plt.savefig(f"RadarPlot_{names[i]}_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
         if (showFigures):
           plt.show()
         plt.close()
@@ -3788,7 +3790,7 @@ def PlotMetrics(
       plt.legend(loc="upper right", bbox_to_anchor=(1.4, 1.1))
       plt.tight_layout()
       keywordRep = keyword.replace("\n", "_")
-      plt.savefig(f"RadarPlot_Combined_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+      plt.savefig(f"RadarPlot_Combined_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()  # Close the figure to free memory.
@@ -3818,7 +3820,7 @@ def PlotMetrics(
         plt.ylabel("Performance Metric", color=GetTickColor(i))
       plt.tight_layout()
       keywordRep = keyword.replace("\n", "_")
-      plt.savefig(f"BoxenPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+      plt.savefig(f"BoxenPlot_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()  # Close the figure to free memory.
@@ -3846,7 +3848,7 @@ def PlotMetrics(
         plt.yticks(color=GetTickColor(i))
       plt.tight_layout()
       keywordRep = keyword.replace("\n", "_")
-      plt.savefig(f"LollipopPlot_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+      plt.savefig(f"LollipopPlot_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
       plt.close()  # Close the figure to free memory.
@@ -3873,7 +3875,7 @@ def PlotMetrics(
         plt.ylabel("Mean Value")
         plt.tight_layout()
         keywordRep = keyword.replace("\n", "_")
-        plt.savefig(f"SlopeChart_{names[i]}_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+        plt.savefig(f"SlopeChart_{names[i]}_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
         if (showFigures):
           plt.show()
         plt.close()  # Close the figure to free memory.
@@ -3901,7 +3903,7 @@ def PlotMetrics(
         plt.ylabel("Mean Value")
         plt.tight_layout()
         keywordRep = keyword.replace("\n", "_")
-        plt.savefig(f"DumbbellPlot_{names[i]}_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+        plt.savefig(f"DumbbellPlot_{names[i]}_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
         if (showFigures):
           plt.show()
         plt.close()  # Close the figure to free memory.
@@ -3928,7 +3930,7 @@ def PlotMetrics(
           plt.axis("off")
           plt.tight_layout()
           keywordRep = keyword.replace("\n", "_")
-          plt.savefig(f"TreemapPlot_{names[i]}_{keywordRep}.pdf", dpi=dpi, bbox_inches="tight")
+          plt.savefig(f"TreemapPlot_{names[i]}_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
           if (showFigures):
             plt.show()
           plt.close()  # Close the figure to free memory.
