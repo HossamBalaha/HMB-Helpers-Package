@@ -45,8 +45,6 @@ def CalculatePerformanceMetrics(
 
   Examples
   --------
-  Here is how to use this function in a script:
-
   .. code-block:: python
 
     import numpy as np
@@ -515,8 +513,6 @@ def PlotROCAUCCurve(
 
   Examples
   --------
-  Here is how to use this function in a script:
-
   .. code-block:: python
 
     import numpy as np
@@ -694,8 +690,6 @@ def PlotPRCCurve(
 
   Examples
   --------
-  Here is how to use this function in a script:
-
   .. code-block:: python
 
     import numpy as np
@@ -818,6 +812,534 @@ def PlotPRCCurve(
     if (returnFig):
       # Return the figure object if requested.
       return fig
+
+
+def PlotMultiTrialROCAUC(
+  allYTrue,  # List of true labels arrays from all trials (list of arrays).
+  allYPred,  # List of predicted probabilities from all trials (list of arrays).
+  classes,  # List of class names.
+  confidenceLevel=0.95,  # Confidence level for CI (default 95%).
+  title="Multi-Trial ROC Curve with Confidence Intervals",  # Plot title.
+  figSize=(8, 8),  # Figure size.
+  cmap=None,  # Colormap for ROC curves.
+  display=True,  # Display the plot.
+  save=False,  # Save the plot.
+  fileName="MultiTrial_ROC_AUC.pdf",  # File name.
+  fontSize=15,  # Font size.
+  plotDiagonal=True,  # Plot diagonal reference line.
+  showLegend=True,  # Show legend.
+  returnFig=False,  # Return figure object.
+  dpi=720,  # DPI for saving the figure.
+):
+  '''
+  Plot averaged ROC curves across multiple trials with confidence intervals.
+
+  Parameters:
+    allYTrue (list): List of ground truth arrays from all trials. Each element shape: (n_samples, n_classes) or (n_samples,)
+    allYPred (list): List of prediction probability arrays from all trials. Each element shape: (n_samples, n_classes)
+    classes (list): List of class names.
+    confidenceLevel (float): Confidence level for intervals (default 0.95).
+    title (str): Plot title.
+    figSize (tuple): Figure size in inches.
+    cmap (colormap): Matplotlib colormap for different classes.
+    display (bool): Whether to display the plot.
+    save (bool): Whether to save the plot.
+    fileName (str): File name for saving.
+    fontSize (int): Font size for labels.
+    plotDiagonal (bool): Whether to plot diagonal reference line.
+    showLegend (bool): Whether to show legend.
+    returnFig (bool): Whether to return figure object.
+    dpi (int): DPI for saving.
+
+  Returns:
+    matplotlib.figure.Figure or None: The matplotlib figure object if returnFig is True, otherwise None.
+
+  Notes:
+    - This function computes and plots the mean ROC curve across multiple trials for each class.
+    - Confidence intervals are calculated using the normal approximation method.
+    - The plot includes options for saving, displaying, and customizing appearance.
+
+  .. math::
+    \text{TPR} = \frac{TP}{TP + FN}
+    \qquad
+    \text{FPR} = \frac{FP}{FP + TN}
+  .. math::
+    \text{AUC} = \int_0^1 \text{TPR}(\text{FPR}) \, d\text{FPR}
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import numpy as np
+    import HMB.PerformanceMetrics as pm
+
+    # Simulated data for 3 trials and 3 classes.
+    allYTrue = [
+      np.array([0, 1, 2, 0, 1, 2]),
+      np.array([0, 1, 2, 0, 1, 2]),
+      np.array([0, 1, 2, 0, 1, 2])
+    ]
+    allYPred = [
+      np.array([
+        [0.8, 0.1, 0.1],
+        [0.2, 0.7, 0.1],
+        [0.1, 0.2, 0.7],
+        [0.9, 0.05, 0.05],
+        [0.1, 0.8, 0.1],
+        [0.05, 0.1, 0.85]
+      ]),
+      np.array([
+        [0.7, 0.2, 0.1],
+        [0.3, 0.6, 0.1],
+        [0.2, 0.3, 0.5],
+        [0.85, 0.1, 0.05],
+        [0.15, 0.75, 0.1],
+        [0.1, 0.2, 0.7]
+      ]),
+      np.array([
+        [0.75, 0.15, 0.1],
+        [0.25, 0.65, 0.1],
+        [0.15, 0.25, 0.6],
+        [0.88, 0.07, 0.05],
+        [0.12, 0.78, 0.1],
+        [0.08, 0.15, 0.77]
+      ])
+    ]
+    classLabels = ["Class 0", "Class 1", "Class 2"]
+    pm.PlotMultiTrialROCAUC(
+      allYTrue,
+      allYPred,
+      classes=classLabels,
+      confidenceLevel=0.95,
+      title="Multi-Trial ROC Curve with Confidence Intervals",
+      display=True,
+      save=False
+    )
+  '''
+
+  from scipy import stats
+  from sklearn.metrics import roc_curve, auc
+
+  # Convert to numpy arrays.
+  allYTrue = [np.array(yt) for yt in allYTrue]
+  allYPred = [np.array(yp) for yp in allYPred]
+
+  numClasses = len(classes)
+  numTrials = len(allYTrue)
+
+  # Calculate alpha for confidence intervals.
+  alpha = 1 - confidenceLevel
+
+  # Get colors for each class.
+  if (cmap is None):
+    cmap = plt.cm.get_cmap("tab10")
+  colors = [cmap(i / numClasses) for i in range(numClasses)]
+
+  # Create figure.
+  fig = plt.figure(figsize=figSize)
+
+  # Storage for results.
+  resultsDict = {}
+
+  # Common FPR values for interpolation.
+  meanFPR = np.linspace(0, 1, 100)
+
+  # Process each class.
+  for classIdx in range(numClasses):
+    className = classes[classIdx]
+
+    # Storage for this class across trials.
+    tprs = []
+    aucs = []
+
+    # Collect ROC data from all trials.
+    for trialIdx in range(numTrials):
+      yTrue = allYTrue[trialIdx]
+      yPred = allYPred[trialIdx]
+
+      # Check if yTrue is one-hot encoded or class indices.
+      if (yTrue.ndim == 1):
+        # Class indices - convert to binary for this class.
+        yTrueBinary = (yTrue == classIdx).astype(int)
+      else:
+        # One-hot encoded.
+        yTrueBinary = yTrue[:, classIdx]
+
+      # Get predictions for this class.
+      yPredClass = yPred[:, classIdx]
+
+      # Calculate ROC curve.
+      fpr, tpr, _ = roc_curve(yTrueBinary, yPredClass)
+
+      # Calculate AUC.
+      rocAuc = auc(fpr, tpr)
+      aucs.append(rocAuc)
+
+      # Interpolate TPR at common FPR values.
+      interpTpr = np.interp(meanFPR, fpr, tpr)
+      interpTpr[0] = 0.0  # Ensure it starts at 0.
+      tprs.append(interpTpr)
+
+    # Convert to numpy array.
+    tprs = np.array(tprs)
+    aucs = np.array(aucs)
+
+    # Calculate mean and std.
+    meanTpr = np.mean(tprs, axis=0)
+    stdTpr = np.std(tprs, axis=0)
+    meanAuc = np.mean(aucs)
+    stdAuc = np.std(aucs)
+
+    # Calculate confidence intervals.
+    # Using normal approximation for CI.
+    z = stats.norm.ppf(1 - alpha / 2)  # Z-score for confidence level.
+
+    # CI for TPR.
+    tprUpper = np.minimum(meanTpr + z * stdTpr / np.sqrt(numTrials), 1.0)
+    tprLower = np.maximum(meanTpr - z * stdTpr / np.sqrt(numTrials), 0.0)
+
+    # CI for AUC.
+    aucUpper = meanAuc + z * stdAuc / np.sqrt(numTrials)
+    aucLower = meanAuc - z * stdAuc / np.sqrt(numTrials)
+
+    # Store results.
+    resultsDict[className] = {
+      "mean_auc"    : meanAuc,
+      "std_auc"     : stdAuc,
+      "auc_ci_lower": aucLower,
+      "auc_ci_upper": aucUpper,
+      "mean_tpr"    : meanTpr,
+      "tpr_ci_lower": tprLower,
+      "tpr_ci_upper": tprUpper,
+    }
+
+    # Plot mean ROC curve.
+    plt.plot(
+      meanFPR,
+      meanTpr,
+      color=colors[classIdx],
+      linewidth=2,
+      label=f"{className} (AUC={meanAuc:.3f} ± {stdAuc:.3f})",
+    )
+
+    # Plot confidence interval as shaded region.
+    plt.fill_between(
+      meanFPR,
+      tprLower,
+      tprUpper,
+      color=colors[classIdx],
+      alpha=0.2,
+      label=f"{className} {int(confidenceLevel * 100)}% CI",
+    )
+
+  # Plot diagonal reference line.
+  if (plotDiagonal):
+    plt.plot([0, 1], [0, 1], "k--", linewidth=1, label="Random Classifier")
+
+  # Set labels and title.
+  plt.xlabel("False Positive Rate", fontsize=fontSize)
+  plt.ylabel("True Positive Rate", fontsize=fontSize)
+  plt.title(f"{title}\n({numTrials} trials)", fontsize=fontSize)
+
+  # Set axis limits.
+  plt.xlim([0.0, 1.0])
+  plt.ylim([0.0, 1.05])
+
+  # Add grid.
+  plt.grid(True, alpha=0.3)
+
+  # Update tick font sizes.
+  plt.xticks(fontsize=fontSize * 0.75)
+  plt.yticks(fontsize=fontSize * 0.75)
+
+  # Show legend.
+  if (showLegend):
+    plt.legend(loc="lower right", fontsize=fontSize * 0.65)
+
+  # Tight layout.
+  plt.tight_layout()
+
+  # Save if requested.
+  if (save):
+    ext = fileName.split(".")[-1]
+    if (ext.lower() == "pdf"):
+      try:
+        fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+      except Exception as e:
+        print(f"Error saving plot: {e}")
+    fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+
+  # Display if requested.
+  if (display):
+    plt.show()
+
+  # Close figure if not returning.
+  if (not returnFig):
+    plt.close(fig)
+
+  # Return results and optionally figure.
+  if (returnFig):
+    return resultsDict, fig
+  else:
+    return resultsDict
+
+
+def PlotMultiTrialPRCurve(
+  allYTrue,  # List of true labels arrays from all trials.
+  allYPred,  # List of predicted probabilities from all trials.
+  classes,  # List of class names.
+  confidenceLevel=0.95,  # Confidence level for CI.
+  title="Multi-Trial Precision-Recall Curve with Confidence Intervals",
+  figSize=(8, 8),
+  cmap=None,
+  display=True,
+  save=False,
+  fileName="MultiTrial_PRC.pdf",
+  fontSize=15,
+  showLegend=True,
+  returnFig=False,
+  dpi=720,
+):
+  '''
+  Plot averaged Precision-Recall curves across multiple trials with confidence intervals.
+
+  Parameters:
+    allYTrue (list): List of ground truth arrays from all trials. Each element shape: (n_samples, n_classes) or (n_samples,).
+    allYPred (list): List of prediction probability arrays from all trials. Each element shape: (n_samples, n_classes).
+    classes (list): List of class names.
+    confidenceLevel (float): Confidence level for intervals (default 0.95).
+    title (str): Plot title.
+    figSize (tuple): Figure size in inches.
+    cmap (colormap): Matplotlib colormap for different classes.
+    display (bool): Whether to display the plot.
+    save (bool): Whether to save the plot.
+    fileName (str): File name for saving.
+    fontSize (int): Font size for labels.
+    showLegend (bool): Whether to show legend.
+    returnFig (bool): Whether to return figure object.
+    dpi (int): DPI for saving.
+
+  Returns:
+    matplotlib.figure.Figure or None: The matplotlib figure object if returnFig is True, otherwise None.
+
+  Notes:
+    - This function computes and plots the mean Precision-Recall curve across multiple trials for each class.
+    - Confidence intervals are calculated using the normal approximation method.
+    - The plot includes options for saving, displaying, and customizing appearance.
+
+  .. math::
+    \text{Precision} = \frac{TP}{TP + FP}
+    \qquad
+    \text{Recall} = \frac{TP}{TP + FN}
+  .. math::
+    \text{Average Precision} = \int_0^1 \text{Precision}(\text{Recall}) \, d\text{Recall}
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import numpy as np
+    import HMB.PerformanceMetrics as pm
+
+    # Simulated data for 3 trials and 3 classes.
+    allYTrue = [
+      np.array([0, 1, 2, 0, 1, 2]),
+      np.array([0, 1, 2, 0, 1, 2]),
+      np.array([0, 1, 2, 0, 1, 2])
+    ]
+    allYPred = [
+      np.array([
+        [0.8, 0.1, 0.1],
+        [0.2, 0.7, 0.1],
+        [0.1, 0.2, 0.7],
+        [0.9, 0.05, 0.05],
+        [0.1, 0.8, 0.1],
+        [0.05, 0.1, 0.85]
+      ]),
+      np.array([
+        [0.7, 0.2, 0.1],
+        [0.3, 0.6, 0.1],
+        [0.2, 0.3, 0.5],
+        [0.85, 0.1, 0.05],
+        [0.15, 0.75, 0.1],
+        [0.1, 0.2, 0.7]
+      ]),
+      np.array([
+        [0.75, 0.15, 0.1],
+        [0.25, 0.65, 0.1],
+        [0.15, 0.25, 0.6],
+        [0.88, 0.07, 0.05],
+        [0.12, 0.78, 0.1],
+        [0.08, 0.15, 0.77]
+      ])
+    ]
+    classLabels = ["Class 0", "Class 1", "Class 2"]
+    pm.PlotMultiTrialPRCurve(
+      allYTrue,
+      allYPred,
+      classes=classLabels,
+      confidenceLevel=0.95,
+      title="Multi-Trial Precision-Recall Curve with Confidence Intervals",
+      display=True,
+      save=False
+    )
+  '''
+
+  from scipy import stats
+  from sklearn.metrics import precision_recall_curve, average_precision_score
+
+  # Convert to numpy arrays.
+  allYTrue = [np.array(yt) for yt in allYTrue]
+  allYPred = [np.array(yp) for yp in allYPred]
+
+  numClasses = len(classes)
+  numTrials = len(allYTrue)
+
+  # Calculate alpha for confidence intervals.
+  alpha = 1 - confidenceLevel
+
+  # Get colors for each class.
+  if (cmap is None):
+    cmap = plt.cm.get_cmap("tab10")
+  colors = [cmap(i / numClasses) for i in range(numClasses)]
+
+  # Create figure.
+  fig = plt.figure(figsize=figSize)
+
+  # Storage for results.
+  resultsDict = {}
+
+  # Common recall values for interpolation.
+  meanRecall = np.linspace(0, 1, 100)
+
+  # Process each class.
+  for classIdx in range(numClasses):
+    className = classes[classIdx]
+
+    # Storage for this class across trials.
+    precisions = []
+    aps = []
+
+    # Collect PR data from all trials.
+    for trialIdx in range(numTrials):
+      yTrue = allYTrue[trialIdx]
+      yPred = allYPred[trialIdx]
+
+      # Check if yTrue is one-hot encoded or class indices.
+      if (yTrue.ndim == 1):
+        yTrueBinary = (yTrue == classIdx).astype(int)
+      else:
+        yTrueBinary = yTrue[:, classIdx]
+
+      # Get predictions for this class.
+      yPredClass = yPred[:, classIdx]
+
+      # Calculate PR curve.
+      precision, recall, _ = precision_recall_curve(yTrueBinary, yPredClass)
+
+      # Calculate Average Precision.
+      ap = average_precision_score(yTrueBinary, yPredClass)
+      aps.append(ap)
+
+      # Interpolate precision at common recall values.
+      # Reverse for interpolation (recall is decreasing).
+      interpPrecision = np.interp(meanRecall[::-1], recall[::-1], precision[::-1])[::-1]
+      precisions.append(interpPrecision)
+
+    # Convert to numpy array.
+    precisions = np.array(precisions)
+    aps = np.array(aps)
+
+    # Calculate mean and std.
+    meanPrecision = np.mean(precisions, axis=0)
+    stdPrecision = np.std(precisions, axis=0)
+    meanAp = np.mean(aps)
+    stdAp = np.std(aps)
+
+    # Calculate confidence intervals.
+    z = stats.norm.ppf(1 - alpha / 2)
+
+    # CI for Precision.
+    precisionUpper = np.minimum(meanPrecision + z * stdPrecision / np.sqrt(numTrials), 1.0)
+    precisionLower = np.maximum(meanPrecision - z * stdPrecision / np.sqrt(numTrials), 0.0)
+
+    # CI for AP.
+    apUpper = meanAp + z * stdAp / np.sqrt(numTrials)
+    apLower = meanAp - z * stdAp / np.sqrt(numTrials)
+
+    # Store results.
+    resultsDict[className] = {
+      "mean_ap"    : meanAp,
+      "std_ap"     : stdAp,
+      "ap_ci_lower": apLower,
+      "ap_ci_upper": apUpper,
+    }
+
+    # Plot mean PR curve.
+    plt.plot(
+      meanRecall,
+      meanPrecision,
+      color=colors[classIdx],
+      linewidth=2,
+      label=f"{className} (AP={meanAp:.3f} ± {stdAp:.3f})",
+    )
+
+    # Plot confidence interval.
+    plt.fill_between(
+      meanRecall,
+      precisionLower,
+      precisionUpper,
+      color=colors[classIdx],
+      alpha=0.2,
+      label=f"{className} {int(confidenceLevel * 100)}% CI",
+    )
+
+  # Set labels and title.
+  plt.xlabel("Recall", fontsize=fontSize)
+  plt.ylabel("Precision", fontsize=fontSize)
+  plt.title(f"{title}\n({numTrials} trials)", fontsize=fontSize)
+
+  # Set axis limits.
+  plt.xlim([0.0, 1.0])
+  plt.ylim([0.0, 1.05])
+
+  # Add grid.
+  plt.grid(True, alpha=0.3)
+
+  # Update tick font sizes.
+  plt.xticks(fontsize=fontSize * 0.75)
+  plt.yticks(fontsize=fontSize * 0.75)
+
+  # Show legend.
+  if (showLegend):
+    plt.legend(loc="lower left", fontsize=fontSize * 0.65)
+
+  # Tight layout.
+  plt.tight_layout()
+
+  # Save if requested.
+  if (save):
+    ext = fileName.split(".")[-1]
+    if (ext.lower() == "pdf"):
+      try:
+        fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+      except Exception as e:
+        print(f"Error saving plot: {e}")
+    fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+
+  # Display if requested.
+  if (display):
+    plt.show()
+
+  # Close figure if not returning.
+  if (not returnFig):
+    plt.close(fig)
+
+  # Return results and optionally figure.
+  if (returnFig):
+    return resultsDict, fig
+  else:
+    return resultsDict
 
 
 def PlotCounterfactualOutcomes(
