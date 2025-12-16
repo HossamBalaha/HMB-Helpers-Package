@@ -11,10 +11,7 @@ from statsmodels.stats.diagnostic import acorr_ljungbox
 from statsmodels.stats.power import TTestPower
 from scipy.stats import skew, kurtosis, bootstrap, wilcoxon
 from skimage.measure import shannon_entropy, moments
-from HMB.Initializations import IgnoreWarnings
 from HMB.Utils import GetCmapColors
-
-IgnoreWarnings()  # Suppress all warnings globally.
 
 
 class GeneralStatisticsHelper(object):
