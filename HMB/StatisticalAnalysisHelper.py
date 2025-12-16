@@ -2247,6 +2247,7 @@ def PlotMetrics(
   plt.rcParams["savefig.dpi"] = dpi  # Set the resolution for saved figures.
   plt.rcParams["savefig.bbox"] = "tight"  # Save figures with tight bounding box.
 
+  originalDir = os.getcwd()  # Store the current working directory.
   if (storeInsideNewFolder and newFolderName):
     # Create a new folder to store the plots if it does not exist.
     os.makedirs(newFolderName, exist_ok=True)
@@ -3974,3 +3975,7 @@ def PlotMetrics(
     print(traceback.format_exc())
     print("Skipping Sunburst Plots.")
     print("=" * 80)
+
+  # Change back to the original directory.
+  if (storeInsideNewFolder and newFolderName):
+    os.chdir(originalDir)
