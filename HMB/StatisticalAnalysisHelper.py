@@ -3625,14 +3625,20 @@ def PlotMetrics(
           # Violin plot (density)
           sns.violinplot(
             x="Group", y="Metric", data=df,
-            palette=cmapColors[:len(names)],
-            inner=None, linewidth=1, cut=0, bw=0.2, alpha=0.7
+            hue="Group",
+            palette=cmapColors[:len(names)], # Use only needed colors.
+            inner=None, # No inner bars.
+            linewidth=1, # Outline width.
+            cut=0, bw_method=0.2, alpha=0.7,
+            legend=False
           )
           # Strip plot (raw data points)
           sns.stripplot(
             x="Group", y="Metric", data=df,
             palette=cmapColors[:len(names)],
-            dodge=True, jitter=True, alpha=0.5, size=4, edgecolor="gray", linewidth=0.5
+            hue=None, # Avoid double legend.
+            dodge=False, jitter=True, alpha=0.5,
+            size=4, edgecolor="gray", linewidth=0.5
           )
           plt.title(f"Raincloud Plot of {metric}", color=cmapColors[i])
           plt.xlabel("Group", fontsize=fontSize)
