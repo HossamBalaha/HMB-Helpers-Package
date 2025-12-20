@@ -3345,8 +3345,9 @@ def PlotMetrics(
         plt.subplot(noRows, noCols, i + 1)
         sns.stripplot(
           data=[dataset[metric]["Trials"] for dataset in data],
-          palette=cmapColors,
-          alpha=0.7
+          palette=cmapColors,  # Color palette for the strip plot.
+          alpha=0.7,  # Transparency for better visibility.
+          jitter=True,  # Add jitter to avoid overlap.
         )
         color = cmapColors[i]
         plt.title(f"Strip Plot of {metric} Results", color=color)
@@ -3626,9 +3627,9 @@ def PlotMetrics(
           sns.violinplot(
             x="Group", y="Metric", data=df,
             hue="Group",
-            palette=cmapColors[:len(names)], # Use only needed colors.
-            inner=None, # No inner bars.
-            linewidth=1, # Outline width.
+            palette=cmapColors[:len(names)],  # Use only needed colors.
+            inner=None,  # No inner bars.
+            linewidth=1,  # Outline width.
             cut=0, bw_method=0.2, alpha=0.7,
             legend=False
           )
@@ -3636,7 +3637,7 @@ def PlotMetrics(
           sns.stripplot(
             x="Group", y="Metric", data=df,
             palette=cmapColors[:len(names)],
-            hue=None, # Avoid double legend.
+            hue=None,  # Avoid double legend.
             dodge=False, jitter=True, alpha=0.5,
             size=4, edgecolor="gray", linewidth=0.5
           )
