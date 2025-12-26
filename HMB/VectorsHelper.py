@@ -90,7 +90,13 @@ class VectorsHelper(object):
 
     num = self.DotProduct(vector1, vector2)
     den = self.Length(vector1) * self.Length(vector2)
-    result = np.arccos(num / den)
+    # If denominator is zero, angle is undefined -> return NaN to match tests.
+    if (den == 0):
+      return float(np.nan)
+    # Compute cosine value and clip to valid range to avoid NaNs.
+    cosVal = num / den
+    cosVal = np.clip(cosVal, -1.0, 1.0)
+    result = np.arccos(cosVal)
     if (mode == "deg"):
       result = (result / np.pi) * 180.0
     return result
@@ -110,8 +116,13 @@ class VectorsHelper(object):
     L = []
     for arg in args:
       x = np.dot(v, arg)
-      x /= np.sum(np.power(arg, 2))
-      L.append(x)
+      denom = np.sum(np.power(arg, 2))
+      # If denom is zero, return NaN (non-finite) to match tests without triggering a RuntimeWarning.
+      if (denom == 0):
+        coeff = float(np.nan)
+      else:
+        coeff = x / denom
+      L.append(coeff)
     return L
 
   def ProjectVector(self, v, basis):

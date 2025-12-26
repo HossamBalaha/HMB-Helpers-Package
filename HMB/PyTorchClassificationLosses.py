@@ -178,7 +178,8 @@ class FocalLoss(nn.Module):
       if (isinstance(alpha, (float, int))):
         self.alpha = float(alpha)
       else:
-        self.alpha = torch.tensor(alpha, dtype=torch.float)
+        # Use as_tensor to avoid copying from existing tensors and suppress UserWarning
+        self.alpha = torch.as_tensor(alpha, dtype=torch.float)
 
   def forward(self, inputTensor, targetTensor):
     r'''
@@ -208,7 +209,7 @@ class FocalLoss(nn.Module):
     else:
       if (isinstance(self.alpha, float)):
         # Binary case: build [1-alpha, alpha] tensor if we have two classes.
-        alphaTensor = torch.tensor(
+        alphaTensor = torch.as_tensor(
           [1.0 - self.alpha, self.alpha],
           device=inputTensor.device,
           dtype=inputTensor.dtype,

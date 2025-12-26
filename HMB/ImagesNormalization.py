@@ -76,7 +76,8 @@ def LAB2RGB(I1, I2, I3, isNorm=True):
 
   # Merge the LAB channels back into a single image.
   I = cv2.merge((I1, I2, I3))  # Merge the LAB channels back into a single image.
-  # Clip the pixel values to ensure they are within the valid range [0, 255].
+  # Replace NaNs/infs with numeric values then Clip the pixel values to ensure they are within the valid range [0, 255].
+  I = np.nan_to_num(I, nan=0.0, posinf=255.0, neginf=0.0)
   I = np.clip(I, 0, 255).astype(np.uint8)  # Clip the pixel values to ensure they are within the valid range [0, 255].
   # Convert the LAB image back to the RGB color space using OpenCV.
   I = cv2.cvtColor(I, cv2.COLOR_LAB2RGB)  # Convert the LAB image back to the RGB color space.
@@ -127,6 +128,7 @@ class ReinhardColorNormalization(object):
     self.targetStds = None  # Initialize target standard deviations as None.
     # Flag to check if the model has been fitted.
     self.isFit = False  # Flag to check if the model has been fitted.
+    self.eps = 1e-6  # Small epsilon to avoid division by zero.
 
   # Fit the model to a target image by calculating its LAB means and standard deviations.
   def Fit(self, img):
@@ -183,10 +185,6 @@ class ReinhardColorNormalization(object):
     means = [np.mean(L), np.mean(A), np.mean(B)]
     stds = [np.std(L), np.std(A), np.std(B)]
 
-    # target = StandarizeBrightness(img)  # Standardize the brightness of the input image.
-    # I1, I2, I3 = RGB2LAB(target)  # Convert the RGB image to LAB and split into channels.
-    # means, stds = LabSplitMeanStd(target)  # Calculate the mean and standard deviation of the LAB channels.
-
     # Subtract the mean from each LAB channel.
     f1 = [
       L - means[0],  # Subtract the mean from the L channel.
@@ -194,10 +192,11 @@ class ReinhardColorNormalization(object):
       B - means[2]  # Subtract the mean from the B channel.
     ]
     # Scale each LAB channel by the ratio of target std to source std.
+    # Guard against division by zero by clamping the source std to EPS.
     f2 = [
-      self.targetStds[0] / stds[0],  # Scale the L channel by the ratio of target std to source std.
-      self.targetStds[1] / stds[1],  # Scale the A channel by the ratio of target std to source std.
-      self.targetStds[2] / stds[2]  # Scale the B channel by the ratio of target std to source std.
+      self.targetStds[0] / max(stds[0], self.eps),  # Scale the L channel by the ratio of target std to source std.
+      self.targetStds[1] / max(stds[1], self.eps),  # Scale the A channel by the ratio of target std to source std.
+      self.targetStds[2] / max(stds[2], self.eps)  # Scale the B channel by the ratio of target std to source std.
     ]
     # Add the target mean to each LAB channel.
     f3 = [
@@ -365,7 +364,8 @@ def LABSplit2RGB(I1, I2, I3):
   I3 += 128.0  # Denormalize B channel.
   # Merge channels back into an image.
   I = cv2.merge((I1, I2, I3))  # Merge channels back into an image.
-  # Clip values to the range [0, 255].
+  # Replace NaNs/infs with numeric values then Clip values to the range [0, 255].
+  I = np.nan_to_num(I, nan=0.0, posinf=255.0, neginf=0.0)
   I = np.clip(I, 0, 255)  # Clip values to the range [0, 255].
   # Convert to unsigned 8-bit integer.
   I = I.astype(np.uint8)  # Convert to unsigned 8-bit integer.
