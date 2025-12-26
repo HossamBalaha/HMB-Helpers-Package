@@ -143,14 +143,26 @@ def NormalizedMutualInformation(image1, image2):
   # This step ensures both images are in the same format and ready for calculation of normalized mutual information.
   img2Flat = np.asarray(image2).flatten().astype(np.float64)
 
+  # If inputs are continuous, quantize them into discrete labels so sklearn's NMI behaves without warnings.
+  # Use 256 bins as a reasonable default for image intensity quantization.
+  def _Quantize(arr, nbins=256):
+    if (arr.size == 0):
+      return arr.astype(int)
+    lo = arr.min()
+    hi = arr.max()
+    if (hi <= lo):
+      return np.zeros_like(arr, dtype=int)
+    scaled = (arr - lo) / (hi - lo)
+    labels = np.floor(scaled * (nbins - 1)).astype(int)
+    return labels
+
+  labels1 = _Quantize(img1Flat, nbins=256)
+  labels2 = _Quantize(img2Flat, nbins=256)
+
   # Calculate the Normalized Mutual Information (NMI) between the two flattened images.
-  # The `normalized_mutual_info_score` function computes NMI, which measures the similarity between two datasets.
-  # NMI is normalized to a range of [0, 1], where 0 indicates no mutual information and 1 indicates perfect correlation.
-  nmi = normalized_mutual_info_score(img1Flat, img2Flat)
+  nmi = normalized_mutual_info_score(labels1, labels2)
 
   # Return the computed Normalized Mutual Information value.
-  # This value provides a normalized measure of the shared information between the two images,
-  # making it easier to interpret.
   return nmi
 
 

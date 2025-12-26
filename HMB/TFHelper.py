@@ -45,7 +45,9 @@ def TFGradCam(model, imgTensor, classIdx=None, lastConvLayerName=None):
 
   # Build a model that outputs conv layer activations and predictions.
   convLayer = model.get_layer(lastConvLayerName).output
-  gradModel = tf.keras.models.Model([model.inputs], [convLayer, model.output])
+  # Use the same input structure as the original model to avoid Keras warnings about input nesting
+  # gradModel = tf.keras.models.Model([model.inputs], [convLayer, model.output])
+  gradModel = tf.keras.models.Model(model.inputs, [convLayer, model.output])
 
   with tf.GradientTape() as tape:
     convOutputs, predictions = gradModel(x)
