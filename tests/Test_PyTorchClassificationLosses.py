@@ -60,5 +60,5 @@ class TestPyTorchClassificationLosses(unittest.TestCase):
     self.assertTrue(torch.isfinite(loss))
 
 
-if __name__ == '__main__':
+if (__name__ == "__main__"):
   unittest.main()

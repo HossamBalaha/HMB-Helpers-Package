@@ -94,7 +94,31 @@ def ExtractPDFTextByRegex(filePath, pattern):
   '''
 
   text = ReadFullPDF(filePath)
-  return re.findall(pattern, text)
+  # Try original pattern first.
+  try:
+    matches = re.findall(pattern, text)
+  except re.error:
+    matches = []
+
+  # If no matches found, attempt common unescaping strategies.
+  if (len(matches) == 0 and isinstance(pattern, str) and "\\\\" in pattern):
+    # Convert double backslashes to single backslashes (e.g., "\\\\d+" -> "\\d+").
+    try:
+      alt = pattern.replace("\\\\", "\\")
+      matches = re.findall(alt, text)
+    except re.error:
+      matches = []
+
+  # As a last resort, try interpreting escape sequences (unicode-escape) to recover patterns.
+  if (len(matches) == 0 and isinstance(pattern, str)):
+    try:
+      alt2 = pattern.encode("utf-8").decode("unicode_escape")
+      if (alt2 != pattern):
+        matches = re.findall(alt2, text)
+    except Exception:
+      pass
+
+  return matches
 
 
 # Define a function to extract metadata from a PDF file.

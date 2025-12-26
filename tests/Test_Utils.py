@@ -21,35 +21,35 @@ from HMB.Utils import (
 
 
 class TestUtils(unittest.TestCase):
-  '''
+  """
   Unit tests for the Utils module.
   Tests cover configuration reading, file I/O, geometric operations, colors, and CSV helpers.
-  '''
+  """
 
   @classmethod
   def setUpClass(cls):
-    '''Create temporary directory for test files.'''
+    """Create temporary directory for test files."""
     cls.testDir = tempfile.mkdtemp()
 
   @classmethod
   def tearDownClass(cls):
-    '''Clean up temporary directory.'''
-    if os.path.exists(cls.testDir):
+    """Clean up temporary directory."""
+    if (os.path.exists(cls.testDir)):
       shutil.rmtree(cls.testDir)
 
-  # ========== ReadProjectConfig Tests ==========
+  # ========== ReadProjectConfig Tests. ==========
 
   def test_read_project_config_yaml(self):
-    '''Test reading YAML configuration file.'''
+    """Test reading YAML configuration file."""
     configPath = os.path.join(self.testDir, "config.yaml")
     configData = {"project_name": "TestProject", "version": "1.0", "debug": True}
 
-    # Write YAML file
+    # Write YAML file.
     import yaml
     with open(configPath, "w") as f:
       yaml.dump(configData, f)
 
-    # Read and verify
+    # Read and verify.
     result = ReadProjectConfig(configPath)
     self.assertIsInstance(result, dict)
     self.assertEqual(result["project_name"], "TestProject")
@@ -57,7 +57,7 @@ class TestUtils(unittest.TestCase):
     self.assertTrue(result["debug"])
 
   def test_read_project_config_yml_extension(self):
-    '''Test reading .yml configuration file.'''
+    """Test reading .yml configuration file."""
     configPath = os.path.join(self.testDir, "config.yml")
     configData = {"app": "test"}
 
@@ -69,7 +69,7 @@ class TestUtils(unittest.TestCase):
     self.assertEqual(result["app"], "test")
 
   def test_read_project_config_json(self):
-    '''Test reading JSON configuration file.'''
+    """Test reading JSON configuration file."""
     configPath = os.path.join(self.testDir, "config.json")
     configData = {"project_name": "JSONProject", "count": 42}
 
@@ -83,12 +83,12 @@ class TestUtils(unittest.TestCase):
     self.assertEqual(result["count"], 42)
 
   def test_read_project_config_file_not_found(self):
-    '''Test reading non-existent config file raises AssertionError.'''
+    """Test reading non-existent config file raises AssertionError."""
     with self.assertRaises(AssertionError):
       ReadProjectConfig("nonexistent.yaml")
 
   def test_read_project_config_unsupported_format(self):
-    '''Test reading unsupported file format raises ValueError.'''
+    """Test reading unsupported file format raises ValueError."""
     configPath = os.path.join(self.testDir, "config.txt")
     with open(configPath, "w") as f:
       f.write("test")
@@ -97,7 +97,7 @@ class TestUtils(unittest.TestCase):
       ReadProjectConfig(configPath)
 
   def test_read_project_config_nested_structure(self):
-    '''Test reading nested configuration structure.'''
+    """Test reading nested configuration structure."""
     configPath = os.path.join(self.testDir, "nested.yaml")
     configData = {
       "database": {
@@ -119,7 +119,7 @@ class TestUtils(unittest.TestCase):
     self.assertEqual(result["database"]["credentials"]["user"], "admin")
 
   def test_read_project_config_invalid_yaml(self):
-    '''Invalid YAML content should raise an error inside ReadProjectConfig.'''
+    """Invalid YAML content should raise an error inside ReadProjectConfig."""
     path = os.path.join(self.testDir, "invalid.yaml")
     with open(path, "w") as f:
       f.write("key: value: another")  # malformed YAML
@@ -127,7 +127,7 @@ class TestUtils(unittest.TestCase):
       _ = ReadProjectConfig(path)
 
   def test_read_project_config_invalid_json(self):
-    '''Invalid JSON content should raise an error inside ReadProjectConfig.'''
+    """Invalid JSON content should raise an error inside ReadProjectConfig."""
     path = os.path.join(self.testDir, "invalid.json")
     with open(path, "w") as f:
       f.write("{ invalid json }")
@@ -163,49 +163,49 @@ class TestUtils(unittest.TestCase):
   # ========== IsPointInsideContour Tests ==========
 
   def test_is_point_inside_contour_inside(self):
-    '''Test point inside a rectangular contour.'''
+    """Test point inside a rectangular contour."""
     contour = np.array([[0, 0], [100, 0], [100, 100], [0, 100]])
     point = (50, 50)
     result = IsPointInsideContour(point, contour)
     self.assertTrue(result)
 
   def test_is_point_inside_contour_outside(self):
-    '''Test point outside a rectangular contour.'''
+    """Test point outside a rectangular contour."""
     contour = np.array([[0, 0], [100, 0], [100, 100], [0, 100]])
     point = (150, 150)
     result = IsPointInsideContour(point, contour)
     self.assertFalse(result)
 
   def test_is_point_inside_contour_on_edge(self):
-    '''Test point on edge of contour.'''
+    """Test point on edge of contour."""
     contour = np.array([[0, 0], [100, 0], [100, 100], [0, 100]])
     point = (0, 50)
     result = IsPointInsideContour(point, contour)
     self.assertIsInstance(result, bool)
 
   def test_is_point_inside_contour_triangular(self):
-    '''Test point inside triangular contour.'''
+    """Test point inside triangular contour."""
     contour = np.array([[0, 0], [100, 0], [50, 100]])
     point = (50, 30)
     result = IsPointInsideContour(point, contour)
     self.assertTrue(result)
 
   def test_is_point_inside_contour_float_coordinates(self):
-    '''Test with float point coordinates.'''
+    """Test with float point coordinates."""
     contour = np.array([[0, 0], [100, 0], [100, 100], [0, 100]])
     point = (50.5, 50.5)
     result = IsPointInsideContour(point, contour)
     self.assertIsInstance(result, bool)
 
   def test_is_point_inside_contour_degenerate(self):
-    '''Contour with fewer than 3 points (degenerate) should be handled.'''
+    """Contour with fewer than 3 points (degenerate) should be handled."""
     contour = np.array([[0, 0], [1, 1]])
     point = (0, 0)
     res = IsPointInsideContour(point, contour)
     self.assertIsInstance(res, bool)
 
   def test_is_point_inside_contour_non_array(self):
-    '''Non-numpy contour input like list should be supported.'''
+    """Non-numpy contour input like list should be supported."""
     contour = [[0, 0], [100, 0], [100, 100], [0, 100]]
     point = (10, 10)
     result = IsPointInsideContour(point, contour)
@@ -227,7 +227,7 @@ class TestUtils(unittest.TestCase):
   # ========== IsIntersectingWithOtherContours Tests ==========
 
   def test_is_intersecting_with_other_contours_true(self):
-    '''Test point intersecting with contours.'''
+    """Test point intersecting with contours."""
     contours = [
       [[0, 0], [50, 0], [50, 50], [0, 50]],
       [[100, 100], [150, 100], [150, 150], [100, 150]]
@@ -237,7 +237,7 @@ class TestUtils(unittest.TestCase):
     self.assertTrue(result)
 
   def test_is_intersecting_with_other_contours_false(self):
-    '''Test point not intersecting with any contours.'''
+    """Test point not intersecting with any contours."""
     contours = [
       [[0, 0], [50, 0], [50, 50], [0, 50]],
       [[100, 100], [150, 100], [150, 150], [100, 150]]
@@ -247,14 +247,14 @@ class TestUtils(unittest.TestCase):
     self.assertFalse(result)
 
   def test_is_intersecting_with_other_contours_empty_list(self):
-    '''Test with empty contours list.'''
+    """Test with empty contours list."""
     contours = []
     point = (50, 50)
     result = IsIntersectingWithOtherContours(point, contours)
     self.assertFalse(result)
 
   def test_is_intersecting_with_other_contours_multiple(self):
-    '''Test with multiple contours.'''
+    """Test with multiple contours."""
     contours = [
       [[0, 0], [30, 0], [30, 30], [0, 30]],
       [[40, 40], [70, 40], [70, 70], [40, 70]],
@@ -265,7 +265,7 @@ class TestUtils(unittest.TestCase):
     self.assertTrue(result)
 
   def test_is_intersecting_with_other_contours_none_and_mixed(self):
-    '''Contours list containing None or degenerate contours should be safely handled.'''
+    """Contours list containing None or degenerate contours should be safely handled."""
     contours = [None, [[0, 0]], [[0, 0], [1, 1]], [[0, 0], [10, 0], [10, 10], [0, 10]]]
     point = (5, 5)
     result = IsIntersectingWithOtherContours(point, contours)
@@ -280,7 +280,7 @@ class TestUtils(unittest.TestCase):
     self.assertIsInstance(IsIntersectingWithOtherContours(point, contours), bool)
 
   def test_is_intersecting_with_other_contours_basic(self):
-    '''Two overlapping rectangles should intersect.'''
+    """Two overlapping rectangles should intersect."""
     c1 = np.array([[0, 0], [10, 0], [10, 10], [0, 10]])
     c2 = np.array([[5, 5], [15, 5], [15, 15], [5, 15]])
     res = IsIntersectingWithOtherContours(c1, [c2])
@@ -295,7 +295,7 @@ class TestUtils(unittest.TestCase):
   # ========== Pickle File Tests ==========
 
   def test_write_read_pickle_file_dict(self):
-    '''Test writing and reading dictionary to pickle file.'''
+    """Test writing and reading dictionary to pickle file."""
     filePath = os.path.join(self.testDir, "test_dict.pkl")
     testData = {"key1": "value1", "key2": 42, "key3": [1, 2, 3]}
 
@@ -306,7 +306,7 @@ class TestUtils(unittest.TestCase):
     self.assertEqual(loadedData, testData)
 
   def test_write_read_pickle_file_list(self):
-    '''Test writing and reading list to pickle file.'''
+    """Test writing and reading list to pickle file."""
     filePath = os.path.join(self.testDir, "test_list.pkl")
     testData = [1, 2, 3, "test", {"nested": "dict"}]
 
@@ -315,7 +315,7 @@ class TestUtils(unittest.TestCase):
     self.assertEqual(loadedData, testData)
 
   def test_write_read_pickle_file_numpy_array(self):
-    '''Test writing and reading numpy array to pickle file.'''
+    """Test writing and reading numpy array to pickle file."""
     filePath = os.path.join(self.testDir, "test_array.pkl")
     testData = np.array([[1, 2, 3], [4, 5, 6]])
 
@@ -324,12 +324,12 @@ class TestUtils(unittest.TestCase):
     np.testing.assert_array_equal(loadedData, testData)
 
   def test_read_pickle_file_not_found(self):
-    '''Test reading non-existent pickle file raises AssertionError.'''
+    """Test reading non-existent pickle file raises AssertionError."""
     with self.assertRaises(AssertionError):
       ReadPickleFile("nonexistent.pkl")
 
   def test_write_read_pickle_complex_object(self):
-    '''Test writing and reading complex nested object.'''
+    """Test writing and reading complex nested object."""
     filePath = os.path.join(self.testDir, "complex.pkl")
     testData = {
       "arrays": [np.array([1, 2, 3]), np.array([4, 5, 6])],
@@ -354,7 +354,7 @@ class TestUtils(unittest.TestCase):
   # ========== Text File Tests ==========
 
   def test_write_read_text_file_basic(self):
-    '''Test writing and reading basic text file.'''
+    """Test writing and reading basic text file."""
     filePath = os.path.join(self.testDir, "test.txt")
     testText = "Hello, World!\nThis is a test."
 
@@ -365,7 +365,7 @@ class TestUtils(unittest.TestCase):
     self.assertEqual(loadedText, testText)
 
   def test_write_read_text_file_empty(self):
-    '''Test writing and reading empty text file.'''
+    """Test writing and reading empty text file."""
     filePath = os.path.join(self.testDir, "empty.txt")
     testText = ""
 
@@ -374,7 +374,7 @@ class TestUtils(unittest.TestCase):
     self.assertEqual(loadedText, testText)
 
   def test_write_read_text_file_multiline(self):
-    '''Test writing and reading multiline text.'''
+    """Test writing and reading multiline text."""
     filePath = os.path.join(self.testDir, "multiline.txt")
     testText = "Line 1\nLine 2\nLine 3\n\nLine 5"
 
@@ -383,12 +383,12 @@ class TestUtils(unittest.TestCase):
     self.assertEqual(loadedText, testText)
 
   def test_read_text_file_not_found(self):
-    '''Test reading non-existent text file raises AssertionError.'''
+    """Test reading non-existent text file raises AssertionError."""
     with self.assertRaises(AssertionError):
       ReadTextFile("nonexistent.txt")
 
   def test_write_text_file_unicode(self):
-    '''Test writing and reading unicode text.'''
+    """Test writing and reading unicode text."""
     filePath = os.path.join(self.testDir, "unicode.txt")
     testText = "Hello World! Ca va?"
 
@@ -397,7 +397,7 @@ class TestUtils(unittest.TestCase):
     self.assertEqual(loadedText, testText)
 
   def test_write_read_text_large_content(self):
-    '''Write and read a large text content.'''
+    """Write and read a large text content."""
     filePath = os.path.join(self.testDir, "large.txt")
     testText = "x" * 100000  # 100k characters
     WriteTextFile(filePath, testText)
@@ -412,7 +412,7 @@ class TestUtils(unittest.TestCase):
   # ========== YAML File Tests ==========
 
   def test_load_save_yaml_basic(self):
-    '''Test saving and loading basic YAML file.'''
+    """Test saving and loading basic YAML file."""
     yamlPath = os.path.join(self.testDir, "test_yaml.yaml")
     testData = {"name": "John", "age": 30, "active": True}
 
@@ -423,7 +423,7 @@ class TestUtils(unittest.TestCase):
     self.assertEqual(loadedData, testData)
 
   def test_load_save_yaml_list(self):
-    '''Test saving and loading list in YAML.'''
+    """Test saving and loading list in YAML."""
     yamlPath = os.path.join(self.testDir, "list.yaml")
     testData = [1, 2, 3, "test", {"key": "value"}]
 
@@ -432,7 +432,7 @@ class TestUtils(unittest.TestCase):
     self.assertEqual(loadedData, testData)
 
   def test_load_save_yaml_nested(self):
-    '''Test saving and loading nested YAML structure.'''
+    """Test saving and loading nested YAML structure."""
     yamlPath = os.path.join(self.testDir, "nested.yaml")
     testData = {
       "level1": {
@@ -448,12 +448,12 @@ class TestUtils(unittest.TestCase):
     self.assertEqual(loadedData, testData)
 
   def test_load_yaml_not_found(self):
-    '''Test loading non-existent YAML file raises AssertionError.'''
+    """Test loading non-existent YAML file raises AssertionError."""
     with self.assertRaises(AssertionError):
       LoadYaml("nonexistent.yaml")
 
   def test_save_yaml_empty_dict(self):
-    '''Test saving empty dictionary to YAML.'''
+    """Test saving empty dictionary to YAML."""
     yamlPath = os.path.join(self.testDir, "empty.yaml")
     testData = {}
 
@@ -462,7 +462,7 @@ class TestUtils(unittest.TestCase):
     self.assertEqual(loadedData, testData)
 
   def test_save_yaml_with_special_types(self):
-    '''Save YAML with various scalar types and verify.'''
+    """Save YAML with various scalar types and verify."""
     yamlPath = os.path.join(self.testDir, "special.yaml")
     testData = {
       "null"      : None,
@@ -487,7 +487,7 @@ class TestUtils(unittest.TestCase):
   # ========== Integration Tests ==========
 
   def test_config_yaml_json_equivalence(self):
-    '''Test that YAML and JSON configs produce same result.'''
+    """Test that YAML and JSON configs produce same result."""
     yamlPath = os.path.join(self.testDir, "config.yaml")
     jsonPath = os.path.join(self.testDir, "config.json")
     configData = {"app": "test", "version": 1, "features": ["a", "b", "c"]}
@@ -503,7 +503,7 @@ class TestUtils(unittest.TestCase):
     self.assertEqual(yamlResult, jsonResult)
 
   def test_file_operations_workflow(self):
-    '''Test complete file I/O workflow.'''
+    """Test complete file I/O workflow."""
     # Write text
     textPath = os.path.join(self.testDir, "workflow.txt")
     WriteTextFile(textPath, "Initial text")

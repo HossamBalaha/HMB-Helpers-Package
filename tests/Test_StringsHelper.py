@@ -3,9 +3,9 @@ from HMB.StringsHelper import StringsHelper
 
 
 class TestStringsHelper(unittest.TestCase):
-  '''
+  """
   Unit tests for StringsHelper covering core methods.
-  '''
+  """
 
   def setUp(self):
     self.sh = StringsHelper("Hello World")
@@ -225,5 +225,5 @@ class TestStringsHelper(unittest.TestCase):
     self.assertFalse(self.sh.IsOneEditOf("pa"))
 
 
-if __name__ == "__main__":
+if (__name__ == "__main__"):
   unittest.main()

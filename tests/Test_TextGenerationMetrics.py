@@ -3,10 +3,10 @@ from HMB.TextGenerationMetrics import TextGenerationMetrics
 
 
 class TestTextGenerationMetrics(unittest.TestCase):
-  '''
+  """
   Unit tests for TextGenerationMetrics focusing on lightweight metrics.
   Covers BLEU, ROUGE, METEOR (approximation), and EditDistance similarity.
-  '''
+  """
 
   def setUp(self):
     self.tgm = TextGenerationMetrics()
@@ -99,5 +99,5 @@ class TestTextGenerationMetrics(unittest.TestCase):
       _ = self.tgm.CalculateROUGE(self.genIdentical, None)
 
 
-if __name__ == "__main__":
+if (__name__ == "__main__"):
   unittest.main()

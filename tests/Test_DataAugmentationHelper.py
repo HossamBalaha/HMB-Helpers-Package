@@ -10,12 +10,12 @@ from HMB.DataAugmentationHelper import (
 
 
 class TestDataAugmentationHelper(unittest.TestCase):
-  '''
+  """
   Unit tests for DataAugmentationHelper using PerformDataAugmentation and ApplyAugmentation APIs.
-  '''
+  """
 
   def setUp(self):
-    # Create a temporary test image
+    # Create a temporary test image.
     self.tmpDir = tempfile.mkdtemp()
     self.testImg = Image.fromarray((np.random.rand(64, 64, 3) * 255).astype(np.uint8))
     self.testImgPath = os.path.join(self.tmpDir, "test.png")
@@ -53,8 +53,8 @@ class TestDataAugmentationHelper(unittest.TestCase):
     config = {"rotation": {"enabled": False}}
     augmented = PerformDataAugmentation(self.testImgPath, config, numResultantImages=2)
     self.assertEqual(len(augmented), 2)
-    # Should return copies of original when no augmentation enabled
+    # Should return copies of original when no augmentation enabled.
 
 
-if __name__ == '__main__':
+if (__name__ == "__main__"):
   unittest.main()

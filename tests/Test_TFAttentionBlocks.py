@@ -24,9 +24,9 @@ from HMB.TFAttentionBlocks import (
 
 
 class TestTFAttentionBlocks(unittest.TestCase):
-  '''
+  """
   Unit tests covering all attention blocks with tiny synthetic tensors.
-  '''
+  """
 
   def _run_layer(self, layer, inputShape):
     x = tf.random.normal(inputShape)
@@ -71,5 +71,5 @@ class TestTFAttentionBlocks(unittest.TestCase):
       pass
 
 
-if __name__ == "__main__":
+if (__name__ == "__main__"):
   unittest.main()

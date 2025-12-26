@@ -3,9 +3,9 @@ from HMB.TextHelper import CleanText
 
 
 class TestTextHelper(unittest.TestCase):
-  '''
+  """
   Unit tests for TextHelper functions that are deterministic and lightweight.
-  '''
+  """
 
   def test_clean_text_basic(self):
     raw = "I can't believe it's not butter!   \nNew line."
@@ -32,9 +32,9 @@ class TestTextHelper(unittest.TestCase):
   def test_stopwords_and_lemmatize(self):
     raw = "This is a simple test for running tests"
     c = CleanText(raw, lowercase=True, handleContractions=False, removeStopwords=True, lemmatize=False)
-    # Common stopwords removed
+    # Common stopwords removed.
     self.assertTrue("this" not in c)
-    # Lemmatize may reduce running->run if enabled
+    # Lemmatize may reduce running->run if enabled.
     c_lem = CleanText(raw, lowercase=True, lemmatize=True, removeStopwords=False)
     self.assertIsInstance(c_lem, str)
 
@@ -86,5 +86,5 @@ class TestTextHelper(unittest.TestCase):
     self.assertIsInstance(c, str)
 
 
-if __name__ == "__main__":
+if (__name__ == "__main__"):
   unittest.main()

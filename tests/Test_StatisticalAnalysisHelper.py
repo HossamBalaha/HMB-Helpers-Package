@@ -4,10 +4,10 @@ from HMB.StatisticalAnalysisHelper import GeneralStatisticsHelper
 
 
 class TestStatisticalAnalysisHelper(unittest.TestCase):
-  '''
+  """
   Unit tests for GeneralStatisticsHelper.
   Focus on affine transforms, area/centroid, and chi-squared.
-  '''
+  """
 
   def setUp(self):
     self.gsh = GeneralStatisticsHelper()
@@ -123,5 +123,5 @@ class TestStatisticalAnalysisHelper(unittest.TestCase):
     self.assertTrue(rowsMean.shape[0] == data.shape[1])
 
 
-if __name__ == "__main__":
+if (__name__ == "__main__"):
   unittest.main()
