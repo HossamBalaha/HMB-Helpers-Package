@@ -1,8 +1,8 @@
 import os, cv2, random
 import numpy as np
+from typing import Dict, List, Any, Tuple
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 from scipy.ndimage import gaussian_filter, map_coordinates
-from typing import Dict, List, Any
 
 
 def PerformDataAugmentation(
@@ -10,6 +10,7 @@ def PerformDataAugmentation(
   config: Dict[str, Any],
   numResultantImages: int,
   auxImagesList: List[str] = None,
+  extensions: Tuple[str, ...] = (".png", ".jpg", ".jpeg", ".bmp", ".gif"),
 ) -> List[Image.Image]:
   r'''
   Performs data augmentation on an image by randomly applying one augmentation technique per generated image.
@@ -25,6 +26,7 @@ def PerformDataAugmentation(
     numResultantImages (int): Number of augmented images to generate.
     auxImagesList (List[str]): Optional list of auxiliary image paths for advanced augmentations like mixup, cutmix, mosaic.
       Default is None.
+    extensions (Tuple[str, ...]): Tuple of valid image file extensions for auxiliary images. Default includes common formats.
 
   Returns:
     List[Image.Image]: List of augmented PIL Image objects.
@@ -120,6 +122,7 @@ def PerformDataAugmentation(
       selectedAugmentation,  # Selected augmentation type.
       config[selectedAugmentation],  # Parameters for the selected augmentation.
       auxImagesList,  # Optional auxiliary images for advanced augmentations.
+      extensions  # Valid image file extensions for auxiliary images.
     )
 
     # Adding the augmented image to the results list.
@@ -134,6 +137,7 @@ def ApplyAugmentation(
   augmentationType: str,
   augmentationParams: Dict[str, Any],
   auxImagesList: List[str] = None,
+  extensions: Tuple[str, ...] = (".png", ".jpg", ".jpeg", ".bmp", ".gif"),
 ) -> Image.Image:
   r'''
   Applies a specific augmentation technique to an image.
@@ -149,6 +153,7 @@ def ApplyAugmentation(
       and specific settings for that augmentation type.
     auxImagesList (List[str]): Optional list of auxiliary image paths for advanced augmentations like mixup,
       cutmix, and mosaic. Default is None.
+    extensions (Tuple[str, ...]): Tuple of valid image file extensions for auxiliary images. Default includes common formats.
 
   Returns:
     Image.Image: Augmented PIL Image object.
@@ -328,7 +333,7 @@ def ApplyAugmentation(
   # Applying mixup augmentation if selected.
   elif (augmentationType == "mixup"):
     # Checking if auxiliary images list is provided.
-    if (auxImagesList is not None and len(auxImagesList) > 0):
+    if ((auxImagesList is not None) and (len(auxImagesList) > 0)):
       alpha = augmentationParams["alpha"]
       # Selecting a random auxiliary image.
       auxImagePath = random.choice(auxImagesList)
@@ -353,7 +358,7 @@ def ApplyAugmentation(
         auxImages = [
           os.path.join(auxImageDir, f)
           for f in os.listdir(auxImageDir)
-          if (f.lower().endswith((".png", ".jpg", ".jpeg")))
+          if (f.lower().endswith(extensions))
         ]
         if (len(auxImages) > 0):
           alpha = augmentationParams["alpha"]
@@ -434,7 +439,7 @@ def ApplyAugmentation(
         holeX2 = min(width, holeX2)
         holeY2 = min(height, holeY2)
         # Applying the mask.
-        if (holeX1 < holeX2 and holeY1 < holeY2):
+        if ((holeX1 < holeX2) and (holeY1 < holeY2)):
           imageArray[holeY1:holeY2, holeX1:holeX2, :] = 0
     # Converting the numpy array back to PIL Image.
     augmentedImage = Image.fromarray(imageArray)
@@ -457,7 +462,7 @@ def ApplyAugmentation(
       erasingHeight = int(np.sqrt(erasingArea / aspectRatio))
       erasingWidth = int(aspectRatio * erasingHeight)
       # Checking if dimensions are valid.
-      if (erasingWidth < width and erasingHeight < height):
+      if ((erasingWidth < width) and (erasingHeight < height)):
         # Generating random position.
         x = random.randint(0, width - erasingWidth)
         y = random.randint(0, height - erasingHeight)
@@ -473,7 +478,7 @@ def ApplyAugmentation(
   # Applying cutmix augmentation if selected.
   elif (augmentationType == "cutmix"):
     # Checking if auxiliary images list is provided.
-    if (auxImagesList is not None and len(auxImagesList) > 0):
+    if ((auxImagesList is not None) and (len(auxImagesList) > 0)):
       alpha = augmentationParams["alpha"]
       # Selecting a random auxiliary image.
       auxImagePath = random.choice(auxImagesList)
@@ -510,7 +515,7 @@ def ApplyAugmentation(
         auxImages = [
           os.path.join(auxImageDir, f)
           for f in os.listdir(auxImageDir)
-          if (f.lower().endswith((".png", ".jpg", ".jpeg")))
+          if (f.lower().endswith(extensions))
         ]
         if (len(auxImages) > 0):
           alpha = augmentationParams["alpha"]
@@ -547,7 +552,7 @@ def ApplyAugmentation(
   elif (augmentationType == "mosaic"):
     numImages = augmentationParams.get("numImages", 4)
     # Checking if auxiliary images list is provided.
-    if (auxImagesList is not None and len(auxImagesList) >= numImages - 1):
+    if ((auxImagesList is not None) and (len(auxImagesList) >= numImages - 1)):
       # Selecting random auxiliary images.
       selectedAuxImages = random.sample(auxImagesList, numImages - 1)
       # Creating list of all images including original.
@@ -590,7 +595,7 @@ def ApplyAugmentation(
         auxImages = [
           os.path.join(auxImageDir, f)
           for f in os.listdir(auxImageDir)
-          if (f.lower().endswith((".png", ".jpg", ".jpeg")))
+          if (f.lower().endswith(extensions))
         ]
         if (len(auxImages) >= numImages - 1):
           # Selecting random auxiliary images.
@@ -623,8 +628,10 @@ def ApplyAugmentation(
               for j in range(3):
                 idx = i * 3 + j
                 if (idx < len(allImages)):
-                  mosaicImage.paste(allImages[idx].resize((thirdWidth, thirdHeight), Image.BICUBIC),
-                                    (j * thirdWidth, i * thirdHeight))
+                  mosaicImage.paste(
+                    allImages[idx].resize((thirdWidth, thirdHeight), Image.BICUBIC),
+                    (j * thirdWidth, i * thirdHeight)
+                  )
             augmentedImage = mosaicImage
 
   # Applying color jitter augmentation if selected.
@@ -873,7 +880,7 @@ def ApplyAugmentation(
     # Inverting the image colors.
     augmentedImage = ImageOps.invert(augmentedImage)
 
-  # Applying solarize augmentation if selected.
+  # Applying the solarize augmentation if selected.
   elif (augmentationType == "solarize"):
     minThreshold, maxThreshold = augmentationParams["threshold"]
     # Generating random threshold.
@@ -881,7 +888,7 @@ def ApplyAugmentation(
     # Applying solarization.
     augmentedImage = ImageOps.solarize(augmentedImage, threshold)
 
-  # Applying posterize augmentation if selected.
+  # Applying the posterize augmentation if selected.
   elif (augmentationType == "posterize"):
     minBits, maxBits = augmentationParams["bits"]
     # Generating random bit depth.
@@ -889,14 +896,14 @@ def ApplyAugmentation(
     # Applying posterization.
     augmentedImage = ImageOps.posterize(augmentedImage, bits)
 
-  # Applying equalize augmentation if selected.
+  # Applying the equalize augmentation if selected.
   elif (augmentationType == "equalize"):
     # Applying histogram equalization.
     augmentedImage = ImageOps.equalize(augmentedImage)
 
-  # Applying emboss augmentation if selected.
+  # Applying the emboss augmentation if selected.
   elif (augmentationType == "emboss"):
-    # Applying emboss filter.
+    # Applying the emboss filter.
     augmentedImage = augmentedImage.filter(ImageFilter.EMBOSS)
 
   # Applying edge enhance augmentation if selected.
@@ -938,7 +945,12 @@ def ApplyAugmentation(
   return augmentedImage
 
 
-def LoadAuxiliaryImages(directory: str, maxImages: int = 100) -> List[str]:
+def LoadAuxiliaryImages(
+  directory: str,
+  maxImages: int = 100,
+  extensions: Tuple[str, ...] = (".png", ".jpg", ".jpeg", ".bmp", ".gif"),
+  verbose: bool = True,
+) -> List[str]:
   r'''
   Loads auxiliary image paths from a directory for advanced augmentations.
 
@@ -949,6 +961,8 @@ def LoadAuxiliaryImages(directory: str, maxImages: int = 100) -> List[str]:
   Parameters:
     directory (str): Path to the directory containing auxiliary images.
     maxImages (int): Maximum number of image paths to load. Default is 100.
+    extensions (Tuple[str, ...]): Tuple of acceptable image file extensions. Default includes common formats.
+    verbose (bool): If True, apply verbose logging. Default is True.
 
   Returns:
     List[str]: List of image file paths found in the directory.
@@ -956,7 +970,8 @@ def LoadAuxiliaryImages(directory: str, maxImages: int = 100) -> List[str]:
 
   # Checking if the directory exists.
   if (not os.path.exists(directory)):
-    print(f"Warning: Auxiliary image directory not found: {directory}")
+    if (verbose):
+      print(f"Warning: Auxiliary image directory not found: {directory}.")
     return []
 
   # Creating a list to store image paths.
@@ -965,12 +980,15 @@ def LoadAuxiliaryImages(directory: str, maxImages: int = 100) -> List[str]:
   # Iterating through files in the directory.
   for filename in os.listdir(directory):
     # Checking if the file has an image extension.
-    if (filename.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".gif"))):
+    if (filename.lower().endswith(extensions)):
       # Adding the full path to the list.
       imagePaths.append(os.path.join(directory, filename))
       # Checking if we have reached the maximum number of images.
       if (len(imagePaths) >= maxImages):
         break
+
+  if (verbose):
+    print(f"Loaded {len(imagePaths)} auxiliary images from directory: {directory}.")
 
   # Returning the list of image paths.
   return imagePaths
@@ -980,7 +998,8 @@ def SaveAugmentedImages(
   augmentedImages: List[Image.Image],
   outputDir: str,
   baseFilename: str,
-  outputExtension: str = ".png"
+  outputExtension: str = ".png",
+  verbose: bool = True,
 ) -> None:
   r'''
   Saves augmented images to the specified output directory.
@@ -994,10 +1013,15 @@ def SaveAugmentedImages(
     outputDir (str): Directory where augmented images will be saved.
     baseFilename (str): Base name for the output files (without extension).
     outputExtension (str): File extension for the saved images (default is ".png").
+    verbose (bool): If True, prints the path of each saved image (default is True).
   '''
 
+  if (verbose):
+    print(f"Saving augmented images to directory: {outputDir}.")
   # Creating the output directory if it does not exist.
   os.makedirs(outputDir, exist_ok=True)
+  if (verbose):
+    print(f"Output directory is ready: {outputDir}.")
 
   # Iterating through the augmented images and saving them.
   for idx, augmentedImage in enumerate(augmentedImages):
@@ -1007,4 +1031,8 @@ def SaveAugmentedImages(
     outputPath = os.path.join(outputDir, outputFilename)
     # Saving the augmented image to disk.
     augmentedImage.save(outputPath)
-    print(f"Saved augmented image: {outputPath}")
+    # Printing the saved image path if verbose is enabled.
+    if (verbose):
+      print(f"Saved augmented image: {outputPath}.")
+  if (verbose):
+    print(f"Total augmented images saved: {len(augmentedImages)}.")

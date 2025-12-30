@@ -83,6 +83,7 @@ Quickstart
    AudioHelper
    CompressionsHelper
    DataAugmentationHelper
+   DatasetsHelper
    EmbeddingsToTextHelper
    ExplainabilityHelper
    HandCraftedFeatures

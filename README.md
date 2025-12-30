@@ -78,40 +78,41 @@ Key dependencies (see `requirements.txt` for full list):
 
 ### Core Modules
 
-- **AgentsHelper**: AI agent orchestration and interaction utilities
-- **ArabicTextHelper**: Specialized tools for Arabic text processing and analysis
-- **AttentionMapsHelper**: Tools for generating and visualizing attention maps in deep learning models
-- **AudioHelper**: Audio processing, feature extraction, and manipulation utilities
-- **CompressionsHelper**: Data compression and decompression utilities
-- **DataAugmentationHelper**: Image and data augmentation pipelines
-- **EmbeddingsToTextHelper**: Convert between embeddings and text representations for NLP tasks
-- **ExplainabilityHelper**: Model explainability and interpretability (e.g., SHAP analysis)
-- **HandCraftedFeatures**: Feature extraction utilities for images and tabular data
-- **ImagesComparisonMetrics**: Image comparison metrics (SSIM, PSNR, MSE, etc.)
-- **ImageSegmentationMetrics**: Segmentation evaluation metrics (IoU, Dice, pixel accuracy)
-- **ImagesHelper**: Comprehensive image loading, saving, resizing, cropping, and manipulation
-- **ImagesNormalization**: Image normalization, standardization, and color space conversion
-- **ImagesToEmbeddings**: Extract embeddings from images using timm and transformers models
-- **Initializations**: Model and layer initialization helpers for deep learning frameworks
-- **MachineLearningHelper**: ML workflow helpers (data splitting, cross-validation, model selection)
-- **MetaheuristicsHelper**: Metaheuristic optimization algorithms (e.g., MRFO)
-- **PDFHelper**: PDF reading, extraction, manipulation, and annotation
-- **PerformanceMetrics**: Comprehensive performance metrics for classification and regression
-- **PyTorchClassificationLosses**: Custom classification loss functions for PyTorch
-- **PyTorchHelper**: PyTorch utilities for models, tensors, device management, and checkpointing
-- **PyTorchSegmentationLosses**: Custom segmentation losses (Dice, BCE, DiceBCE, Focal, Tversky, IoU)
-- **StatisticalAnalysisHelper**: Statistical analysis and data exploration tools
-- **StringsHelper**: String manipulation and text processing utilities
-- **TextGenerationMetrics**: Metrics for text generation models (ROUGE, BLEU, METEOR)
-- **TextHelper**: Text normalization, cleaning, tokenization, and NLP utilities
-- **TFAttentionBlocks**: TensorFlow/Keras attention mechanism implementations
-- **TFHelper**: TensorFlow/Keras utilities and helpers (Grad-CAM, etc.)
-- **Utils**: Miscellaneous utilities for file I/O, configuration, and data handling
-- **VectorsHelper**: Vector operations and geometric computations
-- **VideosHelper**: Video processing and frame extraction utilities
-- **VotingHelper**: Ensemble voting methods for machine learning
-- **WSIHelper**: Whole Slide Image (WSI) processing for digital pathology
-- **YOLOHelper**: YOLO model training and inference utilities
+- **AgentsHelper**: AI agent orchestration and interaction utilities.
+- **ArabicTextHelper**: Specialized tools for Arabic text processing and analysis.
+- **AttentionMapsHelper**: Tools for generating and visualizing attention maps in deep learning models.
+- **AudioHelper**: Audio processing, feature extraction, and manipulation utilities.
+- **CompressionsHelper**: Data compression and decompression utilities.
+- **DataAugmentationHelper**: Image and data augmentation pipelines.
+- **DatasetsHelper**: Utilities to detect, prepare, and validate image classification datasets (train/val/test layouts).
+- **EmbeddingsToTextHelper**: Convert between embeddings and text representations for NLP tasks.
+- **ExplainabilityHelper**: Model explainability and interpretability (e.g., SHAP analysis).
+- **HandCraftedFeatures**: Feature extraction utilities for images and tabular data.
+- **ImageSegmentationMetrics**: Segmentation evaluation metrics (IoU, Dice, pixel accuracy).
+- **ImagesComparisonMetrics**: Image comparison metrics (SSIM, PSNR, MSE, etc.).
+- **ImagesHelper**: Comprehensive image loading, saving, resizing, cropping, and manipulation.
+- **ImagesNormalization**: Image normalization, standardization, and color space conversion.
+- **ImagesToEmbeddings**: Extract embeddings from images using timm and transformers models.
+- **Initializations**: Model and layer initialization helpers for deep learning frameworks.
+- **MachineLearningHelper**: ML workflow helpers (data splitting, cross-validation, model selection).
+- **MetaheuristicsHelper**: Metaheuristic optimization algorithms (e.g., MRFO).
+- **PDFHelper**: PDF reading, extraction, manipulation, and annotation.
+- **PerformanceMetrics**: Comprehensive performance metrics for classification and regression.
+- **PyTorchClassificationLosses**: Custom classification loss functions for PyTorch.
+- **PyTorchHelper**: PyTorch utilities for models, tensors, device management, and checkpointing.
+- **PyTorchSegmentationLosses**: Custom segmentation losses (Dice, BCE, DiceBCE, Focal, Tversky, IoU).
+- **StatisticalAnalysisHelper**: Statistical analysis and data exploration tools.
+- **StringsHelper**: String manipulation and text processing utilities.
+- **TFAttentionBlocks**: TensorFlow/Keras attention mechanism implementations.
+- **TFHelper**: TensorFlow/Keras utilities and helpers (Grad-CAM, etc.).
+- **TextGenerationMetrics**: Metrics for text generation models (ROUGE, BLEU, METEOR).
+- **TextHelper**: Text normalization, cleaning, tokenization, and NLP utilities.
+- **Utils**: Miscellaneous utilities for file I/O, configuration, and data handling.
+- **VectorsHelper**: Vector operations and geometric computations.
+- **VideosHelper**: Video processing and frame extraction utilities.
+- **VotingHelper**: Ensemble voting methods for machine learning.
+- **WSIHelper**: Whole Slide Image (WSI) processing for digital pathology.
+- **YOLOHelper**: YOLO model training and inference utilities.
 
 ## Documentation
 
