@@ -1,98 +1,77 @@
-name: CI - Unit Tests and Integration Tests
+name: Python package tests
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ main ]
-  workflow_dispatch: { }
+    branches: [ main, master ]
 
 jobs:
-  unit-tests:
-    name: Unit Tests (pytest)
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [ 3.8, 3.9, 3.10, 3.11 ]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}-${{ matrix.python-version }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest
-      - name: Run tests (pytest)
-        run: |
-          python -m pytest -q
-
-  integration-tests:
-    name: Integration Tests (heavy deps) - Run on push to main only
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  test:
+    name: Run unit tests
     runs-on: ${{ matrix.os }}
-    needs: unit-tests
     strategy:
+      fail-fast: false
       matrix:
         os: [ ubuntu-latest, windows-latest ]
-        python-version: [ 3.10, 3.11 ]
+        python-version: [ "3.10", "3.11", "3.12" ]
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Free up disk space (Ubuntu)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          echo "Before cleanup:"
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf /usr/local/.ghcup
+          sudo apt-get clean
+          docker rmi $(docker image ls -aq) || true
+          echo "After cleanup:"
+          df -h
+
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Upgrade pip and install basic tools
+
+      - name: Upgrade pip and install build tools
         run: |
           python -m pip install --upgrade pip setuptools wheel
-      - name: Cache pip on Ubuntu
-        if: matrix.os == 'ubuntu-latest'
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}-${{ matrix.python-version }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-      - name: Cache pip on Windows
-        if: matrix.os == 'windows-latest'
-        uses: actions/cache@v4
-        with:
-          path: |
-            %LOCALAPPDATA%\\pip\\Cache
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}-${{ matrix.python-version }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          pip cache purge || true
+
       - name: Install PyTorch CPU
         run: |
           pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-        if: matrix.os == 'ubuntu-latest'
+
       - name: Install TensorFlow CPU
         run: |
           pip install --no-cache-dir tensorflow-cpu keras
-        if: matrix.os == 'ubuntu-latest'
-      - name: Install remaining dependencies
+
+      - name: Install remaining dependencies from CI requirements
         run: |
           pip install --no-cache-dir -r requirements.txt
-          pip install pytest
-      - name: Run integration tests (pytest)
+
+      - name: Check disk space
+        run: df -h || echo "Disk space check"
+        if: startsWith(matrix.os, 'ubuntu')
+
+      - name: Run unit tests
         run: |
-          python -m pytest -q
+          python -m unittest discover -s tests -p "Test_*.py" -v
+
       - name: Upload test artifacts on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: integration-tests-artifacts-${{ matrix.os }}-py${{ matrix.python-version }}
+          name: unittest-logs-${{ matrix.os }}-py${{ matrix.python-version }}
           path: |
             **/pytest*.xml
             **/test-results*.xml
