@@ -1161,12 +1161,14 @@ class CAMExplainerPyTorch(object):
       heatmapsDir.mkdir(parents=True, exist_ok=True)
     overlayPath = overlaysDir / f"{imagePath.stem}_P{predictedClassName}_C{trueClassName}_Overlay.png"
     annotatedPath = overlaysDir / f"{imagePath.stem}_P{predictedClassName}_C{trueClassName}_Annotated.png"
+    overlayPathPDF = overlaysDir / f"{imagePath.stem}_P{predictedClassName}_C{trueClassName}_Overlay.pdf"
+    annotatedPathPDF = overlaysDir / f"{imagePath.stem}_P{predictedClassName}_C{trueClassName}_Annotated.pdf"
     heatmapPath = heatmapsDir / f"{imagePath.stem}_P{predictedClassName}_C{trueClassName}_Heatmap.npy"
     # Save outputs to disk.
     Image.fromarray(overlay).save(overlayPath)
     Image.fromarray(annotatedVisualization).save(annotatedPath)
-    Image.fromarray(overlay).save(overlayPath.replace(".png", ".pdf"))
-    Image.fromarray(annotatedVisualization).save(annotatedPath.replace(".png", ".pdf"))
+    Image.fromarray(overlay).save(overlayPathPDF)
+    Image.fromarray(annotatedVisualization).save(annotatedPathPDF)
     np.save(heatmapPath, saliencyResized)
     elapsed = time.time() - startTime
     # Build a summary dictionary to return.
