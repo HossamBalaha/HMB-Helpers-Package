@@ -1058,6 +1058,7 @@ class CAMExplainerPyTorch(object):
     imagePath,
     classNames=None,
     overlaysDir=None,
+    annotationsDir=None,
     heatmapsDir=None,
     contrast=False
   ):
@@ -1068,6 +1069,7 @@ class CAMExplainerPyTorch(object):
       imagePath (Path | str): Path to the image file to process.
       classNames (dict | None): Optional mapping class_idx -> className used for annotations.
       overlaysDir (Path | None): Directory to save overlay and annotated PNGs.
+      annotationsDir (Path | None): Directory to save annotated images (not used currently).
       heatmapsDir (Path | None): Directory to save raw heatmap numpy arrays.
       contrast (bool): When True use class-contrast mode (explain top non-predicted class).
 
@@ -1153,16 +1155,20 @@ class CAMExplainerPyTorch(object):
     # Prepare output directories and CamelCase filenames.
     if (overlaysDir is None and self.outputBase is not None):
       overlaysDir = self.outputBase / "Overlays"
+    if (annotationsDir is None and self.outputBase is not None):
+      annotationsDir = self.outputBase / "Annotations"
     if (heatmapsDir is None and self.outputBase is not None):
       heatmapsDir = self.outputBase / "Heatmaps"
     if (overlaysDir is not None):
       overlaysDir.mkdir(parents=True, exist_ok=True)
     if (heatmapsDir is not None):
       heatmapsDir.mkdir(parents=True, exist_ok=True)
+    if (annotationsDir is not None):
+      annotationsDir.mkdir(parents=True, exist_ok=True)
     overlayPath = overlaysDir / f"{imagePath.stem}_P{predictedClassName}_C{trueClassName}_Overlay.png"
-    annotatedPath = overlaysDir / f"{imagePath.stem}_P{predictedClassName}_C{trueClassName}_Annotated.png"
+    annotatedPath = annotationsDir / f"{imagePath.stem}_P{predictedClassName}_C{trueClassName}_Annotated.png"
     overlayPathPDF = overlaysDir / f"{imagePath.stem}_P{predictedClassName}_C{trueClassName}_Overlay.pdf"
-    annotatedPathPDF = overlaysDir / f"{imagePath.stem}_P{predictedClassName}_C{trueClassName}_Annotated.pdf"
+    annotatedPathPDF = annotationsDir / f"{imagePath.stem}_P{predictedClassName}_C{trueClassName}_Annotated.pdf"
     heatmapPath = heatmapsDir / f"{imagePath.stem}_P{predictedClassName}_C{trueClassName}_Heatmap.npy"
     # Save outputs to disk.
     Image.fromarray(overlay).save(overlayPath)

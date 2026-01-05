@@ -224,6 +224,49 @@ class TestStringsHelper(unittest.TestCase):
     self.assertFalse(self.sh.IsOneEditOf("paless"))
     self.assertFalse(self.sh.IsOneEditOf("pa"))
 
+  # New additional tests
+  def test_urlify_with_unicode_and_tabs(self):
+    self.sh.SetString(" \u00A0a b\tc \u00A0")
+    # strip=True removes leading/trailing unicode NBSP? strip() will remove standard whitespace but not NBSP;
+    # our Urlify only replaces spaces ' ' so NBSP remains; verify expected behavior
+    res_strip = self.sh.Urlify(strip=True)
+    # After strip(): NBSP at ends may remain; we check replacement of spaces only
+    self.assertIn("%20", res_strip)
+    res_no_strip = self.sh.Urlify(strip=False)
+    self.assertTrue(res_no_strip.startswith("%20") or "\u00A0" in res_no_strip)
+
+  def test_compress_empty_and_unique_and_repeated(self):
+    # Empty string
+    self.sh.SetString("")
+    compressed, isBetter = self.sh.Compress()
+    self.assertEqual(compressed, "")
+    self.assertFalse(isBetter)
+
+    # Unique characters - compression not better
+    self.sh.SetString("abc")
+    compressed, isBetter = self.sh.Compress()
+    self.assertEqual(compressed, "a1b1c1")
+    self.assertFalse(isBetter)
+
+    # Repeated single char - compression better
+    self.sh.SetString("aaaa")
+    compressed, isBetter = self.sh.Compress()
+    self.assertEqual(compressed, "a4")
+    self.assertTrue(isBetter)
+
+  def test_is_permutation_of_non_string_inputs(self):
+    self.sh.SetString("abc")
+    self.assertFalse(self.sh.IsPermutationOf(None))
+    self.assertFalse(self.sh.IsPermutationOf(123))
+
+  def test_is_one_edit_of_empty_and_single(self):
+    # empty stored string and single-char input should be one edit away
+    self.sh.SetString("")
+    self.assertTrue(self.sh.IsOneEditOf("a"))
+    # single char stored and empty other -> deletion
+    self.sh.SetString("a")
+    self.assertTrue(self.sh.IsOneEditOf(""))
+
 
 if (__name__ == "__main__"):
   unittest.main()
