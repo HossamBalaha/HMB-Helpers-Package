@@ -11,6 +11,9 @@ from HMB.PyTorchHelper import (
   SaveCheckpoint,
   LoadCheckpoint,
   GetOptimizer,
+  MixupFn,
+  MixupCriterion,
+  ExponentialMovingAverage,
 )
 
 
@@ -90,6 +93,43 @@ class TestPyTorchHelperUtilities(unittest.TestCase):
       LoadCheckpoint(path, model, opt, lr=0.005, device=torch.device("cpu"))
       for pg in opt.param_groups:
         self.assertAlmostEqual(pg["lr"], 0.005)
+
+  # ========== New tests: Mixup and EMA ==========
+  def test_mixup_fn_alpha_zero_returns_one_hot(self):
+    # Create simple inputs and integer targets
+    inputs = torch.randn(4, 3)
+    targets = torch.tensor([0, 1, 2, 1], dtype=torch.long)
+    mixed_inputs, mixed_targets = MixupFn(inputs, targets, alpha=0.0, numClasses=3)
+    # Inputs should be unchanged
+    self.assertTrue(torch.allclose(mixed_inputs, inputs))
+    # Targets should be one-hot with correct shape and dtype
+    self.assertEqual(mixed_targets.shape, (4, 3))
+    self.assertTrue(torch.all((mixed_targets.sum(dim=1) - 1.0).abs() < 1e-6))
+
+  def test_mixup_fn_alpha_positive_shapes_and_sum_to_one(self):
+    inputs = torch.randn(6, 5)
+    targets = torch.tensor([0, 1, 2, 0, 1, 2], dtype=torch.long)
+    mixed_inputs, mixed_targets = MixupFn(inputs, targets, alpha=0.4, numClasses=3)
+    self.assertEqual(mixed_inputs.shape, inputs.shape)
+    self.assertEqual(mixed_targets.shape[0], inputs.shape[0])
+    # Each soft target row should sum to ~1
+    sums = mixed_targets.sum(dim=1)
+    self.assertTrue(torch.all((sums - 1.0).abs() < 1e-5))
+
+  def test_mixup_criterion_outputs_scalar(self):
+    logits = torch.randn(4, 3)
+    soft = torch.softmax(torch.randn(4, 3), dim=1)
+    loss = MixupCriterion(logits, soft)
+    self.assertTrue(torch.is_tensor(loss))
+    self.assertEqual(loss.dim(), 0)
+
+  def test_ema_load_state_without_module_raises(self):
+    model = TinyModel()
+    ema = ExponentialMovingAverage(model)
+    sd = ema.state_dict()
+    ema2 = ExponentialMovingAverage()
+    with self.assertRaises(RuntimeError):
+      ema2.load_state_dict(sd)
 
 
 if (__name__ == "__main__"):

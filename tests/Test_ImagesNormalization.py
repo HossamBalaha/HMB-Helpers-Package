@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 import cv2
-from HMB.ImagesNormalization import RGB2LAB, LAB2RGB, ReinhardColorNormalization
+from HMB.ImagesNormalization import RGB2LAB, LAB2RGB, ReinhardColorNormalization, LabSplitMeanStd, CreateAverageHistogram, CreateLUTFromHistogram, ApplyLUT, LABSplit2RGB, RGB2OD
 
 
 class TestImagesNormalization(unittest.TestCase):
@@ -121,6 +121,48 @@ class TestImagesNormalization(unittest.TestCase):
       np.uint8)
     out_noisy = rcn.Normalize(noisy)
     self.assertEqual(out_noisy.shape, noisy.shape)
+
+  def test_labsplit_mean_std_basic(self):
+    means, stds = LabSplitMeanStd(self.rgbSolid)
+    # means and stds should be lists of length 3 with numeric entries
+    self.assertEqual(len(means), 3)
+    self.assertEqual(len(stds), 3)
+    for m in means:
+      # mean from cv2.meanStdDev returns array-like; ensure numeric
+      self.assertTrue(np.isfinite(np.array(m)).all())
+    for s in stds:
+      self.assertTrue(np.isfinite(np.array(s)).all())
+
+  def test_create_avg_hist_lut_and_apply(self):
+    # Create a small set of reference images (use 3-channel)
+    refs = [self.rgbSolid, self.rgbGradient]
+    avgHist = CreateAverageHistogram(refs, noChannels=3)
+    self.assertEqual(len(avgHist), 3)
+    lut = CreateLUTFromHistogram(avgHist)
+    self.assertEqual(len(lut), 3)
+    for l in lut:
+      self.assertEqual(len(l), 256)
+    # Apply LUT to a small test image
+    img = np.zeros((8, 8, 3), dtype=np.uint8)
+    img[..., 0] = np.arange(8).reshape(8, 1) * 32
+    img_out = ApplyLUT(img.copy(), lut, noChannels=3)
+    self.assertEqual(img_out.shape, img.shape)
+    self.assertEqual(img_out.dtype, np.uint8)
+    self.assertTrue(np.all(img_out >= 0) and np.all(img_out <= 255))
+
+  def test_labsplit2rgb_consistency(self):
+    L, A, B = RGB2LAB(self.rgbGradient, isNorm=True)
+    rgb_back = LABSplit2RGB(L.copy(), A.copy(), B.copy())
+    self.assertEqual(rgb_back.shape, self.rgbGradient.shape)
+    # Values should be uint8 and within [0,255]
+    self.assertEqual(rgb_back.dtype, np.uint8)
+    self.assertTrue(np.all(rgb_back >= 0) and np.all(rgb_back <= 255))
+
+  def test_rgb2od_range(self):
+    od = RGB2OD(self.rgbSolid)
+    self.assertEqual(od.shape, self.rgbSolid.shape)
+    self.assertTrue(np.all(np.isfinite(od)))
+    self.assertTrue(np.all(od >= 0))
 
 
 if __name__ == "__main__":

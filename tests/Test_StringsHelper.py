@@ -267,6 +267,23 @@ class TestStringsHelper(unittest.TestCase):
     self.sh.SetString("a")
     self.assertTrue(self.sh.IsOneEditOf(""))
 
+  # Additional tests added to cover some unicode/whitespace and compression edge-cases
+  def test_urlify_nbsp_and_tabs_preservation(self):
+    text = "\u00A0 \t A B \u00A0"
+    self.sh.SetString(text)
+    res = self.sh.Urlify(strip=True)
+    # strip() removes only standard whitespace; NBSP may remain; ensure spaces replaced with %20 and tabs are not present
+    self.assertIn("%20", res)
+    self.assertNotIn("\t", res)
+
+  def test_compress_multichar_token_behavior(self):
+    # Compression is based on unique seen letters; for multi-char sequences it behaves as substring counts
+    self.sh.SetString("ababab")
+    compressed, isBetter = self.sh.Compress()
+    # The current implementation will count unique chars 'a' and 'b' -> a3b3
+    self.assertTrue(compressed in ("a3b3", "b3a3"))
+    self.assertTrue(isBetter)
+
 
 if (__name__ == "__main__"):
   unittest.main()

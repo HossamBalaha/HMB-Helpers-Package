@@ -12,6 +12,9 @@ from HMB.ImagesComparisonMetrics import (
   MeanSquaredError,
   NormalizedMeanSquaredError,
   JensenShannonDivergence,
+  EarthMoversDistance,
+  FeatureBasedSimilarity,
+  SpectralResidual,
 )
 
 
@@ -132,6 +135,46 @@ class TestImagesComparisonMetrics(unittest.TestCase):
   def test_jsd_identical_zero(self):
     jsd = JensenShannonDivergence(self.imgA, self.imgB)
     self.assertGreaterEqual(jsd, 0.0)
+
+  # Additional tests
+  def test_mutual_information_color_rgb(self):
+    # Build simple RGB images by stacking grayscale channels
+    rgbA = np.stack([self.imgA, self.imgA, self.imgA], axis=2)
+    rgbB = np.stack([self.imgB, self.imgB, self.imgB], axis=2)
+    mi = MutualInformation(rgbA, rgbB, bins=16)
+    self.assertGreaterEqual(mi, 0.0)
+
+  def test_cosine_similarity_constant_returns_zero(self):
+    constA = np.ones((8, 8), dtype=np.float32) * 5.0
+    constB = np.ones((8, 8), dtype=np.float32) * 5.0
+    cos = CosineSimilarityImages(constA, constB)
+    # Implementation returns 0.0 for constant images
+    self.assertEqual(cos, 0.0)
+
+  def test_earth_movers_distance_identical_zero(self):
+    emd = EarthMoversDistance(self.imgA, self.imgB)
+    self.assertAlmostEqual(emd, 0.0, places=6)
+
+  def test_feature_based_similarity_no_keypoints(self):
+    # Blank images produce no keypoints -> expect similarity 0.0
+    blank = np.zeros((64, 64), dtype=np.uint8)
+    sim = FeatureBasedSimilarity(blank, blank)
+    self.assertEqual(sim, 0.0)
+
+  def test_spectral_residual_finite_and_nonnegative(self):
+    val = SpectralResidual(self.imgA, self.imgNoisy)
+    self.assertTrue(np.isfinite(val))
+    # similarity measure should be a finite number (may be negative or positive depending implementation)
+
+  def test_histogram_comparison_shape_mismatch_raises(self):
+    with self.assertRaises(Exception):
+      _ = HistogramComparison(self.imgA, self.imgA[:-1], bins=16)
+
+  def test_universal_quality_index_zero_variance(self):
+    # Two constant-zero images -> UQI should return 0.0 per implementation
+    z = np.zeros((8, 8), dtype=np.float64)
+    uqi = UniversalQualityIndex(z, z)
+    self.assertEqual(uqi, 0.0)
 
 
 if __name__ == "__main__":

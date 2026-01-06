@@ -1,3 +1,4 @@
+import os
 import unittest
 import numpy as np
 import cv2
@@ -205,6 +206,100 @@ class TestImagesHelper(unittest.TestCase):
     cv2.rectangle(seg, (50, 50), (100, 100), 255, -1)
     regions = ExtractMultipleObjectsFromROI(img, seg, cntAreaThreshold=100)
     self.assertGreaterEqual(len(regions), 1)
+
+  # ========== ReadVolume and ReadVolumeSpecificClasses (additional tests) ==========
+  def test_read_volume_missing_file_raises(self):
+    import tempfile
+    from HMB.ImagesHelper import ReadVolume
+    with tempfile.TemporaryDirectory() as d:
+      img_path = os.path.join(d, "img1.png")
+      # Do not create files
+      with self.assertRaises(FileNotFoundError):
+        _ = ReadVolume([img_path], [img_path])
+
+  def test_read_volume_empty_slice_raise_and_skip(self):
+    import tempfile
+    from HMB.ImagesHelper import ReadVolume
+    with tempfile.TemporaryDirectory() as d:
+      # Create first valid slice (image and seg with square)
+      img1 = np.zeros((32, 32), dtype=np.uint8)
+      seg1 = np.zeros((32, 32), dtype=np.uint8)
+      cv2.rectangle(img1, (5, 5), (20, 20), 200, -1)
+      cv2.rectangle(seg1, (5, 5), (20, 20), 255, -1)
+      p_img1 = os.path.join(d, "img1.png")
+      p_seg1 = os.path.join(d, "seg1.png")
+      cv2.imwrite(p_img1, img1)
+      cv2.imwrite(p_seg1, seg1)
+      # Create second slice with empty segmentation (all zeros)
+      img2 = np.zeros((32, 32), dtype=np.uint8)
+      seg2 = np.zeros((32, 32), dtype=np.uint8)
+      p_img2 = os.path.join(d, "img2.png")
+      p_seg2 = os.path.join(d, "seg2.png")
+      cv2.imwrite(p_img2, img2)
+      cv2.imwrite(p_seg2, seg2)
+
+      # raiseErrors True should raise because second cropped is empty
+      with self.assertRaises(ValueError):
+        _ = ReadVolume([p_img1, p_img2], [p_seg1, p_seg2], raiseErrors=True)
+
+      # raiseErrors False should skip the empty slice and return array with single slice
+      vol = ReadVolume([p_img1, p_img2], [p_seg1, p_seg2], raiseErrors=False)
+      self.assertIsInstance(vol, np.ndarray)
+      self.assertEqual(vol.shape[0], 1)
+
+  def test_read_volume_specific_classes_filter_and_no_slices(self):
+    import tempfile
+    from HMB.ImagesHelper import ReadVolumeSpecificClasses
+    with tempfile.TemporaryDirectory() as d:
+      # Create two slices: one contains class 1, other contains class 2
+      img1 = np.zeros((40, 40), dtype=np.uint8)
+      seg1 = np.zeros((40, 40), dtype=np.uint8)
+      cv2.rectangle(img1, (5, 5), (15, 15), 200, -1)
+      # Mark class 1 in seg1
+      cv2.rectangle(seg1, (5, 5), (15, 15), 1, -1)
+      p_img1 = os.path.join(d, "img1.png")
+      p_seg1 = os.path.join(d, "seg1.png")
+      cv2.imwrite(p_img1, img1)
+      cv2.imwrite(p_seg1, seg1)
+
+      img2 = np.zeros((30, 20), dtype=np.uint8)
+      seg2 = np.zeros((30, 20), dtype=np.uint8)
+      cv2.rectangle(img2, (2, 2), (10, 10), 150, -1)
+      # Mark class 2 in seg2
+      cv2.rectangle(seg2, (2, 2), (10, 10), 2, -1)
+      p_img2 = os.path.join(d, "img2.png")
+      p_seg2 = os.path.join(d, "seg2.png")
+      cv2.imwrite(p_img2, img2)
+      cv2.imwrite(p_seg2, seg2)
+
+      # Request only class 2 -> should return only the second slice
+      vol = ReadVolumeSpecificClasses([p_img1, p_img2], [p_seg1, p_seg2], specificClasses=[2])
+      self.assertIsInstance(vol, np.ndarray)
+      # Only one slice should be included (class 2)
+      self.assertEqual(vol.shape[0], 1)
+
+      # If no slices contain requested class, function should raise ValueError
+      # Create seg masks with zeros (no classes)
+      seg_zero = np.zeros((20, 20), dtype=np.uint8)
+      p_img_z = os.path.join(d, "iz.png")
+      p_seg_z = os.path.join(d, "sz.png")
+      cv2.imwrite(p_img_z, np.zeros((20, 20), dtype=np.uint8))
+      cv2.imwrite(p_seg_z, seg_zero)
+      with self.assertRaises(ValueError):
+        _ = ReadVolumeSpecificClasses([p_img_z], [p_seg_z], specificClasses=[5])
+
+  def test_extract_multiple_objects_sortByX_false_and_threshold_filters_all(self):
+    # Create two small objects but set cntAreaThreshold large so both filtered out
+    img = np.zeros((128, 128), dtype=np.uint8)
+    seg = np.zeros((128, 128), dtype=np.uint8)
+    cv2.rectangle(img, (20, 20), (30, 30), 200, -1)
+    cv2.rectangle(seg, (20, 20), (30, 30), 255, -1)
+    cv2.rectangle(img, (60, 20), (70, 30), 200, -1)
+    cv2.rectangle(seg, (60, 20), (70, 30), 255, -1)
+    regions = ExtractMultipleObjectsFromROI(img, seg, cntAreaThreshold=10000, sortByX=False)
+    # Both objects are tiny and should be filtered out -> expect empty list
+    self.assertIsInstance(regions, list)
+    self.assertEqual(len(regions), 0)
 
 
 if __name__ == "__main__":

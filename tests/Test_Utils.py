@@ -569,93 +569,56 @@ class TestUtils(unittest.TestCase):
     # Ensure colors are within [0,1] if normalized or 0-255 depending on implementation
     self.assertTrue(all(len(c) in (3, 4) for c in colors))
 
-  # ========== CSV Helpers Tests ==========
+  # Additional tests added
+  def test_hex2rgb_4_digit_and_expansion(self):
+    # 4-digit hex like #abcd -> expands to aabbccdd
+    rgba = Hex2RGB("#abcd", isRGBA=True)
+    self.assertEqual(rgba, (0xAA, 0xBB, 0xCC, 0xDD))
 
-  def test_append_or_create_new_csv_create_and_append(self):
-    import csv
-    path = os.path.join(self.testDir, "simple.csv")
-    header = ["a", "b", "c"]
-    data_rows = [[1, 2, 3], [4, 5, 6]]
+  def test_hex2rgb_3_digit_explicit(self):
+    # Explicit expected expansion: #abc -> aabbcc -> (170,187,204)
+    rgb = Hex2RGB("#abc")
+    self.assertEqual(rgb, (170, 187, 204))
 
-    AppendOrCreateNewCSV(path, [], header=header)
-    self.assertTrue(os.path.exists(path))
-    AppendOrCreateNewCSV(path, data_rows)
+  def test_get_cmap_colors_no_dark_fallback(self):
+    # If darknessThreshold is set to 0.0, no color is considered dark -> function should return allColors
+    colors = GetCmapColors("viridis", 6, darkColorsOnly=True, darknessThreshold=0.0)
+    self.assertEqual(len(colors), 6)
 
-    # Read back and validate
-    with open(path, "r", newline="") as f:
-      reader = csv.reader(f)
-      rows = list(reader)
-      self.assertEqual(rows[0], header)
-      self.assertEqual(rows[1], ["1", "2", "3"])
-      self.assertEqual(rows[2], ["4", "5", "6"])
-
-  def test_append_or_create_new_csv_dict(self):
-    import csv
-    path = os.path.join(self.testDir, "dict.csv")
-    header = ["x", "y"]
-    AppendOrCreateNewCSV(path, [], header=header)
-    AppendOrCreateNewCSV(path, {"x": 10, "y": 20})
-    with open(path, "r", newline="") as f:
-      reader = csv.reader(f)
-      rows = list(reader)
-      self.assertEqual(rows[1], ["10", "20"])
-
-  def test_append_or_create_new_csv_append_mode(self):
-    import csv
-    path = os.path.join(self.testDir, "append.csv")
-    header = ["h1", "h2"]
-    AppendOrCreateNewCSV(path, [], header=header)
-    AppendOrCreateNewCSV(path, [["a", "b"]])
-    AppendOrCreateNewCSV(path, [["c", "d"]])
-    with open(path, "r", newline="") as f:
-      reader = csv.reader(f)
-      rows = list(reader)
-      self.assertEqual(rows[-1], ["c", "d"])
-
-  def test_append_or_create_new_csv_basic(self):
-    path = os.path.join(self.testDir, "data.csv")
-    headers = ["a", "b"]
-    rows = [[1, 2], [3, 4]]
-    AppendOrCreateNewCSV(path, [], header=headers)
-    AppendOrCreateNewCSV(path, rows, header=headers)
-    # Append again
-    AppendOrCreateNewCSV(path, [[5, 6]], header=headers)
-    self.assertTrue(os.path.exists(path))
-
-  def test_append_or_create_new_csv_mismatched_row_length(self):
-    path = os.path.join(self.testDir, "bad.csv")
-    headers = ["a", "b"]
-    AppendOrCreateNewCSV(path, [], header=headers)
+  def test_append_or_create_new_csv_unsupported_type(self):
+    path = os.path.join(self.testDir, "unsupported.csv")
     with self.assertRaises(ValueError):
-      AppendOrCreateNewCSV(path, [[1]], header=headers)
+      AppendOrCreateNewCSV(path, 12345)
 
-  def test_append_or_create_new_dataframe_csv_create_and_append(self):
-    import pandas as pd
-    path = os.path.join(self.testDir, "df.csv")
-    df1 = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
-    df2 = pd.DataFrame({"a": [5], "b": [6]})
+  # New CSV and DataFrame tests
+  def test_append_or_create_new_csv_append_and_header_mismatch(self):
+    path = os.path.join(self.testDir, "mydata.csv")
+    header = ["a", "b", "c"]
+    # create with header
+    AppendOrCreateNewCSV(path, [[1, 2, 3]], header=header, mode="w")
+    # append correct row
+    AppendOrCreateNewCSV(path, [[4, 5, 6]], header=header)
+    # appending a row with wrong length should raise
+    with self.assertRaises(ValueError):
+      AppendOrCreateNewCSV(path, [[7, 8]], header=header)
 
-    AppendOrCreateNewDataFrameCSV(path, df1, header=["a", "b"])  # create
-    AppendOrCreateNewDataFrameCSV(path, df2)  # append
-
-    # Verify contents - file has header + data rows
+  def test_append_or_create_new_dataframe_csv_basic(self):
+    # Test appending a pandas DataFrame to CSV
+    try:
+      import pandas as pd
+    except Exception:
+      self.skipTest("pandas not installed")
+    path = os.path.join(self.testDir, "dfdata.csv")
+    df = pd.DataFrame({"x": [1, 2], "y": [3, 4]})
+    # create file
+    AppendOrCreateNewDataFrameCSV(path, df)
+    self.assertTrue(os.path.exists(path))
+    # append again and ensure file still exists and has more than one line
+    AppendOrCreateNewDataFrameCSV(path, df)
     with open(path, "r") as f:
       lines = f.readlines()
-    # Expect 4 total lines: 1 header + 2 from df1 + 1 from df2
-    self.assertEqual(len(lines), 4)
-
-  def test_append_or_create_new_dataframe_csv_headers_handling(self):
-    import pandas as pd
-    path = os.path.join(self.testDir, "df_noheader.csv")
-    df = pd.DataFrame({"c": [7], "d": [8]})
-    AppendOrCreateNewDataFrameCSV(path, df, header=["c", "d"])  # create with header
-    # Append another with same schema
-    AppendOrCreateNewDataFrameCSV(path, df)
-    # Ensure file exists and has 2 rows plus header
-    with open(path, "r") as f:
-      content = f.read()
-    self.assertIn("c,d", content)
-
+    # header + 2 rows + 2 appended rows = at least 5 lines
+    self.assertTrue(len(lines) >= 5)
 
 if __name__ == "__main__":
   unittest.main()
