@@ -1,8 +1,11 @@
 import hashlib, time, json, shutil
 import numpy as np
+import math
 from pathlib import Path
+from typing import Union
 from sklearn.model_selection import train_test_split
-from PIL import Image
+from PIL import Image, ImageOps, ImageEnhance
+from HMB.DataAugmentationHelper import PerformDataAugmentation
 
 
 class GenericImagesDatasetHandler(object):
@@ -25,18 +28,27 @@ class GenericImagesDatasetHandler(object):
     from pathlib import Path
     from HMB.DatasetsHelper import GenericImagesDatasetHandler
 
-    # Initialize handler for a dataset folder (auto-detect structure).
+    # Initialize handler for a dataset folder and auto-detect structure.
     datasetPath = Path("/path/to/dataset")
     handler = GenericImagesDatasetHandler(datasetPath)
 
     # Print detected configuration summary.
     handler.PrintSummary()
 
-    # Prepare dataset in standard train/val/test layout under output folder.
+    # Prepare dataset in standard train/val/test layout under output folder with balancing.
     outputPath = Path("/path/to/output_dataset")
-    handler.Prepare(outputPath, valSplit=0.1, testSplit=0.1)
+    # Enable balancing, choose method and target, and set a reproducible seed.
+    handler.Prepare(
+      outputPath,
+      valSplit=0.1,
+      testSplit=0.1,
+      balance=True,
+      balanceMethod="augmentation",
+      balanceTarget="max",
+      randomSeed=42
+    )
 
-    # Create a dataset configuration JSON file.
+    # Create a dataset configuration JSON file with custom splits and metadata.
     configPath = handler.CreateConfigFile(
       outputPath=datasetPath / "DatasetConfig.json",
       splits={"train": 0.8, "val": 0.1, "test": 0.1},
@@ -44,7 +56,7 @@ class GenericImagesDatasetHandler(object):
       description="My Custom Dataset"
     )
 
-    # Validate an existing dataset structure.
+    # Validate an existing dataset structure and report issues.
     issues = handler.ValidateDatasetStructure(outputPath, minSamplesPerClass=5)
     if (len(issues) > 0):
       print("Dataset validation issues found:")
@@ -64,7 +76,8 @@ class GenericImagesDatasetHandler(object):
     sourceDir: Path,
     configPath: Path = None,
     imageExtensions: set = None,
-    autoDetect: bool = True
+    autoDetect: bool = True,
+    balance: bool = False,
   ):
     r'''
     Initialize the dataset handler.
@@ -276,7 +289,11 @@ class GenericImagesDatasetHandler(object):
     for splitName, splitPaths in splitMapping.items():
       entries = []
       for pathItem in splitPaths:
-        relativePath = str(pathItem.relative_to(outputDir)) if pathItem.is_relative_to(outputDir) else str(pathItem)
+        relativePath = (
+          str(pathItem.relative_to(outputDir))
+          if (pathItem.is_relative_to(outputDir))
+          else str(pathItem)
+        )
         try:
           hashValue = hashlib.sha256()
           with open(pathItem, "rb") as file:
@@ -299,7 +316,16 @@ class GenericImagesDatasetHandler(object):
       print(f"Warning: could not write manifest: {error}", flush=True)
     return manifestPath
 
-  def Prepare(self, outputDir: Path, valSplit: float = 0.1, testSplit: float = 0.1):
+  def Prepare(
+    self,
+    outputDir: Path,
+    valSplit: float = 0.1,
+    testSplit: float = 0.1,
+    balance: bool = None,
+    balanceMethod: str = "duplication",
+    balanceTarget: Union[str, int] = "max",
+    randomSeed: int = 42,
+  ):
     r'''
     Prepare dataset in a standard train/val/test layout by creating train/val/test
     folders per class and copying files according to the requested splits.
@@ -308,6 +334,13 @@ class GenericImagesDatasetHandler(object):
       outputDir (Path): Destination folder where the train/val/test layout will be created.
       valSplit (float): Fraction of data to use for validation (default 0.1).
       testSplit (float): Fraction of data to use for testing (default 0.1).
+      balance (bool|None): If True, apply class balancing after creating splits.
+                           Balancing is applied only to the 'train' split.
+      balanceMethod (str): One of {"duplication", "augmentation"}. Default: "duplication".
+      balanceTarget (str|int): Target per-class count. If "max" (default) expand all
+                               classes up to the current maximum class size. If an int,
+                               expand all classes up to that number.
+      randomSeed (int): Random seed for reproducibility.
 
     Returns:
       Path: Path to the created dataset YAML file.
@@ -337,6 +370,13 @@ class GenericImagesDatasetHandler(object):
 
     # Create dataset YAML (generic, includes YOLO-compatible keys).
     yamlPath = self.CreateYAML(outputDir)
+    if (balance):
+      try:
+        # Pass random seed to balancing helper for reproducibility.
+        self._ApplyBalancing(outputDir, method=balanceMethod, target=balanceTarget, randomSeed=randomSeed)
+      except Exception as e:
+        print(f"Warning: balancing failed: {e}", flush=True)
+
     # Build manifest capturing provenance and file hashes.
     self.BuildManifest(outputDir, splitMapping)
     print(f"Dataset preparation complete: {outputDir}", flush=True)
@@ -365,21 +405,42 @@ class GenericImagesDatasetHandler(object):
       sourceClassDir = self.sourceDir / folderName
       images = self.GetImages(sourceClassDir)
 
-      print(f"Processing class '{className}' ({len(images)} images)...", flush=True)
-
-      # Split data.
-      trainVal, testItems = train_test_split(
-        images,
-        test_size=testSplit if (testSplit > 0) else 0,
-        random_state=42,
+      print(
+        f"Processing class '{className}' ({len(images)} images)... "
+        f"valSplit={valSplit} testSplit={testSplit}",
+        flush=True
       )
 
+      # Split data.
+      # Skip test split when testSplit <= 0 to avoid sklearn defaults.
+      if (testSplit <= 0):
+        trainVal = images
+        testItems = []
+      else:
+        expectedTest = math.ceil(testSplit * len(images))
+        if (expectedTest < 1):
+          trainVal = images
+          testItems = []
+        else:
+          trainVal, testItems = train_test_split(
+            images,
+            test_size=testSplit,
+            random_state=42,
+          )
+
       if (len(trainVal) > 0):
-        trainItems, valItems = train_test_split(
-          trainVal,
-          test_size=valSplit / (valSplit + trainSplit),
-          random_state=42,
-        )
+        # If no validation split was requested, keep all non-test samples as training.
+        if (valSplit <= 0):
+          trainItems, valItems = trainVal, []
+        else:
+          # Compute validation fraction relative to non-test data and split accordingly.
+          denom = (valSplit + trainSplit)
+          valFraction = (valSplit / denom) if (denom > 0) else 0.0
+          trainItems, valItems = train_test_split(
+            trainVal,
+            test_size=valFraction,
+            random_state=42,
+          )
       else:
         trainItems, valItems = [], []
 
@@ -437,21 +498,41 @@ class GenericImagesDatasetHandler(object):
     # Split and copy for each class.
     for className, imageList in classImages.items():
       mappedClass = self.classMapping.get(className, className)
-      print(f"Processing class '{mappedClass}' ({len(imageList)} images)...", flush=True)
-
-      # Split data.
-      trainVal, testItems = train_test_split(
-        imageList,
-        test_size=testSplit if (testSplit > 0) else 0,
-        random_state=42,
+      print(
+        f"Processing class '{mappedClass}' ({len(imageList)} images)... "
+        f"valSplit={valSplit} testSplit={testSplit}",
+        flush=True
       )
 
+      # Split data. Skip test split when testSplit <= 0 to avoid sklearn defaults.
+      if (testSplit <= 0):
+        trainVal = imageList
+        testItems = []
+      else:
+        expectedTest = math.ceil(testSplit * len(imageList))
+        if (expectedTest < 1):
+          trainVal = imageList
+          testItems = []
+        else:
+          trainVal, testItems = train_test_split(
+            imageList,
+            test_size=testSplit,
+            random_state=42,
+          )
+
       if (len(trainVal) > 0):
-        trainItems, valItems = train_test_split(
-          trainVal,
-          test_size=valSplit / (valSplit + trainSplit),
-          random_state=42,
-        )
+        # If no validation split was requested, keep all non-test samples as training.
+        if (valSplit <= 0):
+          trainItems, valItems = trainVal, []
+        else:
+          # Compute validation fraction relative to non-test data and split accordingly.
+          denom = (valSplit + trainSplit)
+          valFraction = (valSplit / denom) if (denom > 0) else 0.0
+          trainItems, valItems = train_test_split(
+            trainVal,
+            test_size=valFraction,
+            random_state=42,
+          )
       else:
         trainItems, valItems = [], []
 
@@ -491,7 +572,7 @@ class GenericImagesDatasetHandler(object):
     classNames = sorted(set(self.classMapping.values()))
     classNameDict = {index: name for index, name in enumerate(classNames)}
 
-    yamlContent = f"""path: {outputDir}
+    yamlContent = f'''path: {outputDir}
 train: train
 val: val
 test: test
@@ -500,7 +581,7 @@ class_names: {classNameDict}
 # YOLO-compatible keys
 nc: {len(classNames)}
 names: {classNameDict}
-"""
+'''
 
     yamlPath = outputDir / "Dataset.yaml"
     with open(yamlPath, "w") as file:
@@ -586,7 +667,10 @@ names: {classNameDict}
     return structured if returnStructured else issues
 
   def CreateConfigFile(
-    self, outputPath: Path = None, splits: dict = None, minSamplesPerClass: int = None,
+    self,
+    outputPath: Path = None,
+    splits: dict = None,
+    minSamplesPerClass: int = None,
     description: str = None
   ) -> Path:
     r'''
@@ -719,3 +803,138 @@ names: {classNameDict}
       print(f"  - {className}: {imageCount} images", flush=True)
 
     print("=" * 80 + "\n", flush=True)
+
+  def _ApplyBalancing(
+    self,
+    outputDir: Path,
+    method: str = "duplication",
+    target: Union[str, int] = "max",
+    randomSeed: int = 42
+  ):
+    r'''
+    Internal helper to balance class counts inside the "train" split.
+
+    Parameters:
+      outputDir (Path): Dataset root containing train/val/test folders.
+      method (str): "duplication" or "augmentation".
+      target (str|int): "max" to match the largest class, or an integer target count.
+      randomSeed (int): Random seed for reproducibility.
+
+    Notes:
+      - Balancing is applied only to the train split. Validation and test splits are left unchanged.
+      - Duplication simply copies existing images with a suffix to avoid collisions.
+      - Augmentation delegates to PerformDataAugmentation from DataAugmentationHelper.
+    '''
+
+    method = (method or "duplication").lower()
+    trainDir = Path(outputDir) / "train"
+    if (not trainDir.exists()):
+      print("No train directory found for balancing; skipping.", flush=True)
+      return
+
+    # Collect class directories and counts.
+    classDirs = [d for d in trainDir.iterdir() if d.is_dir()]
+    counts = {d.name: len([f for f in d.iterdir() if f.is_file()]) for d in classDirs}
+    if (len(counts) == 0):
+      print("No classes found under train/ for balancing; skipping.", flush=True)
+      return
+
+    # Determine target count. When target is "max", use counts from the source data
+    # so balancing aims to restore representation based on the original dataset.
+    maxCount = max(counts.values())
+    if (isinstance(target, str) and target == "max"):
+      # Compute source-level class counts depending on dataset format.
+      sourceCounts = {}
+      if (self.config and self.config.get("datasetFormat") == "nested"):
+        for folderName, mappedClass in self.classMapping.items():
+          folder = self.sourceDir / folderName
+          sourceCounts[mappedClass] = len(self.GetImages(folder)) if (folder.exists()) else 0
+      else:
+        # Flat format: count by filename prefix in sourceDir.
+        images = self.GetImages(self.sourceDir)
+        tempCounts = {}
+        for img in images:
+          fname = img.stem
+          if ("_" in fname):
+            key = fname.split("_")[0]
+            mapped = self.classMapping.get(key, key)
+          else:
+            mapped = self.classMapping.get(fname, fname)
+          tempCounts[mapped] = tempCounts.get(mapped, 0) + 1
+        sourceCounts = tempCounts
+      targetCount = max(sourceCounts.values()) if (len(sourceCounts) > 0) else maxCount
+    else:
+      try:
+        targetCount = int(target)
+      except Exception:
+        targetCount = maxCount
+
+    if (targetCount <= 0):
+      print("Invalid balance target; skipping.", flush=True)
+      return
+
+    for classDir in classDirs:
+      filesList = [p for p in classDir.iterdir() if p.is_file()]
+      currentCount = len(filesList)
+      if (currentCount >= targetCount or currentCount == 0):
+        continue
+
+      neededCount = targetCount - currentCount
+      print(
+        f"Balancing class ({classDir.name}): current={currentCount}, "
+        f"target={targetCount}, needed={neededCount}",
+        flush=True
+      )
+
+      # Ensure reproducibility using provided random seed.
+      rng = np.random.default_rng(randomSeed)
+      for i in range(neededCount):
+        src = rng.choice(filesList)
+        destName = f"{src.stem}_bal_{i}{src.suffix}"
+        destPath = classDir / destName
+        if (method == "duplication"):
+          # Perform a simple file copy.
+          shutil.copy2(src, destPath)
+        else:
+          # Augmentation path: delegate to DataAugmentationHelper.PerformDataAugmentation.
+          try:
+            augConfig = {
+              "rotation"  : {"enabled": True, "range": (-15, 15)},
+              "flip"      : {"enabled": True, "horizontal": True, "vertical": False},
+              "brightness": {"enabled": True, "range": (0.85, 1.15)},
+              "contrast"  : {"enabled": True, "range": (0.9, 1.1)},
+            }
+
+            augmented = PerformDataAugmentation(
+              str(src),
+              augConfig,
+              numResultantImages=1,
+              auxImagesList=None,
+              seed=randomSeed
+            )
+            if (len(augmented) > 0):
+              augImg = augmented[0]
+              j = 0
+              while True:
+                destName = f"{src.stem}_bal_{i}_{j}{src.suffix}"
+                destPath = classDir / destName
+                if (not destPath.exists()):
+                  break
+                j += 1
+              augImg.save(destPath)
+            else:
+              # Fallback to duplication when augmentation returns nothing.
+              destName = f"{src.stem}_bal_{i}{src.suffix}"
+              destPath = classDir / destName
+              shutil.copy2(src, destPath)
+          except Exception:
+            # On any failure, fallback to duplication copy.
+            destName = f"{src.stem}_bal_{i}{src.suffix}"
+            destPath = classDir / destName
+            try:
+              shutil.copy2(src, destPath)
+            except Exception:
+              # Last resort: skip this augmentation if copy also fails.
+              print(f"Warning: could not create balanced sample for {src}", flush=True)
+
+    print("Balancing complete.", flush=True)

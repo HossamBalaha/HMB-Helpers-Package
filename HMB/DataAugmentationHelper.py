@@ -3,6 +3,7 @@ import numpy as np
 from typing import Dict, List, Any, Tuple
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 from scipy.ndimage import gaussian_filter, map_coordinates
+from HMB.Initializations import SeedEverything
 
 
 def PerformDataAugmentation(
@@ -11,6 +12,7 @@ def PerformDataAugmentation(
   numResultantImages: int,
   auxImagesList: List[str] = None,
   extensions: Tuple[str, ...] = (".png", ".jpg", ".jpeg", ".bmp", ".gif"),
+  seed: int = None,
 ) -> List[Image.Image]:
   r'''
   Performs data augmentation on an image by randomly applying one augmentation technique per generated image.
@@ -96,6 +98,10 @@ def PerformDataAugmentation(
 
   # Loading the original image from the provided path.
   originalImage = Image.open(imagePath).convert("RGB")
+
+  # If a seed is provided, seed both python's random and NumPy for determinism.
+  if (seed is not None):
+    HMB.SeedEverything(seed=seed)
 
   # Creating a list to store augmented images.
   augmentedImages = []
