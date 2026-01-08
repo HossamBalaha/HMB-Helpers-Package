@@ -1281,3 +1281,155 @@ def InferenceWithPlots(
       dfCombined.to_csv(overallResultsPath, index=False)
       if (verbose):
         print(f"Overall results appended to {overallResultsPath}.")
+
+
+def ApplyDynamicQuantizationTorch(modelPath: str, outputPath: str, exampleInput=None, inputShape=None):
+  r'''
+  Apply dynamic quantization to a PyTorch model checkpoint and save a portable TorchScript file.
+
+  This helper attempts to load a checkpoint from `modelPath`. It supports either:
+    - a dict containing a key like "model" that is a torch.nn.Module or contains a state_dict
+    - a plain torch.nn.Module object saved directly
+    - a state_dict (mapping) paired with a provided model object is NOT supported here
+
+  The function will try to obtain a live nn.Module to quantize. If only a state_dict is found
+  it will return None because the architecture is not known. When successful the function:
+    - applies torch.quantization.quantize_dynamic to quantize Linear and Embedding modules to qint8
+    - scripts the quantized model with torch.jit.script for portability (or traces using provided exampleInput/inputShape)
+    - saves the scripted module to `outputPath`
+
+  Parameters:
+    modelPath (str): Path to the saved checkpoint or model file.
+    outputPath (str): Path where the scripted quantized model will be saved.
+    example_input (torch.Tensor, optional): Example input tensor to use for tracing when scripting fails.
+    inputShape (tuple, optional): Alternative to exampleInput; will create a random tensor with this shape for tracing.
+
+  Returns:
+    str|None: Returns the outputPath on success, None on failure.
+  '''
+
+  if (not os.path.exists(modelPath)):
+    print(f"Model file not found: {modelPath}")
+    return None
+
+  ckpt = None
+  try:
+    # Load checkpoint with CPU mapping for safe handling.
+    ckpt = torch.load(modelPath, map_location="cpu")
+  except Exception as e:
+    # Some PyTorch installations restrict unpickling of arbitrary globals by default (WeightsUnpickler).
+    # Try to allowlist common nn containers (Sequential, ModuleList, ModuleDict) and retry loading.
+    errstr = str(e)
+    print(f"Initial model loading failed: {errstr}")
+    try:
+      from torch.serialization import WeightsUnpickler
+
+      class CustomUnpickler(WeightsUnpickler):
+        def find_class(self, module, name):
+          if (
+            module == "torch.nn.modules.container" and
+            name in ["Sequential", "ModuleList", "ModuleDict"]
+          ):
+            return super().find_class(module, name)
+          raise pickle.UnpicklingError(f"Global '{module}.{name}' is not allowed for unpickling.")
+
+      with open(modelPath, "rb") as f:
+        unpickler = CustomUnpickler(f)
+        ckpt = unpickler.load()
+    except Exception as e2:
+      print(f"Model loading with custom unpickler also failed: {e2}")
+      return None
+
+  if (ckpt is None):
+    print("Failed to load model checkpoint.")
+    return None
+
+  modelObj = None
+
+  # If checkpoint is a mapping and contains a model/module inside
+  if (isinstance(ckpt, dict)):
+    # Common keys that may contain a module or state_dict
+    # Prefer an actual nn.Module object if saved directly.
+    if ("model" in ckpt and hasattr(ckpt["model"], "state_dict")):
+      modelObj = ckpt["model"]
+    elif ("model_state_dict" in ckpt and hasattr(ckpt["model_state_dict"], "keys")):
+      # Only state_dict present - cannot reconstruct architecture here.
+      print(
+        "Checkpoint contains only state_dict. "
+        "Quantization requires the model architecture object; "
+        "please provide a full model object in the checkpoint."
+      )
+      return None
+    elif (hasattr(ckpt, "state_dict")):
+      # Edge-case: ckpt is a module-like object.
+      modelObj = ckpt
+  else:
+    # ckpt may be a Module saved directly.
+    if (hasattr(ckpt, "state_dict")):
+      modelObj = ckpt
+
+  if (modelObj is None):
+    print(
+      "No torch.nn.Module instance found in the checkpoint. "
+      "Cannot apply dynamic quantization without the model architecture."
+    )
+    return None
+
+  print("Applying dynamic quantization to the model...")
+
+  try:
+    # Only quantize common heavy-weight layers; include Embedding as optional.
+    modulesToQuantize = {torch.nn.Linear, torch.nn.Embedding}
+    qModel = torch.quantization.quantize_dynamic(modelObj, modulesToQuantize, dtype=torch.qint8)
+
+    # Convert to scripted module for portability. Use try/except as some models may not script cleanly.
+    try:
+      ts = torch.jit.script(qModel)
+    except Exception:
+      # Fallback to tracing with a user-supplied exampleInput or inputShape if scripting fails.
+      try:
+        traceInput = None
+        if (exampleInput is not None):
+          # If user passed a numpy array or list, allow it by converting to tensor.
+          if (not hasattr(exampleInput, "shape") or isinstance(exampleInput, (list, tuple))):
+            try:
+              traceInput = torch.tensor(exampleInput)
+            except Exception:
+              traceInput = exampleInput
+          else:
+            traceInput = exampleInput
+        elif (inputShape is not None):
+          try:
+            traceInput = torch.randn(*inputShape)
+          except Exception:
+            traceInput = None
+        else:
+          # As a last resort, attempt a common image input shape used by models such as timm and torchvision.
+          try:
+            traceInput = torch.randn(1, 3, 224, 224)
+          except Exception:
+            traceInput = None
+
+        if (traceInput is None):
+          print(
+            "No valid exampleInput or inputShape available for tracing; "
+            "scripting failed and tracing cannot proceed."
+          )
+          return None
+
+        ts = torch.jit.trace(qModel, traceInput)
+      except Exception as e:
+        print(f"Failed to convert quantized model to TorchScript via tracing: {e}")
+        return None
+
+    # Ensure output directory exists.
+    outDir = os.path.dirname(outputPath)
+    if outDir and (not os.path.exists(outDir)):
+      os.makedirs(outDir, exist_ok=True)
+
+    ts.save(outputPath)
+    print(f"Quantized scripted model saved to {outputPath}")
+    return outputPath
+  except Exception as e:
+    print(f"Dynamic quantization failed: {e}")
+    return None

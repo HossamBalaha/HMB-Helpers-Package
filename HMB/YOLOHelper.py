@@ -1,4 +1,4 @@
-import os, sys, torch, cv2, json
+import os, sys, torch, cv2, json, time
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
@@ -393,6 +393,189 @@ def EvaluateAndSaveYoloClassifications(
   return summary
 
 
+def MeasureLatencyWithUltralytics(
+  modelPath: str,
+  runs: int = 20,
+  warmup: int = 5,
+  inputShape: Tuple[int, int] = (224, 224),
+  exampleInput: Optional[np.ndarray] = None,
+):
+  r'''
+  Measure average inference latency (in milliseconds) for an Ultralytics YOLO model or
+  other supported model file formats using a single synthetic or user-provided example input.
+
+  Supported model formats/paths:
+    - Ultralytics-wrapped .pt weights or hub identifier: loaded via `ultralytics.YOLO`.
+    - TorchScript file (.pt saved via torch.jit.save / scripted/traced): loaded via `torch.jit.load`.
+    - ONNX file (.onnx): executed via `onnxruntime.InferenceSession` (if onnxruntime installed).
+
+  The helper will attempt to load the model using the best available backend for the
+  provided path and run warmup + timed predictions, returning average latency in ms.
+
+  Parameters:
+    modelPath (str): Path to the model file or Ultralytics model identifier.
+    runs (int): Number of timed runs to average. Defaults to 20.
+    warmup (int): Number of warmup runs to perform before timing. Defaults to 5.
+    inputShape (Tuple[int,int]): (H, W) used to synthesize an RGB input when `exampleInput` is not provided.
+    exampleInput (np.ndarray | torch.Tensor | None): Optional user-provided input. If given, this
+      will be used for warmup and timed runs. Expected shape is HxWx3 or batch-like formats.
+
+  Returns:
+    float | None: Average latency in milliseconds on success, or None on failure.
+  '''
+
+  try:
+    # Determine extension lower-case for format guessing.
+    _, ext = os.path.splitext(str(modelPath))
+    ext = ext.lower()
+
+    # Helper to build a synthetic numpy image in HWC uint8 format.
+    def _CreateNumpyRandomImage(h, w, backendName="ultralytics"):
+      if (backendName == "onnx"):
+        # ONNX expects NCHW float32 input; create accordingly.
+        return (np.random.rand(1, 3, h, w) * 255).astype("float32")
+      else:
+        # Ultralytics and torchscript expect HWC uint8 image.
+        return (np.random.rand(h, w, 3) * 255).astype("uint8")
+
+    # Prepare input in three possible backends: ultralytics, torchscript, onnxruntime.
+    backendName = None
+    loadedModel = None
+    ortSess = None
+
+    # Try ultralytics if class available and path doesn't explicitly look like an ONNX file.
+    if (ext != ".onnx"):
+      try:
+        loadedModel = YOLO(modelPath, task="classify", verbose=False)
+        backendName = "ultralytics"
+      except Exception:
+        loadedModel = None
+        backendName = None
+
+    # If ultralytics not selected, try TorchScript for .pt or fallback when ultralytics failed.
+    if (backendName is None) and (ext in [".pt", ".pth"]):
+      try:
+        tsModel = torch.jit.load(modelPath, map_location="cpu")
+        loadedModel = tsModel
+        backendName = "torchscript"
+      except Exception:
+        loadedModel = None
+        backendName = None
+
+    # If .onnx file, try onnxruntime.
+    if (backendName is None) and (ext == ".onnx"):
+      try:
+        import onnxruntime as ort
+        ortSess = ort.InferenceSession(modelPath, providers=["CPUExecutionProvider"])
+        backendName = "onnx"
+      except Exception:
+        ortSess = None
+        backendName = None
+
+    # If still no backend identified, attempt a last-resort ultralytics instantiation.
+    if (backendName is None):
+      try:
+        loadedModel = YOLO(modelPath, task="classify", verbose=False)
+        backendName = "ultralytics"
+      except Exception:
+        backendName = None
+
+    if (backendName is None):
+      # Unsupported model type or required runtime not available.
+      return None
+
+    # Prepare the input for warmup and timing.
+    if (exampleInput is not None):
+      exampleInp = exampleInput
+    else:
+      h, w = inputShape
+      exampleInp = _CreateNumpyRandomImage(h, w, backendName=backendName)
+
+    # Warmup runs to stabilize runtime performance.
+    for _ in range(max(1, warmup)):
+      try:
+        if (backendName == "ultralytics"):
+          # Ultralytics accepts numpy HWC or path; pass imgsz when we generated the image.
+          loadedModel.predict(
+            exampleInp,
+            imgsz=max(inputShape) if (exampleInput is None) else None,
+            verbose=False
+          )
+        elif (backendName == "torchscript"):
+          # Ensure tensor on CPU and in NCHW float format.
+          if (not isinstance(exampleInp, torch.Tensor)):
+            if (isinstance(exampleInp, np.ndarray) and exampleInp.ndim == 3):
+              tensorInp = torch.from_numpy(exampleInp).permute(2, 0, 1).unsqueeze(0).float()
+            elif (isinstance(exampleInp, np.ndarray) and exampleInp.ndim == 4):
+              tensorInp = torch.from_numpy(exampleInp).permute(0, 3, 1, 2).float() if (
+                exampleInp.shape[-1] == 3) else torch.from_numpy(exampleInp).float()
+            else:
+              try:
+                tensorInp = torch.tensor(exampleInp)
+              except Exception:
+                tensorInp = None
+            if (tensorInp is None):
+              continue
+          else:
+            tensorInp = exampleInp
+          # Run the torchscript model.
+          loadedModel(tensorInp)
+        elif (backendName == "onnx"):
+          # ONNX runtime expects numpy inputs; get input name and run.
+          try:
+            inName = ortSess.get_inputs()[0].name
+            ortSess.run(None, {inName: exampleInp})
+          except Exception:
+            pass
+      except Exception:
+        # Ignore per-iteration errors during warmup to keep the benchmark robust.
+        pass
+
+    # Timed runs to measure average latency.
+    startTime = time.perf_counter()
+    for _ in range(max(1, runs)):
+      try:
+        if (backendName == "ultralytics"):
+          loadedModel.predict(
+            exampleInp,
+            imgsz=max(inputShape) if (exampleInput is None) else None,
+            verbose=False
+          )
+        elif (backendName == "torchscript"):
+          import torch
+          if (not isinstance(exampleInp, torch.Tensor)):
+            if (isinstance(exampleInp, np.ndarray) and exampleInp.ndim == 3):
+              tensorInp = torch.from_numpy(exampleInp).permute(2, 0, 1).unsqueeze(0).float()
+            elif (isinstance(exampleInp, np.ndarray) and exampleInp.ndim == 4):
+              tensorInp = (
+                torch.from_numpy(exampleInp).permute(0, 3, 1, 2).float()
+                if (exampleInp.shape[-1] == 3)
+                else torch.from_numpy(exampleInp).float()
+              )
+            else:
+              try:
+                tensorInp = torch.tensor(exampleInp)
+              except Exception:
+                tensorInp = None
+            if (tensorInp is None):
+              continue
+          else:
+            tensorInp = exampleInp
+          loadedModel(tensorInp)
+        elif (backendName == "onnx"):
+          inName = ortSess.get_inputs()[0].name
+          ortSess.run(None, {inName: exampleInp})
+      except Exception:
+        # Ignore individual run errors to keep benchmark robust.
+        pass
+    duration = time.perf_counter() - startTime
+
+    avgMs = (duration / max(1, runs)) * 1000.0
+    return float(avgMs)
+  except Exception:
+    return None
+
+
 if __name__ == "__main__":
   # Generate a random seed for this run.
   rndNumber = np.random.randint(0, 10000)
@@ -426,3 +609,192 @@ if __name__ == "__main__":
     categories=None,
     targetModels=None,
   )
+
+
+def ExportYOLO2TorchScript(
+  weightsPath: str,
+  outPath: str,
+  imgsz: int = 224,
+  device: str = "cpu"
+) -> Optional[str]:
+  r'''
+  Export a classification model to a TorchScript file.
+
+  This helper attempts to load a model via Ultralytics' YOLO wrapper when available.
+  It extracts the underlying core model, moves it to the requested device, and
+  attempts to produce a TorchScript artifact by tracing with a dummy input first
+  and falling back to scripting when tracing is not possible.
+
+  Parameters:
+    weightsPath (str): Path to weights or a model identifier understood by Ultralytics.
+    outPath (str): Desired output path for the TorchScript file (including filename).
+    imgsz (int): Spatial size used for the dummy trace input. Defaults to 224.
+    device (str): Torch device string to use for the conversion. Defaults to "cpu".
+
+  Returns:
+    str | None: Returns the output path on success, otherwise None.
+  '''
+
+  try:
+    # Instantiate the YOLO classifier wrapper.
+    try:
+      yoloModel = YOLO(weightsPath, task="classify", verbose=False)
+    except Exception:
+      return None
+
+    # Prepare dummy input on the requested device.
+    deviceT = torch.device(device)
+    dummy = torch.randn(1, 3, imgsz, imgsz).to(deviceT)
+
+    # Attempt to extract the core PyTorch module from the wrapper.
+    try:
+      coreModel = yoloModel.model
+      coreModel.to(deviceT)
+      coreModel.eval()
+
+      # Try tracing first, and fall back to scripting when tracing fails.
+      try:
+        traced = torch.jit.trace(coreModel, dummy, strict=False)
+      except Exception:
+        traced = torch.jit.script(coreModel)
+
+      traced.save(str(outPath))
+      return str(outPath)
+    except Exception:
+      return None
+  except Exception:
+    return None
+
+
+def ExportYOLO2ONNX(weightsPath: str, outPath: str, imgsz: int = 224, opset: int = 12) -> Optional[str]:
+  r'''
+  Export model to ONNX using Ultralytics' export helper when available.
+
+  The function will attempt to call `model.export(format="onnx")` on a YOLO wrapper.
+  If Ultralytics returns a path or list of paths, the first candidate is copied to
+  the requested output location for convenience.
+
+  Parameters:
+    weightsPath (str): Path or identifier understood by Ultralytics.
+    outPath (str): Desired ONNX output path including filename.
+    imgsz (int): Input spatial size to request from the exporter. Defaults to 224.
+    opset (int): ONNX opset version to request. Defaults to 12.
+
+  Returns:
+    str | None: Returns the output path on success, otherwise None.
+  '''
+
+  try:
+    # Instantiate the YOLO classifier wrapper.
+    try:
+      yoloModel = YOLO(weightsPath, task="classify", verbose=False)
+    except Exception:
+      return None
+
+    # Attempt export using Ultralytics' helper.
+    try:
+      exported = yoloModel.export(format="onnx", imgsz=imgsz, opset=opset)
+
+      # Normalize exported return type to a candidate path string.
+      if (isinstance(exported, (list, tuple))):
+        candidate = exported[0] if (len(exported) > 0) else None
+      else:
+        candidate = exported
+
+      if (not candidate):
+        return None
+
+      if (os.path.exists(str(candidate))):
+        import shutil
+        shutil.copy2(str(candidate), str(outPath))
+        return str(outPath)
+
+      return None
+    except Exception:
+      return None
+  except Exception:
+    return None
+
+
+def ApplyYOLOPruning(weightsPath: str, outPath: str, sparsity: float = 0.5) -> Optional[str]:
+  r'''
+  Apply global unstructured pruning to Conv2d and Linear weights and save state_dict.
+
+  This helper loads a classifier via the Ultralytics YOLO wrapper when available.
+  It collects Conv2d and Linear weight tensors and applies global L1 unstructured
+  pruning to the requested sparsity fraction. The function removes pruning
+  reparametrizations to make weights dense and then saves the resulting
+  state_dict to the requested output path.
+
+  Parameters:
+    weightsPath (str): Path to weights or model identifier understood by Ultralytics.
+    outPath (str): Path where the pruned state_dict will be saved.
+    sparsity (float): Fraction of weights to remove in [0,1). Defaults to 0.5.
+
+  Returns:
+    str | None: Returns the output path on success, otherwise None.
+  '''
+
+  try:
+    # Instantiate the wrapper for classification.
+    try:
+      modelWrapper = YOLO(weightsPath, task="classify", verbose=False)
+    except Exception:
+      return None
+
+    # Extract the core PyTorch model from the wrapper.
+    try:
+      model = modelWrapper.model
+    except Exception:
+      return None
+
+    # Import pruning utilities from torch.
+    import torch.nn.utils.prune as prune
+
+    # Validate sparsity value and coerce to float.
+    try:
+      amount = float(sparsity)
+      if (amount < 0.0 or amount >= 1.0):
+        # Accept exact zero to indicate no pruning.
+        if (amount == 0.0):
+          amount = 0.0
+        else:
+          return None
+    except Exception:
+      return None
+
+    # Collect module weight parameters to prune.
+    paramsToPrune = []
+    for _, module in model.named_modules():
+      if (isinstance(module, torch.nn.Conv2d) or isinstance(module, torch.nn.Linear)):
+        if (hasattr(module, "weight")):
+          paramsToPrune.append((module, "weight"))
+
+    # Abort when no prunable parameters are found.
+    if (len(paramsToPrune) == 0):
+      return None
+
+    # Apply global unstructured pruning with L1 criterion.
+    try:
+      prune.global_unstructured(paramsToPrune, pruning_method=prune.L1Unstructured, amount=amount)
+    except Exception:
+      return None
+
+    # Remove pruning reparametrizations to leave dense tensors.
+    for module, name in paramsToPrune:
+      try:
+        prune.remove(module, name)
+      except Exception:
+        # Ignore failures to remove reparametrization for robustness.
+        pass
+
+    # Ensure output directory exists and save state_dict.
+    try:
+      outP = Path(outPath)
+      outP.parent.mkdir(parents=True, exist_ok=True)
+      torch.save(model.state_dict(), str(outP))
+      return str(outP)
+    except Exception:
+      return None
+  except Exception:
+    return None
