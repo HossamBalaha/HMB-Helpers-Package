@@ -457,8 +457,9 @@ def EvaluatePredictPlotSubset(
     exportFailureCases (bool): Whether to export misclassified samples to CSV. Defaults to True.
     eps (float): Small epsilon value for numerical stability in metric calculations. Defaults to 1e-10.
 
-  Returns:
-    dict[str, str]: Dictionary of computed weighted performance metrics.
+  Return:
+
+
   '''
 
   print(f"Collecting predictions on {subset} split for confusion matrix computation...")
@@ -744,7 +745,11 @@ def EvaluatePredictPlotSubset(
     weightedMetrics["ECE"] = ece
     print("Expected Calibration Error (ECE):", ece)
 
-  return weightedMetrics
+  return (
+    str(storageFilePath), weightedMetrics, allPredsIndices,
+    allGtsIndices, allPredsProbs, allPredsConfidences,
+    predictionsRecords, classNames, cm
+  )
 
 
 def MeasureLatencyWithUltralytics(

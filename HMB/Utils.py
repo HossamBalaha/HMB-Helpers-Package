@@ -199,6 +199,21 @@ def WriteTextFile(filePath, text):
     f.write(text)
 
 
+def DumpJsonFile(filePath, data, indent=2):
+  r'''
+  Dump data to a JSON file.
+
+  Parameters:
+    filePath (str): Path to the JSON file.
+    data (object): Data to be dumped to the JSON file.
+    indent (int, optional): Number of spaces for indentation in the JSON file. Default is 2.
+  '''
+
+  # Open the JSON file in write mode and dump the data.
+  with open(filePath, "w", encoding="utf-8") as jsonFile:
+    json.dump(data, jsonFile, indent=indent)
+
+
 def ReadTextFile(filePath):
   r'''
   Read text from a file.
@@ -247,7 +262,7 @@ def LoadYaml(yamlPath):
   return yamlData
 
 
-def SaveYaml(yamlPath, yamlData):
+def SaveYaml(yamlPath, yamlData, safe=True):
   r'''
   Save data to a YAML file.
 
@@ -258,11 +273,15 @@ def SaveYaml(yamlPath, yamlData):
 
   # Open the YAML file in write mode and dump the data.
   with open(yamlPath, "w") as yamlFile:
-    try:
-      yaml.safe_dump(yamlData, yamlFile)
-    except Exception as e:
-      # Re-raise as ValueError to satisfy tests expecting error on anchors/non-serializable
-      raise ValueError(f"Failed to serialize YAML data: {e}")
+    if (not safe):
+      with open(yamlPath, "w") as yamlFile:
+        yaml.dump(yamlData, yamlFile)
+    else:
+      try:
+        yaml.safe_dump(yamlData, yamlFile)
+      except Exception as e:
+        # Re-raise as ValueError to satisfy tests expecting error on anchors/non-serializable
+        raise ValueError(f"Failed to serialize YAML data: {e}")
 
 
 def Hex2RGB(hexColor, isRGBA=False):
