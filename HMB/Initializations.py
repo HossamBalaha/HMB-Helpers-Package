@@ -230,6 +230,8 @@ def EnsureCUDAAvailable(strict=True):
     bool: True if CUDA is available, False otherwise.
   '''
 
+  import sys, torch
+
   try:
     if (not torch.cuda.is_available()):
       print("ERROR: CUDA is not available. A GPU is required for training.", flush=True)

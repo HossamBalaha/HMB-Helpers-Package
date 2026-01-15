@@ -214,7 +214,7 @@ def EvaluateAndSaveYoloClassifications(
     targetModels (List[str] | None): Model list to evaluate, defaults to common yolo11 variants.
 
   Returns.
-    summary (dict): Mapping of model->{category->csvPath, metrics} for quick programmatic access.
+    dict: Mapping of model->{category->csvPath, metrics} for quick programmatic access.
   '''
 
   # Default allowed image extensions when None provided.
@@ -457,8 +457,7 @@ def EvaluatePredictPlotSubset(
     exportFailureCases (bool): Whether to export misclassified samples to CSV. Defaults to True.
     eps (float): Small epsilon value for numerical stability in metric calculations. Defaults to 1e-10.
 
-  Return:
-
+  Returns:
 
   '''
 
