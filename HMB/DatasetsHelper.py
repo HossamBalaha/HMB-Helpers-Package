@@ -77,7 +77,6 @@ class GenericImagesDatasetHandler(object):
     configPath: Path = None,
     imageExtensions: set = None,
     autoDetect: bool = True,
-    balance: bool = False,
   ):
     r'''
     Initialize the dataset handler.
@@ -335,7 +334,7 @@ class GenericImagesDatasetHandler(object):
       valSplit (float): Fraction of data to use for validation (default 0.1).
       testSplit (float): Fraction of data to use for testing (default 0.1).
       balance (bool|None): If True, apply class balancing after creating splits.
-                           Balancing is applied only to the 'train' split.
+                           Balancing is applied only to the "train" split.
       balanceMethod (str): One of {"duplication", "augmentation"}. Default: "duplication".
       balanceTarget (str|int): Target per-class count. If "max" (default) expand all
                                classes up to the current maximum class size. If an int,
@@ -785,6 +784,77 @@ names: {classNameDict}
       "classMappings": self.classMapping,
       "sourceDir"    : str(self.sourceDir),
     }
+
+  def PlotClassDistribution(
+    self,
+    fileName="ClassDistribution.pdf",
+    title="Class Distribution",
+    save=False,
+    display=True,
+    fontSize=12,
+    dpi=720,
+  ):
+    r'''
+    Plot a bar chart of the class distribution in the dataset.
+
+    Parameters:
+      fileName (str): Path to save the plot PDF. Default: "ClassDistribution.pdf".
+      title (str): Title of the plot. Default: "Class Distribution".
+      save (bool): If True, save the plot to fileName. Default: False.
+      display (bool): If True, display the plot interactively. Default: True.
+      returnPreds (bool): If True, return the matplotlib figure and axis objects. Default: False.
+      fontSize (int): Font size for labels and title. Default: 12.
+      dpi (int): DPI for saved figure. Default: 720.
+    '''
+    import matplotlib.pyplot as plt
+
+    classNames = []
+    counts = []
+
+    for folderName, className in self.classMapping.items():
+      imageCount = len(self.GetImages(self.sourceDir / folderName))
+      classNames.append(className)
+      counts.append(imageCount)
+
+    plt.figure(figsize=(10, 6))
+    plt.bar(classNames, counts, color="skyblue")
+    plt.xlabel("Classes", fontsize=fontSize)
+    plt.ylabel("Number of Images", fontsize=fontSize)
+    plt.title(title, fontsize=fontSize + 2)
+    plt.xticks(rotation=45, ha="right", fontsize=fontSize - 2)
+    plt.yticks(fontsize=fontSize - 2)
+    plt.grid(axis="y", linestyle="--", alpha=0.7)
+    plt.tight_layout()
+
+    if (save and fileName):
+      plt.savefig(fileName, dpi=dpi, bbox_inches="tight")
+      print(f"Class distribution plot saved to: {fileName}", flush=True)
+
+    if (display):
+      plt.show()
+
+    plt.close()
+
+  def CollectSummary(self) -> dict:
+    r'''
+    Collect a short summary of the dataset: source path, format and per-class counts.
+
+    Returns:
+      dict: Summary with keys sourceDir, datasetFormat, numClasses, classCounts.
+    '''
+
+    summary = {
+      "sourceDir"    : str(self.sourceDir),
+      "datasetFormat": self.config.get("datasetFormat", "unknown"),
+      "numClasses"   : len(set(self.classMapping.values())),
+      "classCounts"  : {},
+    }
+
+    for folderName, className in self.classMapping.items():
+      imageCount = len(self.GetImages(self.sourceDir / folderName))
+      summary["classCounts"][className] = imageCount
+
+    return summary
 
   def PrintSummary(self):
     r'''

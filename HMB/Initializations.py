@@ -10,6 +10,7 @@ def SetMaxTextChunkSize(maxChunkSize=100 * (1024 ** 2)):
   Set the maximum size for text chunks in PNG images.
   This is useful for controlling the size of metadata stored in PNG files.
   '''
+
   # Set the maximum size for text chunks in PNG images to 100 MB.
   # This is useful for controlling the size of metadata stored in PNG files.
   # The default value is set to 100 MB (100 * 1024 * 1024 bytes).
@@ -25,6 +26,7 @@ def SetEnvironmentVariables(defaultThreads=6):
   Set environment variables to control the number of threads used by libraries like OpenBLAS, MKL, and OMP.
   This is useful for optimizing performance and avoiding excessive CPU usage.
   '''
+
   import os
 
   # Set the number of threads for OpenBLAS, MKL, and OMP to a default value.
@@ -59,6 +61,11 @@ def MaximizeThreads():
 
 # -------------------------------------------------- #
 def IgnoreWarnings():
+  r'''
+  Suppress all warnings globally.
+  This function uses the `shutup` library to suppress warnings from various libraries.
+  '''
+
   import warnings, shutup, os
 
   # Suppress all warnings using the `shutup` library.
@@ -90,9 +97,19 @@ def IgnoreWarnings():
 
 # -------------------------------------------------- #
 def SeedEverything(seed=42, deterministic=True, benchmark=True):
-  import random, os, torch
-  import numpy as np
+  r'''
+  Seed everything for reproducibility.
+  This function sets the random seed for various libraries to ensure consistent results across runs.
+
+  Parameters:
+    seed (int): The random seed to use for seeding.
+    deterministic (bool): If True, sets cuDNN to be deterministic.
+    benchmark (bool): If True, enables cuDNN benchmark mode.
+  '''
+
   import torch
+  import numpy as np
+  import random, os, torch
 
   # Set the random seed for reproducibility.
   os.environ["PYTHONHASHSEED"] = str(seed)
@@ -145,6 +162,10 @@ def DoRandomSeeding():
 
 # -------------------------------------------------- #
 def ShowGPUUtilization():
+  r'''
+  Show GPU utilization using GPUtil. This function displays the current GPU usage statistics.
+  '''
+
   import GPUtil
   GPUtil.showUtilization(all=False, attrList=None, useOldCode=False)
 
@@ -197,6 +218,34 @@ def PrintGPUSpecs():
     print(f"- GPU UUID: {gpu.uuid}.")
 
 
+def EnsureCUDAAvailable(strict=True):
+  r'''
+  Ensure that CUDA is available for GPU computations.
+  This function checks if CUDA is available and exits the program if not.
+
+  Parameters:
+    strict (bool): If True, the program will exit if CUDA is not available.
+
+  Returns:
+    bool: True if CUDA is available, False otherwise.
+  '''
+
+  try:
+    if (not torch.cuda.is_available()):
+      print("ERROR: CUDA is not available. A GPU is required for training.", flush=True)
+      if (strict):
+        sys.exit(1)
+      else:
+        return False
+  except Exception:
+    print("ERROR: PyTorch is not installed or failed to import.", flush=True)
+    if (strict):
+      sys.exit(1)
+    else:
+      return False
+  return True
+
+
 # -------------------------------------------------- #
 
 # -------------------------------------------------- #
@@ -220,6 +269,9 @@ def IncreaseSysRecursionLimit(limit=10000):
   r'''
   Increase the system recursion limit to allow deeper recursive calls.
   This is useful for algorithms that require deep recursion, such as certain tree or graph algorithms.
+
+  Parameters:
+    limit (int): The new recursion limit to set.
   '''
 
   import sys

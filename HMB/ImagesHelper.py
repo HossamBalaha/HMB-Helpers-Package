@@ -4,6 +4,9 @@ import cv2, PIL  # Import OpenCV and PIL for image processing.
 import numpy as np  # Import numpy for numerical operations.
 from PIL import Image  # Import Image module from PIL for image handling.
 import matplotlib.pyplot as plt  # Import matplotlib for plotting.
+# Import specific modules from PIL for image enhancements and drawing.
+from PIL import Image, ImageEnhance, ImageFilter, ImageDraw
+from io import BytesIO  # Import BytesIO for in-memory byte streams.
 
 
 def ReadVolume(caseImgPaths, caseSegPaths, raiseErrors=True):
@@ -1047,6 +1050,7 @@ def PriorInformationTestingGeneric(image, histogramsDict, startingSigma=1, stepS
       - sumIncludedMaps (numpy.ndarray): The summed included probability map.
       - sumNonIncludedMaps (numpy.ndarray): The summed non-included probability map.
   '''
+
   import tqdm  # Import tqdm for progress bar.
 
   # Calculate the centroids of the image in the X and Y dimensions.
@@ -1557,3 +1561,381 @@ def OverlayHeatmapOnImage(origPIL, heatmap, alpha=0.4, cmap=plt.cm.jet):
   base = origPIL.convert("RGBA")
   blended = Image.blend(base, heatmapRGB, alpha=alpha)
   return blended.convert("RGB")
+
+
+def AddGaussianNoise(img: Image.Image, sigma: float = 10.0, seed: int | None = None) -> Image.Image:
+  r'''
+  Add additive Gaussian noise to an image. sigma is the standard deviation of the noise (e.g., 10.0).
+  Deterministic when seed is provided.
+
+  Parameters:
+    img (PIL.Image): Input image.
+    sigma (float): Standard deviation of the Gaussian noise.
+    seed (int or None): Seed for random number generator for reproducibility.
+
+  Returns:
+    PIL.Image: Noisy image.
+  '''
+
+  # Initialize random number generator with optional seed for reproducibility.
+  rng = np.random.default_rng(seed)
+  # Convert PIL image to floating-point NumPy array.
+  arr = np.array(img).astype("float32")
+  # Generate zero-mean Gaussian noise with specified standard deviation.
+  noise = rng.normal(0.0, float(sigma), arr.shape).astype("float32")
+  # Add noise to the image array.
+  arr = arr + noise
+  # Clip values to valid pixel range [0, 255] and convert to unsigned 8-bit integers.
+  arr = arr.clip(0, 255).astype("uint8")
+  # Convert back to PIL Image and return.
+  return Image.fromarray(arr)
+
+
+def ApplyJPEGCompression(img: Image.Image, quality: int = 75) -> Image.Image:
+  r'''
+  Apply JPEG compression artifact simulation at given quality level. Quality ranges from 1 (worst) to 95 (best).
+
+  Parameters:
+    img (PIL.Image): Input image.
+    quality (int): JPEG quality level (1 to 95).
+
+  Returns:
+    PIL.Image: Compressed image.
+  '''
+
+  # Create an in-memory binary buffer to simulate file saving.
+  buf = BytesIO()
+  # Clamp quality to valid JPEG range [1, 95] and save image to buffer.
+  img.save(buf, format="JPEG", quality=int(max(1, min(95, quality))))
+  # Reset buffer pointer to start for reading.
+  buf.seek(0)
+  # Reopen compressed image from buffer and ensure RGB mode.
+  return Image.open(buf).convert("RGB")
+
+
+def AddSpeckleNoise(img: Image.Image, var: float = 0.01, seed: int | None = None) -> Image.Image:
+  r'''
+  Apply multiplicative speckle noise. var is the variance (e.g., 0.01). Deterministic when seed provided.
+
+  Parameters:
+    img (PIL.Image): Input image.
+    var (float): Variance of the speckle noise.
+    seed (int or None): Seed for random number generator for reproducibility.
+
+  Returns:
+    PIL.Image: Noisy image.
+  '''
+
+  # Initialize random number generator with optional seed.
+  rng = np.random.default_rng(seed)
+  # Normalize image to [0, 1] range as float32.
+  arr = np.array(img).astype("float32") / 255.0
+  # Compute standard deviation from variance, ensuring non-negative.
+  scale = float(np.sqrt(max(0.0, var)))
+  # Generate zero-mean Gaussian noise scaled by computed standard deviation.
+  noise = rng.normal(loc=0.0, scale=scale, size=arr.shape).astype("float32")
+  # Apply multiplicative speckle noise: I_noisy = I * (1 + noise).
+  arr = arr + arr * noise
+  # Rescale to [0, 255], clip, and convert to uint8.
+  arr = (arr * 255.0).clip(0, 255).astype("uint8")
+  # Return as PIL Image.
+  return Image.fromarray(arr)
+
+
+def AddSaltPepperNoise(
+  img: Image.Image,
+  amount: float = 0.05,
+  saltVsPepper: float = 0.5,
+  seed: int | None = None
+) -> Image.Image:
+  r'''
+  Apply salt & pepper noise. amount is fraction of pixels to alter (0..1).
+  saltVsPepper is fraction of salt vs pepper (0..1). Deterministic when seed provided.
+
+  Parameters:
+    img (PIL.Image): Input image.
+    amount (float): Fraction of pixels to alter with noise.
+    saltVsPepper (float): Fraction of salt vs pepper noise.
+    seed (int or None): Seed for random number generator for reproducibility.
+
+  Returns:
+    PIL.Image: Noisy image.
+  '''
+
+  # Validate that noise amount is positive.
+  if (amount <= 0):
+    # Return original image if no noise requested.
+    return img
+  # Clamp amount to maximum of 1.0 to avoid over-corruption.
+  amount = min(amount, 1.0)
+  # Initialize random number generator with optional seed.
+  rng = np.random.default_rng(seed)
+  # Convert image to uint8 NumPy array.
+  arr = np.array(img).astype("uint8")
+  # Extract height and width of image.
+  h, w = arr.shape[0], arr.shape[1]
+  # Compute total number of pixels to corrupt.
+  numPixels = int(amount * h * w)
+  # Generate random integer coordinates for corrupted pixels.
+  coords = (
+    rng.integers(0, h, size=numPixels),
+    rng.integers(0, w, size=numPixels),
+  )
+  # Generate boolean mask to decide salt (True) vs pepper (False).
+  mask = rng.random(size=numPixels) < saltVsPepper
+  # Determine number of channels (handles grayscale and RGB).
+  numChannels = arr.shape[2] if arr.ndim == 3 else 1
+  # Apply salt (255) or pepper (0) to selected pixels across all channels.
+  for i in range(numPixels):
+    r, c = coords[0][i], coords[1][i]
+    if (arr.ndim == 3):
+      # Set all channels to 255 or 0.
+      arr[r, c, :] = 255 if (mask[i]) else 0
+    else:
+      # Grayscale case.
+      arr[r, c] = 255 if (mask[i]) else 0
+  # Convert back to PIL Image and return.
+  return Image.fromarray(arr)
+
+
+def ChangeBrightness(img: Image.Image, factor: float = 1.2) -> Image.Image:
+  r'''
+  Adjust image brightness by multiplicative factor.
+
+  Parameters:
+    img (PIL.Image): Input image.
+    factor (float): Brightness adjustment factor.
+
+  Returns:
+    PIL.Image: Brightness-adjusted image.
+  '''
+
+  # Create brightness enhancer object.
+  enhancer = ImageEnhance.Brightness(img)
+  # Apply enhancement and return result.
+  return enhancer.enhance(factor)
+
+
+def ChangeContrast(img: Image.Image, factor: float = 1.2) -> Image.Image:
+  r'''
+  Adjust image contrast by multiplicative factor.
+
+  Parameters:
+    img (PIL.Image): Input image.
+    factor (float): Contrast adjustment factor.
+
+  Returns:
+    PIL.Image: Contrast-adjusted image.
+  '''
+
+  # Create contrast enhancer object.
+  enhancer = ImageEnhance.Contrast(img)
+  # Apply enhancement and return result.
+  return enhancer.enhance(factor)
+
+
+def AddShotNoise(img: Image.Image, scale: float = 1.0, seed: int | None = None) -> Image.Image:
+  r'''
+  Simulate shot (Poisson) noise. Higher scale means more photons and less relative noise.
+
+  Parameters:
+    img (PIL.Image): Input image.
+    scale (float): Scale factor for photon counts.
+    seed (int or None): Seed for random number generator for reproducibility.
+
+  Returns:
+    PIL.Image: Noisy image.
+  '''
+
+  # Ensure scale is at least a small positive value to avoid division by zero.
+  effectiveScale = max(1e-6, float(scale))
+  # Initialize random number generator with optional seed.
+  rng = np.random.default_rng(seed)
+  # Convert image to float32 array.
+  arr = np.array(img).astype("float32")
+  # Scale image to represent photon counts (higher scale = more photons).
+  photonCounts = arr * effectiveScale
+  # Apply Poisson noise to photon counts.
+  noisyPhotonCounts = rng.poisson(photonCounts).astype("float32")
+  # Rescale back to original intensity range.
+  noisy = noisyPhotonCounts / effectiveScale
+  # Clip to valid pixel range and convert to uint8.
+  noisy = np.clip(noisy, 0, 255).astype("uint8")
+  # Return as PIL Image.
+  return Image.fromarray(noisy)
+
+
+def DownscaleImage(img: Image.Image, level: float) -> Image.Image:
+  r'''
+  Downscale image to simulate lossy resolution reduction. Level > 1.0 indicates downscale factor;
+  level between 0 and 1.0 indicates inverse scale (e.g., 0.5 means downscale by 2x).
+
+  Parameters:
+    img (PIL.Image): Input image.
+    level (float): Downscaling severity.
+
+  Returns:
+    PIL.Image: Downscaled image.
+  '''
+
+  # Interpret level as downscaling severity; ensure it is at least 1.0.
+  factor = max(1.0, float(level))
+  # If level is between 0 and 1, treat it as inverse scale.
+  if (0.0 < level <= 1.0):
+    # Invert level to get downscale factor.
+    factor = 1.0 / float(level)
+  # Get original image dimensions.
+  w, h = img.size
+  # Compute new smaller dimensions.
+  newW = max(1, int(w / factor))
+  newH = max(1, int(h / factor))
+  # Resize down using bilinear interpolation.
+  downscaled = img.resize((newW, newH), resample=Image.BILINEAR)
+  # Resize back up using nearest neighbor to preserve blockiness.
+  return downscaled.resize((w, h), resample=Image.NEAREST)
+
+
+def OccludeImage(img: Image.Image, level: float) -> Image.Image:
+  r'''
+  Occlude center of image with black square proportional to level.
+  Level is fraction of image area to occlude (0.0 to 0.9).
+
+  Parameters:
+    img (PIL.Image): Input image.
+    level (float): Fraction of image area to occlude.
+
+  Returns:
+    PIL.Image: Occluded image.
+  '''
+
+  # Create a copy of the input image to avoid mutation.
+  out = img.copy()
+  # Get image dimensions.
+  w, h = out.size
+  # Clamp occlusion area fraction to [0, 0.9].
+  areaFraction = min(0.9, max(0.0, float(level)))
+  # Compute desired occlusion area in pixels.
+  rectArea = int(w * h * areaFraction)
+  # Compute side length of square with equivalent area.
+  side = int(np.sqrt(rectArea))
+  # Ensure side is at least 1 and does not exceed image bounds.
+  side = max(1, min(side, w, h))
+  # Compute top-left corner of centered square.
+  x0 = (w - side) // 2
+  y0 = (h - side) // 2
+  # Compute bottom-right corner.
+  x1 = x0 + side
+  y1 = y0 + side
+  # Create drawing context.
+  draw = ImageDraw.Draw(out)
+  # Draw black rectangle over center.
+  draw.rectangle([x0, y0, x1, y1], fill=(0, 0, 0))
+  # Return occluded image.
+  return out
+
+
+def ColorJitter(img: Image.Image, level: float) -> Image.Image:
+  r'''
+  Apply deterministic color jitter based on level. Level controls brightness, contrast, and saturation.
+
+  Parameters:
+    img (PIL.Image): Input image.
+    level (float): Jitter severity.
+
+  Returns:
+    PIL.Image: Jittered image.
+  '''
+
+  # Clamp level to reasonable range to avoid extreme effects.
+  clampedLevel = min(0.5, max(0.0, float(level)))
+  # Compute brightness adjustment factor (1.0 = no change).
+  bFactor = 1.0 + clampedLevel
+  # Compute contrast adjustment factor.
+  cFactor = 1.0 + clampedLevel
+  # Compute saturation adjustment factor.
+  sFactor = 1.0 + clampedLevel
+  # Apply brightness enhancement.
+  img2 = ImageEnhance.Brightness(img).enhance(bFactor)
+  # Apply contrast enhancement.
+  img2 = ImageEnhance.Contrast(img2).enhance(cFactor)
+  # Apply saturation enhancement.
+  img2 = ImageEnhance.Color(img2).enhance(sFactor)
+  # Return jittered image.
+  return img2
+
+
+def FogImage(img: Image.Image, level: float) -> Image.Image:
+  r'''
+  Simulate fog by blending image with white translucent layer. Level controls fog density.
+
+  Parameters:
+    img (PIL.Image): Input image.
+    level (float): Fog density level.
+
+  Returns:
+    PIL.Image: Foggy image.
+  '''
+
+  # Get image dimensions.
+  w, h = img.size
+  try:
+    # Generate random noise pattern with fixed seed for consistency.
+    noise = (np.random.RandomState(0).rand(h, w) * 255).astype("uint8")
+    # Convert noise to grayscale PIL image.
+    noiseImg = Image.fromarray(noise).convert("L").resize((w, h))
+    # Apply Gaussian blur to noise to simulate atmospheric diffusion.
+    noiseImg = noiseImg.filter(ImageFilter.GaussianBlur(radius=max(1, int(level))))
+    # Compute blend alpha from level (max 0.7 for visibility).
+    alpha = min(0.7, float(level) * 0.02)
+    # Create pure white overlay image.
+    whiteOverlay = Image.new("RGB", img.size, (255, 255, 255))
+    # Blend original image with white using noise as opacity mask.
+    combined = Image.composite(whiteOverlay, img, noiseImg.convert("L"))
+    # Final blend between original and foggy version.
+    return Image.blend(img, combined, alpha)
+  except Exception:
+    # Fallback to original image on error.
+    return img
+
+
+def PixelateImage(img: Image.Image, level: float) -> Image.Image:
+  r'''
+  Pixelate image by downscaling and upscaling with nearest neighbor. Level controls pixelation block size.
+
+  Parameters:
+    img (PIL.Image): Input image.
+    level (float): Pixelation severity.
+
+  Returns:
+    PIL.Image: Pixelated image.
+  '''
+
+  # Get original image dimensions.
+  w, h = img.size
+  # Interpret level as pixelation block size, clamped to [1, 32].
+  factor = int(max(1, min(32, float(level))))
+  # Compute downscaled dimensions.
+  smallW = max(1, w // factor)
+  smallH = max(1, h // factor)
+  # Downscale using bilinear interpolation.
+  small = img.resize((smallW, smallH), resample=Image.BILINEAR)
+  # Upscale using nearest neighbor to create blocky effect.
+  return small.resize((w, h), resample=Image.NEAREST)
+
+
+def SaturateImage(img: Image.Image, level: float) -> Image.Image:
+  r'''
+  Adjust image saturation by multiplicative factor. Level controls saturation change.
+
+  Parameters:
+    img (PIL.Image): Input image.
+    level (float): Saturation adjustment level.
+
+  Returns:
+    PIL.Image: Saturation-adjusted image.
+  '''
+
+  # Compute saturation factor (1.0 = no change).
+  factor = 1.0 + float(level)
+  # Create color enhancer and apply saturation change.
+  return ImageEnhance.Color(img).enhance(factor)

@@ -2,12 +2,48 @@ import os, sys, torch, cv2, json, time
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
+from pathlib import Path
 from ultralytics import YOLO
-from typing import List, Optional, Tuple
+import matplotlib.pyplot as plt
+from typing import Any, Dict, List, Optional, Tuple
 from sklearn.metrics import confusion_matrix
-from HMB.Initializations import IgnoreWarnings
-from HMB.Initializations import SeedEverything
-from HMB.PerformanceMetrics import CalculatePerformanceMetrics
+from HMB.Initializations import IgnoreWarnings, SeedEverything
+from HMB.PerformanceMetrics import (
+  CalculatePerformanceMetrics, PlotConfusionMatrix, PlotROCAUCCurve, PlotPRCCurve, ComputeECE
+)
+
+IMAGE_SUFFIXES = {
+  ".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".gif",
+  ".JPG", ".JPEG", ".PNG", ".BMP", ".TIFF", ".TIF", ".GIF",
+}
+
+
+def ExtractYOLOModelSize(modelName: str) -> str:
+  r'''
+  Extract model size from YOLO model name. If the model name contains "n", "s", "m", "l", or "x",
+  it maps to "Nano", "Small", "Medium", "Large", or "XLarge" respectively. If no match is found,
+  the original model name is returned.
+
+  Parameters:
+    modelName (str): The YOLO model name to extract size from.
+
+  Returns:
+    str: Human-readable model size or original model name if no match.
+  '''
+
+  # Normalize model name and map abbreviation to human-readable size.
+  modelNameLower = modelName.lower().replace("yolo", "")
+  sizeMapping = {
+    "n": "Nano",
+    "s": "Small",
+    "m": "Medium",
+    "l": "Large",
+    "x": "XLarge",
+  }
+  for abbreviation, fullName in sizeMapping.items():
+    if (abbreviation in modelNameLower):
+      return fullName
+  return modelName
 
 
 def TrainMultipleYoloClassifiers(
@@ -391,6 +427,324 @@ def EvaluateAndSaveYoloClassifications(
 
   # Return the summary mapping for programmatic inspection.
   return summary
+
+
+def EvaluatePredictPlotSubset(
+  datasetDir,
+  model,
+  subset="test",
+  prefix="",
+  storageDir=None,
+  heavy=True,
+  computeECE=True,
+  exportFailureCases=True,
+  eps=1e-10,
+) -> dict[str, str]:
+  r'''
+  Evaluate a trained Ultralytics YOLO classification model on a specified dataset subset
+  (train/val/test/all), collect predictions, compute confusion matrix and performance metrics,
+  and optionally save predictions to a CSV file. It also generates and saves confusion matrix,
+  ROC AUC, and PRC plots.
+
+  Parameters:
+    datasetDir (str): Path to the dataset directory containing train/val/test splits.
+    model (ultralytics.YOLO): Trained Ultralytics YOLO classification model.
+    subset (str): Dataset subset to evaluate ("train", "val", "test", or "all"). Defaults to "test".
+    prefix (str): Prefix for saved figure filenames. Defaults to "".
+    storageDir (str | None): Directory to save predictions CSV and figures. If None, uses current directory. Defaults to None.
+    heavy (bool): Whether to compute heavy metrics and plot ROC/PRC curves. Defaults to True.
+    computeECE (bool): Whether to compute Expected Calibration Error (ECE). Defaults to True.
+    exportFailureCases (bool): Whether to export misclassified samples to CSV. Defaults to True.
+    eps (float): Small epsilon value for numerical stability in metric calculations. Defaults to 1e-10.
+
+  Returns:
+    dict[str, str]: Dictionary of computed weighted performance metrics.
+  '''
+
+  print(f"Collecting predictions on {subset} split for confusion matrix computation...")
+  if (subset not in ("train", "val", "test", "all")):
+    raise ValueError(f"Invalid subset name: {subset}")
+  if (subset == "all"):
+    splitDirs = [Path(datasetDir) / split for split in ("train", "val", "test")]
+  else:
+    splitDirs = [Path(datasetDir) / subset]
+
+  allPredsIndices: List[int] = []
+  allGtsIndices: List[int] = []
+  allPredsProbs: List[List[float]] = []
+  allPredsNames: List[str] = []
+  allGtsNames: List[str] = []
+  allPredsConfidences: List[Optional[float]] = []
+  predictionsRecords: List[Dict[str, Any]] = []
+  classNames = []
+
+  try:
+    for splitDir in splitDirs:
+      if (not splitDir.exists()):
+        print(f"Warning: Split directory does not exist, skipping: {splitDir}")
+        continue
+
+      classDirs = sorted([directory for directory in splitDir.iterdir() if directory.is_dir()])
+      if (len(classNames) == 0):
+        classNames = [directory.name for directory in classDirs]
+      for trueClassIndex, classDir in enumerate(classDirs):
+        imageFiles = [
+          p
+          for p in classDir.iterdir()
+          if (p.is_file() and (p.suffix.lower() in IMAGE_SUFFIXES))
+        ]
+        if (len(imageFiles) == 0):
+          print(f"Warning: No image files found in class directory, skipping: {classDir}")
+          continue
+        for imagePath in imageFiles:
+          # Run prediction for the image using the model.
+          predictionResults = model.predict(str(imagePath), verbose=False)
+          if ((len(predictionResults) > 0) and hasattr(predictionResults[0], "probs")):
+            try:
+              predictedClassIndex = int(predictionResults[0].probs.top1)
+            except Exception:
+              try:
+                predictedClassIndex = int(torch.argmax(predictionResults[0].probs).item())
+              except Exception:
+                predictedClassIndex = -1
+            allPredsIndices.append(predictedClassIndex)
+            allGtsIndices.append(trueClassIndex)
+            allPredsNames.append(
+              classDirs[predictedClassIndex].name
+              if (predictedClassIndex >= 0 and predictedClassIndex < len(classDirs))
+              else "Unknown"
+            )
+            allGtsNames.append(classDir.name)
+
+            prob = None
+            if (len(predictionResults) > 0):
+              try:
+                probsAttr = predictionResults[0].probs
+                if (probsAttr is None):
+                  prob = None
+                else:
+                  probsAttr = probsAttr.data
+                if (isinstance(probsAttr, torch.Tensor)):
+                  prob = probsAttr.cpu().numpy().tolist()
+                elif (isinstance(probsAttr, np.ndarray)):
+                  prob = probsAttr.tolist()
+                else:
+                  prob = None
+              except Exception:
+                prob = None
+            else:
+              prob = None
+            allPredsProbs.append(prob if prob is not None else [])
+
+            # Compute confidence for the predicted class if available.
+            predictedConfidence = None
+            if ((prob is not None) and (predictedClassIndex is not None) and (predictedClassIndex < len(prob))):
+              try:
+                predictedConfidence = float(prob[predictedClassIndex])
+              except Exception:
+                predictedConfidence = None
+            allPredsConfidences.append(predictedConfidence)
+          else:
+            allPredsIndices.append(-1)
+            allGtsIndices.append(trueClassIndex)
+            allPredsNames.append("Unknown")
+            allGtsNames.append(classDir.name)
+            allPredsProbs.append([])
+            allPredsConfidences.append(None)
+
+          eceValue = None
+          if (computeECE and (len(allPredsProbs) > 0 and allPredsProbs[-1])):
+            eceValue = ComputeECE([allPredsProbs[-1]], [allGtsIndices[-1]])
+
+          predictionsRecords.append({
+            "image"              : str(imagePath),
+            "split"              : splitDir.name,
+            "trueClassIndex"     : int(trueClassIndex),
+            "trueClassName"      : classDir.name,
+            "predictedClassIndex": allPredsIndices[-1],
+            "predictedClassName" : allPredsNames[-1],
+            "predictedConfidence": allPredsConfidences[-1],
+            "probabilities"      : (json.dumps(allPredsProbs[-1]) if (allPredsProbs[-1]) else None),
+            "ece"                : (float(eceValue) if (eceValue is not None) else None),
+          })
+
+      print(f"Prediction collection completed for split: {splitDir.name}")
+      print(f"Collected predictions for {len(allGtsIndices)} samples across {len(classDirs)} classes.")
+      print(f"Total samples collected for confusion matrix: {len(allGtsIndices)}")
+      print(f"{'-' * 60}")
+
+    print("Finished collecting predictions for all specified splits.")
+    assert len(allPredsIndices) == len(allGtsIndices), "Mismatch in predictions and ground truths count."
+    assert len(allPredsIndices) == len(allPredsProbs), "Mismatch in predictions and probabilities count."
+    assert len(allPredsIndices) == len(allPredsNames), "Mismatch in predictions and names count."
+    assert len(allGtsIndices) == len(allGtsNames), "Mismatch in ground truths and names count."
+    assert len(allPredsIndices) == len(allPredsConfidences), "Mismatch in predictions and confidences count."
+    assert len(predictionsRecords) == len(allGtsIndices), "Mismatch in prediction records and ground truths count."
+    print(f"Total samples collected: {len(allGtsIndices)}")
+    print(f"{'-' * 60}")
+
+    print("Computing confusion matrix and performance metrics...")
+    if ((len(allPredsIndices) > 0) and (len(allGtsIndices) > 0)):
+      confusion = confusion_matrix(allGtsIndices, allPredsIndices)
+      metricResults = CalculatePerformanceMetrics(
+        confusion,
+        eps=eps,
+        addWeightedAverage=True,
+        addPerClass=False
+      )
+      weightedMetrics = {key: value for key, value in metricResults.items() if key.startswith("Weighted")}
+      print(f"Computed weighted metrics from confusion matrix on {len(allGtsIndices)} samples.")
+    else:
+      weightedMetrics = {}
+      print("Warning: No predictions collected for confusion matrix computation.")
+  except Exception as ex:
+    weightedMetrics = {}
+    print(f"Error during prediction collection or metric computation: {ex}")
+
+  if (prefix):
+    weightedMetrics = {f"{prefix}{key}": value for key, value in weightedMetrics.items()}
+
+  if (storageDir is None):
+    storageDir = Path(".")
+
+  if (not os.path.exists(storageDir)):
+    os.makedirs(storageDir, exist_ok=True)
+    print(f"Created storage directory: {storageDir}")
+  else:
+    print(f"Using existing storage directory: {storageDir}")
+
+  storageFileName = f"{prefix}_Predictions_{subset}.csv" if (prefix) else f"Predictions_{subset}.csv"
+  storageFilePath = Path(storageDir) / storageFileName
+  try:
+    dfPreds = pd.DataFrame(predictionsRecords)
+    dfPreds.to_csv(storageFilePath, index=False)
+    print(f"Predictions for subset '{subset}' saved to: {storageFilePath}")
+  except Exception as saveErr:
+    print(f"Warning: Could not save predictions CSV: {saveErr}")
+
+  if (exportFailureCases):
+    try:
+      failureRecords = []
+      for i in range(len(allGtsIndices)):
+        if (allGtsIndices[i] != allPredsIndices[i]):
+          record = {
+            "image"              : predictionsRecords[i]["image"],
+            "split"              : predictionsRecords[i]["split"],
+            "trueClassIndex"     : predictionsRecords[i]["trueClassIndex"],
+            "trueClassName"      : predictionsRecords[i]["trueClassName"],
+            "predictedClassIndex": predictionsRecords[i]["predictedClassIndex"],
+            "predictedClassName" : predictionsRecords[i]["predictedClassName"],
+            "predictedConfidence": predictionsRecords[i]["predictedConfidence"],
+            "probabilities"      : predictionsRecords[i]["probabilities"],
+            "ece"                : predictionsRecords[i]["ece"],
+          }
+          failureRecords.append(record)
+      if (len(failureRecords) > 0):
+        dfFailures = pd.DataFrame(failureRecords)
+        failureFileName = f"{prefix}_Misclassified_Samples.csv" if (prefix) else "Misclassified_Samples.csv"
+        failureFilePath = Path(storageDir) / failureFileName
+        dfFailures.to_csv(failureFilePath, index=False)
+        print(f"Misclassified samples exported to: {failureFilePath}")
+      else:
+        print("No misclassified samples to export.")
+    except Exception as failErr:
+      print(f"Warning: Could not export misclassified samples: {failErr}")
+
+  cm = confusion_matrix(allGtsIndices, allPredsIndices)
+  print("Confusion matrix computed.")
+  print(cm)
+  print("Class names:")
+  print(classNames)
+  print("All collected ground truth indices:")
+  print(allGtsIndices[:10], "..." if len(allGtsIndices) > 10 else "")
+  print("All collected predicted indices:")
+  print(allPredsIndices[:10], "..." if len(allPredsIndices) > 10 else "")
+  print("All collected predicted probabilities (first 3 samples):")
+  for probs in allPredsProbs[:3]:
+    print(probs)
+  print(f"{'-' * 60}")
+  figsPath = Path(storageDir)
+
+  try:
+    filename = f"{prefix}_CM.pdf" if (prefix) else "CM.pdf"
+    PlotConfusionMatrix(
+      cm,
+      classNames,
+      normalize=False,
+      roundDigits=3,
+      title="Confusion Matrix",
+      cmap=plt.cm.Blues,
+      display=False,
+      save=True,
+      fileName=str(figsPath / filename),
+      fontSize=15,
+      annotate=True,
+      figSize=(8, 8),
+      colorbar=True,
+      returnFig=False,
+      dpi=720,
+    )
+    print(f"Confusion matrix figure saved to: {figsPath / filename}")
+  except Exception as figErr:
+    print(f"Warning: Could not generate confusion matrix figure: {figErr}")
+
+  if (heavy):
+    try:
+      # Prepare data for ROC AUC curve plotting.
+      filename = f"{prefix}_ROC_AUC.pdf" if (prefix) else "ROC_AUC.pdf"
+      PlotROCAUCCurve(
+        np.array(allGtsIndices),  # True labels.
+        np.array(allPredsProbs),  # Predicted probabilities.
+        classNames,  # List of class names.
+        areProbabilities=True,  # Whether yPred are probabilities.
+        title="ROC Curve & AUC",  # Plot title.
+        figSize=(5, 5),  # Figure size.
+        cmap=None,  # Colormap for ROC curves.
+        display=False,  # Display the plot.
+        save=True,  # Save the plot.
+        fileName=str(figsPath / filename),  # File name to save.
+        fontSize=15,  # Font size.
+        plotDiagonal=True,  # Plot diagonal reference line.
+        annotateAUC=True,  # Annotate AUC value on plot.
+        showLegend=True,  # Show legend.
+        returnFig=False,  # Return figure object.
+        dpi=720,  # DPI for saving the figure.
+      )
+      print(f"ROC AUC figure saved to: {figsPath / filename}")
+    except Exception as rocErr:
+      print(f"Warning: Could not generate ROC AUC figure: {rocErr}")
+
+    try:
+      filename = f"{prefix}_PRC.pdf" if (prefix) else "PRC.pdf"
+      PlotPRCCurve(
+        allGtsIndices,  # True labels.
+        allPredsProbs,  # Predicted probabilities.
+        classNames,  # List of class names.
+        areProbabilities=True,  # Whether yPred are probabilities.
+        title="PRC Curve",  # Plot title.
+        figSize=(5, 5),  # Figure size.
+        cmap=None,  # Colormap for PRC curves.
+        display=False,  # Display the plot.
+        save=True,  # Save the plot.
+        fileName=str(figsPath / filename),  # File name to save.
+        fontSize=15,  # Font size.
+        annotateAvg=True,  # Annotate average precision value on plot.
+        showLegend=True,  # Show legend.
+        returnFig=False,  # Return figure object.
+        dpi=720,  # DPI for saving the figure.
+      )
+      print(f"PRC figure saved to: {figsPath / filename}")
+    except Exception as prcErr:
+      print(f"Warning: Could not generate PRC figure: {prcErr}")
+  else:
+    print("Heavy metrics and plots skipped as per configuration.")
+
+  if (computeECE):
+    ece = ComputeECE(allPredsProbs, allGtsIndices)
+    weightedMetrics["ECE"] = ece
+    print("Expected Calibration Error (ECE):", ece)
+
+  return weightedMetrics
 
 
 def MeasureLatencyWithUltralytics(

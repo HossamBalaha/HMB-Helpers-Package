@@ -101,7 +101,7 @@ def PerformDataAugmentation(
 
   # If a seed is provided, seed both python's random and NumPy for determinism.
   if (seed is not None):
-    HMB.SeedEverything(seed=seed)
+    SeedEverything(seed=seed)
 
   # Creating a list to store augmented images.
   augmentedImages = []

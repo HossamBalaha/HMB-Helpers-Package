@@ -386,7 +386,7 @@ def AppendOrCreateNewCSV(
   header=None,  # Header for the CSV file.
   mode="a",  # Mode to open the file (default is append).
 ):
-  '''
+  r'''
   Append data to a CSV file or create a new one if it doesn't exist.
 
   Parameters:
@@ -430,7 +430,7 @@ def AppendOrCreateNewDataFrameCSV(
   data,  # Data to append or create.
   header=None,  # Header for the CSV file.
 ):
-  '''
+  r'''
   Append a pandas DataFrame to a CSV file or create a new one if it doesn't exist.
 
   Parameters:

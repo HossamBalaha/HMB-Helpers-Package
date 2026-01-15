@@ -3495,6 +3495,80 @@ def ComputeMonteCarloUncertaintyMeasures(probsMC, eps=1e-12):
   }
 
 
+def ComputeECE(probabilities, labels, binCount: int = 15, nBins: int | None = None) -> float:
+  '''Compute Expected Calibration Error (ECE).
+
+  This function accepts either:
+    - a 2D array of per-class probabilities (N x C) with integer class labels.
+    - a 1D array of confidences (N,) with labels as 0/1 correctness indicators or class labels.
+
+  The optional legacy keyword `nBins` is accepted for compatibility and overrides binCount when provided.
+
+  Parameters:
+    probabilities (list or numpy.ndarray): List/array of predicted probabilities or confidences.
+    labels (list or numpy.ndarray): List/array of true labels or correctness indicators.
+    binCount (int): Number of bins to use. Default is 15.
+    nBins (int or None): Legacy argument name for number of bins. If provided, overrides binCount.
+
+  Returns:
+    float: Expected Calibration Error (ECE) value.
+  '''
+
+  # Normalize bin count allowing legacy argument name.
+  if (nBins is not None):
+    bins = int(nBins)
+  else:
+    bins = int(binCount)
+
+  # Coerce inputs to numpy arrays.
+  probsArr = np.asarray(probabilities)
+  labelsArr = np.asarray(labels)
+
+  # Return zero for empty inputs.
+  if (probsArr.size == 0 or labelsArr.size == 0):
+    return 0.0
+
+  # Handle 2D per-class probability arrays by deriving confidences and predictions.
+  if (probsArr.ndim == 2):
+    confidences = probsArr.max(axis=1)
+    predictions = probsArr.argmax(axis=1)
+    if (labelsArr.shape[0] != confidences.shape[0]):
+      return 0.0
+    trueMask = (predictions == labelsArr)
+  else:
+    # Handle 1D confidences where labels may be correctness indicators or class labels.
+    confidences = probsArr.ravel()
+    if (labelsArr.shape[0] != confidences.shape[0]):
+      return 0.0
+    uniqueLabels = set(np.unique(labelsArr))
+    if (uniqueLabels.issubset({0, 1})):
+      # Labels represent correctness directly.
+      trueMask = (labelsArr.astype(int) == 1)
+    else:
+      # Fallback: convert confidences to binary predictions at 0.5 threshold.
+      preds = (confidences >= 0.5).astype(int)
+      trueMask = (preds == labelsArr.astype(int))
+
+  # Compute ECE by binning confidences and comparing average confidence vs accuracy per bin.
+  ece = 0.0
+  boundaries = np.linspace(0.0, 1.0, bins + 1)
+  n = len(confidences)
+  for i in range(bins):
+    lo, hi = boundaries[i], boundaries[i + 1]
+    if (i == 0):
+      inBin = (confidences >= lo) & (confidences <= hi)
+    else:
+      inBin = (confidences > lo) & (confidences <= hi)
+    cnt = np.sum(inBin)
+    if (cnt == 0):
+      continue
+    accInBin = np.mean(trueMask[inBin].astype(float))
+    avgConfInBin = np.mean(confidences[inBin])
+    ece += (cnt / n) * abs(accInBin - avgConfInBin)
+
+  return float(ece)
+
+
 def ComputeECEPlotReliability(
   confidences,
   predictions,
