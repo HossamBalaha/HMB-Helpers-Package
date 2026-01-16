@@ -2,6 +2,7 @@ import os, sys, torch, cv2, json, time
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
+from PIL import Image
 from pathlib import Path
 from ultralytics import YOLO
 import matplotlib.pyplot as plt
@@ -439,6 +440,9 @@ def EvaluatePredictPlotSubset(
   computeECE=True,
   exportFailureCases=True,
   eps=1e-10,
+  saveArtifacts=True,
+  maxSamples=None,
+  preprocessFn=None,
 ) -> dict[str, str]:
   r'''
   Evaluate a trained Ultralytics YOLO classification model on a specified dataset subset
@@ -456,10 +460,25 @@ def EvaluatePredictPlotSubset(
     computeECE (bool): Whether to compute Expected Calibration Error (ECE). Defaults to True.
     exportFailureCases (bool): Whether to export misclassified samples to CSV. Defaults to True.
     eps (float): Small epsilon value for numerical stability in metric calculations. Defaults to 1e-10.
+    saveArtifacts (bool): Whether to save figures and artifacts. Defaults to True.
+    maxSamples (int | None): Maximum number of samples to evaluate. If None, evaluates all samples. Defaults to None.
+    preprocessFn (callable | None): Optional preprocessing function to apply to each image before prediction. Defaults to None.
 
   Returns:
-
+    tuple: A tuple containing:
+      - str: Path to the saved predictions CSV file.
+      - dict: Computed weighted performance metrics.
+      - List[int]: List of predicted class indices.
+      - List[int]: List of ground truth class indices.
+      - List[List[float]]: List of predicted class probabilities for each sample.
+      - List[Optional[float]]: List of predicted confidences for each sample.
+      - List[Dict[str, Any]]: List of prediction records for each sample.
+      - List[str]: List of class names.
+      - np.ndarray: Confusion matrix as a 2D numpy array.
   '''
+
+  import time
+  startAll = time.perf_counter()
 
   print(f"Collecting predictions on {subset} split for confusion matrix computation...")
   if (subset not in ("train", "val", "test", "all")):
@@ -496,9 +515,19 @@ def EvaluatePredictPlotSubset(
         if (len(imageFiles) == 0):
           print(f"Warning: No image files found in class directory, skipping: {classDir}")
           continue
+        if (maxSamples is not None):
+          currentMax = maxSamples // len(classDirs)
+          imageFiles = imageFiles[:currentMax]
+          print(f"Limiting to {currentMax} from {len(imageFiles)} samples in class {classDir.name}")
+
         for imagePath in imageFiles:
           # Run prediction for the image using the model.
-          predictionResults = model.predict(str(imagePath), verbose=False)
+          img = cv2.imread(str(imagePath))
+          img2PIL = Image.fromarray(img)
+          if (preprocessFn is not None):
+            img2PIL = preprocessFn(img2PIL)
+          img = np.array(img2PIL)
+          predictionResults = model.predict(img, verbose=False)
           if ((len(predictionResults) > 0) and hasattr(predictionResults[0], "probs")):
             try:
               predictedClassIndex = int(predictionResults[0].probs.top1)
@@ -607,20 +636,25 @@ def EvaluatePredictPlotSubset(
   if (storageDir is None):
     storageDir = Path(".")
 
-  if (not os.path.exists(storageDir)):
-    os.makedirs(storageDir, exist_ok=True)
-    print(f"Created storage directory: {storageDir}")
-  else:
-    print(f"Using existing storage directory: {storageDir}")
+  if (saveArtifacts):
+    if (not os.path.exists(storageDir)):
+      os.makedirs(storageDir, exist_ok=True)
+      print(f"Created storage directory: {storageDir}")
+    else:
+      print(f"Using existing storage directory: {storageDir}")
 
-  storageFileName = f"{prefix}_Predictions_{subset}.csv" if (prefix) else f"Predictions_{subset}.csv"
-  storageFilePath = Path(storageDir) / storageFileName
-  try:
-    dfPreds = pd.DataFrame(predictionsRecords)
-    dfPreds.to_csv(storageFilePath, index=False)
-    print(f"Predictions for subset '{subset}' saved to: {storageFilePath}")
-  except Exception as saveErr:
-    print(f"Warning: Could not save predictions CSV: {saveErr}")
+  if (saveArtifacts):
+    storageFileName = f"{prefix}_Predictions_{subset}.csv" if (prefix) else f"Predictions_{subset}.csv"
+    storageFilePath = Path(storageDir) / storageFileName
+    try:
+      dfPreds = pd.DataFrame(predictionsRecords)
+      dfPreds.to_csv(storageFilePath, index=False)
+      print(f"Predictions for subset '{subset}' saved to: {storageFilePath}")
+    except Exception as saveErr:
+      print(f"Warning: Could not save predictions CSV: {saveErr}")
+  else:
+    storageFileName = None
+    storageFilePath = None
 
   if (exportFailureCases):
     try:
@@ -639,7 +673,7 @@ def EvaluatePredictPlotSubset(
             "ece"                : predictionsRecords[i]["ece"],
           }
           failureRecords.append(record)
-      if (len(failureRecords) > 0):
+      if (saveArtifacts and (len(failureRecords) > 0)):
         dfFailures = pd.DataFrame(failureRecords)
         failureFileName = f"{prefix}_Misclassified_Samples.csv" if (prefix) else "Misclassified_Samples.csv"
         failureFilePath = Path(storageDir) / failureFileName
@@ -665,30 +699,31 @@ def EvaluatePredictPlotSubset(
   print(f"{'-' * 60}")
   figsPath = Path(storageDir)
 
-  try:
-    filename = f"{prefix}_CM.pdf" if (prefix) else "CM.pdf"
-    PlotConfusionMatrix(
-      cm,
-      classNames,
-      normalize=False,
-      roundDigits=3,
-      title="Confusion Matrix",
-      cmap=plt.cm.Blues,
-      display=False,
-      save=True,
-      fileName=str(figsPath / filename),
-      fontSize=15,
-      annotate=True,
-      figSize=(8, 8),
-      colorbar=True,
-      returnFig=False,
-      dpi=720,
-    )
-    print(f"Confusion matrix figure saved to: {figsPath / filename}")
-  except Exception as figErr:
-    print(f"Warning: Could not generate confusion matrix figure: {figErr}")
+  if (saveArtifacts):
+    try:
+      filename = f"{prefix}_CM.pdf" if (prefix) else "CM.pdf"
+      PlotConfusionMatrix(
+        cm,
+        classNames,
+        normalize=False,
+        roundDigits=3,
+        title="Confusion Matrix",
+        cmap=plt.cm.Blues,
+        display=False,
+        save=True,
+        fileName=str(figsPath / filename),
+        fontSize=15,
+        annotate=True,
+        figSize=(8, 8),
+        colorbar=True,
+        returnFig=False,
+        dpi=720,
+      )
+      print(f"Confusion matrix figure saved to: {figsPath / filename}")
+    except Exception as figErr:
+      print(f"Warning: Could not generate confusion matrix figure: {figErr}")
 
-  if (heavy):
+  if (saveArtifacts and heavy):
     try:
       # Prepare data for ROC AUC curve plotting.
       filename = f"{prefix}_ROC_AUC.pdf" if (prefix) else "ROC_AUC.pdf"
@@ -743,6 +778,11 @@ def EvaluatePredictPlotSubset(
     ece = ComputeECE(allPredsProbs, allGtsIndices)
     weightedMetrics["ECE"] = ece
     print("Expected Calibration Error (ECE):", ece)
+
+  endAll = time.perf_counter()
+  duration = endAll - startAll
+  print(f"Total evaluation and prediction time: {duration:.2f} seconds.")
+  weightedMetrics["Total Evaluation Time (s)"] = duration
 
   return (
     str(storageFilePath), weightedMetrics, allPredsIndices,
