@@ -372,7 +372,7 @@ def EvaluateAndSaveYoloClassifications(
       # Save the DataFrame to CSV.
       df.to_csv(storagePath, index=False)
 
-      # Reload the CSV to ensure consistent types for metrics computation.
+      # Reload the CSV to ensure consistent types for metrics.
       df = pd.read_csv(storagePath)
 
       # Compute reference and prediction arrays for metrics.
@@ -443,7 +443,7 @@ def EvaluatePredictPlotSubset(
   saveArtifacts=True,
   maxSamples=None,
   preprocessFn=None,
-) -> dict[str, str]:
+) -> tuple:
   r'''
   Evaluate a trained Ultralytics YOLO classification model on a specified dataset subset
   (train/val/test/all), collect predictions, compute confusion matrix and performance metrics,
@@ -466,7 +466,7 @@ def EvaluatePredictPlotSubset(
 
   Returns:
     tuple: A tuple containing:
-      - str: Path to the saved predictions CSV file.
+      - str|None: Path to the saved predictions CSV file (or None when not saved).
       - dict: Computed weighted performance metrics.
       - List[int]: List of predicted class indices.
       - List[int]: List of ground truth class indices.
@@ -474,7 +474,7 @@ def EvaluatePredictPlotSubset(
       - List[Optional[float]]: List of predicted confidences for each sample.
       - List[Dict[str, Any]]: List of prediction records for each sample.
       - List[str]: List of class names.
-      - np.ndarray: Confusion matrix as a 2D numpy array.
+      - numpy.ndarray|None: Confusion matrix as a 2D numpy array, or None if not computable.
   '''
 
   import time
@@ -495,7 +495,7 @@ def EvaluatePredictPlotSubset(
   allGtsNames: List[str] = []
   allPredsConfidences: List[Optional[float]] = []
   predictionsRecords: List[Dict[str, Any]] = []
-  classNames = []
+  classNames: List[str] = []
 
   try:
     for splitDir in splitDirs:
@@ -504,8 +504,15 @@ def EvaluatePredictPlotSubset(
         continue
 
       classDirs = sorted([directory for directory in splitDir.iterdir() if directory.is_dir()])
+      if (len(classDirs) == 0):
+        print(f"Warning: No class subdirectories found in split: {splitDir}")
+        continue
+
+      # Establish class names from the first non-empty split encountered.
       if (len(classNames) == 0):
         classNames = [directory.name for directory in classDirs]
+      numClasses = len(classDirs)
+
       for trueClassIndex, classDir in enumerate(classDirs):
         imageFiles = [
           p
@@ -516,13 +523,18 @@ def EvaluatePredictPlotSubset(
           print(f"Warning: No image files found in class directory, skipping: {classDir}")
           continue
         if (maxSamples is not None):
-          currentMax = maxSamples // len(classDirs)
+          # Limit per-class to maintain balanced sampling across classes.
+          currentMax = max(1, maxSamples // max(1, numClasses))
           imageFiles = imageFiles[:currentMax]
-          print(f"Limiting to {currentMax} from {len(imageFiles)} samples in class {classDir.name}")
+          print(f"Limiting to {len(imageFiles)} samples from class {classDir.name}")
 
         for imagePath in imageFiles:
           # Run prediction for the image using the model.
           img = cv2.imread(str(imagePath))
+          # Guard against failed reads from cv2.imread (returns None on failure).
+          if (img is None):
+            print(f"Warning: could not read image, skipping: {imagePath}")
+            continue
           img2PIL = Image.fromarray(img)
           if (preprocessFn is not None):
             img2PIL = preprocessFn(img2PIL)
@@ -584,6 +596,8 @@ def EvaluatePredictPlotSubset(
           eceValue = None
           if (computeECE and (len(allPredsProbs) > 0 and allPredsProbs[-1])):
             eceValue = ComputeECE([allPredsProbs[-1]], [allGtsIndices[-1]])
+          # Determine correctness of the prediction.
+          correctness = (allPredsIndices[-1] == trueClassIndex)
 
           predictionsRecords.append({
             "image"              : str(imagePath),
@@ -595,14 +609,17 @@ def EvaluatePredictPlotSubset(
             "predictedConfidence": allPredsConfidences[-1],
             "probabilities"      : (json.dumps(allPredsProbs[-1]) if (allPredsProbs[-1]) else None),
             "ece"                : (float(eceValue) if (eceValue is not None) else None),
+            "correctness"        : correctness
           })
 
       print(f"Prediction collection completed for split: {splitDir.name}")
-      print(f"Collected predictions for {len(allGtsIndices)} samples across {len(classDirs)} classes.")
+      print(f"Collected predictions for {len(allGtsIndices)} samples across {numClasses} classes.")
       print(f"Total samples collected for confusion matrix: {len(allGtsIndices)}")
       print(f"{'-' * 60}")
 
     print("Finished collecting predictions for all specified splits.")
+
+    # Basic consistency checks.
     assert len(allPredsIndices) == len(allGtsIndices), "Mismatch in predictions and ground truths count."
     assert len(allPredsIndices) == len(allPredsProbs), "Mismatch in predictions and probabilities count."
     assert len(allPredsIndices) == len(allPredsNames), "Mismatch in predictions and names count."
@@ -671,6 +688,7 @@ def EvaluatePredictPlotSubset(
             "predictedConfidence": predictionsRecords[i]["predictedConfidence"],
             "probabilities"      : predictionsRecords[i]["probabilities"],
             "ece"                : predictionsRecords[i]["ece"],
+            "correctness"        : predictionsRecords[i]["correctness"],
           }
           failureRecords.append(record)
       if (saveArtifacts and (len(failureRecords) > 0)):
@@ -684,9 +702,15 @@ def EvaluatePredictPlotSubset(
     except Exception as failErr:
       print(f"Warning: Could not export misclassified samples: {failErr}")
 
-  cm = confusion_matrix(allGtsIndices, allPredsIndices)
-  print("Confusion matrix computed.")
-  print(cm)
+  try:
+    cm = confusion_matrix(allGtsIndices, allPredsIndices) if (
+      len(allGtsIndices) > 0 and len(allPredsIndices) > 0) else None
+    print("Confusion matrix computed.")
+    print(cm)
+  except Exception as cmErr:
+    print(f"Warning: could not compute final confusion matrix: {cmErr}")
+    cm = None
+
   print("Class names:")
   print(classNames)
   print("All collected ground truth indices:")
@@ -974,41 +998,6 @@ def MeasureLatencyWithUltralytics(
     return None
 
 
-if __name__ == "__main__":
-  # Generate a random seed for this run.
-  rndNumber = np.random.randint(0, 10000)
-  # Compute splits and experiment paths used in the example.
-  datasetPath = r"/home/hmbala01/[B] Bladder/Data/Data"
-  expDir = r"/home/hmbala01/[B] Bladder"
-
-  # Call the high-level training function with defaults.
-  TrainMultipleYoloClassifiers(
-    baseDir=baseDir,
-    datasetPath=datasetPath,
-    runsDir="runs/classify",
-    epochs=250,
-    batchSize=128,
-    inputShape=(512, 512),
-    trialNum=1,
-    targetModels=None,
-    exportOnnx=True,
-    onnxOpset=11,
-    seed=rndNumber,
-  )
-
-  # Call the evaluation and saving function with defaults.
-  summary = EvaluateAndSaveYoloClassifications(
-    baseDir=baseDir,
-    datasetPath=datasetPath,
-    runsDir="results/classify",
-    extensions=None,
-    inputShape=(512, 512),
-    trialNum=1,
-    categories=None,
-    targetModels=None,
-  )
-
-
 def ExportYOLO2TorchScript(
   weightsPath: str,
   outPath: str,
@@ -1196,3 +1185,38 @@ def ApplyYOLOPruning(weightsPath: str, outPath: str, sparsity: float = 0.5) -> O
       return None
   except Exception:
     return None
+
+
+if __name__ == "__main__":
+  # Generate a random seed for this run.
+  rndNumber = np.random.randint(0, 10000)
+  # Compute splits and experiment paths used in the example.
+  datasetPath = r"/home/hmbala01/[B] Bladder/Data/Data"
+  expDir = r"/home/hmbala01/[B] Bladder"
+
+  # Call the high-level training function with defaults.
+  TrainMultipleYoloClassifiers(
+    baseDir=baseDir,
+    datasetPath=datasetPath,
+    runsDir="runs/classify",
+    epochs=250,
+    batchSize=128,
+    inputShape=(512, 512),
+    trialNum=1,
+    targetModels=None,
+    exportOnnx=True,
+    onnxOpset=11,
+    seed=rndNumber,
+  )
+
+  # Call the evaluation and saving function with defaults.
+  summary = EvaluateAndSaveYoloClassifications(
+    baseDir=baseDir,
+    datasetPath=datasetPath,
+    runsDir="results/classify",
+    extensions=None,
+    inputShape=(512, 512),
+    trialNum=1,
+    categories=None,
+    targetModels=None,
+  )

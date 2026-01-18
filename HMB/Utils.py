@@ -412,7 +412,7 @@ def AppendOrCreateNewCSV(
     fileName (str): Path to the CSV file.
     data (list or dict): Data to append to the CSV file. Can be a list of rows (list of lists) or a dictionary.
     header (list, optional): Header for the CSV file. Required if creating a new file.
-    mode (str, optional): Mode to open the file. Default is "a" (append).
+    mode (str, optional): Mode to open the file. Default is "a" (append). It can be changed to "w" (write) if needed.
   '''
 
   # Append data to a CSV file or create a new one if it doesn't exist.
@@ -425,6 +425,8 @@ def AppendOrCreateNewCSV(
 
   # Append data to the CSV file.
   # newline="" is used to avoid extra blank lines in the CSV file.
+  if (header is not None):
+    mode = "a"  # Ensure append mode when header is provided.
   with open(fileName, mode, newline="") as f:
     writer = csv.writer(f)
     if (isinstance(data, list)):

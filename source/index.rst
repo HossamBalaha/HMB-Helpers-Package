@@ -97,6 +97,7 @@ Quickstart
    MetaheuristicsHelper
    PDFHelper
    PerformanceMetrics
+   PlotsHelper
    PyTorchClassificationLosses
    PyTorchHelper
    PyTorchSegmentationLosses
