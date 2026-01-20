@@ -6,6 +6,7 @@ from typing import Union
 from sklearn.model_selection import train_test_split
 from PIL import Image, ImageOps, ImageEnhance
 from HMB.DataAugmentationHelper import PerformDataAugmentation
+from HMB.PlotsHelper import PlotBarChart
 
 
 class GenericImagesDatasetHandler(object):
@@ -72,11 +73,11 @@ class GenericImagesDatasetHandler(object):
   }
 
   def __init__(
-    self,
-    sourceDir: Path,
-    configPath: Path = None,
-    imageExtensions: set = None,
-    autoDetect: bool = True,
+      self,
+      sourceDir: Path,
+      configPath: Path = None,
+      imageExtensions: set = None,
+      autoDetect: bool = True,
   ):
     r'''
     Initialize the dataset handler.
@@ -316,14 +317,14 @@ class GenericImagesDatasetHandler(object):
     return manifestPath
 
   def Prepare(
-    self,
-    outputDir: Path,
-    valSplit: float = 0.1,
-    testSplit: float = 0.1,
-    balance: bool = None,
-    balanceMethod: str = "duplication",
-    balanceTarget: Union[str, int] = "max",
-    randomSeed: int = 42,
+      self,
+      outputDir: Path,
+      valSplit: float = 0.1,
+      testSplit: float = 0.1,
+      balance: bool = None,
+      balanceMethod: str = "duplication",
+      balanceTarget: Union[str, int] = "max",
+      randomSeed: int = 42,
   ):
     r'''
     Prepare dataset in a standard train/val/test layout by creating train/val/test
@@ -666,11 +667,11 @@ names: {classNameDict}
     return structured if returnStructured else issues
 
   def CreateConfigFile(
-    self,
-    outputPath: Path = None,
-    splits: dict = None,
-    minSamplesPerClass: int = None,
-    description: str = None
+      self,
+      outputPath: Path = None,
+      splits: dict = None,
+      minSamplesPerClass: int = None,
+      description: str = None
   ) -> Path:
     r'''
     Auto-generate a complete dataset configuration JSON based on detected mapping
@@ -786,13 +787,13 @@ names: {classNameDict}
     }
 
   def PlotClassDistribution(
-    self,
-    fileName="ClassDistribution.pdf",
-    title="Class Distribution",
-    save=False,
-    display=True,
-    fontSize=12,
-    dpi=720,
+      self,
+      fileName="ClassDistribution.pdf",
+      title="Class Distribution",
+      save=False,
+      display=True,
+      fontSize=12,
+      dpi=720,
   ):
     r'''
     Plot a bar chart of the class distribution in the dataset.
@@ -806,8 +807,13 @@ names: {classNameDict}
       fontSize (int): Font size for labels and title. Default: 12.
       dpi (int): DPI for saved figure. Default: 720.
     '''
-    import matplotlib.pyplot as plt
 
+    # Guard against missing class mapping.
+    if (not self.classMapping):
+      print("Warning: class mapping is empty or not set; nothing to plot.", flush=True)
+      return None
+
+    # Build labels and counts from detected mapping.
     classNames = []
     counts = []
 
@@ -816,24 +822,24 @@ names: {classNameDict}
       classNames.append(className)
       counts.append(imageCount)
 
-    plt.figure(figsize=(10, 6))
-    plt.bar(classNames, counts, color="skyblue")
-    plt.xlabel("Classes", fontsize=fontSize)
-    plt.ylabel("Number of Images", fontsize=fontSize)
-    plt.title(title, fontsize=fontSize + 2)
-    plt.xticks(rotation=45, ha="right", fontsize=fontSize - 2)
-    plt.yticks(fontsize=fontSize - 2)
-    plt.grid(axis="y", linestyle="--", alpha=0.7)
-    plt.tight_layout()
-
-    if (save and fileName):
-      plt.savefig(fileName, dpi=dpi, bbox_inches="tight")
-      print(f"Class distribution plot saved to: {fileName}", flush=True)
-
-    if (display):
-      plt.show()
-
-    plt.close()
+    # Delegate plotting to the shared PlotBarChart utility to avoid redundancy.
+    try:
+      PlotBarChart(
+        values=counts,
+        labels=classNames,
+        title=title,
+        ylabel="Number of Images",
+        save=save,
+        fileName=fileName,
+        dpi=dpi,
+        display=display,
+        annotate=False,
+        fontSize=fontSize,
+        rotation=45,
+        returnFig=False,
+      )
+    except Exception as e:
+      print(f"Warning: could not generate class distribution plot: {e}", flush=True)
 
   def CollectSummary(self) -> dict:
     r'''
@@ -875,11 +881,11 @@ names: {classNameDict}
     print("=" * 80 + "\n", flush=True)
 
   def _ApplyBalancing(
-    self,
-    outputDir: Path,
-    method: str = "duplication",
-    target: Union[str, int] = "max",
-    randomSeed: int = 42
+      self,
+      outputDir: Path,
+      method: str = "duplication",
+      target: Union[str, int] = "max",
+      randomSeed: int = 42
   ):
     r'''
     Internal helper to balance class counts inside the "train" split.

@@ -96,7 +96,7 @@ def IsPointInsideContour(point, contour):
     cnt = cnt.reshape((-1, 1, 2))
   # If 'point' is actually a polygon, compute convex intersection area>0 with contour
   if isinstance(point, (list, tuple, np.ndarray)) and not (
-    len(point) == 2 and not isinstance(point[0], (list, tuple, np.ndarray))):
+      len(point) == 2 and not isinstance(point[0], (list, tuple, np.ndarray))):
     poly = np.array(point, dtype=np.float32)
     if poly.ndim == 2 and poly.shape[1] == 2:
       poly = poly.reshape((-1, 1, 2)).astype(np.float32)
@@ -400,10 +400,10 @@ def GetCmapColors(cmap, noColors, darkColorsOnly=True, darknessThreshold=0.7):
 
 
 def AppendOrCreateNewCSV(
-  fileName,  # Path to the CSV file.
-  data,  # Data to append or create.
-  header=None,  # Header for the CSV file.
-  mode="a",  # Mode to open the file (default is append).
+    fileName,  # Path to the CSV file.
+    data,  # Data to append or create.
+    header=None,  # Header for the CSV file.
+    mode="a",  # Mode to open the file (default is append).
 ):
   r'''
   Append data to a CSV file or create a new one if it doesn't exist.
@@ -447,9 +447,9 @@ def AppendOrCreateNewCSV(
 
 
 def AppendOrCreateNewDataFrameCSV(
-  fileName,  # Path to the CSV file.
-  data,  # Data to append or create.
-  header=None,  # Header for the CSV file.
+    fileName,  # Path to the CSV file.
+    data,  # Data to append or create.
+    header=None,  # Header for the CSV file.
 ):
   r'''
   Append a pandas DataFrame to a CSV file or create a new one if it doesn't exist.
@@ -470,3 +470,111 @@ def AppendOrCreateNewDataFrameCSV(
   else:
     # Append without header
     data.to_csv(fileName, mode="a", index=False, header=False)
+
+
+def GroupImagesByClass(inputDir, imgExtensions=None):
+  r'''
+
+  Collect image paths grouped by class directory.
+
+  This implementation:
+  - walks the input directory recursively once
+  - accepts a wider set of image extensions (case-insensitive)
+  - groups images by the top-level directory under `inputDir` (so nested subfolders such as augmentation folders don't split a class into multiple keys)
+  - sorts file lists deterministically and prints counts per class
+
+  Parameters:
+    inputDir (str): Path to the input directory containing images.
+    imgExtensions (set, optional): Set of image file extensions to consider. Default includes common formats.
+
+  Returns:
+    dict: A dictionary where keys are class names (top-level folder names) and values are lists of image file paths.
+  '''
+
+  from pathlib import Path
+
+  if (imgExtensions is None):
+    imgExtensions = {
+      ".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".gif",
+      ".JPG", ".JPEG", ".PNG", ".BMP", ".TIFF", ".TIF", ".GIF",
+    }
+
+  imageGroups = {}
+  inputPath = Path(inputDir)
+  if (not inputPath.exists()):
+    return imageGroups
+
+  # Walk once and filter by extension (case-insensitive)
+  for path in inputPath.rglob("*"):
+    if (not path.is_file()):
+      continue
+    if (path.suffix.lower() not in imgExtensions):
+      continue
+
+    # Determine class name as the top-level folder under inputDir, if any.
+    # Example: inputDir/className/aug1/image.jpg -> className
+    try:
+      rel = path.relative_to(inputPath)
+      parts = rel.parts
+      if (len(parts) >= 2):
+        className = parts[0]
+      elif (len(parts) == 1):
+        # Image directly inside inputDir: group under the input directory name.
+        className = inputPath.name
+      else:
+        className = path.parent.name
+    except Exception:
+      className = path.parent.name
+
+    imageGroups.setdefault(className, []).append(path)
+
+  # Sort keys and file lists for deterministic behavior and print counts
+  for className in sorted(imageGroups.keys()):
+    imageGroups[className] = sorted(imageGroups[className])
+    print(f"  Class '{className}': {len(imageGroups[className])} images")
+
+  return imageGroups
+
+def SelectBalancedImages(imageGroups, maxImages, seed=42):
+  r'''
+  Select images evenly across classes up to maxImages. If there are not enough images,
+  fill the remaining slots with random images from the available pool.
+  The `imageGroups` parameter is a dictionary where keys are class names and values are lists of image file paths.
+  You can obtain such a dictionary using the `GroupImagesByClass` function.
+
+  Parameters:
+    imageGroups (dict): Dictionary where keys are class names and values are lists of image file paths.
+    maxImages (int): Maximum number of images to select.
+    seed (int, optional): Random seed for reproducibility. Default is 42.
+
+  Returns:
+    list: List of selected image file paths.
+  '''
+
+  import numpy as np  # NumPy library for numerical operations.
+
+  # Select a balanced subset of images across classes.
+  randomGenerator = np.random.default_rng(seed)
+  classNames = sorted(imageGroups.keys())
+  print(f"Selecting balanced images across {len(classNames)} classes")
+  if (len(classNames) == 0):
+    return []
+  perClass = max(1, maxImages // len(classNames))
+  print(f"Selecting up to {perClass} images per class for {len(classNames)} classes")
+  selected = []
+  for className in classNames:
+    classImages = imageGroups[className]
+    if (len(classImages) > perClass):
+      chosen = randomGenerator.choice(classImages, size=perClass, replace=False)
+    else:
+      chosen = classImages
+    selected.extend(list(chosen))
+    print(f"  Class '{className}': selected {len(chosen)}/{len(classImages)} images")
+  remaining = maxImages - len(selected)
+  if (remaining > 0):
+    pool = [path for className in classNames for path in imageGroups[className] if (path not in selected)]
+    if (len(pool) > 0):
+      extra = min(remaining, len(pool))
+      selected.extend(list(randomGenerator.choice(pool, size=extra, replace=False)))
+  print(f"Total selected images: {len(selected)}")
+  return selected[:maxImages]
