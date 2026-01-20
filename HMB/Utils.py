@@ -214,6 +214,28 @@ def DumpJsonFile(filePath, data, indent=2):
     json.dump(data, jsonFile, indent=indent)
 
 
+def ReadJsonFile(filePath):
+  r'''
+  Read data from a JSON file.
+
+  Parameters:
+    filePath (str): Path to the JSON file.
+
+  Returns:
+    object: The data read from the JSON file as a Python object.
+
+  Raises:
+    AssertionError: If the specified file does not exist.
+  '''
+
+  # Check if the file exists.
+  assert os.path.exists(filePath), f"File not found: {filePath}"
+  # Open the JSON file in read mode and load its contents.
+  with open(filePath, "r", encoding="utf-8") as jsonFile:
+    jsonData = json.load(jsonFile)
+  return jsonData
+
+
 def ReadTextFile(filePath):
   r'''
   Read text from a file.
@@ -534,6 +556,7 @@ def GroupImagesByClass(inputDir, imgExtensions=None):
     print(f"  Class '{className}': {len(imageGroups[className])} images")
 
   return imageGroups
+
 
 def SelectBalancedImages(imageGroups, maxImages, seed=42):
   r'''
