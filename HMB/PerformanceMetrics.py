@@ -3564,7 +3564,7 @@ def ComputeECE(probabilities, labels, binCount: int = 15, nBins: int | None = No
       continue
     accInBin = np.mean(trueMask[inBin].astype(float))
     avgConfInBin = np.mean(confidences[inBin])
-    ece += (cnt / n) * abs(accInBin - avgConfInBin)
+    ece += (cnt / n) * np.abs(accInBin - avgConfInBin)
 
   return float(ece)
 
