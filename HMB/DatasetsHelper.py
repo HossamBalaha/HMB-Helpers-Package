@@ -833,7 +833,8 @@ names: {classNameDict}
         fileName=fileName,
         dpi=dpi,
         display=display,
-        annotate=False,
+        annotate=True,
+        annotateFormat="{:.0f}", # Format as integer counts.
         fontSize=fontSize,
         rotation=45,
         returnFig=False,

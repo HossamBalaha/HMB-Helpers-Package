@@ -3,6 +3,11 @@ import numpy as np
 from threading import Thread
 from PIL import PngImagePlugin
 
+IMAGE_SUFFIXES = {
+  ".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".gif",
+  ".JPG", ".JPEG", ".PNG", ".BMP", ".TIFF", ".TIF", ".GIF",
+}
+
 
 # -------------------------------------------------- #
 def SetMaxTextChunkSize(maxChunkSize=100 * (1024 ** 2)):
@@ -245,6 +250,8 @@ def EnsureCUDAAvailable(strict=True):
       sys.exit(1)
     else:
       return False
+
+  print("Current device:", torch.cuda.get_device_name(0))
   return True
 
 

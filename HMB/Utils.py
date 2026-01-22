@@ -96,7 +96,7 @@ def IsPointInsideContour(point, contour):
     cnt = cnt.reshape((-1, 1, 2))
   # If 'point' is actually a polygon, compute convex intersection area>0 with contour
   if isinstance(point, (list, tuple, np.ndarray)) and not (
-      len(point) == 2 and not isinstance(point[0], (list, tuple, np.ndarray))):
+    len(point) == 2 and not isinstance(point[0], (list, tuple, np.ndarray))):
     poly = np.array(point, dtype=np.float32)
     if poly.ndim == 2 and poly.shape[1] == 2:
       poly = poly.reshape((-1, 1, 2)).astype(np.float32)
@@ -232,7 +232,11 @@ def ReadJsonFile(filePath):
   assert os.path.exists(filePath), f"File not found: {filePath}"
   # Open the JSON file in read mode and load its contents.
   with open(filePath, "r", encoding="utf-8") as jsonFile:
-    jsonData = json.load(jsonFile)
+    try:
+      jsonData = json.load(jsonFile)
+    except Exception:
+      jsonFile.seek(0)
+      jsonData = yaml.safe_load(jsonFile)
   return jsonData
 
 
@@ -422,10 +426,10 @@ def GetCmapColors(cmap, noColors, darkColorsOnly=True, darknessThreshold=0.7):
 
 
 def AppendOrCreateNewCSV(
-    fileName,  # Path to the CSV file.
-    data,  # Data to append or create.
-    header=None,  # Header for the CSV file.
-    mode="a",  # Mode to open the file (default is append).
+  fileName,  # Path to the CSV file.
+  data,  # Data to append or create.
+  header=None,  # Header for the CSV file.
+  mode="a",  # Mode to open the file (default is append).
 ):
   r'''
   Append data to a CSV file or create a new one if it doesn't exist.
@@ -468,30 +472,54 @@ def AppendOrCreateNewCSV(
       raise ValueError("Unsupported data type for CSV append.")
 
 
+# Define the AppendOrCreateNewDataFrameCSV function to append or create a CSV from list or DataFrame.
 def AppendOrCreateNewDataFrameCSV(
-    fileName,  # Path to the CSV file.
-    data,  # Data to append or create.
-    header=None,  # Header for the CSV file.
+  fileName,  # Path to the CSV file.
+  data,  # Data to append or create; can be a list (of lists/dicts) or a pandas DataFrame.
+  header=None,  # Header for the CSV file; required if creating a new file and data is not a DataFrame with columns.
 ):
   r'''
-  Append a pandas DataFrame to a CSV file or create a new one if it doesn't exist.
+  Append data to a CSV file or create a new one if it doesn't exist.
+  Accepts data as either a pandas DataFrame or a list (of lists or dictionaries).
 
   Parameters:
     fileName (str): Path to the CSV file.
-    data (pandas.DataFrame): DataFrame to append to the CSV file.
-    header (list, optional): Header for the CSV file. Required if creating a new file
+    data (list or pandas.DataFrame): Data to write. If list, must align with header.
+    header (list, optional): Column names. Required if creating a new file and data lacks column info.
   '''
 
+  # Import pandas locally to avoid global dependency.
   import pandas as pd
 
-  # Append DataFrame to a CSV file or create a new one if it doesn't exist.
-  if (not os.path.exists(fileName)):
-    # Create new file; if header provided, ensure columns align
-    cols = header if (header is not None) else list(data.columns)
-    data.to_csv(fileName, index=False, header=cols)
+  # Convert input data to a pandas DataFrame if it is not already one.
+  if (isinstance(data, pd.DataFrame)):
+    # Use the DataFrame as-is.
+    df = data
+  elif (isinstance(data, list)):
+    # Check if the list is non-empty and contains dictionaries (record-style).
+    if (len(data) > 0 and isinstance(data[0], dict)):
+      # Construct DataFrame from list of dictionaries.
+      df = pd.DataFrame(data)
+    else:
+      # Assume list of lists/rows; require header for column names.
+      if (header is None):
+        # Raise an error if header is missing when needed.
+        raise ValueError("Header must be provided when data is a list of values (not dicts).")
+      # Construct DataFrame using the provided header as columns.
+      df = pd.DataFrame(data, columns=header)
   else:
-    # Append without header
-    data.to_csv(fileName, mode="a", index=False, header=False)
+    # Raise an error for unsupported data types.
+    raise TypeError("Data must be a pandas DataFrame or a list (of lists or dicts).")
+
+  # Check whether the CSV file already exists.
+  if (not os.path.exists(fileName)):
+    # File does not exist; create a new one with header.
+    finalHeader = header if (header is not None) else df.columns.tolist()
+    # Write the DataFrame to a new CSV file with the specified header.
+    df.to_csv(fileName, index=False, header=finalHeader)
+  else:
+    # File exists; append without writing the header.
+    df.to_csv(fileName, mode="a", index=False, header=False)
 
 
 def GroupImagesByClass(inputDir, imgExtensions=None):
@@ -601,3 +629,74 @@ def SelectBalancedImages(imageGroups, maxImages, seed=42):
       selected.extend(list(randomGenerator.choice(pool, size=extra, replace=False)))
   print(f"Total selected images: {len(selected)}")
   return selected[:maxImages]
+
+
+def PrintHyperParamsList(hparamsFile, returnList=False):
+  r'''
+  Print the list of hyperparameter sets from a hyperparameters file.
+
+  Parameters:
+    hparamsFile (str): Path to the hyperparameters file.
+    returnList (bool, optional): If True, return the list of hyperparameter sets instead of printing. Default is False.
+
+  Returns:
+    list or None: If `returnList` is True, returns the list of hyperparameter sets; otherwise, returns None.
+  '''
+
+  from pathlib import Path
+
+  # Convert the input file path to a Path object for robust path handling.
+  hparamsPath = Path(hparamsFile)
+
+  # Attempt to read and parse the hyperparameters file as JSON.
+  try:
+    # Load the JSON content from the specified file.
+    data = ReadJsonFile(hparamsPath)
+  except Exception as e:
+    # Report an error if the file cannot be read or parsed.
+    print(f"ERROR: Could not read hyperparameters file for listing: {e}")
+    # Return an empty list if returnList is True, otherwise return None.
+    return [] if returnList else None
+
+  # Verify that the top-level JSON structure is a list.
+  if (not isinstance(data, list)):
+    # Report an error if the file does not contain a JSON array.
+    print(f"ERROR: Hyperparameters file does not contain a list: {hparamsPath}")
+    # Return an empty list if returnList is True, otherwise return None.
+    return [] if returnList else None
+
+  # Initialize an empty list to store formatted hyperparameter summaries if needed.
+  result = []
+
+  # Print the header for the hyperparameter listing.
+  print("Hyperparameter sets (name - active):")
+
+  # Iterate over each hyperparameter set in the list with a 1-based index.
+  for idx, hp in enumerate(data, start=1):
+    # Check if the current item is a dictionary; if not, treat it as a raw value.
+    if (isinstance(hp, dict)):
+      # Extract the "name" field, defaulting to a generated name if missing.
+      name = hp.get("name", f"unnamed_{idx}")
+      # Extract the "active" field and convert it to a boolean; default to False if missing.
+      active = bool(hp.get("active", False))
+    else:
+      # For non-dictionary entries, use string representation as the name.
+      name = str(hp)
+      # Mark as inactive since no 'active' key can exist.
+      active = False
+
+    # Format the display string for this hyperparameter set.
+    line = f"  {idx}. {name} - active={active}"
+
+    # Print the formatted line.
+    print(line)
+
+    # If returnList is True, append the original hyperparameter entry to the result.
+    if (returnList):
+      result.append(hp)
+
+    # Print the contents of each hparams dict.
+    print(f"     Contents ({type(hp)}): {hp}")
+
+  # Return the list of hyperparameter sets if requested; otherwise, return None.
+  return result if (returnList) else None

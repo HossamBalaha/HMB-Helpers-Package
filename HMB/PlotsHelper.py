@@ -7,27 +7,27 @@ from matplotlib import colors as mcolors
 
 # Define a function to plot a heatmap from 2D data with flexible options.
 def PlotHeatmap(
-    data: np.ndarray,
-    rowLabels: list[str],
-    colLabels: list[str],
-    title: str = "Heatmap",
-    xlabel: str = "Column",
-    ylabel: str = "Row",
-    cmap: Any = "viridis",
-    vmin: Optional[float] = None,
-    vmax: Optional[float] = None,
-    valueFormat: str = "{:.2f}",
-    annotate: bool = True,
-    fontSize: int = 7,
-    figSize: Optional[tuple[float, float]] = None,
-    colorbarLabel: Optional[str] = None,
-    save: bool = False,
-    savePath: Optional[Path | str] = None,
-    fileName: Optional[str] = None,
-    dpi: int = 300,
-    display: bool = True,
-    colorbar: bool = True,
-    returnFig: bool = False,
+  data: np.ndarray,
+  rowLabels: list[str],
+  colLabels: list[str],
+  title: str = "Heatmap",
+  xlabel: str = "Column",
+  ylabel: str = "Row",
+  cmap: Any = "viridis",
+  vmin: Optional[float] = None,
+  vmax: Optional[float] = None,
+  valueFormat: str = "{:.2f}",
+  annotate: bool = True,
+  fontSize: int = 7,
+  figSize: Optional[tuple[float, float]] = None,
+  colorbarLabel: Optional[str] = None,
+  save: bool = False,
+  savePath: Optional[Path | str] = None,
+  fileName: Optional[str] = None,
+  dpi: int = 300,
+  display: bool = True,
+  colorbar: bool = True,
+  returnFig: bool = False,
 ) -> Optional[plt.Figure]:
   r'''
   Plot a labeled heatmap from a 2D numeric array with flexible display and saving options.
@@ -239,25 +239,25 @@ def PlotHeatmap(
 
 # Define a function to plot a bar chart from values and labels.
 def PlotBarChart(
-    values: list[float],
-    labels: list[str],
-    title: str = "",
-    ylabel: str = "",
-    save: bool = False,
-    savePath: Optional[Path | str] = None,
-    fileName: Optional[str] = None,
-    color: Any = "tab:blue",
-    colors: Optional[list[str]] = None,
-    alpha: float = 0.85,
-    dpi: int = 300,
-    display: bool = True,
-    annotate: bool = False,
-    annotateFormat: str = "{:.4f}",
-    annotateFontSize: Optional[int] = None,
-    fontSize: int = 10,
-    figSize: Optional[tuple[float, float]] = None,
-    rotation: float = 45,
-    returnFig: bool = False,
+  values: list[float],
+  labels: list[str],
+  title: str = "",
+  ylabel: str = "",
+  save: bool = False,
+  savePath: Optional[Path | str] = None,
+  fileName: Optional[str] = None,
+  color: Any = "tab:blue",
+  colors: Optional[list[str]] = None,
+  alpha: float = 0.85,
+  dpi: int = 300,
+  display: bool = True,
+  annotate: bool = False,
+  annotateFormat: str = "{:.4f}",
+  annotateFontSize: Optional[int] = None,
+  fontSize: int = 10,
+  figSize: Optional[tuple[float, float]] = None,
+  rotation: float = 45,
+  returnFig: bool = False,
 ) -> Optional[plt.Figure]:
   r'''
   Create a bar chart from values and labels with options to annotate, save, display and return the Figure.
@@ -320,6 +320,11 @@ def PlotBarChart(
   # Create a new Figure and Axes for the bar chart.
   fig, ax = plt.subplots(figsize=figSize)
 
+  # Add dashed grid lines along the y-axis for readability.
+  ax.yaxis.grid(True, linestyle="--", which="major", color="grey", alpha=0.6)
+  # Keep the dashed grid lines behind the bars.
+  ax.set_axisbelow(True)
+
   # Decide bar colors: prefer per-bar list when provided.
   if (colors is not None):
     # Use the provided per-bar colors.
@@ -330,6 +335,9 @@ def PlotBarChart(
 
   # Draw the bars on the Axes.
   bars = ax.bar(range(len(labels)), values, color=barColors, alpha=alpha)
+
+  # Keep the bar edges sharp.
+  ax.bar(range(len(labels)), values, color=barColors, alpha=alpha, edgecolor="black", linewidth=0.7)
 
   # Set x tick positions for each label.
   ax.set_xticks(range(len(labels)))
@@ -402,22 +410,6 @@ def PlotBarChart(
       # Determine x position centered on the bar.
       xPos = bar.get_x() + bar.get_width() / 2.0
 
-      # Choose a contrasting text color based on the bar facecolor when possible.
-      textColor = "black"
-      # try:
-      #   face_rgba = bar.get_facecolor()
-      #   # face_rgba may be an RGBA tuple or a sequence of RGBA tuples; normalize to first tuple.
-      #   if isinstance(face_rgba, (list, tuple)) and len(face_rgba) > 0 and isinstance(face_rgba[0], (list, tuple)):
-      #     r, g, b = face_rgba[0][:3]
-      #   else:
-      #     r, g, b = face_rgba[:3]
-      #   # Compute luminance and pick white for dark bars, black otherwise.
-      #   luminance = 0.299 * r + 0.587 * g + 0.114 * b
-      #   textColor = "white" if luminance < 0.6 else "black"
-      # except Exception:
-      #   # Fallback to white if facecolor parsing fails.
-      #   textColor = "white"
-
       # Place the annotation. Use different vertical alignment and clipping depending on placement.
       ax.text(
         xPos, yPos, label,
@@ -425,7 +417,7 @@ def PlotBarChart(
         va=va,
         fontsize=annotateFontSize,
         rotation=45,
-        color=textColor,
+        color="black",
         clip_on=clipOn,
         zorder=10,
       )
@@ -495,24 +487,24 @@ def PlotBarChart(
 
 # Additional generic plot helpers.
 def PlotHorizontalBarChart(
-    values: list[float],
-    labels: list[str],
-    title: str = "",
-    xlabel: str = "",
-    save: bool = False,
-    savePath: Optional[Path | str] = None,
-    fileName: Optional[str] = None,
-    color: Any = "tab:blue",
-    colors: Optional[list[str]] = None,
-    alpha: float = 0.85,
-    dpi: int = 300,
-    display: bool = True,
-    annotate: bool = False,
-    annotateFormat: str = "{:.4f}",
-    annotateFontSize: Optional[int] = None,
-    fontSize: int = 10,
-    figSize: Optional[tuple[float, float]] = None,
-    returnFig: bool = False,
+  values: list[float],
+  labels: list[str],
+  title: str = "",
+  xlabel: str = "",
+  save: bool = False,
+  savePath: Optional[Path | str] = None,
+  fileName: Optional[str] = None,
+  color: Any = "tab:blue",
+  colors: Optional[list[str]] = None,
+  alpha: float = 0.85,
+  dpi: int = 300,
+  display: bool = True,
+  annotate: bool = False,
+  annotateFormat: str = "{:.4f}",
+  annotateFontSize: Optional[int] = None,
+  fontSize: int = 10,
+  figSize: Optional[tuple[float, float]] = None,
+  returnFig: bool = False,
 ) -> Optional[plt.Figure]:
   r'''
   Create a horizontal bar chart (bars extend along the x-axis) with labeled y-axis.
@@ -685,20 +677,20 @@ def PlotHorizontalBarChart(
 
 
 def PlotPieChart(
-    values: list[float],
-    labels: list[str],
-    title: str = "",
-    save: bool = False,
-    savePath: Optional[Path | str] = None,
-    fileName: Optional[str] = None,
-    autopct: Optional[str] = "%1.1f%%",
-    explode: Optional[list[float]] = None,
-    colors: Optional[list[str]] = None,
-    dpi: int = 300,
-    display: bool = True,
-    fontSize: int = 10,
-    figSize: Optional[tuple[float, float]] = None,
-    returnFig: bool = False,
+  values: list[float],
+  labels: list[str],
+  title: str = "",
+  save: bool = False,
+  savePath: Optional[Path | str] = None,
+  fileName: Optional[str] = None,
+  autopct: Optional[str] = "%1.1f%%",
+  explode: Optional[list[float]] = None,
+  colors: Optional[list[str]] = None,
+  dpi: int = 300,
+  display: bool = True,
+  fontSize: int = 10,
+  figSize: Optional[tuple[float, float]] = None,
+  returnFig: bool = False,
 ) -> Optional[plt.Figure]:
   r'''
   Create a pie chart from categorical values and labels.
@@ -838,21 +830,21 @@ def PlotPieChart(
 
 
 def PlotLineChart(
-    x: Optional[list[float]],
-    y: list[float],
-    title: str = "",
-    xlabel: str = "",
-    ylabel: str = "",
-    save: bool = False,
-    savePath: Optional[Path | str] = None,
-    fileName: Optional[str] = None,
-    dpi: int = 300,
-    display: bool = True,
-    annotate: bool = False,
-    annotateFormat: str = "{:.2f}",
-    fontSize: int = 10,
-    figSize: Optional[tuple[float, float]] = None,
-    returnFig: bool = False,
+  x: Optional[list[float]],
+  y: list[float],
+  title: str = "",
+  xlabel: str = "",
+  ylabel: str = "",
+  save: bool = False,
+  savePath: Optional[Path | str] = None,
+  fileName: Optional[str] = None,
+  dpi: int = 300,
+  display: bool = True,
+  annotate: bool = False,
+  annotateFormat: str = "{:.2f}",
+  fontSize: int = 10,
+  figSize: Optional[tuple[float, float]] = None,
+  returnFig: bool = False,
 ) -> Optional[plt.Figure]:
   r'''
   Plot a simple line chart connecting (x, y) points.
@@ -1006,19 +998,19 @@ def PlotLineChart(
 
 
 def PlotHistogram(
-    data: list[float],
-    bins: int = 20,
-    title: str = "",
-    xlabel: str = "",
-    ylabel: str = "Frequency",
-    save: bool = False,
-    savePath: Optional[Path | str] = None,
-    fileName: Optional[str] = None,
-    dpi: int = 300,
-    display: bool = True,
-    fontSize: int = 10,
-    figSize: Optional[tuple[float, float]] = None,
-    returnFig: bool = False,
+  data: list[float],
+  bins: int = 20,
+  title: str = "",
+  xlabel: str = "",
+  ylabel: str = "Frequency",
+  save: bool = False,
+  savePath: Optional[Path | str] = None,
+  fileName: Optional[str] = None,
+  dpi: int = 300,
+  display: bool = True,
+  fontSize: int = 10,
+  figSize: Optional[tuple[float, float]] = None,
+  returnFig: bool = False,
 ) -> Optional[plt.Figure]:
   r'''
   Plot a histogram for 1D numeric data.

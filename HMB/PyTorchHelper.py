@@ -1,16 +1,21 @@
-import os, timm, torch, tqdm, copy
+import os, timm, torch, tqdm, copy, time, cv2, json
 import numpy as np
 import pandas as pd
 from PIL import Image
 import matplotlib.pyplot as plt
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 from sklearn.metrics import confusion_matrix, classification_report
 from torch.amp import autocast, GradScaler
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, CosineAnnealingLR
 import torch.nn.functional as F
-
-import HMB.PerformanceMetrics as pm
+from HMB.Initializations import IMAGE_SUFFIXES
+from HMB.PerformanceMetrics import (
+  CalculatePerformanceMetrics, PlotConfusionMatrix,
+  PlotROCAUCCurve, PlotPRCCurve, ComputeECE
+)
 
 
 # Function to save a PyTorch model's state dictionary to a file.
@@ -910,7 +915,7 @@ def TrainOneEpoch(
       labels=list(range(noOfClasses)),  # List of class labels.
     )
     # Calculate performance metrics from the confusion matrix.
-    metrics = pm.CalculatePerformanceMetrics(cm)
+    metrics = CalculatePerformanceMetrics(cm)
     accuracy = metrics["Weighted Accuracy"]
     # Accumulate the total accuracy for the epoch.
     totalEpochAccuracy += accuracy
@@ -1022,7 +1027,7 @@ def EvaluateOneEpoch(
         labels=list(range(noOfClasses)),  # List of class labels.
       )
       # Calculate performance metrics from the confusion matrix.
-      metrics = pm.CalculatePerformanceMetrics(cm)
+      metrics = CalculatePerformanceMetrics(cm)
       accuracy = metrics["Weighted Accuracy"]
 
       # Accumulate the total accuracy for the validation epoch.
@@ -1163,7 +1168,7 @@ def InferenceWithPlots(
     # Compute the confusion matrix.
     cm = confusion_matrix(yTrue, yPred)
     # Calculate performance metrics using the confusion matrix.
-    metrics = pm.CalculatePerformanceMetrics(cm, addWeightedAverage=True)
+    metrics = CalculatePerformanceMetrics(cm, addWeightedAverage=True)
     metrics["Path"] = expDirPath
     metrics["File"] = os.path.basename(expDirPath)
     overallHistory.append(metrics)
@@ -1433,3 +1438,424 @@ def ApplyDynamicQuantizationTorch(modelPath: str, outputPath: str, exampleInput=
   except Exception as e:
     print(f"Dynamic quantization failed: {e}")
     return None
+
+
+def GenericEvaluatePredictPlotSubset(
+  datasetDir: str,
+  model,
+  subset: str = "test",
+  prefix: str = "",
+  storageDir: Optional[str] = None,
+  heavy: bool = True,
+  computeECE: bool = True,
+  exportFailureCases: bool = True,
+  eps: float = 1e-10,
+  saveArtifacts: bool = True,
+  maxSamples: Optional[int] = None,
+  preprocessFn=None,
+) -> Tuple[
+  Optional[str],
+  Dict[str, float],
+  List[int],
+  List[int],
+  List[List[float]],
+  List[Optional[float]],
+  List[Dict[str, Any]],
+  List[str],
+  Optional[np.ndarray],
+]:
+  r'''
+  Evaluate a trained classification model on a specified dataset subset
+  (train/val/test/all), collect predictions, compute confusion matrix and performance metrics,
+  and optionally save predictions to a CSV file. It also generates and saves confusion matrix,
+  ROC AUC, and PRC plots.
+
+  Parameters:
+    datasetDir (str): Path to the dataset directory containing train/val/test splits.
+    model (callable): A callable that takes a NumPy array (HWC, uint8 or float32) and returns a 1D array of class probabilities.
+    subset (str | None): Dataset subset to evaluate ("train", "val", "test", "all", or None). Defaults to "test".
+    prefix (str): Prefix for saved figure filenames. Defaults to "".
+    storageDir (str | None): Directory to save predictions CSV and figures. If None, uses current directory. Defaults to None.
+    heavy (bool): Whether to compute heavy metrics and plot ROC/PRC curves. Defaults to True.
+    computeECE (bool): Whether to compute Expected Calibration Error (ECE). Defaults to True.
+    exportFailureCases (bool): Whether to export misclassified samples to CSV. Defaults to True.
+    eps (float): Small epsilon value for numerical stability in metric calculations. Defaults to 1e-10.
+    saveArtifacts (bool): Whether to save figures and artifacts. Defaults to True.
+    maxSamples (int | None): Maximum number of samples to evaluate. If None, evaluates all samples. Defaults to None.
+    preprocessFn (callable | None): Optional preprocessing function to apply to each PIL image before prediction. Defaults to None.
+
+  Returns:
+    tuple: A tuple containing:
+      - str|None: Path to the saved predictions CSV file (or None when not saved).
+      - dict: Computed weighted performance metrics.
+      - List[int]: List of predicted class indices.
+      - List[int]: List of ground truth class indices.
+      - List[List[float]]: List of predicted class probabilities for each sample.
+      - List[Optional[float]]: List of predicted confidences for each sample.
+      - List[Dict[str, Any]]: List of prediction records for each sample.
+      - List[str]: List of class names.
+      - numpy.ndarray|None: Confusion matrix as a 2D numpy array, or None if not computable.
+  '''
+
+  # Record the start time for total evaluation duration.
+  startAll = time.perf_counter()
+
+  # Validate the requested dataset subset.
+  if (subset not in ("train", "val", "test", "all", None)):
+    # Raise an error if the subset is not one of the allowed values.
+    raise ValueError(f"Invalid subset name: {subset}")
+
+  # Determine which split directories to process based on the subset.
+  if (subset == "all"):
+    # Include all standard splits.
+    splitDirs = [Path(datasetDir) / split for split in ("train", "val", "test")]
+  elif (subset in ("train", "val", "test")):
+    # Use only the specified split.
+    splitDirs = [Path(datasetDir) / subset]
+  else:
+    # Fallback to the root dataset directory.
+    splitDirs = [Path(datasetDir)]
+
+  # Initialize containers for collected data.
+  allPredsIndices: List[int] = []
+  allGtsIndices: List[int] = []
+  allPredsProbs: List[List[float]] = []
+  allPredsNames: List[str] = []
+  allGtsNames: List[str] = []
+  allPredsConfidences: List[Optional[float]] = []
+  predictionsRecords: List[Dict[str, Any]] = []
+  classNames: List[str] = []
+
+  try:
+    # Iterate over each split directory (e.g., train, val, test).
+    for splitDir in splitDirs:
+      # Skip if the split directory does not exist.
+      if (not splitDir.exists()):
+        print(f"Warning: Split directory does not exist, skipping: {splitDir}")
+        continue
+
+      # Get sorted list of class subdirectories.
+      classDirs = sorted([
+        directory
+        for directory in splitDir.iterdir()
+        if (directory.is_dir())
+      ])
+      if (len(classDirs) == 0):
+        print(f"Warning: No class subdirectories found in split: {splitDir}")
+        continue
+
+      # Set class names from the first valid split encountered.
+      if (len(classNames) == 0):
+        classNames = [directory.name for directory in classDirs]
+      numClasses = len(classDirs)
+      print(f"Processing split: {splitDir.name} with {numClasses} classes.")
+      print(f"Class names: {classNames}")
+
+      # Process each class directory.
+      for trueClassIndex, classDir in enumerate(classDirs):
+        # Collect all valid image files in the class directory.
+        imageFiles = [
+          p
+          for p in classDir.iterdir()
+          if (p.is_file() and (p.suffix.lower() in IMAGE_SUFFIXES))
+        ]
+        if (len(imageFiles) == 0):
+          print(f"Warning: No image files found in class directory, skipping: {classDir}")
+          continue
+
+        # Apply per-class sampling limit if maxSamples is set.
+        if (maxSamples is not None):
+          currentMax = max(1, maxSamples // max(1, numClasses))
+          imageFiles = imageFiles[:currentMax]
+          print(f"Limiting to {len(imageFiles)} samples from class {classDir.name}")
+
+        # Process each image in the class.
+        for imagePath in imageFiles:
+          # Load image using OpenCV (BGR format).
+          img = cv2.imread(str(imagePath))
+          if (img is None):
+            print(f"Warning: could not read image, skipping: {imagePath}")
+            continue
+
+          # Convert BGR to RGB.
+          img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+          # Convert to PIL Image for optional preprocessing.
+          from PIL import Image
+          imgPIL = Image.fromarray(img)
+          if (preprocessFn is not None):
+            imgPIL = preprocessFn(imgPIL)
+          img = np.array(imgPIL)
+
+          # Make prediction using the generic model callable.
+          try:
+            probs = model(img)  # Should return 1D array of shape [num_classes]
+            probs = np.asarray(probs, dtype=np.float32)
+
+            if (probs.ndim != 1):
+              raise ValueError(f"Expected 1D probability vector, got shape {probs.shape}")
+            if (len(probs) != numClasses):
+              raise ValueError(
+                f"Number of classes mismatch: expected {numClasses}, got {len(probs)}\n"
+                f"Image path: {imagePath}"
+                f", probs: {probs}"
+              )
+
+            predictedClassIndex = int(np.argmax(probs))
+            predictedConfidence = float(probs[predictedClassIndex])
+            probList = probs.tolist()
+
+          except Exception as predErr:
+            print(f"Prediction failed for {imagePath}: {predErr}")
+            predictedClassIndex = -1
+            predictedConfidence = None
+            probList = []
+
+          # Append prediction results.
+          allPredsIndices.append(predictedClassIndex)
+          allGtsIndices.append(trueClassIndex)
+          allPredsConfidences.append(predictedConfidence)
+          allPredsProbs.append(probList)
+
+          # Resolve class names for display.
+          predName = (
+            classNames[predictedClassIndex]
+            if (0 <= predictedClassIndex < len(classNames))
+            else "Unknown"
+          )
+          allPredsNames.append(predName)
+          allGtsNames.append(classDir.name)
+
+          # Compute per-sample ECE if requested.
+          eceValue = None
+          if (computeECE and probList):
+            try:
+              eceValue = ComputeECE([probList], [trueClassIndex])
+            except Exception:
+              eceValue = None
+
+          # Determine if prediction is correct.
+          correctness = (predictedClassIndex == trueClassIndex)
+
+          # Record full prediction metadata.
+          predictionsRecords.append({
+            "image"              : str(imagePath),
+            "split"              : splitDir.name,
+            "trueClassIndex"     : int(trueClassIndex),
+            "trueClassName"      : classDir.name,
+            "predictedClassIndex": predictedClassIndex,
+            "predictedClassName" : predName,
+            "predictedConfidence": predictedConfidence,
+            "probabilities"      : (json.dumps(probList) if probList else None),
+            "ece"                : (float(eceValue) if eceValue is not None else None),
+            "correctness"        : correctness,
+          })
+
+      # Log progress after each split.
+      print(f"Prediction collection completed for split: {splitDir.name}")
+      print(f"Collected predictions for {len(allGtsIndices)} samples across {numClasses} classes.")
+      print(f"Total samples collected for confusion matrix: {len(allGtsIndices)}")
+      print(f"{'-' * 60}")
+
+    # Finalize collection.
+    print("Finished collecting predictions for all specified splits.")
+
+    # Perform basic consistency checks on collected data.
+    assert len(allPredsIndices) == len(allGtsIndices), "Mismatch in predictions and ground truths count."
+    assert len(allPredsIndices) == len(allPredsProbs), "Mismatch in predictions and probabilities count."
+    assert len(allPredsIndices) == len(allPredsNames), "Mismatch in predictions and names count."
+    assert len(allGtsIndices) == len(allGtsNames), "Mismatch in ground truths and names count."
+    assert len(allPredsIndices) == len(allPredsConfidences), "Mismatch in predictions and confidences count."
+    assert len(predictionsRecords) == len(allGtsIndices), "Mismatch in prediction records and ground truths count."
+    print(f"Total samples collected: {len(allGtsIndices)}")
+    print(f"{'-' * 60}")
+
+    # Compute confusion matrix and metrics if data exists.
+    if ((len(allPredsIndices) > 0) and (len(allGtsIndices) > 0)):
+      cm = confusion_matrix(allGtsIndices, allPredsIndices)
+      metricResults = CalculatePerformanceMetrics(
+        cm,
+        eps=eps,
+        addWeightedAverage=True,
+        addPerClass=False
+      )
+      weightedMetrics = {key: value for key, value in metricResults.items() if key.startswith("Weighted")}
+      print(f"Computed weighted metrics from confusion matrix on {len(allGtsIndices)} samples.")
+    else:
+      weightedMetrics = {}
+      print("Warning: No predictions collected for confusion matrix computation.")
+
+  except Exception as ex:
+    # Handle any unexpected errors during evaluation.
+    weightedMetrics = {}
+    print(f"Error during prediction collection or metric computation: {ex}")
+
+  # Apply prefix to metric keys if provided.
+  if (prefix):
+    weightedMetrics = {f"{prefix}{key}": value for key, value in weightedMetrics.items()}
+
+  # Resolve storage directory.
+  if (storageDir is None):
+    storageDir = Path(".")
+  else:
+    storageDir = Path(storageDir)
+
+  # Create storage directory if saving artifacts.
+  if (saveArtifacts):
+    storageDir.mkdir(parents=True, exist_ok=True)
+    print(f"Using storage directory: {storageDir}")
+
+  # Save full predictions to CSV if enabled.
+  storageFilePath = None
+  if (saveArtifacts):
+    storageFileName = f"{prefix}_Predictions_{subset}.csv" if (prefix) else f"Predictions_{subset}.csv"
+    storageFilePath = storageDir / storageFileName
+    try:
+      dfPreds = pd.DataFrame(predictionsRecords)
+      dfPreds.to_csv(storageFilePath, index=False)
+      print(f"Predictions for subset '{subset}' saved to: {storageFilePath}")
+    except Exception as saveErr:
+      print(f"Warning: Could not save predictions CSV: {saveErr}")
+
+  # Export misclassified samples if requested.
+  if (exportFailureCases):
+    try:
+      failureRecords = [
+        rec for i, rec in enumerate(predictionsRecords)
+        if allGtsIndices[i] != allPredsIndices[i]
+      ]
+      if (saveArtifacts and failureRecords):
+        dfFailures = pd.DataFrame(failureRecords)
+        failureFileName = f"{prefix}_Misclassified_Samples.csv" if (prefix) else "Misclassified_Samples.csv"
+        failureFilePath = storageDir / failureFileName
+        dfFailures.to_csv(failureFilePath, index=False)
+        print(f"Misclassified samples exported to: {failureFilePath}")
+      else:
+        print("No misclassified samples to export.")
+    except Exception as failErr:
+      print(f"Warning: Could not export misclassified samples: {failErr}")
+
+  # Recompute final confusion matrix.
+  try:
+    cm = confusion_matrix(allGtsIndices, allPredsIndices) if (
+      len(allGtsIndices) > 0 and len(allPredsIndices) > 0) else None
+    print("Confusion matrix computed.")
+    print(cm)
+  except Exception as cmErr:
+    print(f"Warning: could not compute final confusion matrix: {cmErr}")
+    cm = None
+
+  # Print diagnostic summaries.
+  print("Class names:")
+  print(classNames)
+  print("All collected ground truth indices (first 10):")
+  print(allGtsIndices[:10], "..." if len(allGtsIndices) > 10 else "")
+  print("All collected predicted indices (first 10):")
+  print(allPredsIndices[:10], "..." if len(allPredsIndices) > 10 else "")
+  print("All collected predicted probabilities (first 3 samples):")
+  for probs in allPredsProbs[:3]:
+    print(probs)
+  print(f"{'-' * 60}")
+
+  # Save confusion matrix plot.
+  if (saveArtifacts):
+    try:
+      filename = f"{prefix}_CM.pdf" if (prefix) else "CM.pdf"
+      PlotConfusionMatrix(
+        cm,
+        classNames,
+        normalize=False,
+        roundDigits=3,
+        title="Confusion Matrix",
+        cmap=plt.cm.Blues,
+        display=False,
+        save=True,
+        fileName=str(storageDir / filename),
+        fontSize=15,
+        annotate=True,
+        figSize=(8, 8),
+        colorbar=True,
+        returnFig=False,
+        dpi=720,
+      )
+      print(f"Confusion matrix figure saved to: {storageDir / filename}")
+    except Exception as figErr:
+      print(f"Warning: Could not generate confusion matrix figure: {figErr}")
+
+  # Save ROC and PRC curves if heavy metrics are enabled.
+  if (saveArtifacts and heavy):
+    try:
+      filename = f"{prefix}_ROC_AUC.pdf" if (prefix) else "ROC_AUC.pdf"
+      PlotROCAUCCurve(
+        np.array(allGtsIndices),
+        np.array(allPredsProbs),
+        classNames,
+        areProbabilities=True,
+        title="ROC Curve & AUC",
+        figSize=(5, 5),
+        cmap=None,
+        display=False,
+        save=True,
+        fileName=str(storageDir / filename),
+        fontSize=15,
+        plotDiagonal=True,
+        annotateAUC=True,
+        showLegend=True,
+        returnFig=False,
+        dpi=720,
+      )
+      print(f"ROC AUC figure saved to: {storageDir / filename}")
+    except Exception as rocErr:
+      print(f"Warning: Could not generate ROC AUC figure: {rocErr}")
+
+    try:
+      filename = f"{prefix}_PRC.pdf" if (prefix) else "PRC.pdf"
+      PlotPRCCurve(
+        allGtsIndices,
+        allPredsProbs,
+        classNames,
+        areProbabilities=True,
+        title="PRC Curve",
+        figSize=(5, 5),
+        cmap=None,
+        display=False,
+        save=True,
+        fileName=str(storageDir / filename),
+        fontSize=15,
+        annotateAvg=True,
+        showLegend=True,
+        returnFig=False,
+        dpi=720,
+      )
+      print(f"PRC figure saved to: {storageDir / filename}")
+    except Exception as prcErr:
+      print(f"Warning: Could not generate PRC figure: {prcErr}")
+  else:
+    print("Heavy metrics and plots skipped as per configuration.")
+
+  # Compute overall ECE if requested.
+  if (computeECE):
+    try:
+      ece = ComputeECE(allPredsProbs, allGtsIndices)
+      weightedMetrics["ECE"] = ece
+      print("Expected Calibration Error (ECE):", ece)
+    except Exception as eceErr:
+      print(f"Warning: Could not compute ECE: {eceErr}")
+
+  # Record total evaluation time.
+  endAll = time.perf_counter()
+  duration = endAll - startAll
+  print(f"Total evaluation and prediction time: {duration:.2f} seconds.")
+  weightedMetrics["Total Evaluation Time (s)"] = duration
+
+  # Return all collected results.
+  return (
+    str(storageFilePath) if storageFilePath else None,
+    weightedMetrics,
+    allPredsIndices,
+    allGtsIndices,
+    allPredsProbs,
+    allPredsConfidences,
+    predictionsRecords,
+    classNames,
+    cm
+  )
