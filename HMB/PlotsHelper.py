@@ -343,7 +343,7 @@ def PlotBarChart(
   ax.set_xticks(range(len(labels)))
 
   # Set x tick labels with rotation and font size.
-  ax.set_xticklabels(labels, rotation=rotation, ha="right", fontsize=fontSize)
+  ax.set_xticklabels(labels, rotation=rotation, ha="center", fontsize=fontSize)
 
   # Set the y-axis label text.
   ax.set_ylabel(ylabel, fontsize=fontSize)

@@ -1,5 +1,7 @@
 # Import the required libraries.
-import PIL, cv2, os, openslide
+import PIL, cv2, os, openslide, json
+import numpy as np
+from pathlib import Path
 from HMB.Utils import *
 from HMB.ImagesHelper import *
 
@@ -20,6 +22,256 @@ def ReadWSIViaOpenSlide(slidePath):
 
   assert os.path.exists(slidePath), f"Slide path does not exist: {slidePath}"
   return openslide.OpenSlide(slidePath)
+
+
+def ReadGeoJSONAnnotations(annotationFile):
+  r'''
+  Read a GeoJSON annotation file and return a list of annotations.
+
+  Each annotation is a dict with the keys:
+    - id: feature id (or index)
+    - properties: feature properties (dict)
+    - geometry: dict with 'type' and 'coordinates'
+
+  Accepts either a pathlib.Path or a string path. Gracefully handles
+  FeatureCollection, single Feature, or raw geometry objects.
+
+  Parameters:
+    annotationFile (str or pathlib.Path): Path to the GeoJSON annotation file.
+
+  Returns:
+    List[Dict[str, Any]]: List of annotations read from the GeoJSON file.
+  '''
+
+  p = Path(annotationFile)
+  if (not p.exists()):
+    print(f"ERROR: Annotation file does not exist: {p}")
+    return []
+
+  try:
+    with p.open("r", encoding="utf-8") as f:
+      data = json.load(f)
+  except Exception as e:
+    print(f"ERROR: Failed to read/parse GeoJSON '{p}': {e}")
+    return []
+
+  annotations: List[Dict[str, Any]] = []
+
+  # Normalize to a list of features
+  features = None
+  if (isinstance(data, dict) and isinstance(data.get("features"), list)):
+    features = data["features"]
+  elif (isinstance(data, dict) and data.get("type") == "Feature"):
+    features = [data]
+  elif (isinstance(data, dict) and data.get("type") == "FeatureCollection"):
+    features = data.get("features", [])
+  else:
+    # If data looks like a geometry object, wrap it as a single feature-like entry
+    if (isinstance(data, dict) and ("type" in data and "coordinates" in data)):
+      features = [{"type": "Feature", "geometry": data, "properties": {}}]
+    else:
+      print(f"WARNING: GeoJSON file '{p.name}' doesn't contain features or a geometry object; returning empty list")
+      return []
+
+  for idx, feat in enumerate(features):
+    if (not isinstance(feat, dict)):
+      print(f"WARNING: Skipping non-dict feature at index {idx}")
+      continue
+
+    fid = feat.get("id", idx)
+    props = feat.get("properties", {}) or {}
+    geom = feat.get("geometry") or feat  # sometimes the feature itself may be a geometry
+
+    if (not isinstance(geom, dict) or "type" not in geom or "coordinates" not in geom):
+      print(f"WARNING: feature {fid} missing valid geometry; skipping")
+      continue
+
+    gtype = geom.get("type")
+    coords = geom.get("coordinates")
+
+    annotations.append(
+      {
+        "id"        : fid,
+        "properties": props,
+        "geometry"  : {"type": gtype, "coordinates": coords}
+      }
+    )
+
+  print(f"Read {len(annotations)} annotations from: {p.name}")
+  return annotations
+
+
+def DrawPolygonOnImage(imageArr, coords, outlineColor=(255, 0, 0), fillColor=None, width=2):
+  r'''
+  Draw a polygon with optional filled semi-transparent interior.
+
+  Parameters:
+    imageArr (np.ndarray): Input image (HWC, uint8), RGB or BGR.
+    coords (list): List of (x, y) tuples defining polygon vertices.
+    outlineColor (tuple): RGB color for outline, e.g., (255, 0, 0) = red.
+    fillColor (tuple or None): RGBA color for fill, e.g., (255, 0, 0, 0.5). If None, no fill.
+    width (int): Thickness of the outline.
+
+  Returns:
+    numpy.ndarray: Modified image in same format as input (RGB assumed).
+  '''
+
+  # Work on a copy to avoid modifying original.
+  image = np.array(imageArr).copy()
+
+  # Handle grayscale: convert to 3-channel.
+  if (image.ndim == 2):
+    image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+  elif (image.shape[2] == 4):
+    # Remove alpha channel (assume RGB(A) input).
+    image = image[:, :, :3]
+
+  # Ensure 3-channel BGR for OpenCV.
+  if (image.shape[2] != 3):
+    raise ValueError("Input image must be grayscale, RGB, or RGBA.")
+
+  # Prepare points for OpenCV.
+  pts = np.array([coords], dtype=np.int32)
+
+  # Draw outline.
+  cv2.polylines(
+    image,
+    pts,
+    isClosed=True,
+    color=outlineColor,
+    thickness=width,
+    lineType=cv2.LINE_AA
+  )
+
+  # Handle fill with transparency.
+  if (fillColor is not None):
+    if (len(fillColor) == 4):
+      rgbFill = fillColor[:3]
+      alpha = fillColor[3]
+    else:
+      rgbFill = fillColor
+      alpha = 1.0
+
+    # Create overlay for transparent fill.
+    overlay = image.copy()
+    cv2.fillPoly(overlay, pts, color=rgbFill)
+
+    # Blend only if alpha < 1.0.
+    if (alpha < 1.0):
+      image = cv2.addWeighted(overlay, alpha, image, 1.0 - alpha, 0)
+    else:
+      image = overlay
+
+  return image
+
+
+def ExtractPatchesFromWSI(
+  wsi,
+  wsiFile,
+  annotations,
+  outputDir,
+  patchSize=(256, 256),
+  overlap=(0, 0),
+  maxNumPatchesPerAnnotation=100,
+  label=None,
+  tissueThreshold=0.3,  # Fraction of non-background pixels required
+):
+  r'''
+  Extract patches from WSI within annotated regions, skipping background tiles.
+
+  Parameters:
+    wsi (openslide.OpenSlide): OpenSlide WSI object.
+    wsiFile (str or Path): Path to the WSI file (for reference).
+    annotations (list): List of GeoJSON-like annotation dicts.
+    outputDir (str or Path): Directory to save extracted patches.
+    patchSize (tuple): Size of patches to extract (width, height).
+    overlap (tuple): Overlap between patches (x_overlap, y_overlap).
+    maxNumPatchesPerAnnotation (int): Max patches to extract per annotation.
+    label: Optional label to embed in patch filenames.
+    tissueThreshold (float): Minimum fraction of tissue pixels required.
+  '''
+
+  import cv2
+  from PIL import Image
+  from shapely.geometry import Point, Polygon
+
+  outputPath = Path(outputDir)
+  outputPath.mkdir(parents=True, exist_ok=True)
+
+  # Validate patch size and overlap.
+  if (patchSize[0] <= 0 or patchSize[1] <= 0):
+    raise ValueError("Patch size must be positive.")
+  if (overlap[0] >= patchSize[0] or overlap[1] >= patchSize[1]):
+    raise ValueError("Overlap must be less than patch size.")
+
+  for annotIdx, annot in enumerate(annotations):
+    coordsList = np.array(annot["geometry"]["coordinates"][0])
+    polygon = Polygon(coordsList)
+
+    xCoords = coordsList[:, 0]
+    yCoords = coordsList[:, 1]
+    minX, maxX = int(np.floor(np.min(xCoords))), int(np.ceil(np.max(xCoords)))
+    minY, maxY = int(np.floor(np.min(yCoords))), int(np.ceil(np.max(yCoords)))
+
+    patchCount = 0
+    stepX = max(1, patchSize[0] - overlap[0])
+    stepY = max(1, patchSize[1] - overlap[1])
+
+    for y in range(minY, maxY - patchSize[1] + 1, stepY):
+      for x in range(minX, maxX - patchSize[0] + 1, stepX):
+        if patchCount >= maxNumPatchesPerAnnotation:
+          break
+
+        # Skip if patch center is outside annotation.
+        centerX = x + patchSize[0] // 2
+        centerY = y + patchSize[1] // 2
+        if not polygon.contains(Point(centerX, centerY)):
+          continue
+
+        try:
+          # Read patch region.
+          patch = wsi.read_region((x, y), 0, patchSize)
+          if (patch.mode != "RGB"):
+            patch = patch.convert("RGB")
+          patchArr = np.array(patch)  # Shape: (H, W, 3).
+
+          # Background filtering.
+          # Strategy: skip if too many white (>240) or black (<15) pixels.
+          # Common in WSI: background = white; artifacts = black.
+          whiteMask = (patchArr[:, :, 0] > 240) & \
+                      (patchArr[:, :, 1] > 240) & \
+                      (patchArr[:, :, 2] > 240)
+          blackMask = (patchArr[:, :, 0] < 15) & \
+                      (patchArr[:, :, 1] < 15) & \
+                      (patchArr[:, :, 2] < 15)
+          backgroundMask = whiteMask | blackMask
+          backgroundFraction = np.mean(backgroundMask)
+
+          if (backgroundFraction > (1.0 - tissueThreshold)):
+            continue  # Skip background-dominant patch
+
+          # Save patch with embedded label and coordinates.
+          safeLabel = (
+            str(label).replace("/", "_").replace("\\", "_")
+            if (label is not None) else "Unlabeled"
+          )
+          wsiFileName = str(Path(wsiFile).stem)
+          patchFilename = outputPath / f"{wsiFileName}_A{annotIdx + 1}_X{x}_Y{y}_L{safeLabel}.jpg"
+
+          # Use PIL or cv2 to save (more reliable than plt.imsave for JPG).
+          imgPIL = Image.fromarray(patchArr)
+          # Save with maximum quality.
+          imgPIL.save(patchFilename, quality=100)
+          patchCount += 1
+
+        except Exception as e:
+          print(f"Warning: Failed to process patch at ({x}, {y}): {e}")
+          continue
+
+      if (patchCount >= maxNumPatchesPerAnnotation):
+        break
+
+    print(f"Extracted {patchCount} valid tissue patches for annotation {annotIdx + 1}")
 
 
 def TileExtractionAlignmentHandler(
@@ -132,7 +384,7 @@ def TileExtractionAlignmentHandler(
       dpi=720,
       bbox_inches="tight",
     )
-    plt.close() # Close the plot to free up memory.
+    plt.close()  # Close the plot to free up memory.
 
   # Calculate the bounding box of the HE contour.
   # The bounding box defines the rectangular region enclosing the contour.

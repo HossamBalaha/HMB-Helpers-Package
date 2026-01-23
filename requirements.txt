@@ -73,3 +73,4 @@ py7zr==1.0.0
 rarfile==4.2
 timm==1.0.22
 statsmodels==0.14.6
+shapely==2.1.2
