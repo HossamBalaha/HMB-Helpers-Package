@@ -4,8 +4,8 @@ from threading import Thread
 from PIL import PngImagePlugin
 
 IMAGE_SUFFIXES = {
-  ".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".gif",
-  ".JPG", ".JPEG", ".PNG", ".BMP", ".TIFF", ".TIF", ".GIF",
+  ".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".gif", ".webp",
+  ".JPG", ".JPEG", ".PNG", ".BMP", ".TIFF", ".TIF", ".GIF", ".WEBP"
 }
 
 

@@ -199,7 +199,7 @@ def WriteTextFile(filePath, text):
     f.write(text)
 
 
-def DumpJsonFile(filePath, data, indent=2):
+def DumpJsonFile(filePath, data, indent=2, ensureAscii=False):
   r'''
   Dump data to a JSON file.
 
@@ -207,11 +207,12 @@ def DumpJsonFile(filePath, data, indent=2):
     filePath (str): Path to the JSON file.
     data (object): Data to be dumped to the JSON file.
     indent (int, optional): Number of spaces for indentation in the JSON file. Default is 2.
+    ensureAscii (bool, optional): If True, all non-ASCII characters in the output are escaped. Default is False.
   '''
 
   # Open the JSON file in write mode and dump the data.
   with open(filePath, "w", encoding="utf-8") as jsonFile:
-    json.dump(data, jsonFile, indent=indent)
+    json.dump(data, jsonFile, indent=indent, ensure_ascii=ensureAscii)
 
 
 def ReadJsonFile(filePath):
