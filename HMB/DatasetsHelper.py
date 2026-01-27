@@ -233,7 +233,7 @@ class GenericImagesDatasetHandler(object):
       "  - Pre-split: dataset/train/class1/, dataset/val/class1/, etc.\n"
       "  - Nested: dataset/class1/, dataset/class2/, etc.\n"
       "  - Flat: dataset/class1_image1.jpg, etc.\n"
-      "Provide datasetConfig.json for custom structures."
+      "Provide DatasetConfig.json for custom structures."
     )
 
   def DetectPreSplitStructure(self) -> bool:

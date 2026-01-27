@@ -436,6 +436,7 @@ def EvaluatePredictPlotSubset(
   saveArtifacts=True,
   maxSamples=None,
   preprocessFn=None,
+  dpi: int = 720,
 ) -> tuple:
   r'''
   Evaluate a trained Ultralytics YOLO classification model on a specified dataset subset
@@ -456,6 +457,7 @@ def EvaluatePredictPlotSubset(
     saveArtifacts (bool): Whether to save figures and artifacts. Defaults to True.
     maxSamples (int | None): Maximum number of samples to evaluate. If None, evaluates all samples. Defaults to None.
     preprocessFn (callable | None): Optional preprocessing function to apply to each image before prediction. Defaults to None.
+    dpi (int): DPI setting for saved figures. Defaults to 720.
 
   Returns:
     tuple: A tuple containing:
@@ -471,12 +473,18 @@ def EvaluatePredictPlotSubset(
   '''
 
   # Define a YOLO-specific prediction adapter that wraps the model to return probabilities.
-  def YoloPredictFn(image: np.ndarray) -> np.ndarray:
+  def YoloPredictFn(
+    image: np.ndarray,
+    imgPath: Optional[str] = None,
+    cls: Optional[int | str] = None,
+  ) -> np.ndarray:
     '''
     Adapter to convert YOLO model output into a 1D probability array.
 
     Parameters:
       image (numpy.ndarray): Input image as HWC NumPy array (uint8 or float32).
+      imgPath (str | None): Optional image path (not used here).
+      cls (int | str | None): Optional class index or name (not used here).
 
     Returns:
       numpy.ndarray: 1D array of class probabilities.
@@ -520,6 +528,7 @@ def EvaluatePredictPlotSubset(
     saveArtifacts=saveArtifacts,
     maxSamples=maxSamples,
     preprocessFn=preprocessFn,
+    dpi=dpi,
   )
 
 

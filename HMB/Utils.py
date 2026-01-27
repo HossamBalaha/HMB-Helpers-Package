@@ -237,7 +237,7 @@ def ReadJsonFile(filePath):
       jsonData = json.load(jsonFile)
     except Exception:
       jsonFile.seek(0)
-      jsonData = yaml.safe_load(jsonFile)
+      jsonData =  yaml.safe_load(jsonFile)
   return jsonData
 
 

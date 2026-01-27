@@ -1453,6 +1453,7 @@ def GenericEvaluatePredictPlotSubset(
   saveArtifacts: bool = True,
   maxSamples: Optional[int] = None,
   preprocessFn=None,
+  dpi: int = 720,
 ) -> Tuple[
   Optional[str],
   Dict[str, float],
@@ -1483,6 +1484,7 @@ def GenericEvaluatePredictPlotSubset(
     saveArtifacts (bool): Whether to save figures and artifacts. Defaults to True.
     maxSamples (int | None): Maximum number of samples to evaluate. If None, evaluates all samples. Defaults to None.
     preprocessFn (callable | None): Optional preprocessing function to apply to each PIL image before prediction. Defaults to None.
+    dpi (int): DPI for saved figures. Defaults to 720.
 
   Returns:
     tuple: A tuple containing:
@@ -1588,7 +1590,9 @@ def GenericEvaluatePredictPlotSubset(
 
           # Make prediction using the generic model callable.
           try:
-            probs = model(img)  # Should return 1D array of shape [num_classes]
+            # Should return 1D array of shape [numClasses].
+            trueClassName = classDir.name
+            probs = model(img, str(imagePath), trueClassName)
             probs = np.asarray(probs, dtype=np.float32)
 
             if (probs.ndim != 1):
@@ -1775,11 +1779,21 @@ def GenericEvaluatePredictPlotSubset(
         figSize=(8, 8),
         colorbar=True,
         returnFig=False,
-        dpi=720,
+        dpi=dpi,
       )
       print(f"Confusion matrix figure saved to: {storageDir / filename}")
     except Exception as figErr:
       print(f"Warning: Could not generate confusion matrix figure: {figErr}")
+
+    # Store the metrics as CSV file.
+    try:
+      filename = f"{prefix}_Metrics.csv" if (prefix) else "Metrics.csv"
+      metricsFilePath = storageDir / filename
+      dfMetrics = pd.DataFrame([weightedMetrics])
+      dfMetrics.to_csv(metricsFilePath, index=False)
+      print(f"Metrics saved to: {metricsFilePath}")
+    except Exception as metricsErr:
+      print(f"Warning: Could not save metrics CSV: {metricsErr}")
 
   # Save ROC and PRC curves if heavy metrics are enabled.
   if (saveArtifacts and heavy):
@@ -1801,7 +1815,7 @@ def GenericEvaluatePredictPlotSubset(
         annotateAUC=True,
         showLegend=True,
         returnFig=False,
-        dpi=720,
+        dpi=dpi,
       )
       print(f"ROC AUC figure saved to: {storageDir / filename}")
     except Exception as rocErr:
@@ -1824,7 +1838,7 @@ def GenericEvaluatePredictPlotSubset(
         annotateAvg=True,
         showLegend=True,
         returnFig=False,
-        dpi=720,
+        dpi=dpi,
       )
       print(f"PRC figure saved to: {storageDir / filename}")
     except Exception as prcErr:

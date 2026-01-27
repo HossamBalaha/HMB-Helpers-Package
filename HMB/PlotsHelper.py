@@ -1,9 +1,10 @@
 import numpy as np
+import pandas as pd
 from pathlib import Path
 import matplotlib.pyplot as plt
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 from matplotlib import colors as mcolors
-
+from matplotlib.patches import Patch
 
 # Define a function to plot a heatmap from 2D data with flexible options.
 def PlotHeatmap(
@@ -1133,3 +1134,142 @@ def PlotHistogram(
 
   # Default return when nothing to return.
   return None
+
+
+def GenerateGenericBubblePlot(
+  data: pd.DataFrame,
+  xColumn: str,
+  yColumn: str,
+  sizeColumn: str,
+  colorColumn: str,
+  outputPath: Optional[Path | str],
+  figureSize: Tuple[int, int] = (12, 12),
+  dpiValue: int = 300,
+  title: str = "Bubble Plot",
+  xlabel: str = "X Axis",
+  ylabel: str = "Y Axis",
+  performanceZones: bool = True,
+  concentrationPeak: bool = True,
+) -> bool:
+  r'''
+  Generate a generic bubble plot from structured data.
+
+  Parameters:
+    data (pd.DataFrame): Input data with required columns.
+    xColumn (str): Column name for x-axis values.
+    yColumn (str): Column name for y-axis categories (will be indexed).
+    sizeColumn (str): Column name for bubble size (numeric).
+    colorColumn (str): Column name for categorical coloring.
+    outputPath (str|Path|None): Path to save the output plot (PNG and PDF).
+    figureSize (tuple): Figure dimensions (width, height).
+    dpiValue (int): DPI for saved figures.
+    title (str): Plot title.
+    xlabel (str): X-axis label.
+    ylabel (str): Y-axis label.
+    performanceZones (bool): Whether to shade low/medium/high performance zones.
+    concentrationPeak (bool): Whether to highlight the densest region in x-values.
+
+  Returns:
+    bool: True if plot was saved successfully, False otherwise.
+  '''
+
+  # Validate required columns.
+  required = {xColumn, yColumn, sizeColumn, colorColumn}
+  if not required.issubset(data.columns):
+    missing = required - set(data.columns)
+    print(f"ERROR: Missing columns in data: {missing}")
+    return False
+
+  # Prepare categorical y-axis.
+  uniqueY = sorted(data[yColumn].unique())
+  yIndexMap = {label: idx for idx, label in enumerate(uniqueY)}
+  data["_y_index"] = data[yColumn].map(yIndexMap)
+
+  # Prepare colors.
+  uniqueColors = sorted(data[colorColumn].unique())
+  colors = plt.cm.tab20(np.linspace(0, 1, len(uniqueColors)))
+  colorMap = dict(zip(uniqueColors, colors))
+
+  # Create plot.
+  fig, ax = plt.subplots(figsize=figureSize)
+
+  # Plot bubbles.
+  for _, row in data.iterrows():
+    x = float(row[xColumn])
+    y = row["_y_index"]
+    s = float(row[sizeColumn])
+    c = colorMap[row[colorColumn]]
+    ax.scatter(x, y, s=s, c=[c], alpha=0.7, edgecolors="black", linewidth=2)
+
+  # Horizontal dividers between y-categories.
+  for i in range(1, len(uniqueY)):
+    ax.axhline(y=i - 0.5, color="gray", linestyle="-", linewidth=0.8, alpha=0.4)
+
+  # Performance zones (shaded vertical bands).
+  if performanceZones:
+    xMin, xMax = data[xColumn].min(), data[xColumn].max()
+    xRange = xMax - xMin
+    lowThresh = xMin + xRange * 0.33
+    highThresh = xMin + xRange * 0.66
+    ax.axvspan(xMin, lowThresh, alpha=0.03, color="red", label="Low Performance Zone")
+    ax.axvspan(lowThresh, highThresh, alpha=0.03, color="yellow", label="Medium Performance Zone")
+    ax.axvspan(highThresh, xMax, alpha=0.03, color="green", label="High Performance Zone")
+
+  # Concentration peak (densest bin).
+  if (concentrationPeak):
+    xVals = data[xColumn].values
+    bins = np.linspace(xVals.min(), xVals.max(), 4)
+    counts, _ = np.histogram(xVals, bins=bins)
+    peak_idx = np.argmax(counts)
+    ax.axvspan(
+      bins[peak_idx], bins[peak_idx + 1],
+      alpha=0.15, facecolor="gold", edgecolor="orange", linestyle="--",
+      label="Concentration Peak"
+    )
+
+  # Axes formatting.
+  ax.set_yticks(range(len(uniqueY)))
+  ax.set_yticklabels(uniqueY, fontsize=12, fontweight="bold")
+  ax.set_xlabel(xlabel, fontsize=14, fontweight="bold")
+  ax.set_ylabel(ylabel, fontsize=14, fontweight="bold")
+  ax.set_title(title, fontsize=16, fontweight="bold")
+  ax.grid(True, alpha=0.3, linestyle="--", axis="x")
+
+  # Legend.
+  legendElements = [
+    Patch(facecolor=colorMap[cat], edgecolor="black", label=cat)
+    for cat in uniqueColors
+  ]
+  if performanceZones:
+    legendElements.extend([
+      Patch(facecolor="red", alpha=0.2, edgecolor="none", label="Low Performance Zone"),
+      Patch(facecolor="yellow", alpha=0.2, edgecolor="none", label="Medium Performance Zone"),
+      Patch(facecolor="green", alpha=0.2, edgecolor="none", label="High Performance Zone"),
+    ])
+  if concentrationPeak:
+    legendElements.append(
+      Patch(facecolor="gold", alpha=0.5, edgecolor="orange", linestyle="--", label="Concentration Peak")
+    )
+
+  ax.legend(
+    handles=legendElements,
+    loc="upper left",
+    bbox_to_anchor=(1.02, 1),
+    fontsize=10,
+    title="Legend",
+    title_fontsize=12,
+    frameon=True,
+    fancybox=True
+  )
+
+  plt.tight_layout()
+
+  # Save outputs.
+  outputPath = Path(outputPath)
+  outputPath.parent.mkdir(parents=True, exist_ok=True)
+  fig.savefig(outputPath, dpi=dpiValue, bbox_inches="tight")
+  fig.savefig(outputPath.with_suffix(".pdf"), dpi=dpiValue, bbox_inches="tight")
+  plt.close(fig)
+
+  print(f"\nBubble plot saved to: {outputPath}")
+  return True
