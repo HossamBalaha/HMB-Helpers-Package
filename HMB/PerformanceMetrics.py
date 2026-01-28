@@ -1,7 +1,8 @@
-# Import the required libraries.
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from typing import List
+from collections import Counter
 from HMB.Utils import GetCmapColors
 
 
@@ -846,10 +847,10 @@ def PlotMultiTrialROCAUC(
     save (bool): Whether to save the plot.
     fileName (str): File name for saving.
     fontSize (int): Font size for labels.
-    plotDiagonal (bool): Whether to plot diagonal reference line.
+    plotDiagonal (bool): Whether to plot the diagonal reference line.
     showLegend (bool): Whether to show legend.
     returnFig (bool): Whether to return figure object.
-    dpi (int): DPI for saving.
+    dpi (int): DPI for saving the figure.
 
   Returns:
     matplotlib.figure.Figure or None: The matplotlib figure object if returnFig is True, otherwise None.
@@ -3014,20 +3015,18 @@ def PlotMisclassificationExamples(
     )
   '''
 
-  from collections import Counter
-
   yTrue = np.array(yTrue)
   yPred = np.array(yPred)
   mask = yTrue != yPred
   errors = list(zip(yTrue[mask], yPred[mask]))
   counter = Counter(errors)
-  most_common = counter.most_common(maxExamples)
+  mostCommon = counter.most_common(maxExamples)
 
   fig, ax = plt.subplots(figsize=figsize)
   ax.axis("off")
   lines = []
 
-  for idx, ((t, p), count) in enumerate(most_common):
+  for idx, ((t, p), count) in enumerate(mostCommon):
     line = f"{idx + 1}. True: {t}  Pred: {p}  Count: {count}"
     if (X is not None):
       sampleIdxs = np.where((yTrue == t) & (yPred == p))[0][:1]
@@ -3922,6 +3921,39 @@ def RiskCoverageCurve(
       return coverage, accuracy, aucVal, fig
 
   return coverage, accuracy, aucVal
+
+
+def ComputeBrierScore(confidences: List[float], correctness: List[float]) -> float:
+  r'''
+  Compute Brier Score given prediction confidences and correctness indicators.
+  Compute Brier score = mean((conf - correct)^2).
+
+  Parameters:
+    confidences (list or numpy.ndarray): List/array of predicted confidences (0.0 to 1.0).
+    correctness (list or numpy.ndarray): List/array of correctness indicators (0.0 or 1.0).
+
+  Returns:
+    float: Brier score value, or None if inputs are invalid.
+
+  Example
+  -------
+  .. code-block:: python
+
+    import numpy as np
+    import HMB.PerformanceMetrics as pm
+    confidences = [0.9, 0.8, 0.7, 0.6, 0.5]
+    correctness = [1, 0, 1, 1, 0]
+    brierScore = pm.ComputeBrierScore(confidences, correctness)
+    print(f"Brier Score: {brierScore}")
+  '''
+
+  if (not confidences or len(confidences) != len(correctness)):
+    return None
+  try:
+    diffs = [(c - y) ** 2 for c, y in zip(confidences, correctness)]
+    return float(np.mean(diffs))
+  except Exception:
+    return None
 
 
 if __name__ == "__main__":

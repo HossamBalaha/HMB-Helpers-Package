@@ -1,3 +1,4 @@
+import random
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -5,6 +6,14 @@ import matplotlib.pyplot as plt
 from typing import Any, Optional, Tuple
 from matplotlib import colors as mcolors
 from matplotlib.patches import Patch
+
+COLORS = [
+  "orange", "tab:blue", "tab:green", "tab:red", "tab:purple", "tab:brown",
+  "tab:pink", "tab:gray", "tab:olive", "tab:cyan", "gold", "lime", "teal",
+  "navy", "maroon", "coral", "darkgreen", "darkblue", "darkred", "darkorange"
+]
+# Shuffle colors to avoid similar adjacent colors in plots.
+random.shuffle(COLORS)
 
 # Define a function to plot a heatmap from 2D data with flexible options.
 def PlotHeatmap(

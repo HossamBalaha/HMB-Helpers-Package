@@ -1,9 +1,11 @@
-import os, timm, torch, tqdm, copy, time, cv2, json
+import os, timm, torch, tqdm, copy, time, cv2, json, hashlib
 import numpy as np
 import pandas as pd
 from PIL import Image
 import matplotlib.pyplot as plt
 from pathlib import Path
+from collections import Counter
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from sklearn.metrics import confusion_matrix, classification_report
 from torch.amp import autocast, GradScaler
@@ -14,8 +16,11 @@ import torch.nn.functional as F
 from HMB.Initializations import IMAGE_SUFFIXES
 from HMB.PerformanceMetrics import (
   CalculatePerformanceMetrics, PlotConfusionMatrix,
-  PlotROCAUCCurve, PlotPRCCurve, ComputeECE
+  PlotROCAUCCurve, PlotPRCCurve, ComputeECE, ComputeBrierScore
 )
+from HMB.Utils import DumpJsonFile, AppendOrCreateNewCSV
+from HMB.PlotsHelper import PlotHeatmap, PlotBarChart, COLORS
+from HMB.ImagesHelper import *
 
 
 # Function to save a PyTorch model's state dictionary to a file.
@@ -1871,5 +1876,913 @@ def GenericEvaluatePredictPlotSubset(
     allPredsConfidences,
     predictionsRecords,
     classNames,
-    cm
+    cm,
   )
+
+
+def EvaluateModelOnPerturbations(
+  model,
+  run,
+  datasetDir,
+  storeDir,
+  perturbations: List[str],
+  levels: List[float],
+  maxSamples: Optional[int] = 200,
+  preprocessFn=None,
+  subset: Optional[str] = "test",
+  eps: float = 1e-10,
+  dpi: int = 300,
+):
+  r'''
+  Evaluate a classification model under a set of input perturbations and severity levels.
+
+  This routine runs the provided model over a dataset subset (train/val/test/all) while applying
+  controlled corruptions (noise, brightness, jpeg, occlusion, etc.) at several severity levels.
+  It collects per-sample predictions, computes accuracy, calibration (ECE), Brier score and other
+  auxiliary metrics, aggregates results per-perturbation and per-level, produces plots and CSV
+  summaries, and writes a human-readable interpretation report.
+
+  Parameters:
+    model (callable | torch.nn.Module): A model or a prediction callable that accepts an image
+      (PIL or NumPy HWC) and returns a 1D array of class probabilities.
+    run (Any): Identifier for the current model run used in report headers (may be a Path-like
+      or an object with a `.name` attribute).
+    datasetDir (str | Path): Path to the dataset root containing splits (train/val/test).
+    storeDir (str | Path): Directory where results, CSVs, plots and interpretation files will be
+      written. The directory will be created if it does not exist.
+    perturbations (List[str]): List of perturbation names to evaluate. If empty, a default set of
+      available perturbations will be used.
+    levels (List[float]): List of severity levels to apply for each perturbation. If empty,
+      default robustness levels will be used.
+    maxSamples (int | None): Maximum number of samples to evaluate per run/level. If None,
+      evaluates all available samples. Default: 200.
+    preprocessFn (callable | None): Optional preprocessing function applied to each image before
+      prediction. When provided it should accept a PIL image and return a processed image.
+    subset (str): Dataset subset to evaluate: one of ("train", "val", "test", "all").
+      Defaults to "test".
+    eps (float): Small epsilon for numerical stability in metric computations. Default: 1e-10.
+    dpi (int): DPI used when saving figures. Default: 300.
+
+  Returns:
+    dict: A dictionary containing the robustness evaluation results. The dictionary contains keys
+      such as "Dataset", "ClassNames", "Perturbations", "AverageAccuracy", "WorstAccuracy",
+      and an inner "RobustnessMetrics" structure with aggregated measures. In addition to the
+      return value, the function writes these artifacts to `storeDir` (e.g. "RobustnessReport.json",
+      "RobustnessResults.csv", "RobustnessSummary.csv", and "Interpretation.txt").
+
+  Example
+  -------
+  .. code-block:: python
+
+    EvaluateModelOnPerturbations(
+      model=myModel,
+      run=myRun,
+      datasetDir="./data/cifar10",
+      storeDir="./out/robustness",
+      perturbations=["gaussian","jpeg"],
+      levels=[0.1, 0.2, 0.3],
+      maxSamples=500,
+      subset="test"
+    )
+  '''
+
+  # Map perturbation name to handler function.
+  PERTURBATION_MAP = {
+    "baseline"   : lambda im, lv, p: im,
+    "gaussian"   : lambda im, lv, p: AddGaussianNoise(im, sigma=lv, seed=p),
+    "brightness" : lambda im, lv, p: ChangeBrightness(im, factor=lv),
+    "jpeg"       : lambda im, lv, p: ApplyJPEGCompression(im, quality=int(max(1, min(95, int(lv))))),
+    "speckle"    : lambda im, lv, p: AddSpeckleNoise(im, var=lv, seed=p),
+    "saltPepper" : lambda im, lv, p: AddSaltPepperNoise(im, amount=lv, seed=p),
+    "contrast"   : lambda im, lv, p: ChangeContrast(im, factor=lv),
+    "shotNoise"  : lambda im, lv, p: AddShotNoise(im, scale=lv, seed=p),
+    "motionBlur" : lambda im, lv, p: im.filter(ImageFilter.GaussianBlur(radius=max(1, int(lv)))),
+    "downscale"  : lambda im, lv, p: DownscaleImage(im, lv),
+    "occlusion"  : lambda im, lv, p: OccludeImage(im, lv),
+    "colorJitter": lambda im, lv, p: ColorJitter(im, lv),
+    "fog"        : lambda im, lv, p: FogImage(im, lv),
+    "snow"       : lambda im, lv, p: AddSaltPepperNoise(im, amount=min(0.5, lv), seed=p),
+    "spatter"    : lambda im, lv, p: AddSaltPepperNoise(im, amount=min(0.3, lv), seed=p),
+    "glassBlur"  : lambda im, lv, p: PixelateImage(im, max(1, int(lv))).filter(ImageFilter.GaussianBlur(radius=1)),
+    "pixelate"   : lambda im, lv, p: PixelateImage(im, lv),
+    "saturate"   : lambda im, lv, p: SaturateImage(im, lv),
+    "zoomBlur"   : lambda im, lv, p: im.filter(ImageFilter.GaussianBlur(radius=max(1, int(lv)))),
+    "shadow"     : lambda im, lv, p: Image.blend(im, Image.new("RGB", im.size, (0, 0, 0)), min(0.7, lv * 0.02)),
+  }
+
+  run = Path(run)
+  storeDir = Path(storeDir)
+  storeDir.mkdir(parents=True, exist_ok=True)
+
+  reportPath = storeDir / "RobustnessReport.json"
+  csvPath = storeDir / "RobustnessResults.csv"
+  summaryCsv = storeDir / "RobustnessSummary.csv"
+  interpTxt = storeDir / "Interpretation.txt"
+
+  AVAILABLE_PERTURBATIONS = [
+    "gaussian", "brightness", "jpeg", "speckle", "saltPepper", "contrast", "shotNoise",
+    "motionBlur", "downscale", "occlusion", "colorJitter", "fog", "snow", "spatter",
+    "glassBlur", "pixelate", "saturate", "zoomBlur", "shadow",
+  ]
+  DEFAULT_ROBUSTNESS_LEVELS = [0.1, 0.2, 0.3, 10, 20, 30, 40, 50]
+  if (len(perturbations) <= 0):
+    perturbations = AVAILABLE_PERTURBATIONS
+  if (len(levels) <= 0):
+    levels = DEFAULT_ROBUSTNESS_LEVELS
+
+  results = {
+    "Dataset"      : str(datasetDir),
+    "ClassNames"   : [],
+    "Perturbations": []
+  }
+
+  (
+    predsCsvPath, weightedMetrics, allPredsIndices, allGtsIndices,
+    allPredsProbs, allPredsConfs, predictionsRecords, classNames, cm
+  ) = GenericEvaluatePredictPlotSubset(
+    datasetDir=str(datasetDir),
+    model=model,
+    subset=subset,
+    prefix="",
+    storageDir=str(storeDir),
+    heavy=False,
+    computeECE=True,
+    saveArtifacts=False,
+    exportFailureCases=False,
+    eps=eps,
+    maxSamples=maxSamples,
+    preprocessFn=preprocessFn,
+  )
+
+  results["ClassNames"] = classNames
+  baselineAcc = weightedMetrics["Weighted Accuracy"]
+  baselineEce = weightedMetrics["ECE"]
+  duration = weightedMetrics["Total Evaluation Time (s)"]
+  confmat = cm.tolist() if (isinstance(cm, np.ndarray)) else cm
+
+  baselineEntry = {
+    "Perturbation": "baseline",
+    "Levels"      : [
+      {
+        "Level"          : "baseline",
+        "Accuracy"       : baselineAcc,
+        "Samples"        : len(allGtsIndices),
+        "DurationSeconds": duration,
+        "ECE"            : baselineEce,
+        "ConfusionMatrix": confmat,
+        "Confidences"    : allPredsConfs,
+        "Correctness"    : [el["correctness"] for el in predictionsRecords],
+        "MeanConfidence" : float(np.mean(allPredsConfs)) if (allPredsConfs) else None,
+        "Brier"          : ComputeBrierScore(allPredsConfs, [el["correctness"] for el in predictionsRecords]),
+        "ConfAccGap"     : (float(np.mean(allPredsConfs)) - baselineAcc) if allPredsConfs else None,
+        "ClasswiseAcc"   : {},  # Will be filled below if needed.
+        "PredsCsvPath"   : str(predsCsvPath),
+        "WeightedMetrics": weightedMetrics,
+      }
+    ]
+  }
+  results["Perturbations"].insert(0, baselineEntry)
+
+  # Fill baseline ClasswiseAcc.
+  if (allGtsIndices and allPredsIndices):
+    correctByClass = Counter()
+    totalByClass = Counter()
+    for gt, pred in zip(allGtsIndices, allPredsIndices):
+      totalByClass[gt] += 1
+      if (gt == pred):
+        correctByClass[gt] += 1
+    baselineClasswise = {
+      str(cls): correctByClass[cls] / totalByClass[cls]
+      for cls in totalByClass
+    }
+    results["Perturbations"][0]["Levels"][0]["ClasswiseAcc"] = baselineClasswise
+  print(f"Baseline accuracy: {baselineAcc:.4f} over {len(allGtsIndices)} samples.")
+
+  for perturb in perturbations:
+    print(f"Evaluating perturbation: {perturb}")
+    perturbResults = {"Perturbation": perturb, "Levels": []}
+    for level in levels:
+      print(f"    Level: {level}")
+      handler = PERTURBATION_MAP.get(perturb)
+      seed = int(hashlib.sha1(str(perturb).encode("utf-8")).hexdigest()[:8], 16)
+      print(f"    Using seed: {seed}")
+      preprocessFn = lambda img, h=handler, l=level, s=seed: (h(img, l, s) if (h is not None) else img)
+      (
+        _predsCsvPath, _weightedMetrics, _allPredsIndices, _allGtsIndices,
+        _allPredsProbs, _allPredsConfs, _predictionsRecords, _classNames, _cm
+      ) = GenericEvaluatePredictPlotSubset(
+        datasetDir=str(datasetDir),
+        model=model,
+        subset=subset,
+        prefix="",
+        storageDir=str(storeDir),
+        heavy=False,
+        computeECE=True,
+        saveArtifacts=False,
+        exportFailureCases=False,
+        eps=eps,
+        maxSamples=maxSamples,
+        preprocessFn=preprocessFn,
+      )
+
+      accuracy = _weightedMetrics["Weighted Accuracy"]
+      duration = _weightedMetrics["Total Evaluation Time (s)"]
+      ece = _weightedMetrics["ECE"]
+      confmat = _cm.tolist() if isinstance(_cm, np.ndarray) else _cm
+
+      # Compute per-level auxiliary metrics.
+      confidencesLevel = _allPredsConfs
+      correctnessLevel = [el["correctness"] for el in _predictionsRecords]
+      meanConfLevel = float(np.mean(confidencesLevel)) if (confidencesLevel) else None
+      brierLevel = ComputeBrierScore(confidencesLevel, correctnessLevel)
+      confAccGap = (meanConfLevel - accuracy) if (meanConfLevel is not None) else None
+
+      # Classwise accuracy (optional, lightweight).
+      classwiseAcc = {}
+      if (_allGtsIndices and _allPredsIndices):
+        try:
+          totalByClass = Counter()
+          correctByClass = Counter()
+          for gt, pred in zip(_allGtsIndices, _allPredsIndices):
+            totalByClass[gt] += 1
+            if (gt == pred):
+              correctByClass[gt] += 1
+          classwiseAcc = {
+            str(cls): correctByClass[cls] / totalByClass[cls]
+            for cls in totalByClass
+          }
+        except Exception:
+          classwiseAcc = {}
+
+      perturbResults["Levels"].append({
+        "Level"          : level,
+        "Accuracy"       : accuracy,
+        "Samples"        : len(_allGtsIndices),
+        "DurationSeconds": duration,
+        "ECE"            : ece,
+        "ConfusionMatrix": confmat,
+        "Confidences"    : confidencesLevel,
+        "Correctness"    : correctnessLevel,
+        "MeanConfidence" : meanConfLevel,
+        "Brier"          : brierLevel,
+        "ConfAccGap"     : confAccGap,
+        "ClasswiseAcc"   : classwiseAcc,
+        "PredsCsvPath"   : str(_predsCsvPath),
+        "WeightedMetrics": _weightedMetrics,
+      })
+    results["Perturbations"].append(perturbResults)
+
+  perturbList = results["Perturbations"]
+  overallAccs, perturbSummaries = [], []
+
+  for perturbEntry in perturbList:
+    perturbName = perturbEntry["Perturbation"]
+    levelAccs, levelDetails = [], []
+    levelsReported = perturbEntry["Levels"]
+    for levelEntry in levelsReported:
+      acc = levelEntry["Accuracy"] if (levelEntry["Accuracy"] is not None) else 0.0
+      samples = levelEntry["Samples"] if (levelEntry["Samples"] is not None) else 0
+      ece = levelEntry["ECE"] if (levelEntry["ECE"] is not None) else 0.0
+      levelAccs.append(float(acc))
+      levelDetails.append({
+        "Level"          : levelEntry["Level"],
+        "Accuracy"       : float(acc),
+        "Samples"        : int(samples),
+        "ECE"            : ece,
+        "Confidences"    : levelEntry["Confidences"],
+        "MeanConfidence" : levelEntry["MeanConfidence"],
+        "DurationSeconds": levelEntry["DurationSeconds"],
+        "ConfAccGap"     : levelEntry["ConfAccGap"],
+        "ClasswiseAcc"   : levelEntry["ClasswiseAcc"],
+        "PredsCsvPath"   : levelEntry["PredsCsvPath"],
+        "WeightedMetrics": levelEntry["WeightedMetrics"],
+      })
+    if (levelAccs):
+      meanAcc = sum(levelAccs) / len(levelAccs)
+      bestAcc = max(levelAccs)
+      worstAcc = min(levelAccs)
+      perturbSummaries.append((perturbName, meanAcc, bestAcc, worstAcc, levelDetails))
+      overallAccs.extend(levelAccs)
+  # Compute baseline, average, worst.
+  baseline = avg = worst = 0.0
+  if (overallAccs):
+    baseline = None
+    try:
+      for p in perturbList:
+        if (str(p["Perturbation"]).lower() == "baseline"):
+          lvl0 = p["Levels"][0]
+          bacc = lvl0["Accuracy"]
+          if (bacc is not None):
+            baseline = float(bacc)
+            break
+    except Exception:
+      pass
+    if (baseline is None):
+      baseline = max(overallAccs)
+    avg = sum(overallAccs) / len(overallAccs)
+    worst = min(overallAccs)
+
+  extendedMetrics = {}
+  perPerturbMetrics = []
+  baselineConfidences = []
+
+  for (pname, meanAcc, bestAcc, worstAcc, details) in perturbSummaries:
+    sevAcc = [
+      (float(d["Level"]) if ((d["Level"] is not None) and (d["Level"] != "baseline")) else i, float(d["Accuracy"]))
+      for i, d in enumerate(details)
+    ]
+    sevAcc = sorted(sevAcc, key=lambda x: x[0])
+    sev = [s for s, _ in sevAcc]
+    accs = [a for _, a in sevAcc]
+
+    # Aggregate confidence-accuracy gap.
+    gaps = [d["ConfAccGap"] for d in details if (d["ConfAccGap"] is not None)]
+    meanConfAccGap = float(np.mean(gaps)) if gaps else None
+
+    # Compute classwise drops vs baseline
+    classwiseDrops = {}
+    if ("ClasswiseAcc" in details[0] and baselineClasswise):
+      for cls in baselineClasswise:
+        drops = []
+        for d in details:
+          accDict = d.get("ClasswiseAcc", {})
+          if (cls in accDict):
+            drop = baselineClasswise[cls] - accDict[cls]
+            drops.append(drop)
+        if (drops):
+          classwiseDrops[cls] = float(np.mean(drops))
+
+    if (len(sev) >= 2):
+      auc = float(np.trapz(accs, x=sev))
+      maxArea = (max(sev) - min(sev)) * (baseline if (baseline > 0) else 1.0)
+      normAuc = auc / maxArea if maxArea > 0 else 0.0
+    else:
+      auc = accs[0] if (accs) else 0.0
+      normAuc = (auc / (baseline if (baseline > 0) else 1.0)) if (baseline > 0) else 0.0
+
+    mceP = 0.0
+    if (baseline > 0):
+      relErrs = [max(0.0, (baseline - a) / baseline) for a in accs]
+      mceP = float(np.mean(relErrs)) if (relErrs) else 0.0
+
+    meanConfs = [d["MeanConfidence"] for d in details if (d["MeanConfidence"] is not None)]
+    meanConf = float(np.mean(meanConfs)) if (meanConfs) else None
+    if (meanConf is not None):
+      baselineConfidences.append(meanConf)
+
+    eces = [d["ECE"] for d in details if d["ECE"] is not None]
+    meanEce = float(np.mean([float(e) for e in eces])) if eces else None
+
+    latencies = [d["DurationSeconds"] for d in details if (d["DurationSeconds"] is not None)]
+    meanLatency = float(np.mean(latencies)) if (latencies) else None
+
+    perPerturbMetrics.append({
+      "Perturbation"       : pname,
+      "MeanAcc"            : meanAcc,
+      "BestAcc"            : bestAcc,
+      "WorstAcc"           : worstAcc,
+      "MceLike"            : mceP,
+      "AUC"                : auc,
+      "NormAUC"            : normAuc,
+      "MeanECE"            : meanEce,
+      "MeanConfidence"     : meanConf,
+      "MeanDurationSeconds": meanLatency,
+      "MeanConfAccGap"     : meanConfAccGap,
+      "ClasswiseDrops"     : classwiseDrops,
+    })
+
+  mceVals = [p["MceLike"] for p in perPerturbMetrics if (p["MceLike"] is not None)]
+  overallMce = float(np.mean(mceVals)) if mceVals else None
+  baselineConf = max(baselineConfidences) if baselineConfidences else None
+
+  extendedMetrics.update({
+    "PerPerturbMetrics"  : perPerturbMetrics,
+    "OverallMce"         : overallMce,
+    "BaselineConfidence" : baselineConf,
+    "RelativeDropOverall": {
+      "BaselineMinusWorst": float(baseline - worst),
+      "BaselineMinusMean" : float(baseline - avg)
+    }
+  })
+  results["RobustnessMetrics"] = extendedMetrics
+
+  perturbSummariesDicts = []
+  for (pname, meanAcc, bestAcc, worstAcc, details) in perturbSummaries:
+    perturbSummariesDicts.append({
+      "Perturbation": pname,
+      "MeanAcc"     : float(meanAcc) if (meanAcc is not None) else None,
+      "BestAcc"     : float(bestAcc) if (bestAcc is not None) else None,
+      "WorstAcc"    : float(worstAcc) if (worstAcc is not None) else None,
+      "Details"     : details,
+    })
+  results.update({
+    "BaselineAccuracy": float(baseline) if (baseline is not None) else None,
+    "AverageAccuracy" : float(avg) if (avg is not None) else None,
+    "WorstAccuracy"   : float(worst) if (worst is not None) else None,
+    "PerturbSummaries": perturbSummariesDicts,
+  })
+  DumpJsonFile(str(reportPath), results)
+  print(f"Robustness report saved to: {reportPath}")
+
+  perLevelRows = []
+  perLevelHeader = ["Perturbation", "Level", "Accuracy", "Samples", "ECE"]
+  for pEntry in perturbList:
+    pName = pEntry["Perturbation"]
+    levelsReported = pEntry["Levels"]
+    for lvl in levelsReported:
+      lvlLabel = lvl["Level"]
+      accVal = lvl["Accuracy"]
+      samplesVal = lvl["Samples"]
+      eceVal = lvl["ECE"]
+      perLevelRows.append([pName, lvlLabel, accVal, samplesVal, eceVal])
+
+  if (perLevelRows):
+    AppendOrCreateNewCSV(str(csvPath), perLevelRows, header=perLevelHeader, mode="w")
+    print(f"Per-level robustness results CSV saved to: {csvPath}")
+
+  summaryRows = []
+  summaryHeader = [
+    "Perturbation", "MeanAcc", "BestAcc", "WorstAcc", "MceLike", "AUC",
+    "NormAUC", "MeanECE", "MeanConfidence", "MeanDurationSeconds",
+    "MeanConfAccGap", "ClasswiseDrops"
+  ]
+  for rec in extendedMetrics["PerPerturbMetrics"]:
+    summaryRows.append([
+      rec["Perturbation"], rec["MeanAcc"], rec["BestAcc"], rec["WorstAcc"],
+      rec["MceLike"], rec["AUC"], rec["NormAUC"], rec["MeanECE"],
+      rec["MeanConfidence"], rec["MeanDurationSeconds"],
+      rec["MeanConfAccGap"], json.dumps(rec["ClasswiseDrops"])
+    ])
+  if (summaryRows):
+    AppendOrCreateNewCSV(str(summaryCsv), summaryRows, header=summaryHeader, mode="w")
+    print(f"Per-perturbation summary CSV saved to: {summaryCsv}")
+
+  perturbNames = [p[0] for p in perturbSummaries] if (perturbSummaries) else [p["Perturbation"] for p in perturbList]
+  orderedLevelLabels = []
+  if (perLevelRows):
+    orderedLevelLabels = sorted({str(r[1]) for r in perLevelRows}, key=lambda x: (x != "baseline", x))
+
+  heatMat = np.full((len(perturbNames), len(orderedLevelLabels)), np.nan, dtype=float)
+  for row in perLevelRows:
+    pName, lvlLabel, accVal, _, _ = row
+    if (pName in perturbNames and str(lvlLabel) in orderedLevelLabels):
+      i = perturbNames.index(pName)
+      j = orderedLevelLabels.index(str(lvlLabel))
+      heatMat[i, j] = float(accVal) if (accVal is not None) else np.nan
+
+  PlotHeatmap(
+    data=heatMat,
+    rowLabels=perturbNames,
+    colLabels=orderedLevelLabels,
+    title="Accuracy Heatmap (Top-1) by Perturbation and Level",
+    xlabel="Level",
+    ylabel="Perturbation",
+    cmap="viridis",
+    vmin=0.0,
+    vmax=1.0,
+    valueFormat="{:.2f}",
+    savePath=storeDir / "AccuracyHeatmap.png",
+    dpi=dpi,
+    save=True,
+    display=False,
+  )
+
+  # mCE Bar Chart.
+  mceVals = [rec["MceLike"] for rec in extendedMetrics["PerPerturbMetrics"]]
+  names = [rec["Perturbation"] for rec in extendedMetrics["PerPerturbMetrics"]]
+  if (names and any(v is not None for v in mceVals)):
+    mcePath = storeDir / "McePerPerturbation.png"
+    PlotBarChart(
+      values=mceVals,
+      labels=names,
+      title="mCE-like Metric by Perturbation",
+      ylabel="Mean relative error (mCE-like)",
+      savePath=mcePath,
+      color="tab:orange",
+      alpha=0.9,
+      dpi=dpi,
+      display=False,
+      save=True,
+      annotate=True,
+    )
+
+  # ECE Heatmap.
+  if (perLevelRows and perturbNames and orderedLevelLabels):
+    eceMat = np.full((len(perturbNames), len(orderedLevelLabels)), np.nan, dtype=float)
+    for row in perLevelRows:
+      pName, lvlLabel, _, _, eceVal = row
+      if (pName in perturbNames and str(lvlLabel) in orderedLevelLabels):
+        i = perturbNames.index(pName)
+        j = orderedLevelLabels.index(str(lvlLabel))
+        eceMat[i, j] = float(eceVal) if eceVal is not None else np.nan
+
+    figEce, axEce = plt.subplots(
+      figsize=(max(6, len(orderedLevelLabels) * 0.6), max(4, len(perturbNames) * 0.4))
+    )
+    cax2 = axEce.imshow(eceMat, aspect="auto", interpolation="nearest", cmap="magma")
+    axEce.set_yticks(range(len(perturbNames)))
+    axEce.set_yticklabels(perturbNames)
+    axEce.set_xticks(range(len(orderedLevelLabels)))
+    axEce.set_xticklabels(orderedLevelLabels, rotation=45, ha="right")
+    axEce.set_xlabel("Level")
+    axEce.set_ylabel("Perturbation")
+    axEce.set_title("ECE Heatmap by Perturbation and Level")
+    figEce.colorbar(cax2, ax=axEce, label="ECE")
+    for i in range(eceMat.shape[0]):
+      for j in range(eceMat.shape[1]):
+        val = eceMat[i, j]
+        if (not np.isnan(val)):
+          axEce.text(j, i, f"{val:.3f}", ha="center", va="center", color="white", fontsize=7)
+    ecePath = storeDir / "EceHeatmap.png"
+    figEce.tight_layout()
+    figEce.savefig(str(ecePath), dpi=dpi, bbox_inches="tight")
+    plt.close(figEce)
+    print(f"ECE heatmap saved to: {ecePath}")
+
+  # Per-level diagnostics.
+  reportClassNames = results["ClassNames"]
+  for pEntry in perturbList:
+    pName = pEntry["Perturbation"]
+    levelsReported = pEntry["Levels"]
+    for lvl in levelsReported:
+      lvlLabel = lvl["Level"]
+      cmRaw = lvl["ConfusionMatrix"]
+      if (cmRaw is not None):
+        cmArr = np.array(cmRaw)
+        if reportClassNames and len(reportClassNames) == cmArr.shape[0]:
+          classNamesForCm = list(reportClassNames)
+        else:
+          classNamesForCm = [str(i) for i in range(cmArr.shape[0])]
+        (storeDir / "CMs").mkdir(parents=True, exist_ok=True)
+        PlotConfusionMatrix(
+          cmArr,
+          classNamesForCm,
+          normalize=False,
+          roundDigits=3,
+          title=f"Confusion Matrix - {pName} - Level {lvlLabel}",
+          cmap=plt.cm.Blues,
+          display=False,
+          save=True,
+          fileName=str(storeDir / "CMs" / f"{pName}_{lvlLabel}_ConfusionMatrix.pdf"),
+          fontSize=10,
+          annotate=True,
+          figSize=(6, 6),
+          colorbar=True,
+          returnFig=False,
+          dpi=dpi,
+        )
+        print(f"Confusion matrix saved for {pName} level {lvlLabel}")
+
+      confidences = lvl["Confidences"]
+      correctness = lvl["Correctness"]
+      (storeDir / "Reliability").mkdir(parents=True, exist_ok=True)
+      if (confidences is not None and correctness is not None and len(confidences) == len(correctness)):
+        try:
+          confArr = np.array(confidences, dtype=float)
+          corrArr = np.array(correctness, dtype=float)
+          if (corrArr.ndim == 1 and not set(np.unique(corrArr)).issubset({0.0, 1.0})):
+            pass
+          else:
+            bins = np.linspace(0, 1, 11)
+            binAcc, binConf = [], []
+            for i in range(len(bins) - 1):
+              lo, hi = bins[i], bins[i + 1]
+              mask = (confArr >= lo) & (confArr <= hi) if i == 0 else (confArr > lo) & (confArr <= hi)
+              if (np.sum(mask) == 0):
+                binAcc.append(np.nan)
+                binConf.append(np.nan)
+              else:
+                binAcc.append(float(np.mean(corrArr[mask])))
+                binConf.append(float(np.mean(confArr[mask])))
+            x = [b for b in binConf if not np.isnan(b)]
+            y = [a for a in binAcc if not np.isnan(a)]
+            if (x):
+              figRel, axRel = plt.subplots(figsize=(6, 6))
+              axRel.plot([0, 1], [0, 1], "--", color="gray")
+              axRel.plot(x, y, "o-", color="blue", label="Model")
+              axRel.set_xlim(0, 1)
+              axRel.set_ylim(0, 1)
+              axRel.set_xlabel("Mean Confidence")
+              axRel.set_ylabel("Accuracy")
+              axRel.set_title(f"Reliability Diagram - {pName} - Level {lvlLabel}")
+              relPath = storeDir / "Reliability" / f"{pName}_{lvlLabel}_Reliability.png"
+              figRel.tight_layout()
+              figRel.savefig(str(relPath), dpi=dpi, bbox_inches="tight")
+              plt.close(figRel)
+              print(f"Reliability diagram saved for {pName} level {lvlLabel}")
+        except Exception as relEx:
+          print(f"Warning: Failed to generate reliability diagram for {pName} level {lvlLabel}: {relEx}")
+      else:
+        print(f"Skipping reliability diagram for {pName} level {lvlLabel} due to missing data.")
+
+  for perturbEntry in perturbList:
+    # Robustly extract perturbation name and levels (support multiple key variants).
+    pname = perturbEntry["Perturbation"]
+    levelsReported = perturbEntry["Levels"]
+    if (not levelsReported):
+      continue
+
+    # Build tuples (numericCandidate, labelStr, accuracy) to allow numeric sorting when possible.
+    levelTuples = []
+    for lvl in levelsReported:
+      rawLabel = lvl["Level"]
+      accVal = lvl["Accuracy"]
+      try:
+        num = float(rawLabel)
+      except:
+        num = 0
+      levelTuples.append((num, str(rawLabel), float(accVal)))
+    # Sort by numeric severity when available, otherwise by label.
+    levelTuples = sorted(levelTuples, key=lambda x: (x[0] is None, x[0] if x[0] is not None else 0.0, x[1]))
+
+    xLabels = [t[1] for t in levelTuples]
+    yAccs = [t[2] for t in levelTuples]
+
+    # Filename-safe perturbation name.
+    pertName = (pname[0].upper() + pname[1:]) if (isinstance(pname, str) and pname) else "Perturbation"
+    safeName = "".join(ch if (ch.isalnum() or ch in ("_", "-")) else "_" for ch in pertName)
+    figPath = storeDir / "BarCharts" / f"{safeName}_Accuracy.png"
+
+    # Call the project's `PlotBarChart` with the same style/params as the existing call.
+    PlotBarChart(
+      values=yAccs,
+      labels=xLabels,
+      title=f"Robustness Accuracy by Level - {pertName}",
+      ylabel="Top-1 Accuracy",
+      savePath=figPath,
+      colors=COLORS,
+      alpha=0.85,
+      dpi=dpi,
+      display=False,
+      save=True,
+      annotate=True,
+    )
+    print(f"Interpretation figure written to: {figPath}")
+
+  perturbations = results["Perturbations"]
+  baselineRecord = [p for p in perturbations if (p["Perturbation"] == "baseline")]
+  if (not baselineRecord):
+    raise ValueError("Baseline record not found in robustness report.")
+  baselineRecord = baselineRecord[0]["Levels"][0]
+  baselineAcc = baselineRecord["Accuracy"]
+  robustnessMetrics = results["RobustnessMetrics"]
+  overallMCE = robustnessMetrics["OverallMce"]
+  relativeDropOverall = robustnessMetrics["RelativeDropOverall"]
+  perPerturbMetrics = robustnessMetrics["PerPerturbMetrics"]
+  baselineMinusWorst = relativeDropOverall["BaselineMinusWorst"]
+  baselineMinusMean = relativeDropOverall["BaselineMinusMean"]
+  avg = results["AverageAccuracy"]
+  worst = results["WorstAccuracy"]
+  perturbSummaries = results["PerturbSummaries"]
+
+  # Build a detailed interpretation report with per-perturbation analysis and actionable guidance.
+  lines = [
+    "Robustness Interpretation",
+    f"Generated: {datetime.now(timezone.utc).isoformat()}",  # UTC timestamp.
+    f"Dataset: {results['Dataset']}",  # Dataset name.
+    f"Model run: {run.name}",  # Model run.
+    "",
+    "This report summarizes the robustness evaluation results of the model "
+    "across various perturbations and severity levels. It highlights key metrics, "
+    "identifies potential weaknesses, and provides actionable recommendations "
+    "to improve model robustness.",
+    "",
+    "Overall summary:",
+    f"- Best observed accuracy (baseline): {baselineAcc:.3f}",
+    f"- Average accuracy across all perturbations/levels: {avg:.3f}",
+    f"- Worst observed accuracy: {worst:.3f}",
+    f"- mean Corruption Error (mCE-like): {overallMCE} (fraction of baseline)",
+    "- Lower mCE values indicate better robustness; aim for mCE < 0.5 for good robustness.",
+    f"- Relative drops: baseline-worst={baselineMinusWorst}, baseline-mean={baselineMinusMean}",
+    "",
+    "Per-perturbation details:"
+  ]
+
+  # Iterate through the earlier-built perturbation summaries.
+  for dictRecord in perturbSummaries:
+    # Extract perturbation name and level summary details.
+    pname = dictRecord["Perturbation"]
+    meanAcc = dictRecord["MeanAcc"]
+    bestAcc = dictRecord["BestAcc"]
+    worstAcc = dictRecord["WorstAcc"]
+    details = dictRecord["Details"]
+    # Compute drop from baseline for this perturbation's worst level.
+    dropFromBaseline = baselineAcc - worstAcc
+    # Append header for this perturbation.
+    lines.extend([
+      f"\n{pname}:",
+      f"  - mean accuracy: {meanAcc:.3f} | best: {bestAcc:.3f} | worst: {worstAcc:.3f}",
+      f"  - max drop from baseline: {dropFromBaseline * 100:.1f}%"
+    ])
+    # Level-by-level breakdown when details are present.
+    for detail in details:
+      # Extract level, accuracy, samples and ECE from the level detail dictionary.
+      levelVal = detail["Level"]
+      acc = detail["Accuracy"]
+      samples = detail["Samples"]
+      ece = detail["ECE"]
+      # Decide whether to add a low-sample warning.
+      sampleNote = "" if (samples >= 30) else " (low sample count - interpret with caution)"
+      # Build an ECE note string based on available types.
+      eceNote = (
+        f" | ECE={ece:.3f}"
+        if (isinstance(ece, (int, float)))
+        else (f" | ECE={ece}" if (ece is not None) else "")
+      )
+      # Append a line describing this severity level's accuracy and sample count.
+      lines.append(f"    - Level {levelVal}: acc={acc:.3f}, samples={samples}{sampleNote}{eceNote}")
+
+    # Add compact per-perturbation metrics if available from extended metrics.
+    perpm = next((p for p in perPerturbMetrics if (p["Perturbation"] == pname)), None)
+    # Append computed metrics to the interpretation when available.
+    if (perpm is not None):
+      try:
+        # Append AUC and normalized AUC lines.
+        lines.append(
+          f"  - AUC (accuracy vs severity): {perpm['AUC']:.4f} | normalized AUC: {perpm['NormAUC']:.4f}"
+        )
+        # Append mean ECE when present.
+        # if (perpm.get("MeanECE") is not None):
+        lines.append(f"  - mean ECE across levels: {perpm['MeanEce']:.4f}")
+        # Append mean confidence when present.
+        #             if (perpm["MeanConfidence"] is not None):
+        lines.append(f"  - mean confidence: {perpm['MeanConfidence']:.4f}")
+        # Append mean latency when present.
+        #             if (perpm.get("MeanDurationSeconds") is not None):
+        latencyMs = perpm["MeanDurationSeconds"] * 1000
+        lines.append(f"  - mean latency: {latencyMs:.2f} ms")
+      except Exception:
+        # Ignore errors while formatting per-perturbation metrics.
+        pass
+
+    # Actionable recommendation for this perturbation based on drop magnitude.
+    if (dropFromBaseline > 0.15):
+      lines.append(
+        "  => Recommendation: Large drop observed. Strongly consider adding this perturbation "
+        "to training augmentation, use adversarial/robust training, monitor calibration, or ensemble models."
+      )
+    elif (dropFromBaseline > 0.05):
+      lines.append(
+        "  => Recommendation: Moderate degradation. Try targeted augmentation, "
+        "temperature scaling for calibration, or collect more data at problematic levels."
+      )
+    else:
+      lines.append(
+        "  => Recommendation: Model performs reasonably; validate on larger sample sizes "
+        "and consider expanding perturbation types."
+      )
+
+  # High-level recommendations and next steps.
+  lines.append("")
+  lines.append("High-level recommendations:")
+  # Add tiered advice based on the worst-case drop across perturbations.
+  if ((baselineAcc - worst) > 0.15):
+    lines.append(
+      "- Significant robustness issues detected across tested perturbations (>15% drop). "
+      "Prioritize: augmentation with specific perturbations, adversarial/robust training, "
+      "evaluation on holdout sets, and model ensembling where appropriate."
+    )
+  elif ((baselineAcc - worst) > 0.05):
+    lines.append(
+      "- Moderate robustness variation detected. Consider targeted augmentations, "
+      "calibration (e.g., temperature scaling or label smoothing), and gathering "
+      "more evaluation samples for weak conditions."
+    )
+  else:
+    lines.append(
+      "- Minimal robustness degradation observed. Confirm findings by increasing "
+      "sample sizes and testing additional perturbation types (e.g., occlusion, blur, domain shifts)."
+    )
+
+  # Confidence Calibration Insights.
+  lines.append("")
+  lines.append("Confidence Calibration Insights:")
+  # Compute average confidence-accuracy gap across non-baseline perturbations.
+  nonBaselineMetrics = [p for p in perPerturbMetrics if p["Perturbation"] != "baseline"]
+  gaps = [p["MeanConfAccGap"] for p in nonBaselineMetrics if (p["MeanConfAccGap"] is not None)]
+  if (gaps):
+    avgGap = float(np.mean(gaps))
+    if (avgGap > 0.05):
+      lines.append(
+        f"- Model is overconfident under perturbation (mean confidence exceeds accuracy by {avgGap:.3f}).")
+      lines.append("  => Consider temperature scaling or recalibration to align confidence with accuracy.")
+    elif (avgGap < -0.05):
+      lines.append(
+        f"- Model is underconfident under perturbation (accuracy exceeds mean confidence by {-avgGap:.3f})."
+      )
+      lines.append(
+        "  => May indicate conservative predictions; consider confidence recalibration or threshold tuning."
+      )
+    else:
+      lines.append(f"- Confidence is well-aligned with accuracy (mean gap: {avgGap:.3f}).")
+  else:
+    lines.append("- Confidence–accuracy gap data not available.")
+
+  # Brier score insight (if available).
+  brierScores = []
+  for p in perturbations:
+    if (p["Perturbation"] == "baseline"):
+      continue
+    for lvl in p["Levels"]:
+      if "Brier" in lvl and lvl["Brier"] is not None:
+        brierScores.append(lvl["Brier"])
+  if (brierScores):
+    avgBrier = np.mean(brierScores)
+    lines.append(f"- Average Brier score across perturbed levels: {avgBrier:.4f} (lower is better).")
+
+  # Classwise Robustness Analysis.
+  lines.append("")
+  lines.append("Classwise Robustness Analysis:")
+  allClassDrops = {}
+  for p in nonBaselineMetrics:
+    drops = p["ClasswiseDrops"]
+    for cls, drop_val in drops.items():
+      if (cls not in allClassDrops):
+        allClassDrops[cls] = []
+      allClassDrops[cls].append(drop_val)
+
+  if (allClassDrops):
+    # Compute mean drop per class
+    meanDrops = {cls: np.mean(drops) for cls, drops in allClassDrops.items()}
+    # Sort by drop (largest first)
+    topFragile = sorted(meanDrops.items(), key=lambda x: x[1], reverse=True)[:5]
+    lines.append("- Top fragile classes (mean accuracy drop under perturbation):")
+    for cls, drop in topFragile:
+      lines.append(f"  - Class '{cls}': -{drop:.1%}")
+    # Suggest action
+    lines.append(
+      "  => Recommendation: Inspect misclassifications for these classes, augment training data with "
+      "perturbed examples of these classes, or use class-balanced robust training."
+    )
+  else:
+    lines.append("- Classwise robustness data not available (requires per-class predictions).")
+
+  # Notes and cautions to help interpret the results.
+  lines.extend([
+    # Notes and cautions to help interpret the results.
+    "",
+    "Notes and cautions:",
+    "- ECE (expected calibration error) values, when present, "
+    "indicate how well model confidences match accuracy; high ECE suggests recalibration is needed.",
+    "- Small sample sizes per level reduce confidence in the measured accuracy; ",
+    "aim for >=30 samples per level when possible.",
+    "- If making deployment decisions, always re-evaluate accuracy on ",
+    "your target environment and downstream tasks.",
+    # Add an explanatory section describing the step and benefits.
+    "",
+    "Interpretation Help:",
+    "- What this step does: Evaluates how model accuracy and calibration change under controlled data ",
+    "perturbations (for example: noise, brightness shifts, JPEG compression). This helps quantify model ",
+    "sensitivity to input degradations.",
+    "- Why it matters: Understanding robustness highlights failure modes that may occur in deployment ",
+    "(poor lighting, compression artifacts, sensor noise). Addressing these can reduce unexpected model failures.",
+    "- Practical next steps: If large drops are observed for a perturbation, augment training data with ",
+    "that perturbation, consider robust/adversarial training, or apply calibration techniques like ",
+    "temperature scaling. Validate any mitigation on a held-out test set before deployment.",
+    "- How to use results: Use the per-perturbation and per-level breakdown to prioritize which corruptions ",
+    "to simulate during training and which to collect more real-world data for.",
+    # Additional decision-oriented guidance and ranking.
+    "",
+    "Decision guide and ranking:",
+    "- Quick decision thresholds (example): <5% worst-drop=OK for deployment, "
+    "5-15%=Moderate (fix before high-risk ",
+    "deployments), >15%=High risk (mitigate before deployment). ",
+    "Adjust thresholds to your business risk.",
+  ])
+
+  # Build a simple ranking of perturbations by max drop from baseline for human prioritization.
+  # ranked = sorted(perturbSummaries, key=lambda x: (baselineAcc - x[3]), reverse=True)
+  # ranked = sorted(perturbSummaries, key=lambda x: (baselineAcc - (x["WorstAcc"] or 0.0)), reverse=True)
+  # Build a simple ranking of perturbations by max drop from baseline.
+  ranked = sorted(
+    perturbSummaries,
+    key=lambda x: baselineAcc - (x["WorstAcc"] if (x["WorstAcc"] is not None) else 0.0),
+    reverse=True
+  )
+  # Append ranking header.
+  lines.append("- Ranked perturbations by worst-case impact (largest drop first):")
+  # Append each perturbation's worst-case information to the interpretation.
+  for dictRecord in ranked:
+    # Extract perturbation name and worst accuracy.
+    pname = dictRecord["Perturbation"]
+    worstAcc = dictRecord["WorstAcc"]
+    # Compute the drop from baseline for reporting.
+    drop = baselineAcc - worstAcc
+    # Append a line describing the worst-case impact for this perturbation.
+    lines.append(f"  - {pname}: worst acc={worstAcc:.3f}, dropFromBaseline={drop * 100:.1f}%")
+  # Add a short recommendation on how to prioritize fixes using this ranking.
+  lines.append("")
+  lines.append("- Prioritization advice:")
+  lines.append(
+    " 1) Focus on perturbations at the top of the ranking with large drops and reasonable sample counts. "
+    " 2) For moderate drops, prototype lightweight augmentations and recalibrate confidence. "
+    " 3) For large drops, prefer stronger interventions (robust training or collecting targeted data)."
+  )
+
+  # Save interpretation file.
+  with open(interpTxt, "w", encoding="utf-8") as f:
+    # Write the joined interpretation lines to disk.
+    f.write("\n".join(lines))
+  # Announce that the interpretation file was written.
+  # Show where the interpretation file was written.
+  print(f"Interpretation written to: {interpTxt}")
