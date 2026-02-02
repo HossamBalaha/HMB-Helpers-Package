@@ -9,6 +9,58 @@ IMAGE_SUFFIXES = {
 }
 
 
+def UpdateMatplotlibSettings():
+  r'''
+  Update Matplotlib settings for better visualization.
+  This function sets various parameters in Matplotlib to improve the appearance of plots.
+  It configures figure resolution, font styles, grid settings, and line properties.
+  '''
+
+  import matplotlib.pyplot as plt
+
+  # Update Matplotlib settings for better visualization.
+  params = {
+    "figure.dpi"        : 720,  # Set figure DPI for better resolution.
+    "figure.facecolor"  : "white",  # Set figure background color.
+
+    "savefig.dpi"       : 720,  # Set savefig DPI for better resolution.
+    "savefig.bbox"      : "tight",  # Save figures with tight bounding box.
+    "savefig.pad_inches": 0.05,  # Set padding around saved figures.
+
+    "font.family"       : "serif",  # Use serif font family.
+    "font.serif"        : ["Times New Roman"],  # Specify serif font.
+    "font.size"         : 12,  # Set default font size.
+
+    "axes.titlesize"    : 16,  # Set title font size.
+    "axes.labelsize"    : 14,  # Set axis label font size.
+    "axes.grid"         : True,  # Enable grid by default.
+    "axes.facecolor"    : "white",  # Set axes background color.
+
+    "xtick.labelsize"   : 12,  # Set x-tick label font size.
+    "ytick.labelsize"   : 12,  # Set y-tick label font size.
+
+    "legend.fontsize"   : 12,  # Set legend font size.
+    "legend.frameon"    : True,  # Enable legend frame.
+    "legend.framealpha" : 0.9,  # Set legend frame transparency.
+
+    "grid.alpha"        : 0.2,  # Set grid transparency.
+    "grid.linestyle"    : "-",  # Set grid line style.
+    "grid.linewidth"    : 0.5,  # Set grid line width.
+    "grid.color"        : "gray",  # Set grid color.
+    "grid.which"        : "both",  # Show grid on both major and minor ticks.
+    "grid.axis"         : "both",  # Show grid on both x and y axes.
+    "grid.zorder"       : 0,  # Set grid z-order to be behind other plot elements.
+
+    "lines.linewidth"   : 2.0,  # Set default line width.
+    "lines.markersize"  : 6,  # Set default marker size.
+  }
+  plt.rcParams.update(params)  # Update Matplotlib rcParams with the defined settings.
+
+  print("Matplotlib settings updated for better visualization.")
+  for key, value in params.items():
+    print(f"{key}: {value}")
+
+
 # -------------------------------------------------- #
 def SetMaxTextChunkSize(maxChunkSize=100 * (1024 ** 2)):
   r'''

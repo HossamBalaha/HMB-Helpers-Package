@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from typing import List
 from collections import Counter
-from HMB.Utils import GetCmapColors
+from HMB.PlotsHelper import GetCmapColors
 
 
 def CalculatePerformanceMetrics(

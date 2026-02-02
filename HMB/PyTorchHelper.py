@@ -23,6 +23,21 @@ from HMB.PlotsHelper import PlotHeatmap, PlotBarChart, COLORS
 from HMB.ImagesHelper import *
 
 
+def GetParamCount(model):
+  r'''
+  Get the total number of trainable parameters in a PyTorch model.
+
+  Parameters:
+    model (torch.nn.Module): The model to count parameters for.
+
+  Returns:
+    int: Total number of trainable parameters.
+  '''
+
+  # Sum the number of elements for all trainable parameters.
+  return sum(p.numel() for p in model.parameters() if (p.requires_grad))
+
+
 # Function to save a PyTorch model's state dictionary to a file.
 def SaveModel(model, filename="model.pth"):
   r'''
@@ -110,7 +125,7 @@ def LoadPyTorchDict(filename="model.pth", device="cuda"):
   return stateDict
 
 
-def SaveCheckpoint(model, optimizer, filename="chk.pth.tar"):
+def SaveCheckpoint(model, optimizer, filename="chk.pth.tar", epoch=None, hparams=None):
   r'''
   Save model and optimizer state to a checkpoint file.
   Useful for resuming training or inference later.
@@ -121,6 +136,8 @@ def SaveCheckpoint(model, optimizer, filename="chk.pth.tar"):
     model (torch.nn.Module): The model to save.
     optimizer (torch.optim.Optimizer): The optimizer to save.
     filename (str): The name of the file to save the checkpoint to.
+    epoch (int, optional): The current epoch number to save in the checkpoint.
+    hparams (dict, optional): Hyperparameters to save in the checkpoint.
   '''
 
   # Create a dictionary containing model and optimizer state.
@@ -128,6 +145,10 @@ def SaveCheckpoint(model, optimizer, filename="chk.pth.tar"):
     "state_dict": model.state_dict(),
     "optimizer" : optimizer.state_dict(),
   }
+  if (epoch is not None):
+    checkpoint["epoch"] = epoch
+  if (hparams is not None):
+    checkpoint["hparams"] = hparams
   # Save the checkpoint dictionary to the specified file.
   torch.save(checkpoint, filename)
 
@@ -135,7 +156,7 @@ def SaveCheckpoint(model, optimizer, filename="chk.pth.tar"):
   print(f"Checkpoint saved to {filename}. You can load it later using LoadCheckpoint().")
 
 
-def LoadCheckpoint(checkpointFile, model, optimizer, lr, device):
+def LoadCheckpoint(checkpointFile, model, optimizer, lr, device, strict):
   r'''
   Load model and optimizer state from a checkpoint file.
   Updates the learning rate of the optimizer if provided.
@@ -148,6 +169,10 @@ def LoadCheckpoint(checkpointFile, model, optimizer, lr, device):
     optimizer (torch.optim.Optimizer): The optimizer to load the state into.
     lr (float): The learning rate to set for the optimizer.
     device (torch.device): The device to load the model onto (e.g., "cpu" or "cuda").
+    strict (bool): Whether to strictly enforce that the keys in state_dict match the keys returned by the model's state_dict() function.
+
+  Returns:
+    dict: The loaded checkpoint dictionary.
   '''
 
   # Check if the checkpoint file exists before loading.
@@ -158,7 +183,7 @@ def LoadCheckpoint(checkpointFile, model, optimizer, lr, device):
   # Load the checkpoint dictionary from file and map to the specified device.
   checkpoint = torch.load(checkpointFile, map_location=device)
   # Load the model state from the checkpoint.
-  model.load_state_dict(checkpoint["state_dict"])
+  model.load_state_dict(checkpoint["state_dict"], strict=strict)
 
   # If optimizer is provided, load its state and update learning rate.
   if (optimizer is not None):
@@ -170,6 +195,8 @@ def LoadCheckpoint(checkpointFile, model, optimizer, lr, device):
 
   # Print confirmation message with checkpoint file and device.
   print(f"Checkpoint loaded from {checkpointFile} and model moved to {device}.")
+
+  return checkpoint
 
 
 def GetOptimizer(model, optimizerType="adamw", learningRate=1e-4, weightDecay=1e-4):

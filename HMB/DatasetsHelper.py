@@ -1,8 +1,8 @@
-import hashlib, time, json, shutil
+import hashlib, time, json, shutil, os, cv2, torch
 import numpy as np
 import math
 from pathlib import Path
-from typing import Union
+from typing import List, Callable, Optional, Tuple, Union
 from sklearn.model_selection import train_test_split
 from PIL import Image, ImageOps, ImageEnhance
 from HMB.DataAugmentationHelper import PerformDataAugmentation
@@ -606,7 +606,7 @@ class GenericImagesDatasetHandler(object):
       return structured if returnStructured else issues
 
     # Use the handler's configured image extensions (lower-case entries).
-    exts = sorted({ext.lower() if ext.startswith(".") else f".{ext.lower()}" for ext in self.imageExtensions})
+    exts = sorted({ext.lower() if (ext.startswith(".")) else f".{ext.lower()}" for ext in self.imageExtensions})
 
     for split in ("train", "val", "test"):
       splitPath = base / split
@@ -1202,3 +1202,373 @@ names: {classNameDict}
               print(f"Warning: could not create balanced sample for {src}", flush=True)
 
     print("Balancing complete.", flush=True)
+
+
+class SegmentationDataset(torch.utils.data.Dataset):
+  r'''
+  PyTorch Dataset class for image segmentation tasks. Loads images and
+  corresponding masks from provided file paths, applies optional transformations,
+  encodes masks into class indices, and converts data to tensors.
+
+  Parameters:
+    imagePaths (List[str]): List of file paths to input images.
+    maskPaths (List[str]): List of file paths to corresponding segmentation masks.
+    transforms (Callable|None): Optional callable for data augmentation/transforms.
+    imageSize (int): Target size to resize images and masks (square). Default is 512.
+    numClasses (int): Number of segmentation classes. Default is 2.
+
+  Methods:
+    __len__(): Returns the number of samples in the dataset.
+    __getitem__(index): Returns the image and mask tensors for the given index.
+  '''
+
+  # Initialize the dataset with lists of image and mask paths, transforms, and target size.
+  def __init__(
+    self,
+    imagePaths: List[str],
+    maskPaths: List[str],
+    transforms: Optional[Callable] = None,
+    imageSize: int = 512,
+    numClasses: int = 1
+  ):
+    r'''
+    Initialize the segmentation dataset instance.
+
+    Parameters:
+      imagePaths (List[str]): List of image file paths.
+      maskPaths (List[str]): List of corresponding mask file paths.
+      transforms (Callable|None): Optional augmentation/transform callable that accepts and returns a dict with keys "image" and "mask".
+      imageSize (int): Target square size (height,width) to resize images and masks.
+      numClasses (int): Number of segmentation classes used for encoding masks.
+    '''
+
+    # Store provided paths and transforms on the instance.
+    self.imagePaths = imagePaths
+    # Store provided mask paths on the instance.
+    self.maskPaths = maskPaths
+    # Store transforms callable on the instance.
+    self.transforms = transforms
+    # Store target image size for resizing.
+    self.imageSize = imageSize
+    # Store number of segmentation classes.
+    self.numClasses = numClasses
+
+  # Return the number of samples in the dataset.
+  def __len__(self) -> int:
+    r'''
+    Return the number of samples available in the dataset.
+
+    Returns:
+      int: Number of image-mask pairs.
+    '''
+
+    # Return the length of the image paths list.
+    return len(self.imagePaths)
+
+  # Load an image from disk and return as a numpy array.
+  def LoadImage(self, path):
+    r'''
+    Load an image from disk and return an RGB numpy array.
+
+    The function first attempts to use OpenCV for performance and falls back
+    to PIL if OpenCV fails or is unavailable.
+
+    Parameters:
+      path (str|Path): Filesystem path to the image file.
+
+    Returns:
+      numpy.ndarray: HxWx3 uint8 RGB image array.
+    '''
+
+    # Try importing cv2 for fast image I/O.
+    try:
+      # Read the image using cv2 in BGR format.
+      img = cv2.imread(path, cv2.IMREAD_COLOR)
+      # Convert BGR to RGB for consistency.
+      img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+      # Return the image array.
+      return img
+    # Fallback to PIL if cv2 is not available.
+    except Exception:
+      # Open image with PIL and convert to RGB.
+      img = Image.open(path).convert("RGB")
+      # Convert to numpy array and return.
+      return np.array(img)
+
+  # Load a mask from disk and return as a numpy array.
+  def LoadMask(self, path):
+    r'''
+    Load a segmentation mask from disk as a 2D numpy array.
+
+    Attempts to use OpenCV to read the mask in grayscale. If OpenCV is not
+    available, falls back to PIL.
+
+    Parameters:
+      path (str|Path): Filesystem path to the mask image.
+
+    Returns:
+      numpy.ndarray: HxW integer mask array (single-channel).
+    '''
+
+    # Try importing cv2 for mask reading.
+    try:
+      # Read the mask as grayscale to preserve labels.
+      mask = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+      # Return the mask array.
+      return mask
+    # Fallback to PIL when cv2 is not available.
+    except Exception:
+      # Open mask and convert to grayscale.
+      mask = Image.open(path).convert("L")
+      # Convert to numpy array and return.
+      return np.array(mask)
+
+  def EncodeMask(self, mask):
+    r'''
+    Encode a grayscale mask into integer class indices.
+    - For binary (numClasses == 1): threshold at 128 → {0, 1}
+    - For multi-class (numClasses >= 2): assume pixel values are class IDs; clip to [0, numClasses-1]
+
+    Parameters:
+      mask (numpy.ndarray): HxW grayscale mask array.
+
+    Returns:
+      numpy.ndarray: (H, W) of dtype int64
+    '''
+
+    if (self.numClasses == 1):
+      # Binary: foreground = 1, background = 0.
+      encoded = (mask > 128).astype(np.int64)
+    else:
+      # Multi-class: clip to valid range.
+      encoded = np.clip(mask, 0, self.numClasses - 1).astype(np.int64)
+    return encoded
+
+  # Convert image and mask numpy arrays to torch tensors.
+  def ToTensors(self, image, mask):
+    r'''
+    Convert numpy image and mask arrays to PyTorch tensors.
+
+    The image is normalized to [0,1] float32 and transposed to channel-first
+    format (C,H,W). The mask is returned as a torch tensor of shape (H,W).
+
+    Parameters:
+      image (numpy.ndarray): HxWx3 image array (uint8 or float).
+      mask (numpy.ndarray): HxWx1 integer mask array.
+
+    Returns:
+      tuple: (imageTensor, maskTensor) where imageTensor is torch.FloatTensor shape (C,H,W) and maskTensor is torch tensor shape (H,W).
+    '''
+
+    # Normalize image to [0,1] and convert to (C,H,W).
+    image = image.astype(np.float32) / 255.0
+    image = np.transpose(image, (2, 0, 1))
+    imageTensor = torch.from_numpy(image)
+
+    # Handle mask based on numClasses.
+    if (self.numClasses == 1):
+      # Binary: mask should be float32 with 0.0/1.0.
+      mask = mask.astype(np.float32)
+      maskTensor = torch.from_numpy(mask).unsqueeze(0)  # (H, W) → (1, H, W).
+    else:
+      # Multi-class: mask should be long (class indices).
+      maskTensor = torch.from_numpy(mask.astype(np.int64))
+
+    return imageTensor, maskTensor
+
+  # Get a single item by index, apply transforms, and return tensors.
+  def __getitem__(self, index):
+    r'''
+    Retrieve the image and mask tensors for a given index.
+
+    The method loads image and mask files, resizes them to the configured
+    `imageSize`, applies optional augmentation/transforms (expects a callable
+    that accepts and returns a dict with "image" and "mask"), encodes the mask
+    into class indices and converts both to torch tensors.
+
+    Parameters:
+      index (int): Index of the sample to retrieve.
+
+    Returns:
+      tuple: (imageTensor, maskTensor) as returned by `ToTensors`.
+    '''
+
+    # Obtain image and mask paths for the given index.
+    imgPath = self.imagePaths[index]
+    # Obtain the corresponding mask path.
+    maskPath = self.maskPaths[index]
+    # Load image and mask from disk.
+    image = self.LoadImage(imgPath)
+    mask = self.LoadMask(maskPath)
+    # Resize image using cv2 when available, otherwise use PIL for resizing.
+    try:
+      # Resize image to target size using bilinear interpolation.
+      image = cv2.resize(image, (self.imageSize, self.imageSize), interpolation=cv2.INTER_LINEAR)
+      # Resize mask to target size using nearest neighbor interpolation.
+      mask = cv2.resize(mask, (self.imageSize, self.imageSize), interpolation=cv2.INTER_NEAREST)
+    except Exception:
+      # Use PIL for resizing when cv2 is not available.
+      image = np.array(Image.fromarray(image).resize((self.imageSize, self.imageSize), resample=Image.BILINEAR))
+      mask = np.array(Image.fromarray(mask).resize((self.imageSize, self.imageSize), resample=Image.NEAREST))
+    # Apply optional transforms if provided.
+    if (self.transforms is not None):
+      # Albumentations expects dict with "image" and "mask" keys.
+      augmented = self.transforms(image=image, mask=mask)
+      # Extract augmented image and mask.
+      image = augmented["image"]
+      mask = augmented["mask"]
+    # Encode the mask into class indices.
+    encoded = self.EncodeMask(mask)
+    # Convert to tensors and return.
+    imageTensor, maskTensor = self.ToTensors(image, encoded)
+    # Return the image and mask tensors.
+    return imageTensor, maskTensor
+
+
+def CreateSegmentationDataLoaders(
+  dataDir: str,
+  imageSize: int = 512,
+  batchSize: int = 8,
+  numWorkers: int = 4,
+  numClasses: int = 1
+):
+  r'''
+  Create PyTorch DataLoader objects for segmentation tasks from a directory
+  that contains either an `Images/` and `Masks/` folder pair or a looser
+  tree where image/mask pairs are discovered recursively.
+
+  The function will look for `Images/` and `Masks/` under `dataDir`. When the
+  standard layout is missing it will attempt to gather image-mask pairs using
+  `GatherSegmentationPairs` (non-recursive pairing by basename matching).
+
+  Parameters:
+    dataDir (str): Root path to the dataset containing images and masks.
+    imageSize (int): Target square size to resize images and masks. Default 512.
+    batchSize (int): Batch size for the returned DataLoaders. Default 8.
+    numWorkers (int): Number of worker processes for the DataLoader. Default 4.
+    numClasses (int): Number of segmentation classes (used by SegmentationDataset).
+
+  Returns:
+    tuple: (trainLoader, valLoader) PyTorch DataLoader instances for training and validation.
+  '''
+
+  # Build paths for images and masks inside the provided data directory.
+  imagesDir = os.path.join(dataDir, "Images")
+  # Build masks directory path.
+  masksDir = os.path.join(dataDir, "Masks")
+  # If standard Images/Masks structure is missing, attempt to gather pairs recursively.
+  if (not os.path.isdir(imagesDir)) or (not os.path.isdir(masksDir)):
+    # Gather image and mask pairs across the dataset tree.
+    imageFiles, maskFiles = GatherSegmentationPairs(dataDir)
+  else:
+    # Collect image file paths sorted for reproducibility.
+    imageFiles = sorted(
+      [
+        os.path.join(imagesDir, f)
+        for f in os.listdir(imagesDir)
+        if (f.lower().endswith(tuple(IMAGE_SUFFIXES)))
+      ]
+    )
+    # Collect mask file paths sorted for reproducibility.
+    maskFiles = sorted(
+      [
+        os.path.join(masksDir, f)
+        for f in os.listdir(masksDir)
+        if (f.lower().endswith(tuple(IMAGE_SUFFIXES)))
+      ]
+    )
+  # Create a simple train/validation split by index.
+  split = int(len(imageFiles) * 0.8)
+  # Assign train and validation image lists.
+  trainImages = imageFiles[:split]
+  trainMasks = maskFiles[:split]
+  valImages = imageFiles[split:]
+  valMasks = maskFiles[split:]
+  # Create dataset instances for train and validation.
+  trainDataset = SegmentationDataset(
+    trainImages,
+    trainMasks,
+    transforms=None,
+    imageSize=imageSize,
+    numClasses=numClasses
+  )
+  valDataset = SegmentationDataset(
+    valImages,
+    valMasks,
+    transforms=None,
+    imageSize=imageSize,
+    numClasses=numClasses
+  )
+  # Create dataloaders for train and validation.
+  trainLoader = torch.utils.data.DataLoader(
+    trainDataset,
+    batch_size=batchSize,
+    shuffle=True,
+    num_workers=numWorkers,
+    pin_memory=True
+  )
+  valLoader = torch.utils.data.DataLoader(
+    valDataset,
+    batch_size=batchSize,
+    shuffle=False,
+    num_workers=numWorkers,
+    pin_memory=True
+  )
+  # Return train and validation dataloaders.
+  return trainLoader, valLoader
+
+
+def GatherSegmentationPairs(rootDir: str):
+  r'''
+  Discover image/mask file pairs by walking a directory tree.
+
+  The function treats directories whose name contains the substring "mask"
+  (case-insensitive) as mask folders and everything else as image folders. It
+  matches images and masks by basename (ignoring extension) using a best-match
+  heuristic (prefix containment) and returns two lists: paired images and
+  paired masks in identical order.
+
+  Parameters:
+    rootDir (str): Root directory to recursively scan for images and masks.
+
+  Returns:
+    tuple: (pairedImagePaths, pairedMaskPaths) where each is a list of filesystem paths (strings).
+  '''
+
+  # Initialize lists for images and masks.
+  imagePaths = []
+  maskPaths = []
+  # Walk the directory tree to collect all image files and mask files.
+  for dirpath, dirnames, filenames in os.walk(rootDir):
+    # Normalize the directory name for mask detection.
+    lowName = os.path.basename(dirpath).lower()
+    # If the directory name suggests it contains masks, collect mask files.
+    if ("mask" in lowName):
+      for f in filenames:
+        # Only consider image-like files.
+        if (f.lower().endswith(tuple(IMAGE_SUFFIXES))):
+          maskPaths.append(os.path.join(dirpath, f))
+    elif ("mask" not in lowName):
+      # Otherwise, collect image files as potential images.
+      for f in filenames:
+        if (f.lower().endswith(tuple(IMAGE_SUFFIXES))):
+          imagePaths.append(os.path.join(dirpath, f))
+
+  # Map masks by basename for quick lookup.
+  maskMap = {os.path.splitext(os.path.basename(p))[0]: p for p in maskPaths}
+  # Build paired lists by matching basenames between images and masks.
+  pairedImages = []
+  pairedMasks = []
+  for img in sorted(imagePaths):
+    # Compute basename without extension.
+    base = os.path.splitext(os.path.basename(img))[0]
+    # If a corresponding mask exists, pair them.
+    whichIsClosest = [m for m in list(maskMap.keys()) if (base in m)]
+    whichIsClosest = whichIsClosest[0] if (len(whichIsClosest) > 0) else None
+    if (whichIsClosest):
+      pairedImages.append(img)
+      pairedMasks.append(maskMap[whichIsClosest])
+  print(f"Found {len(imagePaths)} images and {len(maskPaths)} masks in '{rootDir}'")
+  print(f"Paired {len(pairedImages)} image-mask pairs.")
+  # Return the paired image and mask file lists.
+  return pairedImages, pairedMasks
