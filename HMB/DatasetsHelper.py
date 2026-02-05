@@ -1214,7 +1214,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
     imagePaths (List[str]): List of file paths to input images.
     maskPaths (List[str]): List of file paths to corresponding segmentation masks.
     transforms (Callable|None): Optional callable for data augmentation/transforms.
-    imageSize (int): Target size to resize images and masks (square). Default is 512.
+    imageSize (int): Target size to resize images and masks (square). Default is 256.
     numClasses (int): Number of segmentation classes. Default is 2.
 
   Methods:
@@ -1228,7 +1228,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
     imagePaths: List[str],
     maskPaths: List[str],
     transforms: Optional[Callable] = None,
-    imageSize: int = 512,
+    imageSize: int = 256,
     numClasses: int = 1
   ):
     r'''
@@ -1424,10 +1424,89 @@ class SegmentationDataset(torch.utils.data.Dataset):
     # Return the image and mask tensors.
     return imageTensor, maskTensor
 
+  def GetPixelStats(self):
+    r'''
+    Compute per-channel min, max, mean, and standard deviation across the dataset
+    for both images and masks. This can be useful for normalization and analysis.
+
+    Returns:
+      dict: Dictionary with keys "image" and "mask", each containing a dict with keys
+            "min", "max", "mean", "std" mapping to numpy arrays of shape (3,) for images and (1,) for masks.
+    '''
+
+    from tqdm import tqdm
+
+    # Initialize accumulators for statistics.
+    pixelSumImages = np.zeros(3, dtype=np.float64)
+    pixelSumMasks = np.zeros(3, dtype=np.float64)
+    pixelSumSqImages = np.zeros(3, dtype=np.float64)
+    pixelSumSqMasks = np.zeros(3, dtype=np.float64)
+    pixelMinImages = np.full(3, np.inf, dtype=np.float64)
+    pixelMaxImages = np.full(3, -np.inf, dtype=np.float64)
+    pixelMinMasks = np.full(3, np.inf, dtype=np.float64)
+    pixelMaxMasks = np.full(3, -np.inf, dtype=np.float64)
+    totalPixels = 0
+
+    # Iterate over the dataset to accumulate statistics using a progress bar.
+    for idx in tqdm(range(len(self)), desc="Computing pixel statistics"):
+      # Use __getitem__ to get image and mask tensors.
+      imageTensor, maskTensor = self[idx]
+      # Convert tensors to numpy arrays.
+      image = imageTensor.numpy().transpose(1, 2, 0)  # (H, W, C)
+      mask = maskTensor.numpy().transpose(1, 2, 0)  # (H, W, C)
+      # Update total pixel count.
+      numPixels = image.shape[0] * image.shape[1]
+      totalPixels += numPixels
+      # Update sums and sums of squares for images.
+      pixelSumImages += image.sum(axis=(0, 1))
+      pixelSumSqImages += (image ** 2).sum(axis=(0, 1))
+      # Update min and max for images.
+      pixelMinImages = np.minimum(pixelMinImages, image.min(axis=(0, 1)))
+      pixelMaxImages = np.maximum(pixelMaxImages, image.max(axis=(0, 1)))
+      # Update sums and sums of squares for masks.
+      pixelSumMasks += mask.sum(axis=(0, 1))
+      pixelSumSqMasks += (mask ** 2).sum(axis=(0, 1))
+      # Update min and max for masks.
+      pixelMinMasks = np.minimum(pixelMinMasks, mask.min(axis=(0, 1)))
+      pixelMaxMasks = np.maximum(pixelMaxMasks, mask.max(axis=(0, 1)))
+
+    # Compute mean and std for images.
+    meanImages = pixelSumImages / totalPixels
+    stdImages = np.sqrt((pixelSumSqImages / totalPixels) - (meanImages ** 2))
+    # Compute mean and std for masks.
+    meanMasks = pixelSumMasks / totalPixels
+    stdMasks = np.sqrt((pixelSumSqMasks / totalPixels) - (meanMasks ** 2))
+
+    # Prepare results.
+    stats = {
+      "images": {
+        "mean"       : meanImages.tolist(),
+        "std"        : stdImages.tolist(),
+        "min"        : pixelMinImages.tolist(),
+        "max"        : pixelMaxImages.tolist(),
+        "overallMin" : float(np.mean(pixelMinImages)),
+        "overallMax" : float(np.mean(pixelMaxImages)),
+        "overallMean": float(np.mean(meanImages)),
+        "overallStd" : float(np.mean(stdImages))
+      },
+      "masks" : {
+        "mean"       : meanMasks.tolist(),
+        "std"        : stdMasks.tolist(),
+        "min"        : pixelMinMasks.tolist(),
+        "max"        : pixelMaxMasks.tolist(),
+        "overallMin" : float(np.mean(pixelMinMasks)),
+        "overallMax" : float(np.mean(pixelMaxMasks)),
+        "overallMean": float(np.mean(meanMasks)),
+        "overallStd" : float(np.mean(stdMasks))
+      }
+    }
+
+    return stats
+
 
 def CreateSegmentationDataLoaders(
   dataDir: str,
-  imageSize: int = 512,
+  imageSize: int = 256,
   batchSize: int = 8,
   numWorkers: int = 4,
   numClasses: int = 1
@@ -1443,10 +1522,10 @@ def CreateSegmentationDataLoaders(
 
   Parameters:
     dataDir (str): Root path to the dataset containing images and masks.
-    imageSize (int): Target square size to resize images and masks. Default 512.
+    imageSize (int): Target square size to resize images and masks. Default 256.
     batchSize (int): Batch size for the returned DataLoaders. Default 8.
     numWorkers (int): Number of worker processes for the DataLoader. Default 4.
-    numClasses (int): Number of segmentation classes (used by SegmentationDataset).
+    numClasses (int): Number of segmentation classes (used by `SegmentationDataset`).
 
   Returns:
     tuple: (trainLoader, valLoader) PyTorch DataLoader instances for training and validation.

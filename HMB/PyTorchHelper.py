@@ -74,7 +74,7 @@ def SavePyTorchDict(modelDict, filename="model.pth"):
 
 
 # Function to load a PyTorch model's state dictionary from a file and move it to a device.
-def LoadModel(model, filename="model.pth", device="cuda"):
+def LoadModel(model, filename="model.pth", device="cuda", weightsOnly=False):
   r'''
   Load the model state from a file and move it to the specified device.
 
@@ -82,6 +82,10 @@ def LoadModel(model, filename="model.pth", device="cuda"):
     model (torch.nn.Module): The model to load the state into.
     filename (str): The name of the file to load the model from.
     device (str): The device to load the model onto (e.g., "cpu" or "cuda").
+    weightsOnly (bool): If True, only load the weights without strict key matching.
+
+  Returns:
+    torch.nn.Module: The model with loaded state.
   '''
 
   # Check if the model file exists before loading.
@@ -89,22 +93,31 @@ def LoadModel(model, filename="model.pth", device="cuda"):
     print(f"Model file not found: {filename}")
     return
 
-  # Load the state dictionary from file and map to the specified device.
-  model.load_state_dict(torch.load(filename, map_location=device))
+  # Load the state dictionary from a file and map it to the specified device.
+  stateDict = LoadPyTorchDict(filename, device=device, weightsOnly=weightsOnly)
+
+  if ((stateDict) and (isinstance(stateDict, dict)) and ("model_state_dict" in stateDict)):
+    model.load_state_dict(stateDict["model_state_dict"])
+  else:
+    model.load_state_dict(stateDict)
+
   # Move the model to the specified device.
   model.to(device)
 
   # Print confirmation message with filename and device.
   print(f"Model loaded from {filename} and moved to {device}.")
 
+  return model
 
-def LoadPyTorchDict(filename="model.pth", device="cuda"):
+
+def LoadPyTorchDict(filename="model.pth", device="cuda", weightsOnly=False):
   r'''
   Load a PyTorch state dictionary from a file and map it to the specified device.
 
   Parameters:
     filename (str): The name of the file to load the state dictionary from.
     device (str): The device to map the state dictionary onto (e.g., "cpu" or "cuda").
+    weightsOnly (bool): If True, only load the weights without strict key matching.
 
   Returns:
     dict: The loaded state dictionary.
@@ -117,7 +130,7 @@ def LoadPyTorchDict(filename="model.pth", device="cuda"):
 
   # Load the state dictionary from file and map to the specified device.
   # Set weights_only=False to allow loading full objects (required for PyTorch >=2.6).
-  stateDict = torch.load(filename, map_location=device, weights_only=False)
+  stateDict = torch.load(filename, map_location=device, weights_only=weightsOnly)
 
   # Print confirmation message with filename and device.
   print(f"State dictionary loaded from {filename} and mapped to {device}.")
@@ -246,7 +259,7 @@ class CustomDataset(torch.utils.data.Dataset):
     self,
     dataDir,
     transform=None,
-    allowedExtensions=(".png", ".jpg", ".jpeg")
+    allowedExtensions=tuple(IMAGE_SUFFIXES)
   ):
     r'''
     Initialize the custom dataset for image classification tasks.
@@ -1153,11 +1166,13 @@ def InferenceWithPlots(
     if (modelCheckpointName):
       modelPath = os.path.join(expDirPath, modelCheckpointName)
       # Load model checkpoint name from experiment directory.
-      stateDict = LoadPyTorchDict(modelPath, device=device)
-      if (stateDict and isinstance(stateDict, dict) and "model_state_dict" in stateDict):
-        model.load_state_dict(stateDict["model_state_dict"])
-      else:
-        model.load_state_dict(stateDict)
+      # stateDict = LoadPyTorchDict(modelPath, device=device)
+      # if (stateDict and isinstance(stateDict, dict) and "model_state_dict" in stateDict):
+      #   model.load_state_dict(stateDict["model_state_dict"])
+      # else:
+      #   model.load_state_dict(stateDict)
+      #  You can use LoadModel function if preferred.
+      model = LoadModel(modelPath, model, device=device)
 
     cmFilePath = os.path.join(expDirPath, "CM.pdf")
     rocFilePath = os.path.join(expDirPath, "ROC.pdf")
@@ -1614,7 +1629,6 @@ def GenericEvaluatePredictPlotSubset(
           # Convert BGR to RGB.
           img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
           # Convert to PIL Image for optional preprocessing.
-          from PIL import Image
           imgPIL = Image.fromarray(img)
           if (preprocessFn is not None):
             imgPIL = preprocessFn(imgPIL)

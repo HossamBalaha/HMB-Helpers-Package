@@ -526,6 +526,22 @@ class CAMExplainerPyTorch(object):
 
   '''
 
+  AVAILABLE_CAM_METHODS = {
+    "gradcam",
+    "gradcampp",
+    "xgradcam",
+    "eigencam",
+    "layercam",
+    "scorecam",
+    "ablationcam",
+    "saliency",
+    "smoothgrad",
+    "integratedgradients",
+    "occlusion",
+    "gradxinput",
+    "smoothgradcampp",
+  }
+
   def __init__(
     self,
     torchModel=None,
@@ -567,6 +583,19 @@ class CAMExplainerPyTorch(object):
     # Store configuration values.
     self.torchModel = torchModel
     self.yoloModel = yoloModel
+
+    if ((self.torchModel is None) and (self.yoloModel is None)):
+      raise ValueError("Either `torchModel` or `yoloModel` must be provided.")
+    if ((type(self.torchModel) is str) and (self.torchModel is not None)):
+      raise ValueError(
+        "The `torchModel` parameter must be a `torch.nn.Module` instance or any other object, not a string."
+      )
+    if (camType not in self.AVAILABLE_CAM_METHODS):
+      raise ValueError(
+        f"CAM type '{camType}' is not supported. "
+        f"Available methods: {self.AVAILABLE_CAM_METHODS}"
+      )
+
     self.device = torch.device("cuda" if (device == "cuda" and torch.cuda.is_available()) else "cpu")
     self.camType = camType
     self.imgSize = imgSize
@@ -655,10 +684,10 @@ class CAMExplainerPyTorch(object):
     Normalize and enhance heatmap contrast to the [0,1] range.
 
     Parameters:
-      heatmap (np.ndarray): Raw heatmap array with arbitrary range.
+      heatmap (numpy.ndarray): Raw heatmap array with arbitrary range.
 
     Returns:
-      np.ndarray: Normalized and smoothed heatmap clipped to [0,1].
+      numpy.ndarray: Normalized and smoothed heatmap clipped to [0,1].
 
     Notes
     -----
@@ -667,15 +696,15 @@ class CAMExplainerPyTorch(object):
     '''
 
     hm = np.asarray(heatmap, dtype=np.float32)
-    if hm.size == 0:
+    if (hm.size == 0):
       return hm
     hm = np.maximum(hm, 0.0)
     maxVal = hm.max()
-    if maxVal <= 1e-8:
+    if (maxVal <= 1e-8):
       return np.zeros_like(hm)
     hm = hm / maxVal
     p99 = np.percentile(hm, 99.5)
-    if p99 > 1e-6:
+    if (p99 > 1e-6):
       hm = np.clip(hm / p99, 0, 1)
     hm = cv2.GaussianBlur(hm, (5, 5), 0)
     hm = np.power(hm, 0.7)
@@ -686,12 +715,12 @@ class CAMExplainerPyTorch(object):
     Blend heatmap onto an RGB image and return uint8 RGB result.
 
     Parameters:
-      imageRgb (np.ndarray): Original RGB image array (H, W, 3) in uint8 or float.
-      heatmap (np.ndarray): Heatmap normalized to [0,1] with shape (H, W).
+      imageRgb (numpy.ndarray): Original RGB image array (H, W, 3) in uint8 or float.
+      heatmap (numpy.ndarray): Heatmap normalized to [0,1] with shape (H, W).
       alpha (float | None): Blend factor for overlay. If None uses instance alpha.
 
     Returns:
-      np.ndarray: Blended RGB image as uint8.
+      numpy.ndarray: Blended RGB image as uint8.
 
     Notes
     -----
@@ -702,7 +731,7 @@ class CAMExplainerPyTorch(object):
     if (alpha is None):
       alpha = self.alpha
     heatmapArray = np.asarray(heatmap, dtype=np.float32)
-    if heatmapArray.size == 0:
+    if (heatmapArray.size == 0):
       return np.asarray(imageRgb, dtype=np.uint8)
     heatmapArray = np.clip(heatmapArray, 0, 1)
     hmUint8 = (heatmapArray * 255).astype(np.uint8)
@@ -710,7 +739,7 @@ class CAMExplainerPyTorch(object):
     hmColor = cv2.cvtColor(hmColor, cv2.COLOR_BGR2RGB)
     base = np.asarray(imageRgb, dtype=np.uint8)
     # Ensure same shape.
-    if base.shape[:2] != hmColor.shape[:2]:
+    if (base.shape[:2] != hmColor.shape[:2]):
       hmColor = cv2.resize(hmColor, (base.shape[1], base.shape[0]), interpolation=cv2.INTER_LINEAR)
     overlay = cv2.addWeighted(base, 1.0 - alpha, hmColor, alpha, 0)
     return overlay.astype(np.uint8)
@@ -815,9 +844,9 @@ class CAMExplainerPyTorch(object):
     Build a 2x2 annotated saliency figure with colorbars.
 
     Parameters:
-      imageRgb (np.ndarray): Original RGB image array.
-      heatmap (np.ndarray): Heatmap in [0,1] used to render colorbars.
-      overlayImage (np.ndarray): RGB overlay image produced by ApplyHeatmapOverlay.
+      imageRgb (numpy.ndarray): Original RGB image array.
+      heatmap (numpy.ndarray): Heatmap in [0,1] used to render colorbars.
+      overlayImage (numpy.ndarray): RGB overlay image produced by ApplyHeatmapOverlay.
       className (str): Name of the class being explained.
       predictedClassName (str): Predicted class name for annotation.
       trueClassName (str): Ground truth class name for annotation.
@@ -829,7 +858,7 @@ class CAMExplainerPyTorch(object):
       fontSize (int): Base font size used in annotations.
 
     Returns:
-      np.ndarray: RGB numpy array containing the rendered annotated visualization.
+      numpy.ndarray: RGB numpy array containing the rendered annotated visualization.
     '''
 
     # Create font size variants for title, panels, and footer.
@@ -939,7 +968,7 @@ class CAMExplainerPyTorch(object):
       targetLayer (torch.nn.Module | None): Convolutional layer to use for CAMs.
 
     Returns:
-      np.ndarray: Heatmap normalized to [0,1] as a 2D array matching input spatial dims.
+      numpy.ndarray: Heatmap normalized to [0,1] as a 2D array matching input spatial dims.
 
     Notes
     -----
@@ -1018,7 +1047,7 @@ class CAMExplainerPyTorch(object):
       noiseLevel (float): Standard deviation of additive gaussian noise.
 
     Returns:
-      np.ndarray: Averaged Grad-CAM++ heatmap normalized to [0,1].
+      numpy.ndarray: Averaged Grad-CAM++ heatmap normalized to [0,1].
 
     Notes
     -----
@@ -1081,6 +1110,13 @@ class CAMExplainerPyTorch(object):
       - Prepares output directories when `self.outputBase` was provided at init.
       - File names use CamelCase for the fixed parts to match project conventions.
     '''
+
+    # Validate the inputs:
+    if (classNames is not None and not isinstance(classNames, dict)):
+      raise ValueError("`classNames` must be a dict mapping class indices to class names.")
+    imgPath = Path(imagePath)
+    if (not imgPath.is_file()):
+      raise FileNotFoundError(f"Image file (`imgPath`) not found: {imgPath}")
 
     startTime = time.time()
 
@@ -1251,7 +1287,7 @@ class CAMExplainerPyTorch(object):
       device (torch.device | None): Device used for computation. If None uses the instance device.
 
     Returns:
-      np.ndarray: Grad-CAM heatmap resized to input spatial dimensions and normalized to [0,1].
+      numpy.ndarray: Grad-CAM heatmap resized to input spatial dimensions and normalized to [0,1].
     '''
 
     model = self.torchModel
@@ -1324,7 +1360,7 @@ class CAMExplainerPyTorch(object):
       device (torch.device | None): Device used for computation.
 
     Returns:
-      np.ndarray: Grad-CAM++ heatmap normalized to [0,1].
+      numpy.ndarray: Grad-CAM++ heatmap normalized to [0,1].
 
     Notes
     -----
@@ -1405,7 +1441,7 @@ class CAMExplainerPyTorch(object):
       device (torch.device | None): Device used for computation.
 
     Returns:
-      np.ndarray: XGrad-CAM heatmap normalized to [0,1].
+      numpy.ndarray: XGrad-CAM heatmap normalized to [0,1].
     '''
 
     model = self.torchModel
@@ -1476,7 +1512,7 @@ class CAMExplainerPyTorch(object):
       device (torch.device | None): Device used for computation.
 
     Returns:
-      np.ndarray: Eigen-CAM heatmap normalized to [0,1].
+      numpy.ndarray: Eigen-CAM heatmap normalized to [0,1].
     '''
 
     model = self.torchModel
@@ -1544,7 +1580,7 @@ class CAMExplainerPyTorch(object):
       device (torch.device | None): Device used for computation.
 
     Returns:
-      np.ndarray: Layer-CAM heatmap normalized to [0,1].
+      numpy.ndarray: Layer-CAM heatmap normalized to [0,1].
     '''
 
     model = self.torchModel
@@ -1612,7 +1648,7 @@ class CAMExplainerPyTorch(object):
       topK (int): Number of top channels to consider to reduce compute.
 
     Returns:
-      np.ndarray: Score-CAM heatmap normalized to [0,1].
+      numpy.ndarray: Score-CAM heatmap normalized to [0,1].
     '''
 
     model = self.torchModel
@@ -1696,7 +1732,7 @@ class CAMExplainerPyTorch(object):
       topK (int): Number of top channels to ablate for weight estimation.
 
     Returns:
-      np.ndarray: Ablation-CAM heatmap normalized to [0,1].
+      numpy.ndarray: Ablation-CAM heatmap normalized to [0,1].
     '''
 
     model = self.torchModel
@@ -1824,7 +1860,7 @@ class CAMExplainerPyTorch(object):
       steps (int): Number of interpolation steps between baseline and input.
 
     Returns:
-      np.ndarray: Integrated Gradients attribution map normalized to [0,1].
+      numpy.ndarray: Integrated Gradients attribution map normalized to [0,1].
     '''
 
     model = self.torchModel
@@ -1871,7 +1907,7 @@ class CAMExplainerPyTorch(object):
       stride (int): Stride to move the occlusion patch.
 
     Returns:
-      np.ndarray: Occlusion sensitivity map normalized to [0,1].
+      numpy.ndarray: Occlusion sensitivity map normalized to [0,1].
     '''
 
     model = self.torchModel
@@ -1924,7 +1960,7 @@ class CAMExplainerPyTorch(object):
       device (torch.device | None): Device used for computation. If None uses the instance device.
 
     Returns:
-      np.ndarray: Saliency map normalized to [0,1].
+      numpy.ndarray: Saliency map normalized to [0,1].
     '''
 
     model = self.torchModel
@@ -1974,7 +2010,7 @@ class CAMExplainerPyTorch(object):
       noiseLevel (float): Standard deviation of Gaussian noise relative to input range [0,1].
 
     Returns:
-      np.ndarray: SmoothGrad saliency map normalized to [0,1].
+      numpy.ndarray: SmoothGrad saliency map normalized to [0,1].
     '''
 
     model = self.torchModel
@@ -2033,7 +2069,7 @@ class CAMExplainerPyTorch(object):
       device (torch.device | None): Device used for computation. If None uses the instance device.
 
     Returns:
-      np.ndarray: Grad x Input attribution map normalized to [0,1].
+      numpy.ndarray: Grad x Input attribution map normalized to [0,1].
     '''
 
     model = self.torchModel
