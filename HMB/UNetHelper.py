@@ -2,6 +2,28 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+AVAILABLE_UNETS = [
+  "original", "legacy",  # Original UNet architecture with standard convolutional blocks and skip connections.
+  "dynamic",  # Dynamic convolutional blocks that adapt their weights based on the input features.
+  "multiresunet",  # MultiResUNet architecture with multi-resolution blocks for improved feature extraction.
+  "r2unet",  # Recurrent residual convolutional blocks for improved feature representation.
+  "transunet",  # Transformer-based encoder with a UNet-style decoder for capturing long-range dependencies.
+  "cbamunet",  # CBAM integrated into the UNet architecture for enhanced feature representation.
+  "efficientunet",  # EfficientNet-based encoder with a lightweight decoder for efficient segmentation.
+  "residual",  # Residual connections within the encoder and decoder blocks for improved gradient flow.
+  "attention",  # Attention gates for skip connections to focus on relevant features.
+  "mobile",  # Depthwise separable convolutions for lightweight segmentation.
+  "se",  # Squeeze-and-Excitation blocks for channel-wise feature recalibration.
+  "residual_attention",  # Combines residual connections with attention gates for enhanced feature learning.
+  "boundary_aware",  # Two parallel branches for segmentation and boundary detection.
+  "asppunet",  # Incorporates Atrous Spatial Pyramid Pooling (ASPP) in the bottleneck to capture multi-scale context.
+  "denseunet",  # Dense connectivity pattern where each layer receives inputs from all previous layers.
+]
+
+
+# ---------------------------------------------------- #
+# Basic building blocks for UNet architectures.        #
+# ---------------------------------------------------- #
 
 class DoubleConv(nn.Module):
   r'''
@@ -152,9 +174,9 @@ class ResidualBlock(nn.Module):
     # Second batch normalization.
     self.bn2 = nn.BatchNorm2d(outChannels)
     # Projection flag when channels differ.
-    self.need_proj = (inChannels != outChannels)
+    self.needProj = (inChannels != outChannels)
     # Optional projection to match channels.
-    if (self.need_proj):
+    if (self.needProj):
       self.proj = nn.Conv2d(inChannels, outChannels, kernel_size=1)
 
   # Forward pass for residual block.
@@ -166,7 +188,7 @@ class ResidualBlock(nn.Module):
     # Second conv->bn.
     out = self.bn2(self.conv2(out))
     # Project identity when necessary.
-    if (self.need_proj):
+    if (self.needProj):
       identity = self.proj(identity)
     # Add skip connection.
     out += identity
@@ -322,6 +344,573 @@ class SEBlock(nn.Module):
     s = self.fc(s).view(b, c, 1, 1)
     # Scale the input by the learned channel weights and return.
     return x * s
+
+
+class MultiResBlock(nn.Module):
+  r'''
+  Multi-resolution convolution block capturing features at multiple receptive fields.
+
+  Short summary:
+    Parallel convolutions with kernel sizes 3x3, 5x5, and 7x7 followed by channel weighting
+    to capture multi-scale context within a single block while controlling parameter growth.
+
+  Parameters:
+    inChans (int): Input channel count.
+    outChans (int): Output channel count (total across all paths).
+    alpha (float): Scaling factor for path channel allocation. Default 1.67.
+
+  Attributes:
+    conv3x3 (nn.Sequential): 3x3 convolution path.
+    conv5x5 (nn.Sequential): 5x5 convolution path (decomposed to two 3x3).
+    conv7x7 (nn.Sequential): 7x7 convolution path (decomposed to three 3x3).
+    convShortcut (nn.Conv2d): 1x1 shortcut for residual connection.
+    batchNorm (nn.BatchNorm2d): Final batch normalization.
+
+  Returns:
+    torch.Tensor: Multi-resolution feature map with outChans channels.
+  '''
+
+  # Initialize MultiRes block.
+  def __init__(self, inChans, outChans, alpha=1.67):
+    # Call parent initializer.
+    super(MultiResBlock, self).__init__()
+    # Compute channel allocation per path using alpha scaling.
+    u = int(outChans / alpha)
+    # Compute channels for 3x3 path.
+    c1 = u
+    # Compute channels for 5x5 path.
+    c2 = int(u / 2)
+    # Compute channels for 7x7 path.
+    c3 = outChans - (c1 + c2)
+    # Create 3x3 convolution path with batch norm and ReLU.
+    self.conv3x3 = nn.Sequential(
+      nn.Conv2d(inChans, c1, kernel_size=3, padding=1),
+      nn.BatchNorm2d(c1),
+      nn.ReLU(inplace=True),
+    )
+    # Create 5x5 path using two cascaded 3x3 convolutions.
+    self.conv5x5 = nn.Sequential(
+      nn.Conv2d(inChans, c2, kernel_size=3, padding=1),
+      nn.BatchNorm2d(c2),
+      nn.ReLU(inplace=True),
+      nn.Conv2d(c2, c2, kernel_size=3, padding=1),
+      nn.BatchNorm2d(c2),
+      nn.ReLU(inplace=True),
+    )
+    # Create 7x7 path using three cascaded 3x3 convolutions.
+    self.conv7x7 = nn.Sequential(
+      nn.Conv2d(inChans, c3, kernel_size=3, padding=1),
+      nn.BatchNorm2d(c3),
+      nn.ReLU(inplace=True),
+      nn.Conv2d(c3, c3, kernel_size=3, padding=1),
+      nn.BatchNorm2d(c3),
+      nn.ReLU(inplace=True),
+      nn.Conv2d(c3, c3, kernel_size=3, padding=1),
+      nn.BatchNorm2d(c3),
+      nn.ReLU(inplace=True),
+    )
+    # Create shortcut connection with 1x1 convolution when channels differ.
+    if (inChans != outChans):
+      self.convShortcut = nn.Conv2d(inChans, outChans, kernel_size=1)
+    else:
+      # Use identity when channels match.
+      self.convShortcut = nn.Identity()
+    # Create final batch normalization layer.
+    self.batchNorm = nn.BatchNorm2d(outChans)
+
+  # Forward pass through MultiRes block.
+  def forward(self, x):
+    # Process input through 3x3 path.
+    path1 = self.conv3x3(x)
+    # Process input through 5x5 path.
+    path2 = self.conv5x5(x)
+    # Process input through 7x7 path.
+    path3 = self.conv7x7(x)
+    # Concatenate all multi-resolution paths along channel dimension.
+    multiRes = torch.cat(
+      [
+        path1,
+        path2,
+        path3,
+      ],
+      dim=1,
+    )
+    # Apply shortcut connection to input.
+    shortcut = self.convShortcut(x)
+    # Add residual connection and apply batch normalization.
+    out = self.batchNorm(multiRes + shortcut)
+    # Return activated output tensor.
+    return F.relu(out)
+
+
+class DenseBlock(nn.Module):
+  r'''
+  Dense connectivity block with bottleneck layers for parameter efficiency.
+
+  Short summary:
+    Stacks multiple bottleneck layers where each layer receives feature maps from
+    all preceding layers as input, promoting feature reuse and gradient flow.
+
+  Parameters:
+    inChans (int): Input channel count.
+    numLayers (int): Number of bottleneck layers in block. Default 4.
+    growthRate (int): Channels added per layer. Default 32.
+    bnSize (int): Bottleneck expansion factor. Default 4.
+
+  Attributes:
+    layers (nn.ModuleList): Sequential bottleneck layers with dense connectivity.
+
+  Returns:
+    torch.Tensor: Concatenated output of all layers with inChans + numLayers*growthRate channels.
+  '''
+
+  # Initialize Dense block.
+  def __init__(self, inChans, numLayers=4, growthRate=32, bnSize=4):
+    # Call parent initializer.
+    super(DenseBlock, self).__init__()
+    # Initialize module list for sequential layers.
+    self.layers = nn.ModuleList()
+    # Track current input channels for dense connectivity.
+    currentChans = inChans
+    # Build sequential bottleneck layers.
+    for i in range(numLayers):
+      # Create bottleneck layer with 1x1 reduction followed by 3x3 expansion.
+      layer = nn.Sequential(
+        nn.BatchNorm2d(currentChans),
+        nn.ReLU(inplace=True),
+        nn.Conv2d(currentChans, bnSize * growthRate, kernel_size=1),
+        nn.BatchNorm2d(bnSize * growthRate),
+        nn.ReLU(inplace=True),
+        nn.Conv2d(bnSize * growthRate, growthRate, kernel_size=3, padding=1),
+      )
+      # Append layer to block sequence.
+      self.layers.append(layer)
+      # Update channel count after concatenation.
+      currentChans += growthRate
+
+  # Forward pass through Dense block.
+  def forward(self, x):
+    # Initialize list to accumulate feature maps.
+    features = [x]
+    # Process through each bottleneck layer sequentially.
+    for layer in self.layers:
+      # Concatenate all previous features as input.
+      concated = torch.cat(features, dim=1)
+      # Apply current bottleneck transformation.
+      out = layer(concated)
+      # Append output to feature list for next layer.
+      features.append(out)
+    # Concatenate all layer outputs including original input.
+    return torch.cat(features, dim=1)
+
+
+class RecurrentConvLayer(nn.Module):
+  r'''
+  Recurrent convolutional layer with internal state feedback.
+
+  Short summary:
+    Applies convolution repeatedly for T timesteps where each step receives feedback
+    from its previous output, enabling iterative refinement of spatial features.
+
+  Parameters:
+    channels (int): Input/output channel count.
+    t (int): Number of recurrent iterations. Default 2.
+
+  Attributes:
+    conv (nn.Conv2d): Shared convolution kernel applied at each timestep.
+
+  Returns:
+    torch.Tensor: Refined feature map after T recurrent steps.
+  '''
+
+  # Initialize recurrent convolution layer.
+  def __init__(self, channels, t=2):
+    # Call parent initializer.
+    super(RecurrentConvLayer, self).__init__()
+    # Store recurrence count parameter.
+    self.t = t
+    # Create shared convolution kernel with residual connectivity.
+    self.conv = nn.Conv2d(channels, channels, kernel_size=3, padding=1)
+    # Create batch normalization for stability.
+    self.bn = nn.BatchNorm2d(channels)
+
+  # Forward pass through recurrent layer.
+  def forward(self, x):
+    # Initialize hidden state with input features.
+    hidden = x
+    # Iterate for T timesteps with state feedback.
+    for _ in range(self.t):
+      # Apply convolution to combined input and hidden state.
+      hidden = self.conv(x + hidden)
+      # Apply batch normalization.
+      hidden = self.bn(hidden)
+      # Apply ReLU activation.
+      hidden = F.relu(hidden)
+    # Return final refined feature map.
+    return hidden
+
+
+class ASPP(nn.Module):
+  r'''
+  Atrous Spatial Pyramid Pooling for multi-scale context aggregation.
+
+  Short summary:
+    Parallel dilated convolutions at multiple rates plus image pooling to capture
+    objects at different scales within a single feature map.
+
+  Parameters:
+    inChans (int): Input channel count.
+    outChans (int): Output channel count after fusion.
+    dilations (Tuple[int]): Dilation rates for parallel branches. Default (1, 6, 12, 18).
+
+  Attributes:
+    conv1x1 (nn.Sequential): 1x1 convolution branch (rate=1).
+    conv3x3_1..3 (nn.Sequential): Dilated 3x3 convolutions at specified rates.
+    imagePool (nn.Sequential): Global average pooling branch.
+    project (nn.Sequential): Final projection and dropout.
+
+  Returns:
+   torch.Tensor: Context-enriched feature map with outChans channels.
+  '''
+
+  # Initialize ASPP module.
+  def __init__(self, inChans, outChans, dilations=(1, 6, 12, 18)):
+    # Call parent initializer.
+    super(ASPP, self).__init__()
+    # Create 1x1 convolution branch.
+    self.conv1x1 = nn.Sequential(
+      nn.Conv2d(inChans, outChans, kernel_size=1, bias=False),
+      nn.BatchNorm2d(outChans),
+      nn.ReLU(inplace=True),
+    )
+    # Create first dilated 3x3 convolution branch.
+    self.conv3x3_1 = nn.Sequential(
+      nn.Conv2d(inChans, outChans, kernel_size=3, padding=dilations[1], dilation=dilations[1], bias=False),
+      nn.BatchNorm2d(outChans),
+      nn.ReLU(inplace=True),
+    )
+    # Create second dilated 3x3 convolution branch.
+    self.conv3x3_2 = nn.Sequential(
+      nn.Conv2d(inChans, outChans, kernel_size=3, padding=dilations[2], dilation=dilations[2], bias=False),
+      nn.BatchNorm2d(outChans),
+      nn.ReLU(inplace=True),
+    )
+    # Create third dilated 3x3 convolution branch.
+    self.conv3x3_3 = nn.Sequential(
+      nn.Conv2d(inChans, outChans, kernel_size=3, padding=dilations[3], dilation=dilations[3], bias=False),
+      nn.BatchNorm2d(outChans),
+      nn.ReLU(inplace=True),
+    )
+    # Create image pooling branch with adaptive pooling.
+    self.imagePool = nn.Sequential(
+      nn.AdaptiveAvgPool2d(1),
+      nn.Conv2d(inChans, outChans, kernel_size=1, bias=False),
+      # nn.BatchNorm2d(outChans),
+      nn.ReLU(inplace=True),
+    )
+    # Create final projection layer after concatenation.
+    self.project = nn.Sequential(
+      nn.Conv2d(outChans * 5, outChans, kernel_size=1, bias=False),
+      nn.BatchNorm2d(outChans),
+      nn.ReLU(inplace=True),
+      nn.Dropout(0.5),
+    )
+
+  # Forward pass through ASPP.
+  def forward(self, x):
+    # Extract spatial dimensions for later upsampling.
+    h, w = x.size(2), x.size(3)
+    # Apply 1x1 convolution branch.
+    feat1 = self.conv1x1(x)
+    # Apply first dilated convolution branch.
+    feat2 = self.conv3x3_1(x)
+    # Apply second dilated convolution branch.
+    feat3 = self.conv3x3_2(x)
+    # Apply third dilated convolution branch.
+    feat4 = self.conv3x3_3(x)
+    # Apply image pooling branch.
+    feat5 = self.imagePool(x)
+    # Upsample pooled features to original spatial dimensions.
+    feat5 = F.interpolate(
+      feat5,
+      size=(h, w),
+      mode="bilinear",
+      align_corners=True,
+    )
+    # Concatenate all five branches along channel dimension.
+    concat = torch.cat(
+      [
+        feat1,
+        feat2,
+        feat3,
+        feat4,
+        feat5,
+      ],
+      dim=1,
+    )
+    # Project concatenated features to output dimension.
+    return self.project(concat)
+
+
+class PatchEmbedding(nn.Module):
+  r'''
+  2D image to patch embedding with optional positional encoding.
+
+  Short summary:
+    Converts input image into non-overlapping patches via convolutional projection
+    and flattens them into a sequence for transformer processing.
+
+  Parameters:
+    inChans (int): Input channel count.
+    embedDim (int): Embedding dimension per patch. Default 256.
+    patchSize (int): Patch size (height=width). Default 4.
+
+  Attributes:
+    proj (nn.Conv2d): Convolutional patch projection layer.
+
+  Returns:
+    Tuple[torch.Tensor, Tuple[int, int]]: Patch sequence [B, N, embedDim] and (patchH, patchW).
+  '''
+
+  # Initialize patch embedding module.
+  def __init__(self, inChans, embedDim=256, patchSize=4):
+    # Call parent initializer.
+    super(PatchEmbedding, self).__init__()
+    # Store patch size parameter.
+    self.patchSize = patchSize
+    # Create convolutional projection layer.
+    self.proj = nn.Conv2d(inChans, embedDim, kernel_size=patchSize, stride=patchSize)
+
+  # Forward pass for patch embedding.
+  def forward(self, x):
+    # Apply convolutional patch projection.
+    x = self.proj(x)
+    # Extract spatial dimensions of patch grid.
+    patchH = x.shape[2]
+    # Extract patch width dimension.
+    patchW = x.shape[3]
+    # Permute to [B, C, H, W] -> [B, H, W, C] format.
+    x = x.permute(0, 2, 3, 1)
+    # Flatten spatial dimensions to sequence format.
+    x = x.view(x.shape[0], patchH * patchW, x.shape[-1])
+    # Return patch sequence and grid dimensions.
+    return (
+      x,
+      (
+        patchH,
+        patchW,
+      ),
+    )
+
+
+class TransformerBlock(nn.Module):
+  r'''
+  Standard transformer encoder block with pre-normalization.
+
+  Short summary:
+    Multi-head self-attention followed by position-wise feed-forward network
+    with layer normalization and residual connections before each sub-layer.
+
+  Parameters:
+    embedDim (int): Embedding dimension.
+    numHeads (int): Number of attention heads. Default 8.
+    mlpRatio (float): Hidden dimension ratio for MLP. Default 4.0.
+    dropout (float): Dropout probability. Default 0.1.
+
+  Attributes:
+    norm1, norm2 (nn.LayerNorm): Pre-normalization layers.
+    attn (nn.MultiheadAttention): Multi-head self-attention module.
+    mlp (nn.Sequential): Two-layer MLP with GELU activation.
+    drop (nn.Dropout): Dropout layer after MLP.
+
+  Returns:
+    torch.Tensor: Transformed sequence of same shape as input.
+  '''
+
+  # Initialize transformer block.
+  def __init__(self, embedDim, numHeads=8, mlpRatio=4.0, dropout=0.1):
+    # Call parent initializer.
+    super(TransformerBlock, self).__init__()
+    # Create first layer normalization.
+    self.norm1 = nn.LayerNorm(embedDim)
+    # Create multi-head self-attention module.
+    self.attn = nn.MultiheadAttention(embedDim, numHeads, dropout=dropout, batch_first=True)
+    # Create second layer normalization.
+    self.norm2 = nn.LayerNorm(embedDim)
+    # Compute hidden dimension for MLP.
+    hiddenDim = int(embedDim * mlpRatio)
+    # Build MLP sequential block.
+    self.mlp = nn.Sequential(
+      nn.Linear(embedDim, hiddenDim),
+      nn.GELU(),
+      nn.Dropout(dropout),
+      nn.Linear(hiddenDim, embedDim),
+      nn.Dropout(dropout),
+    )
+
+  # Forward pass through transformer block.
+  def forward(self, x):
+    # Apply pre-normalization before attention.
+    xNorm = self.norm1(x)
+    # Compute self-attention with residual connection.
+    attnOut, _ = self.attn(xNorm, xNorm, xNorm)
+    # Add residual connection.
+    x = x + attnOut
+    # Apply pre-normalization before MLP.
+    xNorm = self.norm2(x)
+    # Apply MLP with residual connection.
+    x = x + self.mlp(xNorm)
+    # Return transformed sequence.
+    return x
+
+
+class CBAM(nn.Module):
+  r'''
+  Convolutional Block Attention Module (channel + spatial attention).
+
+  Short summary:
+    Sequential channel attention followed by spatial attention to adaptively
+    refine feature maps along both channel and spatial dimensions.
+
+  Parameters:
+    channels (int): Input/output channel count.
+    reduction (int): Reduction ratio for channel attention. Default 16.
+
+  Attributes:
+    channelAttn (ChannelAttn): Channel attention submodule.
+    spatialAttn (SpatialAttn): Spatial attention submodule.
+
+  Returns:
+    torch.Tensor: Attention-refined feature map with same shape as input.
+  '''
+
+  # Initialize CBAM module.
+  def __init__(self, channels, reduction=16):
+    # Call parent initializer.
+    super(CBAM, self).__init__()
+    # Create channel attention submodule.
+    self.channelAttn = ChannelAttn(channels, reduction)
+    # Create spatial attention submodule.
+    self.spatialAttn = SpatialAttn()
+
+  # Forward pass through CBAM.
+  def forward(self, x):
+    # Apply channel attention refinement.
+    x = self.channelAttn(x)
+    # Apply spatial attention refinement.
+    x = self.spatialAttn(x)
+    # Return fully refined feature map.
+    return x
+
+
+class ChannelAttn(nn.Module):
+  r'''
+  Channel attention branch of CBAM using squeeze-and-excitation.
+
+  Short summary:
+    Global average and max pooling followed by shared MLP to compute
+    channel-wise attention weights that rescale feature channels.
+
+  Parameters:
+    channels (int): Input channel count.
+    reduction (int): Reduction ratio for bottleneck MLP. Default 16.
+
+  Attributes:
+   mlp (nn.Sequential): Shared MLP for both pooling streams.
+
+  Returns:
+   torch.Tensor: Channel-refined feature map.
+  '''
+
+  # Initialize channel attention module.
+  def __init__(self, channels, reduction=16):
+    # Call parent initializer.
+    super(ChannelAttn, self).__init__()
+    # Compute reduced dimension for bottleneck.
+    reduced = max(1, channels // reduction)
+    # Create shared MLP for both pooling streams.
+    self.mlp = nn.Sequential(
+      nn.Linear(channels, reduced),
+      nn.ReLU(inplace=True),
+      nn.Linear(reduced, channels),
+    )
+
+  # Forward pass through channel attention.
+  def forward(self, x):
+    # Extract batch and channel dimensions.
+    b, c, _, _ = x.size()
+    # Apply global average pooling and flatten.
+    avgPooled = F.adaptive_avg_pool2d(x, 1).view(b, c)
+    # Apply global max pooling and flatten.
+    maxPooled = F.adaptive_max_pool2d(x, 1).view(b, c)
+    # Process average pooled features through MLP.
+    avgOut = self.mlp(avgPooled)
+    # Process max pooled features through same MLP.
+    maxOut = self.mlp(maxPooled)
+    # Combine both streams with element-wise addition.
+    attn = avgOut + maxOut
+    # Apply sigmoid activation for attention weights.
+    attn = torch.sigmoid(attn).view(b, c, 1, 1)
+    # Scale input features by attention weights.
+    return x * attn
+
+
+class SpatialAttn(nn.Module):
+  r'''
+  Spatial attention branch of CBAM using channel aggregation.
+
+  Short summary:
+    Channel-wise average and max pooling followed by convolution to compute
+    spatial attention map that highlights important regions in feature maps.
+
+  Parameters:
+    kernelSize (int): Convolution kernel size for spatial attention. Default 7.
+
+  Attributes:
+    conv (nn.Conv2d): Convolution to generate spatial attention map.
+
+  Returns:
+    torch.Tensor: Spatially-refined feature map.
+  '''
+
+  # Initialize spatial attention module.
+  def __init__(self, kernelSize=7):
+    # Call parent initializer.
+    super(SpatialAttn, self).__init__()
+    # Create convolution layer for spatial attention map generation.
+    self.conv = nn.Conv2d(
+      2,
+      1,
+      kernel_size=kernelSize,
+      padding=kernelSize // 2,
+      bias=False,
+    )
+
+  # Forward pass through spatial attention.
+  def forward(self, x):
+    # Apply channel-wise average pooling.
+    avgPooled = torch.mean(x, dim=1, keepdim=True)
+    # Apply channel-wise max pooling.
+    maxPooled = torch.max(x, dim=1, keepdim=True)[0]
+    # Concatenate both pooling streams along channel dimension.
+    concat = torch.cat(
+      [
+        avgPooled,
+        maxPooled,
+      ],
+      dim=1,
+    )
+    # Generate spatial attention map via convolution.
+    attn = self.conv(concat)
+    # Apply sigmoid activation for attention weights.
+    attn = torch.sigmoid(attn)
+    # Scale input features by spatial attention map.
+    return x * attn
+
+
+# ---------------------------------------------------- #
+# UNets implementations.                               #
+# ---------------------------------------------------- #
 
 
 class UNet(nn.Module):
@@ -1394,160 +1983,6 @@ class SEUNet(nn.Module):
     return self.finalConv(d1)
 
 
-class NestedUNet(nn.Module):
-  r'''
-  Compact U-Net++ (Nested U-Net) implementation.
-
-  Short summary:
-    Implements a practical and lightweight U-Net++ fusion pattern limited to
-    four nested levels. Useful when multi-level dense skip fusion is desired.
-
-  Parameters:
-    inputChannels (int): Number of input channels. Default 3.
-    numClasses (int): Number of output classes. Default 2.
-    baseChannels (int): Base number of filters. Default 64.
-    useConvTranspose2d (bool): If True use ConvTranspose2d for upsampling.
-
-  Returns:
-    torch.Tensor: Logits tensor of shape [B, numClasses, H, W].
-  '''
-
-  # Initialize the nested U-Net.
-  def __init__(self, inputChannels=3, numClasses=2, baseChannels=64, useConvTranspose2d=True):
-    # Call the parent initializer.
-    super(NestedUNet, self).__init__()
-    # Create the level-0 block.
-    self.x00 = DoubleConv(inputChannels, baseChannels)
-    # Create a shared pooling layer.
-    self.pool = nn.MaxPool2d(2)
-
-    # Create level-1 blocks.
-    self.x10 = DoubleConv(baseChannels, baseChannels * 2)
-    self.x01 = DoubleConv(baseChannels * 2, baseChannels)
-
-    # Create level-2 blocks.
-    self.x20 = DoubleConv(baseChannels * 2, baseChannels * 4)
-    self.x11 = DoubleConv(baseChannels * 4, baseChannels * 2)
-    self.x02 = DoubleConv(baseChannels * 4, baseChannels)
-
-    # Create level-3 blocks.
-    self.x30 = DoubleConv(baseChannels * 4, baseChannels * 8)
-    self.x21 = DoubleConv(baseChannels * 8, baseChannels * 4)
-    self.x12 = DoubleConv(baseChannels * 8, baseChannels * 2)
-    self.x03 = DoubleConv(baseChannels * 8, baseChannels)
-
-    # Create the center block.
-    self.center = DoubleConv(baseChannels * 8, baseChannels * 16)
-
-    # Build upsampling modules using a ModuleDict with CamelCase keys.
-    if (useConvTranspose2d):
-      # Use learned transposed convolutions for upsampling.
-      self.up = nn.ModuleDict(
-        {
-          "Up1": nn.ConvTranspose2d(baseChannels * 16, baseChannels * 8, kernel_size=2, stride=2),
-          "Up2": nn.ConvTranspose2d(baseChannels * 8, baseChannels * 4, kernel_size=2, stride=2),
-          "Up3": nn.ConvTranspose2d(baseChannels * 4, baseChannels * 2, kernel_size=2, stride=2),
-          "Up4": nn.ConvTranspose2d(baseChannels * 2, baseChannels, kernel_size=2, stride=2),
-        }
-      )
-    else:
-      # Use bilinear upsampling blocks for each level.
-      self.up = nn.ModuleDict(
-        {
-          "Up1": nn.Sequential(
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
-            nn.Conv2d(baseChannels * 16, baseChannels * 8, kernel_size=1),
-          ),
-          "Up2": nn.Sequential(
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
-            nn.Conv2d(baseChannels * 8, baseChannels * 4, kernel_size=1),
-          ),
-          "Up3": nn.Sequential(
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
-            nn.Conv2d(baseChannels * 4, baseChannels * 2, kernel_size=1),
-          ),
-          "Up4": nn.Sequential(
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
-            nn.Conv2d(baseChannels * 2, baseChannels, kernel_size=1),
-          ),
-        }
-      )
-
-    # Final convolution that maps the most nested representation to classes.
-    self.finalConv = nn.Conv2d(baseChannels, numClasses, kernel_size=1)
-
-  # Forward pass for NestedUNet.
-  def forward(self, x):
-    # Compute x00 representation.
-    x00 = self.x00.forward(x)
-    # Compute x10 using pooled x00.
-    x10 = self.x10.forward(self.pool(x00))
-    # Compute x01 by concatenating x00 and upsampled x10.
-    x01 = self.x01.forward(
-      torch.cat(
-        [x00, F.interpolate(x10, size=(x00.size(2), x00.size(3)), mode="bilinear", align_corners=True)],
-        dim=1,
-      )
-    )
-
-    # Compute x20 from pooled x10.
-    x20 = self.x20.forward(self.pool(x10))
-    # Compute x11 by concatenating x10 and upsampled x20.
-    x11 = self.x11.forward(
-      torch.cat(
-        [x10, F.interpolate(x20, size=(x10.size(2), x10.size(3)), mode="bilinear", align_corners=True)],
-        dim=1,
-      )
-    )
-    # Compute x02 by concatenating x00, x01 and upsampled x11.
-    x02 = self.x02.forward(
-      torch.cat(
-        [
-          x00,
-          x01,
-          F.interpolate(x11, size=(x00.size(2), x00.size(3)), mode="bilinear", align_corners=True),
-        ],
-        dim=1,
-      )
-    )
-
-    # Compute x30 from pooled x20.
-    x30 = self.x30.forward(self.pool(x20))
-    # Compute x21 by concatenating x20 and upsampled x30.
-    x21 = self.x21.forward(
-      torch.cat(
-        [x20, F.interpolate(x30, size=(x20.size(2), x20.size(3)), mode="bilinear", align_corners=True)],
-        dim=1,
-      )
-    )
-    # Compute x12 by concatenating x10, x11 and upsampled x21.
-    x12 = self.x12.forward(
-      torch.cat(
-        [
-          x10,
-          x11,
-          F.interpolate(x21, size=(x10.size(2), x10.size(3)), mode="bilinear", align_corners=True),
-        ],
-        dim=1,
-      )
-    )
-    # Compute x03 by concatenating x00, x01, x02 and upsampled x12.
-    x03 = self.x03.forward(
-      torch.cat(
-        [
-          x00,
-          x01,
-          x02,
-          F.interpolate(x12, size=(x00.size(2), x00.size(3)), mode="bilinear", align_corners=True),
-        ],
-        dim=1,
-      )
-    )
-
-    # Map the most nested representation to logits and return.
-    return self.finalConv(x03)
-
-
 class ResidualAttentionUNet(nn.Module):
   r'''
   Residual U-Net combined with Attention Gates.
@@ -1755,235 +2190,6 @@ class ResidualAttentionUNet(nn.Module):
     return self.finalConv(d1)
 
 
-# Additional U-Net variants appended at file end to keep all architectures together.
-
-class UNet3Plus(nn.Module):
-  r'''
-  UNet3+ compact implementation for multi-scale full-resolution fusion.
-
-  Short summary:
-    Implements UNet3+ style full-scale skip aggregation across encoder and
-    decoder levels to improve multi-scale feature fusion at each decoder stage.
-
-  Parameters:
-    inputChannels (int): Number of input channels. Default 3.
-    numClasses (int): Number of output classes. Default 2.
-    baseChannels (int): Base number of filters. Default 64.
-    useConvTranspose2d (bool): If True use ConvTranspose2d for upsampling.
-
-  Attributes:
-    enc1..enc4, center: Encoder/bottleneck blocks.
-    up (nn.ModuleDict): Upsampling modules keyed by CamelCase names.
-    fuse1..fuse3: Fusion conv blocks that aggregate multi-scale maps.
-    finalConv (torch.nn.Conv2d): 1x1 conv to logits.
-
-  Returns:
-    torch.Tensor: Logits tensor of shape [B, numClasses, H, W].
-  '''
-
-  # Initialize UNet3Plus.
-  def __init__(self, inputChannels=3, numClasses=2, baseChannels=64, useConvTranspose2d=True):
-    # Call super initializer.
-    super(UNet3Plus, self).__init__()
-    # Create encoder stages.
-    self.enc1 = DoubleConv(inputChannels, baseChannels)
-    # Create pooling after encoder stage 1.
-    self.pool1 = nn.MaxPool2d(2)
-    # Create encoder stage 2.
-    self.enc2 = DoubleConv(baseChannels, (baseChannels * 2))
-    # Create pooling after encoder stage 2.
-    self.pool2 = nn.MaxPool2d(2)
-    # Create encoder stage 3.
-    self.enc3 = DoubleConv((baseChannels * 2), (baseChannels * 4))
-    # Create pooling after encoder stage 3.
-    self.pool3 = nn.MaxPool2d(2)
-    # Create encoder stage 4.
-    self.enc4 = DoubleConv((baseChannels * 4), (baseChannels * 8))
-    # Create pooling after encoder stage 4.
-    self.pool4 = nn.MaxPool2d(2)
-    # Create center block.
-    self.center = DoubleConv((baseChannels * 8), (baseChannels * 16))
-
-    # Prepare upsampling modules as ModuleDict with CamelCase keys.
-    if (useConvTranspose2d):
-      # Create learned upsampling layers.
-      self.up = nn.ModuleDict(
-        {
-          "UpC3": nn.ConvTranspose2d((baseChannels * 16), (baseChannels * 8), kernel_size=2, stride=2),
-          "UpC2": nn.ConvTranspose2d((baseChannels * 8), (baseChannels * 4), kernel_size=2, stride=2),
-          "UpC1": nn.ConvTranspose2d((baseChannels * 4), (baseChannels * 2), kernel_size=2, stride=2),
-        }
-      )
-    else:
-      # Create bilinear upsampling blocks for each level.
-      self.up = nn.ModuleDict(
-        {
-          "UpC3": nn.Sequential(
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
-            nn.Conv2d((baseChannels * 16), (baseChannels * 8), kernel_size=1),
-          ),
-          "UpC2": nn.Sequential(
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
-            nn.Conv2d((baseChannels * 8), (baseChannels * 4), kernel_size=1),
-          ),
-          "UpC1": nn.Sequential(
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
-            nn.Conv2d((baseChannels * 4), (baseChannels * 2), kernel_size=1),
-          ),
-        }
-      )
-
-    # Create fusion layers for full-scale aggregation.
-    self.fuse3 = DoubleConv(
-      (baseChannels * 8) + (baseChannels * 4) + (baseChannels * 2) + baseChannels,
-      baseChannels * 8,
-    )
-
-    # Create second-level fusion layer.
-    self.fuse2 = DoubleConv(
-      (baseChannels * 4) + (baseChannels * 2) + baseChannels + baseChannels,
-      baseChannels * 4,
-    )
-
-    # Create first-level fusion layer.
-    self.fuse1 = DoubleConv(
-      (baseChannels * 2) + baseChannels + baseChannels + baseChannels,
-      baseChannels * 2,
-    )
-
-    # Create final logits conv.
-    self.finalConv = nn.Conv2d(baseChannels * 2, numClasses, kernel_size=1)
-
-  # Forward pass for UNet3Plus.
-  def forward(self, x):
-    # Compute encoder level 1.
-    e1 = self.enc1.forward(x)
-    # Compute pool after level 1.
-    p1 = self.pool1(e1)
-    # Compute encoder level 2.
-    e2 = self.enc2.forward(p1)
-    # Compute pool after level 2.
-    p2 = self.pool2(e2)
-    # Compute encoder level 3.
-    e3 = self.enc3.forward(p2)
-    # Compute pool after level 3.
-    p3 = self.pool3(e3)
-    # Compute encoder level 4.
-    e4 = self.enc4.forward(p3)
-    # Compute pool after level 4.
-    p4 = self.pool4(e4)
-    # Compute center features.
-    c = self.center.forward(p4)
-
-    # Upsample center to level 4 decoder input.
-    upC3 = self.up["UpC3"](c)
-    # Align shapes if required.
-    if ((upC3.size(2) != e4.size(2)) or (upC3.size(3) != e4.size(3))):
-      # Interpolate to match encoder spatial size.
-      upC3 = F.interpolate(
-        upC3,
-        size=(e4.size(2), e4.size(3)),
-        mode="bilinear",
-        align_corners=True,
-      )
-
-    # Concatenate full-scale features for decoder level 3 and fuse.
-    f3 = self.fuse3.forward(
-      torch.cat(
-        [
-          upC3,
-          e4,
-          F.interpolate(
-            e3,
-            size=(upC3.size(2), upC3.size(3)),
-            mode="bilinear",
-            align_corners=True,
-          ),
-          F.interpolate(
-            e2,
-            size=(upC3.size(2), upC3.size(3)),
-            mode="bilinear",
-            align_corners=True,
-          ),
-        ],
-        dim=1,
-      )
-    )
-
-    # Upsample fused level 3 to level 2.
-    upC2 = self.up["UpC2"](f3)
-    # Align shapes if required.
-    if ((upC2.size(2) != e3.size(2)) or (upC2.size(3) != e3.size(3))):
-      # Interpolate to match encoder spatial size.
-      upC2 = F.interpolate(
-        upC2,
-        size=(e3.size(2), e3.size(3)),
-        mode="bilinear",
-        align_corners=True,
-      )
-
-    # Concatenate and fuse for decoder level 2.
-    f2 = self.fuse2.forward(
-      torch.cat(
-        [
-          upC2,
-          e3,
-          F.interpolate(
-            e2,
-            size=(upC2.size(2), upC2.size(3)),
-            mode="bilinear",
-            align_corners=True,
-          ),
-          F.interpolate(
-            e1,
-            size=(upC2.size(2), upC2.size(3)),
-            mode="bilinear",
-            align_corners=True,
-          ),
-        ],
-        dim=1,
-      )
-    )
-
-    # Upsample fused level 2 to level 1.
-    upC1 = self.up["UpC1"](f2)
-    # Align shapes if required.
-    if ((upC1.size(2) != e2.size(2)) or (upC1.size(3) != e2.size(3))):
-      # Interpolate to match encoder spatial size.
-      upC1 = F.interpolate(
-        upC1,
-        size=(e2.size(2), e2.size(3)),
-        mode="bilinear",
-        align_corners=True,
-      )
-
-    # Concatenate and fuse for decoder level 1.
-    f1 = self.fuse1.forward(
-      torch.cat(
-        [
-          upC1,
-          e2,
-          F.interpolate(
-            e1,
-            size=(upC1.size(2), upC1.size(3)),
-            mode="bilinear",
-            align_corners=True,
-          ),
-          F.interpolate(
-            c,
-            size=(upC1.size(2), upC1.size(3)),
-            mode="bilinear",
-            align_corners=True,
-          ),
-        ],
-        dim=1,
-      )
-    )
-
-    # Compute final logits and return.
-    return self.finalConv(f1)
-
-
 class MultiResUNet(nn.Module):
   r'''
   MultiResUNet with MultiRes blocks per stage.
@@ -2072,7 +2278,15 @@ class MultiResUNet(nn.Module):
         mode="bilinear",
         align_corners=True,
       )
-    d4 = self.dec4.forward(torch.cat([u4, e4], dim=1))
+    d4 = self.dec4.forward(
+      torch.cat(
+        [
+          u4,
+          e4,
+        ],
+        dim=1,
+      )
+    )
     # Decoder stage 3.
     u3 = self.up3(d4)
     # Align shapes if required.
@@ -2132,79 +2346,114 @@ class DenseUNet(nn.Module):
   def __init__(self, inputChannels=3, numClasses=2, baseChannels=32, useConvTranspose2d=True):
     # Call super initializer.
     super(DenseUNet, self).__init__()
-    # Encoder dense blocks and transition convs.
-    self.enc1 = DenseBlock(inputChannels, numLayers=3, growthRate=baseChannels // 2)
-    self.trans1 = nn.Conv2d(inputChannels + 3 * (baseChannels // 2), baseChannels, kernel_size=1)
-    self.pool1 = nn.MaxPool2d(2)
-    self.enc2 = DenseBlock(baseChannels, numLayers=3, growthRate=baseChannels // 2)
-    self.trans2 = nn.Conv2d(baseChannels + 3 * (baseChannels // 2), baseChannels * 2, kernel_size=1)
-    self.pool2 = nn.MaxPool2d(2)
-    self.enc3 = DenseBlock(baseChannels * 2, numLayers=3, growthRate=baseChannels // 2)
-    self.trans3 = nn.Conv2d(baseChannels * 2 + 3 * (baseChannels // 2), baseChannels * 4, kernel_size=1)
-    self.pool3 = nn.MaxPool2d(2)
-    self.enc4 = DenseBlock(baseChannels * 4, numLayers=3, growthRate=baseChannels // 2)
-    self.trans4 = nn.Conv2d(baseChannels * 4 + 3 * (baseChannels // 2), baseChannels * 8, kernel_size=1)
-    self.pool4 = nn.MaxPool2d(2)
-    # Center.
-    self.center = DenseBlock(baseChannels * 8, numLayers=3, growthRate=baseChannels // 2)
 
-    # Upsampling.
+    growth = baseChannels // 2
+
+    # Encoder dense blocks and transition convs.
+    self.enc1 = DenseBlock(inputChannels, numLayers=3, growthRate=growth)
+    out1 = inputChannels + 3 * growth
+    self.trans1 = nn.Conv2d(out1, baseChannels, kernel_size=1)
+    self.pool1 = nn.MaxPool2d(2)
+
+    self.enc2 = DenseBlock(baseChannels, numLayers=3, growthRate=growth)
+    out2 = baseChannels + 3 * growth
+    self.trans2 = nn.Conv2d(out2, baseChannels * 2, kernel_size=1)
+    self.pool2 = nn.MaxPool2d(2)
+
+    self.enc3 = DenseBlock(baseChannels * 2, numLayers=3, growthRate=growth)
+    out3 = baseChannels * 2 + 3 * growth
+    self.trans3 = nn.Conv2d(out3, baseChannels * 4, kernel_size=1)
+    self.pool3 = nn.MaxPool2d(2)
+
+    self.enc4 = DenseBlock(baseChannels * 4, numLayers=3, growthRate=growth)
+    out4 = baseChannels * 4 + 3 * growth
+    self.trans4 = nn.Conv2d(out4, baseChannels * 8, kernel_size=1)
+    self.pool4 = nn.MaxPool2d(2)
+
+    # Center dense block.
+    CenterIn = baseChannels * 8
+    self.center = DenseBlock(CenterIn, numLayers=3, growthRate=growth)
+    centerOut = CenterIn + 3 * growth
+
+    # Upsampling modules.
     if (useConvTranspose2d):
-      self.up4 = nn.ConvTranspose2d(baseChannels * 8 + 3 * (baseChannels // 2), baseChannels * 4, kernel_size=2,
-                                    stride=2)
-      self.up3 = nn.ConvTranspose2d(baseChannels * 4 + 3 * (baseChannels // 2), baseChannels * 2, kernel_size=2,
-                                    stride=2)
-      self.up2 = nn.ConvTranspose2d(baseChannels * 2 + 3 * (baseChannels // 2), baseChannels, kernel_size=2, stride=2)
-      self.up1 = nn.ConvTranspose2d(baseChannels + 3 * (baseChannels // 2), baseChannels // 2, kernel_size=2, stride=2)
+      self.up4 = nn.ConvTranspose2d(centerOut, baseChannels * 8, kernel_size=2, stride=2)
+      self.up3 = nn.ConvTranspose2d(baseChannels * 8, baseChannels * 4, kernel_size=2, stride=2)
+      self.up2 = nn.ConvTranspose2d(baseChannels * 4, baseChannels * 2, kernel_size=2, stride=2)
+      self.up1 = nn.ConvTranspose2d(baseChannels * 2, baseChannels, kernel_size=2, stride=2)
     else:
       self.up4 = nn.Sequential(
         nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
-        nn.Conv2d(baseChannels * 8 + 3 * (baseChannels // 2), baseChannels * 4, kernel_size=1),
+        nn.Conv2d(centerOut, baseChannels * 8, kernel_size=1),
       )
       self.up3 = nn.Sequential(
         nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
-        nn.Conv2d(baseChannels * 4 + 3 * (baseChannels // 2), baseChannels * 2, kernel_size=1),
+        nn.Conv2d(baseChannels * 8, baseChannels * 4, kernel_size=1),
       )
       self.up2 = nn.Sequential(
         nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
-        nn.Conv2d(baseChannels * 2 + 3 * (baseChannels // 2), baseChannels, kernel_size=1),
+        nn.Conv2d(baseChannels * 4, baseChannels * 2, kernel_size=1),
       )
       self.up1 = nn.Sequential(
         nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
-        nn.Conv2d(baseChannels + 3 * (baseChannels // 2), baseChannels // 2, kernel_size=1),
+        nn.Conv2d(baseChannels * 2, baseChannels, kernel_size=1),
       )
 
+    # Decoder convolution blocks (to process concatenated features).
+    self.dec4 = DoubleConv(baseChannels * 16, baseChannels * 8)  # up4 + t4.
+    self.dec3 = DoubleConv(baseChannels * 8, baseChannels * 4)  # up3 + t3.
+    self.dec2 = DoubleConv(baseChannels * 4, baseChannels * 2)  # up2 + t2.
+    self.dec1 = DoubleConv(baseChannels * 2, baseChannels)  # up1 + t1.
+
     # Final conv.
-    self.finalConv = nn.Conv2d(baseChannels // 2, numClasses, kernel_size=1)
+    self.finalConv = nn.Conv2d(baseChannels, numClasses, kernel_size=1)
 
   # Forward pass.
   def forward(self, x):
     # Encoder 1.
-    e1 = self.enc1.forward(x)
-    t1 = self.trans1.forward(e1)
+    e1 = self.enc1(x)
+    t1 = self.trans1(e1)
     p1 = self.pool1(t1)
     # Encoder 2.
-    e2 = self.enc2.forward(p1)
-    t2 = self.trans2.forward(e2)
+    e2 = self.enc2(p1)
+    t2 = self.trans2(e2)
     p2 = self.pool2(t2)
     # Encoder 3.
-    e3 = self.enc3.forward(p2)
-    t3 = self.trans3.forward(e3)
+    e3 = self.enc3(p2)
+    t3 = self.trans3(e3)
     p3 = self.pool3(t3)
     # Encoder 4.
-    e4 = self.enc4.forward(p3)
-    t4 = self.trans4.forward(e4)
+    e4 = self.enc4(p3)
+    t4 = self.trans4(e4)
     p4 = self.pool4(t4)
     # Center.
-    c = self.center.forward(p4)
+    c = self.center(p4)
+
     # Decoder stage 4.
-    u4 = self.up4.forward(torch.cat([c, t4], dim=1))
+    u4 = self.up4(c)
+    # Optional: align size (in case of odd dimensions).
+    if (u4.shape[2:] != t4.shape[2:]):
+      u4 = F.interpolate(u4, size=t4.shape[2:], mode="bilinear", align_corners=True)
+    d4 = self.dec4(torch.cat([u4, t4], dim=1))
+
     # Decoder stage 3.
-    u3 = self.up3.forward(torch.cat([d4, t3], dim=1))
+    u3 = self.up3(d4)
+    if (u3.shape[2:] != t3.shape[2:]):
+      u3 = F.interpolate(u3, size=t3.shape[2:], mode="bilinear", align_corners=True)
+    d3 = self.dec3(torch.cat([u3, t3], dim=1))
+
     # Decoder stage 2.
-    u2 = self.up2.forward(torch.cat([d3, t2], dim=1))
+    u2 = self.up2(d3)
+    if (u2.shape[2:] != t2.shape[2:]):
+      u2 = F.interpolate(u2, size=t2.shape[2:], mode="bilinear", align_corners=True)
+    d2 = self.dec2(torch.cat([u2, t2], dim=1))
+
     # Decoder stage 1.
-    u1 = self.up1.forward(torch.cat([d2, t1], dim=1))
+    u1 = self.up1(d2)
+    if (u1.shape[2:] != t1.shape[2:]):
+      u1 = F.interpolate(u1, size=t1.shape[2:], mode="bilinear", align_corners=True)
+    d1 = self.dec1(torch.cat([u1, t1], dim=1))
+
     # Final logits.
     return self.finalConv(d1)
 
@@ -2245,7 +2494,8 @@ class R2UNet(nn.Module):
     self.in4 = nn.Conv2d(baseChannels * 4, baseChannels * 8, kernel_size=3, padding=1)
     self.enc4 = RecurrentConvLayer(baseChannels * 8, t=t)
     self.pool4 = nn.MaxPool2d(2)
-    # Center.
+    # Center with projection to match expected channels.
+    self.centerProj = nn.Conv2d(baseChannels * 8, baseChannels * 16, kernel_size=1)
     self.center = RecurrentConvLayer(baseChannels * 16, t=t)
 
     # Upsampling.
@@ -2294,8 +2544,9 @@ class R2UNet(nn.Module):
     i4 = self.in4.forward(p3)
     e4 = self.enc4.forward(i4)
     p4 = self.pool4(e4)
-    # Center.
-    c = self.center.forward(p4)
+    # Center projection and recurrent processing.
+    cProj = self.centerProj(p4)
+    c = self.center.forward(cProj)
     # Decoder.
     u4 = self.up4(c)
     if ((u4.size(2) != e4.size(2)) or (u4.size(3) != e4.size(3))):
@@ -2706,104 +2957,245 @@ class EfficientUNet(nn.Module):
     return self.model.forward(x)
 
 
-class UNet3D(nn.Module):
+class BoundaryAwareUNet(nn.Module):
   r'''
-  3D U-Net for volumetric segmentation.
+  Boundary-aware U-Net with explicit boundary detection branch.
 
   Short summary:
-    A compact 3D U-Net using Conv3d and Pool3d operations for volumetric data.
+    Integrates parallel boundary detection pathway with auxiliary loss supervision
+    using Sobel filters to enhance segmentation boundary precision and reduce
+    boundary blurring common in standard encoder-decoder architectures.
 
   Parameters:
-    inputChannels (int): Number of input channels for 3D volumes. Default 1.
+    inputChannels (int): Number of input image channels. Default 3.
     numClasses (int): Number of segmentation classes. Default 2.
-    baseChannels (int): Base channel width. Default 16.
-    useConvTranspose3d (bool): If True use ConvTranspose3d for upsampling.
+    baseChannels (int): Base filter count. Default 64.
+    useConvTranspose2d (bool): Use ConvTranspose2d for upsampling when True.
+    boundaryWeight (float): Weighting factor for boundary supervision loss. Default 0.5.
+
+  Attributes:
+    encoder (nn.ModuleList): Standard U-Net encoder blocks.
+    pools (nn.ModuleList): Max pooling layers.
+    center (DoubleConv): Bottleneck block.
+    upsamples (nn.ModuleList): Upsampling modules.
+    decoders (nn.ModuleList): Decoder convolutional blocks.
+    boundaryEncoder (nn.ModuleList): Parallel encoder for boundary features.
+    boundaryCenter (DoubleConv): Boundary bottleneck block.
+    boundaryUpsamples (nn.ModuleList): Boundary upsampling modules.
+    boundaryDecoders (nn.ModuleList): Boundary decoder blocks.
+    boundaryHead (nn.Conv2d): Boundary prediction head (binary edge map).
+    segmentationHead (nn.Conv2d): Final segmentation logits head.
 
   Returns:
-    torch.Tensor: Logits tensor of shape [B, numClasses, D, H, W].
+    Tuple[torch.Tensor, torch.Tensor]: Segmentation logits and boundary map.
   '''
 
-  # Initialize UNet3D.
-  def __init__(self, inputChannels=1, numClasses=2, baseChannels=16, useConvTranspose3d=True):
+  # Initialize boundary-aware U-Net.
+  def __init__(
+    self,
+    inputChannels=3,
+    numClasses=2,
+    baseChannels=64,
+    useConvTranspose2d=True,
+    boundaryWeight=0.5
+  ):
     # Call parent initializer.
-    super(UNet3D, self).__init__()
-    # Encoder 3D conv blocks.
-    self.enc1 = nn.Sequential(
-      nn.Conv3d(inputChannels, baseChannels, kernel_size=3, padding=1),
-      nn.BatchNorm3d(baseChannels),
-      nn.ReLU(inplace=True),
-      nn.Conv3d(baseChannels, baseChannels, kernel_size=3, padding=1),
-      nn.BatchNorm3d(baseChannels),
-      nn.ReLU(inplace=True),
-    )
-    # Pooling and second encoder.
-    self.pool1 = nn.MaxPool3d(2)
-    self.enc2 = nn.Sequential(
-      nn.Conv3d(baseChannels, baseChannels * 2, kernel_size=3, padding=1),
-      nn.BatchNorm3d(baseChannels * 2),
-      nn.ReLU(inplace=True),
-    )
-    self.pool2 = nn.MaxPool3d(2)
-    # Center block.
-    self.center = nn.Sequential(
-      nn.Conv3d(baseChannels * 2, baseChannels * 4, kernel_size=3, padding=1),
-      nn.BatchNorm3d(baseChannels * 4),
-      nn.ReLU(inplace=True),
-    )
+    super(BoundaryAwareUNet, self).__init__()
+    # Store boundary supervision weight.
+    self.boundaryWeight = boundaryWeight
 
-    # Upsampling strategy.
-    if (useConvTranspose3d):
-      self.up1 = nn.ConvTranspose3d(baseChannels * 4, baseChannels * 2, kernel_size=2, stride=2)
-      self.up2 = nn.ConvTranspose3d(baseChannels * 2, baseChannels, kernel_size=2, stride=2)
-    else:
-      self.up1 = nn.Upsample(scale_factor=2, mode="trilinear", align_corners=True)
-      self.up2 = nn.Upsample(scale_factor=2, mode="trilinear", align_corners=True)
+    # Initialize standard encoder blocks.
+    self.encoder = nn.ModuleList()
+    # Initialize pooling layers.
+    self.pools = nn.ModuleList()
+    # Initialize boundary encoder blocks.
+    self.boundaryEncoder = nn.ModuleList()
 
-    # Decoder 3D convs and final conv.
-    self.dec1 = nn.Sequential(
-      nn.Conv3d(baseChannels * 4, baseChannels * 2, kernel_size=3, padding=1),
-      nn.BatchNorm3d(baseChannels * 2),
-      nn.ReLU(inplace=True),
-    )
-    self.dec2 = nn.Sequential(
-      nn.Conv3d(baseChannels * 2, baseChannels, kernel_size=3, padding=1),
-      nn.BatchNorm3d(baseChannels),
-      nn.ReLU(inplace=True),
-    )
-    self.finalConv = nn.Conv3d(baseChannels, numClasses, kernel_size=1)
+    # Set initial channel counters for both pathways.
+    inChansMain = inputChannels
+    inChansBoundary = inputChannels
+    boundaryBase = max(16, baseChannels // 4)
+    boundaryEncChans = []
 
-  # Forward pass for UNet3D.
+    # Build four-level encoder hierarchy.
+    for i in range(4):
+      # Create standard encoder block.
+      outChansMain = baseChannels * (2 ** i)
+      self.encoder.append(DoubleConv(inChansMain, outChansMain))
+      inChansMain = outChansMain
+
+      # Create boundary encoder block with reduced capacity.
+      outChansBoundary = boundaryBase * (2 ** i)
+      self.boundaryEncoder.append(DoubleConv(inChansBoundary, outChansBoundary))
+      boundaryEncChans.append(outChansBoundary)
+      inChansBoundary = outChansBoundary
+
+      # Create shared pooling layer.
+      self.pools.append(nn.MaxPool2d(2))
+
+    # Create standard bottleneck block.
+    self.center = DoubleConv(baseChannels * 8, baseChannels * 16)
+    # Create boundary bottleneck block.
+    self.boundaryCenter = DoubleConv(boundaryEncChans[-1], boundaryBase * 8)
+
+    # Initialize upsampling and decoder modules.
+    self.upsamples = nn.ModuleList()
+    self.decoders = nn.ModuleList()
+    self.boundaryUpsamples = nn.ModuleList()
+    self.boundaryDecoders = nn.ModuleList()
+
+    # Build symmetric decoder hierarchy for main segmentation path.
+    for i in range(4):
+      inChansDec = baseChannels * (2 ** (4 - i))
+      outChansDec = baseChannels * (2 ** (3 - i))
+      if useConvTranspose2d:
+        upModule = nn.ConvTranspose2d(
+          inChansDec,
+          outChansDec,
+          kernel_size=2,
+          stride=2
+        )
+      else:
+        upModule = nn.Sequential(
+          nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
+          nn.Conv2d(inChansDec, outChansDec, kernel_size=1)
+        )
+      self.upsamples.append(upModule)
+      self.decoders.append(DoubleConv(inChansDec, outChansDec))
+
+    # Build symmetric decoder hierarchy for boundary path.
+    currentBoundaryIn = boundaryBase * 8
+    for i in range(4):
+      outChansBoundary = boundaryEncChans[3 - i]
+      if useConvTranspose2d:
+        boundaryUp = nn.ConvTranspose2d(
+          currentBoundaryIn,
+          outChansBoundary,
+          kernel_size=2,
+          stride=2
+        )
+      else:
+        boundaryUp = nn.Sequential(
+          nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
+          nn.Conv2d(currentBoundaryIn, outChansBoundary, kernel_size=1)
+        )
+      self.boundaryUpsamples.append(boundaryUp)
+      self.boundaryDecoders.append(DoubleConv(2 * outChansBoundary, outChansBoundary))
+      currentBoundaryIn = outChansBoundary
+
+    # Create heads.
+    self.boundaryHead = nn.Conv2d(boundaryEncChans[0], 1, kernel_size=1)
+    self.segmentationHead = nn.Conv2d(baseChannels, numClasses, kernel_size=1)
+
+  # Forward pass through boundary-aware U-Net.
   def forward(self, x):
-    # Encoder 3D forward.
-    e1 = self.enc1.forward(x)
-    p1 = self.pool1(e1)
-    e2 = self.enc2.forward(p1)
-    p2 = self.pool2(e2)
-    # Center.
-    c = self.center.forward(p2)
-    # Decoder.
-    u1 = self.up1(c)
-    # Align spatial dims when necessary using a multi-line interpolate call.
-    if ((u1.size(2) != e2.size(2)) or (u1.size(3) != e2.size(3))):
-      u1 = F.interpolate(
-        u1,
-        size=(e2.size(2), e2.size(3)),
-        mode="trilinear",
-        align_corners=True,
+    # Extract original spatial dimensions.
+    hOrig = x.shape[2]
+    # Extract original width dimension.
+    wOrig = x.shape[3]
+    # Initialize lists for skip connections.
+    encoderFeatures = []
+    # Initialize boundary skip connection list.
+    boundaryFeatures = []
+    # Process through standard encoder path.
+    xEnc = x
+    # Process through boundary encoder path.
+    xBoundary = x
+    # Iterate through encoder stages.
+    for i in range(4):
+      # Apply standard encoder block.
+      xEnc = self.encoder[i](xEnc)
+      # Store standard encoder feature.
+      encoderFeatures.append(xEnc)
+      # Apply boundary encoder block.
+      xBoundary = self.boundaryEncoder[i](xBoundary)
+      # Store boundary encoder feature.
+      boundaryFeatures.append(xBoundary)
+      # Apply pooling to both pathways.
+      xEnc = self.pools[i](xEnc)
+      # Apply pooling to boundary pathway.
+      xBoundary = self.pools[i](xBoundary)
+    # Process standard bottleneck.
+    xEnc = self.center(xEnc)
+    # Process boundary bottleneck.
+    xBoundary = self.boundaryCenter(xBoundary)
+    # Process through decoder stages.
+    for i in range(4):
+      # Upsample standard features.
+      xEnc = self.upsamples[i](xEnc)
+      # Upsample boundary features.
+      xBoundary = self.boundaryUpsamples[i](xBoundary)
+      # Align spatial dimensions when necessary.
+      if (xEnc.size(2) != encoderFeatures[-(i + 1)].size(2)) or (
+        xEnc.size(3) != encoderFeatures[-(i + 1)].size(3)
+      ):
+        # Interpolate standard features to match skip connection.
+        xEnc = F.interpolate(
+          xEnc,
+          size=(
+            encoderFeatures[-(i + 1)].size(2),
+            encoderFeatures[-(i + 1)].size(3)
+          ),
+          mode="bilinear",
+          align_corners=True
+        )
+      # Align boundary features similarly.
+      if (xBoundary.size(2) != boundaryFeatures[-(i + 1)].size(2)) or (
+        xBoundary.size(3) != boundaryFeatures[-(i + 1)].size(3)
+      ):
+        # Interpolate boundary features to match skip connection.
+        xBoundary = F.interpolate(
+          xBoundary,
+          size=(
+            boundaryFeatures[-(i + 1)].size(2),
+            boundaryFeatures[-(i + 1)].size(3)
+          ),
+          mode="bilinear",
+          align_corners=True
+        )
+      # Concatenate standard skip connection.
+      xEnc = torch.cat(
+        [
+          xEnc,
+          encoderFeatures[-(i + 1)]
+        ],
+        dim=1
       )
-    d1 = self.dec1.forward(torch.cat([u1, e2], dim=1))
-    u2 = self.up2(d1)
-    # Align spatial dims when necessary using a multi-line interpolate call.
-    if ((u2.size(2) != e1.size(2)) or (u2.size(3) != e1.size(3))):
-      u2 = F.interpolate(
-        u2,
-        size=(e1.size(2), e1.size(3)),
-        mode="trilinear",
-        align_corners=True,
+      # Apply standard decoder block.
+      xEnc = self.decoders[i](xEnc)
+      # Concatenate boundary skip connection.
+      xBoundary = torch.cat(
+        [
+          xBoundary,
+          boundaryFeatures[-(i + 1)]
+        ],
+        dim=1
       )
-    d2 = self.dec2.forward(torch.cat([u2, e1], dim=1))
-    # Final logits.
-    return self.finalConv(d2)
+      # Apply boundary decoder block.
+      xBoundary = self.boundaryDecoders[i](xBoundary)
+    # Generate boundary prediction map.
+    boundaryMap = self.boundaryHead(xBoundary)
+    # Upsample boundary map to original resolution.
+    boundaryMap = F.interpolate(
+      boundaryMap,
+      size=(hOrig, wOrig),
+      mode="bilinear",
+      align_corners=True
+    )
+    # Generate segmentation logits.
+    segmentationLogits = self.segmentationHead(xEnc)
+    # Upsample segmentation to original resolution.
+    segmentationLogits = F.interpolate(
+      segmentationLogits,
+      size=(hOrig, wOrig),
+      mode="bilinear",
+      align_corners=True
+    )
+    # Return both segmentation logits and boundary map.
+    return (
+      segmentationLogits,
+      boundaryMap
+    )
 
 
 # Extended factory override to include the newly appended UNet variants.
@@ -2834,7 +3226,7 @@ def CreateUNet(
     norm (str): Normalization mode for configurable blocks. Default "batch".
     dropout (float): Dropout probability for configurable blocks. Default 0.0.
     residual (bool): Whether to use residual blocks where supported. Default False.
-    modelType (str): Case-insensitive model selection string, e.g. "dynamic", "unet3plus".
+    modelType (str): Case-insensitive model selection string, e.g. "dynamic".
 
   Returns:
     nn.Module: Instantiated UNet variant ready for training or inference.
@@ -2844,9 +3236,14 @@ def CreateUNet(
   mt = (modelType or "dynamic")
   mtLower = mt.lower()
 
-  # New variants mapping.
-  if (mtLower == "unet3plus"):
-    return UNet3Plus(
+  if (mtLower not in tuple(AVAILABLE_UNETS)):
+    print(
+      f"Warning: Unrecognized modelType '{modelType}'. Defaulting to 'dynamic' UNet.\n"
+      f"Available types: {AVAILABLE_UNETS}"
+    )
+
+  if (mtLower in ("original", "legacy")):
+    return UNet(
       inputChannels=inputChannels,
       numClasses=numClasses,
       baseChannels=baseChannels,
@@ -2909,22 +3306,6 @@ def CreateUNet(
       useConvTranspose2d=(upMode == "transpose"),
     )
 
-  if (mtLower == "unet3d"):
-    return UNet3D(
-      inputChannels=inputChannels,
-      numClasses=numClasses,
-      baseChannels=max(8, baseChannels // 2),
-      useConvTranspose3d=(upMode == "transpose"),
-    )
-
-  if (mtLower in ("original", "legacy")):
-    return UNet(
-      inputChannels=inputChannels,
-      numClasses=numClasses,
-      baseChannels=baseChannels,
-      useConvTranspose2d=(upMode == "transpose"),
-    )
-
   if (mtLower == "dynamic"):
     return DynamicUNet(
       inputChannels=inputChannels,
@@ -2961,14 +3342,6 @@ def CreateUNet(
       useConvTranspose2d=(upMode == "transpose"),
     )
 
-  if (mtLower == "nested"):
-    return NestedUNet(
-      inputChannels=inputChannels,
-      numClasses=numClasses,
-      baseChannels=baseChannels,
-      useConvTranspose2d=(upMode == "transpose"),
-    )
-
   if (mtLower == "se"):
     return SEUNet(
       inputChannels=inputChannels,
@@ -2979,6 +3352,14 @@ def CreateUNet(
 
   if (mtLower == "residual_attention"):
     return ResidualAttentionUNet(
+      inputChannels=inputChannels,
+      numClasses=numClasses,
+      baseChannels=baseChannels,
+      useConvTranspose2d=(upMode == "transpose"),
+    )
+
+  if (mtLower == "boundary_aware"):
+    return BoundaryAwareUNet(
       inputChannels=inputChannels,
       numClasses=numClasses,
       baseChannels=baseChannels,
@@ -2996,3 +3377,42 @@ def CreateUNet(
     dropout=dropout,
     residual=residual,
   )
+
+
+if __name__ == "__main__":
+  # Example to test all UNet variants.
+  for unetType in AVAILABLE_UNETS:
+    for imgSize in [128]:  # , 224, 256, 512
+      print(f"Testing UNet variant: {unetType} with input size {imgSize}x{imgSize}")
+      # Create model instance.
+      model = CreateUNet(
+        inputChannels=3,
+        numClasses=5,
+        baseChannels=64,
+        depth=4,
+        upMode="transpose",
+        norm="batch",
+        dropout=0.25,
+        residual=True,
+        modelType=unetType
+      )
+      model.train()
+      X = torch.randn(1, 3, imgSize, imgSize)
+      with torch.no_grad():
+        Y = model(X)
+      if (isinstance(Y, tuple)):
+        print(f"Output shapes: {[y.shape for y in Y]}")
+      else:
+        print(f"Output shape: {Y.shape}")
+
+      # Create dummy input tensor.
+      inputTensor = torch.randn(1, 3, imgSize, imgSize)
+      model.eval()
+      # Forward pass.
+      output = model(inputTensor)
+      # Print output shape.
+      if (isinstance(output, tuple)):
+        print(f"Output shapes: {[o.shape for o in output]}")
+      else:
+        print(f"Output shape: {output.shape}")
+      print("-" * 50)
