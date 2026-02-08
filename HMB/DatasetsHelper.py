@@ -1509,7 +1509,8 @@ def CreateSegmentationDataLoaders(
   imageSize: int = 256,
   batchSize: int = 8,
   numWorkers: int = 4,
-  numClasses: int = 1
+  numClasses: int = 1,
+  pinMemory: bool = False,
 ):
   r'''
   Create PyTorch DataLoader objects for segmentation tasks from a directory
@@ -1526,6 +1527,7 @@ def CreateSegmentationDataLoaders(
     batchSize (int): Batch size for the returned DataLoaders. Default 8.
     numWorkers (int): Number of worker processes for the DataLoader. Default 4.
     numClasses (int): Number of segmentation classes (used by `SegmentationDataset`).
+    pinMemory (bool): Whether to use pinned memory in DataLoaders for faster GPU transfer.
 
   Returns:
     tuple: (trainLoader, valLoader) PyTorch DataLoader instances for training and validation.
@@ -1578,23 +1580,37 @@ def CreateSegmentationDataLoaders(
     imageSize=imageSize,
     numClasses=numClasses
   )
+  allDataset = SegmentationDataset(
+    imageFiles,
+    maskFiles,
+    transforms=None,
+    imageSize=imageSize,
+    numClasses=numClasses
+  )
   # Create dataloaders for train and validation.
   trainLoader = torch.utils.data.DataLoader(
     trainDataset,
     batch_size=batchSize,
     shuffle=True,
     num_workers=numWorkers,
-    pin_memory=True
+    pin_memory=pinMemory,
   )
   valLoader = torch.utils.data.DataLoader(
     valDataset,
     batch_size=batchSize,
     shuffle=False,
     num_workers=numWorkers,
-    pin_memory=True
+    pin_memory=pinMemory,
+  )
+  allLoader = torch.utils.data.DataLoader(
+    allDataset,
+    batch_size=batchSize,
+    shuffle=False,
+    num_workers=numWorkers,
+    pin_memory=pinMemory,
   )
   # Return train and validation dataloaders.
-  return trainLoader, valLoader
+  return trainLoader, valLoader, allLoader
 
 
 def GatherSegmentationPairs(rootDir: str):

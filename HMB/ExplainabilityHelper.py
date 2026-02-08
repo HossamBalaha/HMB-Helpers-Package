@@ -220,12 +220,15 @@ class SHAPExplainer(object):
         # Ensure target variable matches the sampled features.
         self.yTest = self.yTest.loc[self.XTest.index]
 
-  def ComputeShapValues(self):
-    '''
+  def ComputeShapValues(self, maxEvals=None):
+    r'''
     Initialize the SHAP explainer and compute SHAP values for the test set.
 
     This method creates a SHAP explainer object using the trained model and the prepared test features,
     then computes SHAP values for the test set to explain model predictions.
+
+    Parameters:
+      maxEvals (int, optional): Maximum number of evaluations for the SHAP explainer (default: None, which means noOfFeatures * 2 + 1).
 
     Notes
     -----
@@ -235,7 +238,11 @@ class SHAPExplainer(object):
     '''
 
     # Initialize SHAP explainer using the trained model and prepared test data.
-    self.explainer = shap.Explainer(self.model.predict, self.XTest)
+    noOfFeatures = self.XTest.shape[1]
+    if (maxEvals is None):
+      maxEvals = noOfFeatures * 2 + 2
+    print(f"Initializing SHAP explainer with max_evals={maxEvals} for {noOfFeatures} features.")
+    self.explainer = shap.Explainer(self.model.predict, self.XTest, max_evals=maxEvals)
 
     # Compute SHAP values for the test set to explain model predictions.
     self.shapValues = self.explainer(self.XTest)
@@ -244,7 +251,7 @@ class SHAPExplainer(object):
     print("SHAP values shape:", self.shapValues.shape)
 
   def MakePredictions(self):
-    '''
+    r'''
     Make predictions on the test set using the loaded model and decode them.
 
     This method uses the trained model to predict on the prepared test features,
@@ -268,7 +275,7 @@ class SHAPExplainer(object):
     noOfRecords=150,
     noOfFeatures=5
   ):
-    '''
+    r'''
     Generate and save various SHAP visualizations for model interpretability.
 
     This method produces and saves the following SHAP plots:
@@ -293,8 +300,13 @@ class SHAPExplainer(object):
     '''
 
     # Determine the instance index to explain if not provided.
+    # Use a local RNG (numpy Generator) to avoid relying on NumPy's global RNG and to silence
+    # the FutureWarning emitted by SHAP when the global RNG has been seeded elsewhere in the
+    # application. This keeps randomness local and makes it easy to provide a seed later if
+    # reproducible behavior is required.
+    rng = np.random.default_rng()
     if (instanceIndex is None):
-      instanceIndex = np.random.randint(0, self.XTest.shape[0])  # Choose a random instance index.
+      instanceIndex = int(rng.integers(0, self.XTest.shape[0]))  # Choose a random instance index using local RNG.
 
     # --- Waterfall Plot ---
     # Visualize the waterfall plot for a specific instance's prediction.
@@ -429,10 +441,20 @@ class SHAPExplainer(object):
 
       # --- Summary Plot ---
       # Visualize the summary plot for the test set.
-      shap.summary_plot(
-        temp[:noOfRecords, :noOfFeatures],  # SHAP values for selected records/features.
-        show=False,  # Prevent automatic display.
-      )
+      # Prefer passing an explicit RNG to SHAP's summary_plot to opt-in to the new RNG behavior
+      # and silence the FutureWarning about the NumPy global RNG. If the installed SHAP version
+      # does not accept the `rng` argument, fall back to calling without it.
+      try:
+        shap.summary_plot(
+          temp[:noOfRecords, :noOfFeatures],  # SHAP values for selected records/features.
+          show=False,  # Prevent automatic display.
+          rng=rng,
+        )
+      except TypeError:
+        shap.summary_plot(
+          temp[:noOfRecords, :noOfFeatures],  # SHAP values for selected records/features.
+          show=False,  # Prevent automatic display.
+        )
 
       # Set the title of the summary plot.
       plt.title(
@@ -557,27 +579,27 @@ class CAMExplainerPyTorch(object):
     topN=20,
     debug=False,
   ):
-    '''
-      Initialize the CAMExplainerPyTorch with model, device and visualization settings.
+    r'''
+    Initialize the CAMExplainerPyTorch with model, device and visualization settings.
 
-      Parameters:
-        torchModel (torch.nn.Module | None): The underlying PyTorch model used for inference and gradients.
-        yoloModel (object | None): Optional Ultralytics YOLO wrapper from which a torch model may be extracted.
-        device (str): Device where model and tensors are executed ("cpu" or "cuda").
-        camType (str): Selected CAM / attribution method name (lowercase key used by dispatch map).
-        imgSize (int): Default square input size for preprocessing images.
-        alpha (float): Default overlay transparency when blending heatmaps with the image.
-        outputBase (Path | None): Optional base path where outputs (Overlays, Heatmaps) are saved.
-        figsize (tuple): Default figure size used by annotated visualizations.
-        dpi (int): Default DPI used to render annotated images.
-        fontSize (int): Base font size used in annotations.
-        topN (int): Top-N value used for uncertainty/confidence tracking.
-        debug (bool): Enable verbose debug prints if True.
+    Parameters:
+      torchModel (torch.nn.Module | None): The underlying PyTorch model used for inference and gradients.
+      yoloModel (object | None): Optional Ultralytics YOLO wrapper from which a torch model may be extracted.
+      device (str): Device where model and tensors are executed ("cpu" or "cuda").
+      camType (str): Selected CAM / attribution method name (lowercase key used by dispatch map).
+      imgSize (int): Default square input size for preprocessing images.
+      alpha (float): Default overlay transparency when blending heatmaps with the image.
+      outputBase (Path | None): Optional base path where outputs (Overlays, Heatmaps) are saved.
+      figsize (tuple): Default figure size used by annotated visualizations.
+      dpi (int): Default DPI used to render annotated images.
+      fontSize (int): Base font size used in annotations.
+      topN (int): Top-N value used for uncertainty/confidence tracking.
+      debug (bool): Enable verbose debug prints if True.
 
-      Notes
-      -----
-        - If both torchModel and yoloModel are provided, torchModel takes precedence.
-        - If no torchModel is provided but a yoloModel is, the underlying torch model is extracted automatically.
+    Notes
+    -----
+      - If both torchModel and yoloModel are provided, torchModel takes precedence.
+      - If no torchModel is provided but a yoloModel is, the underlying torch model is extracted automatically.
     '''
 
     # Store configuration values.

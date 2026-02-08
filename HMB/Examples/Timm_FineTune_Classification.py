@@ -256,11 +256,11 @@ def ValidateArgs(args):
       raise FileNotFoundError(f"resumeFromCheckpoint not found: {args.resumeFromCheckpoint}")
 
   # Validate judgeBy choices.
-  valid_judges = {"val_loss", "val_accuracy", "both"}
+  validJudges = {"val_loss", "val_accuracy", "both"}
   # Ensure judgeBy is one of the allowed strings.
-  if (args.judgeBy not in valid_judges):
+  if (args.judgeBy not in validJudges):
     # Raise when judgeBy is invalid.
-    raise ValueError(f"--judgeBy must be one of {valid_judges}")
+    raise ValueError(f"--judgeBy must be one of {validJudges}")
 
   # Validate earlyStoppingPatience when provided.
   if (args.earlyStoppingPatience is not None):
