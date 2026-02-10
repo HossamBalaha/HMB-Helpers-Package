@@ -1,14 +1,73 @@
-import hashlib, time, json, shutil, os, cv2, torch
+import hashlib, time, json, shutil, os, cv2, torch, math
 import numpy as np
-import math
 from pathlib import Path
-from typing import List, Callable, Optional, Tuple, Union
-from sklearn.model_selection import train_test_split
 from PIL import Image, ImageOps, ImageEnhance
-from HMB.DataAugmentationHelper import PerformDataAugmentation
+from sklearn.model_selection import train_test_split
+from typing import List, Callable, Optional, Tuple, Union
 from HMB.PlotsHelper import PlotBarChart
 from HMB.Initializations import IMAGE_SUFFIXES
 from HMB.Utils import DumpJsonFile, ReadJsonFile
+from HMB.DataAugmentationHelper import PerformDataAugmentation
+
+
+class RawImageFolder(object):
+  r'''
+  Lightweight loader to get image paths and labels without transforms.
+
+  Attributes:
+    samples (list): List of tuples (imagePath, labelIndex) for all images in the dataset.
+    classToIdx (dict): Mapping of class names to integer indices.
+    classes (list): Sorted list of class names detected in the dataset.
+
+  Notes:
+    - The constructor scans the provided root directory for subdirectories (each representing a class) and collects
+      image file paths along with their corresponding class labels.
+    - Only files with extensions matching those in IMAGE_SUFFIXES are considered as valid images.
+    - The __getitem__ method returns the file path and label index for a given sample index, allowing for lazy loading of images.
+  '''
+
+  def __init__(self, root):
+    r'''
+    Initialize the RawImageFolder by scanning the root directory for class subfolders and image files.
+
+    Parameters:
+      root (str): Path to the root directory containing class subfolders with images.
+    '''
+
+    self.samples = []  # list of (path, label)
+    self.classToIdx = {}
+    self.classes = sorted(entry.name for entry in os.scandir(root) if (entry.is_dir()))
+    self.classToIdx = {clsName: idx for idx, clsName in enumerate(self.classes)}
+    for targetClass in self.classes:
+      classDir = os.path.join(root, targetClass)
+      for fname in sorted(os.listdir(classDir)):
+        if (fname.lower().endswith(tuple(IMAGE_SUFFIXES))):
+          path = os.path.join(classDir, fname)
+          self.samples.append((path, self.classToIdx[targetClass]))
+
+  def __len__(self):
+    r'''
+    Calculate the total number of samples (images) in the dataset.
+
+    Returns:
+      int: Total number of samples (images) in the dataset.
+    '''
+
+    return len(self.samples)
+
+  def __getitem__(self, idx):
+    r'''
+    Retrieve the image path and label index for a given sample index.
+
+    Parameters:
+      idx (int): Index of the sample to retrieve.
+
+    Returns:
+      tuple: A tuple containing the image file path (str) and the corresponding label index (int).
+    '''
+
+    path, label = self.samples[idx]
+    return path, label  # Return path, not image tensor.
 
 
 class GenericImagesDatasetHandler(object):

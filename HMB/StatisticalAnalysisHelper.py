@@ -11,7 +11,7 @@ from statsmodels.stats.diagnostic import acorr_ljungbox
 from statsmodels.stats.power import TTestPower
 from scipy.stats import skew, kurtosis, bootstrap, wilcoxon
 from skimage.measure import shannon_entropy, moments
-from HMB.Utils import GetCmapColors
+from HMB.PlotsHelper import GetCmapColors
 
 
 class GeneralStatisticsHelper(object):
@@ -3092,8 +3092,12 @@ def PlotMetrics(
         plt.subplot(noRows, noCols, i + 1)
         sns.swarmplot(
           data=[dataset[metric]["Trials"] for dataset in data],
-          palette=cmapColors,
-          alpha=0.7
+          palette=cmapColors[:len(names)],  # Slice palette to match groups.
+          dodge=True,
+          size=3,  # Smaller markers to reduce placement failures.
+          edgecolor="0.5",  # Numeric gray to avoid grayscale FutureWarning.
+          linewidth=0.4,
+          alpha=0.8
         )
         color = cmapColors[i]
         plt.title(
@@ -3345,9 +3349,13 @@ def PlotMetrics(
         plt.subplot(noRows, noCols, i + 1)
         sns.stripplot(
           data=[dataset[metric]["Trials"] for dataset in data],
-          palette=cmapColors,  # Color palette for the strip plot.
-          alpha=0.7,  # Transparency for better visibility.
           jitter=True,  # Add jitter to avoid overlap.
+          palette=cmapColors[:len(names)],  # Slice palette to match groups.
+          dodge=True,
+          size=3,  # Smaller markers to reduce placement failures.
+          edgecolor="0.5",  # Numeric gray to avoid grayscale FutureWarning.
+          linewidth=0.4,
+          alpha=0.8,  # Transparency for better visibility.
         )
         color = cmapColors[i]
         plt.title(f"Strip Plot of {metric} Results", color=color)
@@ -3617,12 +3625,12 @@ def PlotMetrics(
         # Use Seaborn's violinplot + stripplot for a modern raincloud plot (ptitprince is not required)
         for i, metric in enumerate(metrics):
           plt.figure(figsize=(factor * 2, factor))
-          all_trials = []
-          all_names = []
+          allTrials = []
+          allNames = []
           for j, dataset in enumerate(data):
-            all_trials.extend(dataset[metric]["Trials"])
-            all_names.extend([names[j]] * len(dataset[metric]["Trials"]))
-          df = pd.DataFrame({"Metric": all_trials, "Group": all_names})
+            allTrials.extend(dataset[metric]["Trials"])
+            allNames.extend([names[j]] * len(dataset[metric]["Trials"]))
+          df = pd.DataFrame({"Metric": allTrials, "Group": allNames})
           # Violin plot (density)
           sns.violinplot(
             x="Group", y="Metric", data=df,
@@ -3633,13 +3641,13 @@ def PlotMetrics(
             cut=0, bw_method=0.2, alpha=0.7,
             legend=False
           )
-          # Strip plot (raw data points)
+          # Strip plot (raw data points).
           sns.stripplot(
             x="Group", y="Metric", data=df,
             palette=cmapColors[:len(names)],
-            hue=None,  # Avoid double legend.
+            legend=False, hue="Group",
             dodge=False, jitter=True, alpha=0.5,
-            size=4, edgecolor="gray", linewidth=0.5
+            size=4, edgecolor="0.5", linewidth=0.5
           )
           plt.title(f"Raincloud Plot of {metric}", color=cmapColors[i])
           plt.xlabel("Group", fontsize=fontSize)
@@ -3653,6 +3661,45 @@ def PlotMetrics(
             plt.show()
           plt.close()  # Close the figure to free memory.
           plt.clf()  # Clear the current figure.
+
+        # Generate a combined raincloud plot for all metrics and datasets as subplots.
+        plt.figure(figsize=(factor * noCols, factor * noRows))
+        for i, metric in enumerate(metrics):
+          plt.subplot(noRows, noCols, i + 1)
+          allTrials = []
+          allNames = []
+          for j, dataset in enumerate(data):
+            allTrials.extend(dataset[metric]["Trials"])
+            allNames.extend([names[j]] * len(dataset[metric]["Trials"]))
+          df = pd.DataFrame({"Metric": allTrials, "Group": allNames})
+          sns.violinplot(
+            x="Group", y="Metric", data=df,
+            hue="Group",
+            palette=cmapColors[:len(names)],
+            inner=None,
+            linewidth=1,
+            cut=0, bw_method=0.2, alpha=0.7,
+            legend=False
+          )
+          sns.stripplot(
+            x="Group", y="Metric", data=df,
+            palette=cmapColors[:len(names)],
+            legend=False, hue="Group",
+            dodge=False, jitter=True, alpha=0.5,
+            size=4, edgecolor="0.5", linewidth=0.5
+          )
+          plt.title(f"Raincloud Plot of {metric}", color=cmapColors[i])
+          plt.xlabel("Group", fontsize=fontSize)
+          plt.ylabel("Metric", fontsize=fontSize)
+          plt.xticks(color=GetTickColor(i), rotation=xTicksRotation)
+          plt.yticks(color=GetTickColor(i))
+        plt.tight_layout()
+        keywordRep = keyword.replace("\n", "_")
+        plt.savefig(f"RaincloudPlot_Combined_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
+        if (showFigures):
+          plt.show()
+        plt.close()  # Close the figure to free memory.
+        plt.clf()  # Clear the current figure.
       except Exception as e:
         print(f"RaincloudPlots: {e}")
   except Exception as e:
@@ -3685,13 +3732,13 @@ def PlotMetrics(
           print(f"AndrewsCurves: {e}")
       # Create a combined Andrews curves plot for all datasets.
       plt.figure(figsize=(factor * 2, factor * 2))
-      combined_df = pd.DataFrame()
+      combinedDF = pd.DataFrame()
       for i, dataset in enumerate(data):
         temp_df = pd.DataFrame({metric: dataset[metric]["Trials"] for metric in metrics})
         temp_df["Group"] = names[i]
-        combined_df = pd.concat([combined_df, temp_df], ignore_index=True)
+        combinedDF = pd.concat([combinedDF, temp_df], ignore_index=True)
       try:
-        pd.plotting.andrews_curves(combined_df, "Group", color=cmapColors)
+        pd.plotting.andrews_curves(combinedDF, "Group", color=cmapColors)
         plt.title("Combined Andrews Curves", color="black")
         plt.tight_layout()
         keywordRep = keyword.replace("\n", "_")
@@ -3817,7 +3864,11 @@ def PlotMetrics(
         plt.subplot(noRows, noCols, i + 1)
         sns.boxenplot(
           data=[dataset[metric]["Trials"] for dataset in data],
-          palette=cmapColors
+          palette=cmapColors[:len(names)],  # Slice palette to match groups.
+          dodge=True,
+          edgecolor="0.5",  # Numeric gray to avoid grayscale FutureWarning.
+          linewidth=0.4,
+          alpha=0.8,  # Transparency for better visibility.
         )
         plt.title(f"Boxen Plot of {metric} Results", color=cmapColors[i])
         plt.xticks(range(len(names)), names, rotation=xTicksRotation, color=GetTickColor(i))

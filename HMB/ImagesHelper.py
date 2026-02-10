@@ -1939,3 +1939,101 @@ def SaturateImage(img: Image.Image, level: float) -> Image.Image:
   factor = 1.0 + float(level)
   # Create color enhancer and apply saturation change.
   return ImageEnhance.Color(img).enhance(factor)
+
+
+def ClusteringImageKMeans(sample, kmeans, noChannels=4):
+  r'''
+  Use a pre-fitted KMeans model to cluster an image.
+
+  Parameters:
+    sample (numpy.ndarray): Input image to be clustered.
+    kmeans (KMeans): Pre-fitted KMeans model.
+    noChannels (int): Number of channels in the image. Default is 4.
+
+  Returns:
+    numpy.ndarray: Grayscale image where each pixel value corresponds to its cluster label.
+  '''
+
+  # Reshape the image to a 2D array of pixels and their color values, then predict cluster labels.
+  pixelValues = np.array(sample.copy()).reshape(-1, noChannels)
+  # Sort pixel values to ensure consistent ordering for KMeans prediction.
+  pixelValues.sort()
+  # Predict cluster labels for each pixel using the pre-fitted KMeans model.
+  labels = kmeans.predict(pixelValues)
+  # Get the original image dimensions to reshape the clustered labels back to image format.
+  height, width = sample.shape[:2]
+  # Create an array of grayscale values corresponding to each cluster label.
+  grayscaleValues = np.linspace(0, 255, kmeans.n_clusters, dtype=np.uint8)
+  # Assign grayscale values to each pixel based on its cluster label and reshape to image dimensions.
+  grayscaleImage = grayscaleValues[labels].reshape((height, width))
+  return grayscaleImage
+
+def FitGlobalKMeans(
+  heDeformedFolderPath,
+  targetSize=(256, 256),
+  numClusters=3,
+  noChannels=4,
+  sampleSize=None,
+  modelPath="Global_KMeans_Model.p",
+  nInit=10,
+  batchSize=1000,
+  randomState=42,
+  verbose=False,
+):
+  r'''
+  Fit a global KMeans model on all image pixels and save it.
+
+  Parameters:
+    heDeformedFolderPath (str): Path to the folder containing deformed HE images.
+    targetSize (tuple): Target size to resize images for fitting. Default is (256, 256).
+    numClusters (int): Number of clusters for KMeans. Default is 3.
+    noChannels (int): Number of channels in the images. Default is 4.
+    sampleSize (int or None): Number of pixels to sample from each image. If None, use all pixels. Default is None.
+    modelPath (str): Path to save the fitted KMeans model. Default is "Global_KMeans_Model.p".
+    nInit (int): Number of time the k-means algorithm will be run with different centroid seeds. Default is 10.
+    batchSize (int): Size of the mini-batches for MiniBatchKMeans. Default is 1000.
+    randomState (int): Random seed for reproducibility. Default is 42.
+
+  Returns:
+    sklearn.cluster.KMeans: Fitted KMeans model.
+  '''
+
+  from sklearn.cluster import MiniBatchKMeans
+  from HMB.Utils import WritePickleFile
+
+  allPixels = []
+  # List all image files in the specified folder containing deformed HE images.
+  files = os.listdir(heDeformedFolderPath)
+  # Iterate over each image file in the specified folder, read and resize the image,
+  # and collect pixel data for KMeans fitting.
+  for file in tqdm.tqdm(files, desc="Collecting pixels for global KMeans"):
+    try:
+      img = Image.open(os.path.join(heDeformedFolderPath, file))
+      img = img.resize(targetSize)
+      imgNp = np.array(img)
+      if (noChannels is not None):
+        pixels = imgNp.reshape(-1, noChannels)
+      else:
+        pixels = imgNp.reshape(-1, imgNp.shape[-1])
+      if (sampleSize and pixels.shape[0] > sampleSize):
+        idx = np.random.choice(pixels.shape[0], sampleSize, replace=False)
+        pixels = pixels[idx]
+      allPixels.append(pixels)
+    except Exception as e:
+      if (verbose):
+        print(f"Error processing file {file}: {e}", flush=True)
+      continue
+  # Stack all collected pixel data into a single array for KMeans fitting.
+  allPixels = np.vstack(allPixels)
+  # Initialize the MiniBatchKMeans model with specified parameters for efficient clustering on large datasets.
+  kmeans = MiniBatchKMeans(
+    n_clusters=numClusters,  # Number of clusters.
+    random_state=randomState,  # For reproducibility.
+    n_init=nInit,  # Number of initializations to run.
+    batch_size=batchSize,  # Use mini-batches for efficiency.
+  )  # Initialize MiniBatchKMeans.
+  # Fit the KMeans model on the collected pixel data.
+  kmeans.fit(allPixels)
+  # Save the fitted KMeans model to a file.
+  WritePickleFile(modelPath, kmeans)
+  return kmeans

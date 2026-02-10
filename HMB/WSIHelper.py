@@ -289,6 +289,7 @@ def TileExtractionAlignmentHandler(
   emptyPercentageThreshold=80,  # Threshold for empty percentage in patches (default is 80%).
   doPlotting=True,  # Whether to generate and save plots for visualization.
   verbose=False,  # Whether to print verbose output during processing.
+  dpi=720,  # DPI for saved plots. Default is 720 for high-quality visualization.
 ):
   r'''
   Extracts and aligns patches from HE (Hematoxylin-Eosin) and MT (Masson's Trichrome) slides,
@@ -309,6 +310,7 @@ def TileExtractionAlignmentHandler(
     emptyPercentageThreshold (int): Threshold for empty percentage in patches (default is 80%).
     doPlotting (bool): Whether to generate and save plots for visualization.
     verbose (bool): Whether to print verbose output during processing.
+    dpi (int): DPI for saved plots.
 
   Raises:
     AssertionError: If the HE or MT slide paths do not exist.
@@ -380,8 +382,8 @@ def TileExtractionAlignmentHandler(
     plt.tight_layout()
     # Save the plot as PNG only if thumbStoragePath is defined.
     plt.savefig(
-      os.path.join(thumbStoragePath, f"Slide_{os.path.basename(heSlidePath)}.png"),
-      dpi=720,
+      os.path.join(storageDir, "Thumbnails Visualization", f"Slide_{os.path.basename(heSlidePath)}.png"),
+      dpi=dpi,
       bbox_inches="tight",
     )
     plt.close()  # Close the plot to free up memory.
@@ -506,7 +508,7 @@ def TileExtractionAlignmentHandler(
         #   # Save the plot as PNG.
         #   plt.savefig(
         #     os.path.join(mtTilesStoragePath, f"Tile_{topLeftPoint}.png"),
-        #     dpi=720,
+        #     dpi=dpi,
         #     bbox_inches="tight",
         #   )
         #   plt.close()
@@ -850,3 +852,151 @@ def FreeFormDeformationHandler(
     except Exception as e:
       # Handle any exceptions that occur during processing.
       print(f"Error processing {heFile}: {e}")
+
+
+def ExtractRandomTilesFromImages(
+  labelsFile,  # Path to CSV labels or a pandas.DataFrame.
+  slidesDir="Slides",  # Directory where slide files live (joined with filenames from labels).
+  outputDir="Tiles",  # Root output directory where class folders will be created.
+  targetShape=(256, 256),  # (width, height) of tiles to extract.
+  numOfTiles=1000,  # Number of tiles to extract per slide.
+  allowedBackgroundRatio=0.65,  # Maximum allowed ratio of (mostly) background pixels.
+  filenameColumn="filename",  # Column name in labels CSV that contains filenames.
+  categoryColumn="Category",  # Column name that contains category / class integer.
+  maxAttemptsFactor=10,  # Maximum attempts = numOfTiles * maxAttemptsFactor (avoid infinite loops).
+  verbose=False,  # Verbose logging.
+):
+  r'''
+  Extract random tiles from a set of large images using pyvips for efficient IO and
+  OpenCV for simple background filtering. This mirrors the user's provided script but
+  is wrapped as a reusable function following the repository style.
+
+  Parameters:
+    labelsFile (str or pandas.DataFrame): Path to a CSV file with at least a filename column
+      and either a category column or one-hot category columns. Alternatively a DataFrame
+      may be passed directly.
+    slidesDir (str): Directory containing the slides referenced by the filename column.
+    outputDir (str): Base directory where class subfolders will be created and tiles saved.
+    targetShape (tuple): (width, height) of tiles to crop.
+    numOfTiles (int): Number of tiles to extract per slide.
+    allowedBackgroundRatio (float): Allowed fraction of background (white/black) pixels.
+    filenameColumn (str): Name of the filename column inside the labels file/DataFrame.
+    categoryColumn (str): Name of the category column. If missing the function will try to
+      infer a Category column from one-hot encoded columns (same heuristic as in the snippet).
+    maxAttemptsFactor (int): Multiplier to cap the maximum attempts per slide (to avoid infinite loops).
+    verbose (bool): Whether to print progress and warnings.
+
+  Returns:
+    dict: Summary dictionary with CamelCase keys describing the operation outcome.
+  '''
+
+  # Local imports (keep module-level imports unchanged).
+  import pyvips, math
+  import pandas as pd
+
+  # Load labels.
+  if (isinstance(labelsFile, (str, Path))):
+    if (not os.path.exists(str(labelsFile))):
+      raise FileNotFoundError(f"Labels file not found: {labelsFile}")
+    labels = pd.read_csv(labelsFile)
+  elif (hasattr(labelsFile, "copy") and isinstance(labelsFile, pd.DataFrame)):
+    labels = labelsFile.copy()
+  else:
+    raise ValueError("labelsFile must be a path to a CSV or a pandas.DataFrame")
+
+  # If category column missing, try to build it from one-hot columns (common pattern).
+  if (categoryColumn not in labels.columns):
+    # assume first column is filename and rest are one-hot class columns.
+    if (labels.shape[1] >= 2):
+      catCols = labels[labels.columns[1:]].columns
+      try:
+        labels["Category"] = np.argmax(labels[catCols].values, axis=1)
+        categoryColumn = "Category"
+        if (verbose):
+          print("Inferred 'Category' from one-hot columns.")
+      except Exception:
+        raise ValueError(f"Cannot infer a '{categoryColumn}' column from labels; provide explicit column name.")
+    else:
+      raise ValueError(f"labels DataFrame doesn't contain a '{categoryColumn}' column and cannot infer one.")
+
+  results = {}
+
+  # Ensure output base exists.
+  os.makedirs(outputDir, exist_ok=True)
+
+  for idx, row in labels.iterrows():
+    filename = str(row[filenameColumn])
+    cat = row[categoryColumn]
+    clsPath = os.path.join(outputDir, str(cat))
+    os.makedirs(clsPath, exist_ok=True)
+
+    filePath = os.path.join(slidesDir, filename)
+    if (not os.path.exists(filePath)):
+      if (verbose):
+        print(f"[SKIP] slide not found: {filePath}")
+      results[filename] = 0
+      continue
+
+    try:
+      image = pyvips.Image.new_from_file(filePath, access="sequential")
+    except Exception as e:
+      if (verbose):
+        print(f"[ERROR] failed to open {filePath}: {e}")
+      results[filename] = 0
+      continue
+
+    width, height = image.width, image.height
+    tw, th = int(targetShape[0]), int(targetShape[1])
+
+    if (width <= tw or height <= th):
+      if verbose:
+        print(f"[SKIP] slide smaller than target tile size: {filePath} ({width}x{height})")
+      results[filename] = 0
+      continue
+
+    counter = 0
+    attempts = 0
+    maxAttempts = max(1000, int(numOfTiles * maxAttemptsFactor))
+
+    while (counter < numOfTiles and attempts < maxAttempts):
+      attempts += 1
+      x = np.random.randint(0, width - tw)
+      y = np.random.randint(0, height - th)
+
+      try:
+        tileVips = image.crop(x, y, tw, th)
+        tile = np.ndarray(
+          buffer=tileVips.write_to_memory(),
+          dtype=np.uint8,
+          shape=[tileVips.height, tileVips.width, 3]
+        )
+
+        # Convert to HSV then to gray as in the original snippet.
+        imgHSV = cv2.cvtColor(tile, cv2.COLOR_BGR2HSV)
+        imgGray = cv2.cvtColor(imgHSV, cv2.COLOR_BGR2GRAY)
+        imgGray = cv2.GaussianBlur(imgGray, (3, 3), 0)
+        imgThresh = cv2.threshold(imgGray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+
+        ratioOfBlackBackground = np.sum(imgThresh <= 255 * 0.1) / float(tw * th)
+        ratioOfWhiteBackground = np.sum(imgThresh >= 255 * 0.9) / float(tw * th)
+
+        if ((ratioOfBlackBackground > allowedBackgroundRatio) or (ratioOfWhiteBackground > allowedBackgroundRatio)):
+          continue
+
+        # Save tile.
+        baseName = os.path.splitext(os.path.basename(filename))[0]
+        outName = os.path.join(clsPath, f"{baseName}_{x}_{y}_{counter}.jpg")
+        # cv2.imwrite expects BGR; tile is assumed compatible with user's original snippet.
+        cv2.imwrite(outName, tile)
+        counter += 1
+
+      except Exception as e:
+        if (verbose):
+          print(f"[WARN] failed cropping/saving tile from {filePath} at ({x},{y}): {e}")
+        continue
+
+    results[filename] = counter
+    if (verbose):
+      print(f"Saved {counter}/{numOfTiles} tiles for {filename} (attempts: {attempts})")
+
+  return results
