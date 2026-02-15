@@ -1,7 +1,10 @@
 # Import the required libraries.
-import PIL, cv2, os, openslide, json
+import PIL, cv2, os, openslide, json, tqdm
 import numpy as np
 from pathlib import Path
+import matplotlib.pyplot as plt
+import xml.etree.ElementTree as ET
+from shapely.geometry import Polygon
 from HMB.Utils import *
 from HMB.ImagesHelper import *
 
@@ -44,6 +47,7 @@ def ReadGeoJSONAnnotations(annotationFile):
   '''
 
   p = Path(annotationFile)
+  # Check that the provided file path exists.
   if (not p.exists()):
     print(f"ERROR: Annotation file does not exist: {p}")
     return []
@@ -52,12 +56,13 @@ def ReadGeoJSONAnnotations(annotationFile):
     with p.open("r", encoding="utf-8") as f:
       data = json.load(f)
   except Exception as e:
+    # Report JSON parsing error with the path.
     print(f"ERROR: Failed to read/parse GeoJSON '{p}': {e}")
     return []
 
   annotations: List[Dict[str, Any]] = []
 
-  # Normalize to a list of features
+  # Normalize to a list of features.
   features = None
   if (isinstance(data, dict) and isinstance(data.get("features"), list)):
     features = data["features"]
@@ -66,7 +71,7 @@ def ReadGeoJSONAnnotations(annotationFile):
   elif (isinstance(data, dict) and data.get("type") == "FeatureCollection"):
     features = data.get("features", [])
   else:
-    # If data looks like a geometry object, wrap it as a single feature-like entry
+    # If data looks like a geometry object, wrap it as a single feature-like entry.
     if (isinstance(data, dict) and ("type" in data and "coordinates" in data)):
       features = [{"type": "Feature", "geometry": data, "properties": {}}]
     else:
@@ -74,6 +79,7 @@ def ReadGeoJSONAnnotations(annotationFile):
       return []
 
   for idx, feat in enumerate(features):
+    # Skip non-dictionary features.
     if (not isinstance(feat, dict)):
       print(f"WARNING: Skipping non-dict feature at index {idx}")
       continue
@@ -89,6 +95,7 @@ def ReadGeoJSONAnnotations(annotationFile):
     gtype = geom.get("type")
     coords = geom.get("coordinates")
 
+    # Append both the original GeoJSON-style keys and CamelCase aliases for compatibility.
     annotations.append(
       {
         "id"        : fid,
@@ -195,6 +202,7 @@ def ExtractPatchesFromWSI(
   from PIL import Image
   from shapely.geometry import Point, Polygon
 
+  # Create the output path if missing.
   outputPath = Path(outputDir)
   outputPath.mkdir(parents=True, exist_ok=True)
 
@@ -575,7 +583,7 @@ def ExtractPatch(
   # Check if the downsampled point lies within both the MT and HE contours.
   topLeftFlag = (
     IsPointInsideContour(topLeftDownsampled, mtContour) and
-    IsPointInsideContour(topLeftDownSampled, heContour)
+    IsPointInsideContour(topLeftDownsampled, heContour)
   )
 
   # Apply the homography transformation to the downsampled point.
@@ -870,24 +878,6 @@ def ExtractRandomTilesFromImages(
   Extract random tiles from a set of large images using pyvips for efficient IO and
   OpenCV for simple background filtering. This mirrors the user's provided script but
   is wrapped as a reusable function following the repository style.
-
-  Parameters:
-    labelsFile (str or pandas.DataFrame): Path to a CSV file with at least a filename column
-      and either a category column or one-hot category columns. Alternatively a DataFrame
-      may be passed directly.
-    slidesDir (str): Directory containing the slides referenced by the filename column.
-    outputDir (str): Base directory where class subfolders will be created and tiles saved.
-    targetShape (tuple): (width, height) of tiles to crop.
-    numOfTiles (int): Number of tiles to extract per slide.
-    allowedBackgroundRatio (float): Allowed fraction of background (white/black) pixels.
-    filenameColumn (str): Name of the filename column inside the labels file/DataFrame.
-    categoryColumn (str): Name of the category column. If missing the function will try to
-      infer a Category column from one-hot encoded columns (same heuristic as in the snippet).
-    maxAttemptsFactor (int): Multiplier to cap the maximum attempts per slide (to avoid infinite loops).
-    verbose (bool): Whether to print progress and warnings.
-
-  Returns:
-    dict: Summary dictionary with CamelCase keys describing the operation outcome.
   '''
 
   # Local imports (keep module-level imports unchanged).
@@ -931,6 +921,7 @@ def ExtractRandomTilesFromImages(
     os.makedirs(clsPath, exist_ok=True)
 
     filePath = os.path.join(slidesDir, filename)
+    # Check slide existence.
     if (not os.path.exists(filePath)):
       if (verbose):
         print(f"[SKIP] slide not found: {filePath}")
@@ -949,7 +940,7 @@ def ExtractRandomTilesFromImages(
     tw, th = int(targetShape[0]), int(targetShape[1])
 
     if (width <= tw or height <= th):
-      if verbose:
+      if (verbose):
         print(f"[SKIP] slide smaller than target tile size: {filePath} ({width}x{height})")
       results[filename] = 0
       continue
@@ -958,6 +949,7 @@ def ExtractRandomTilesFromImages(
     attempts = 0
     maxAttempts = max(1000, int(numOfTiles * maxAttemptsFactor))
 
+    # Loop until requested tiles are obtained or attempts exhausted.
     while (counter < numOfTiles and attempts < maxAttempts):
       attempts += 1
       x = np.random.randint(0, width - tw)
@@ -1000,3 +992,755 @@ def ExtractRandomTilesFromImages(
       print(f"Saved {counter}/{numOfTiles} tiles for {filename} (attempts: {attempts})")
 
   return results
+
+
+def ExtractBACHAnnotationsFromXML(xmlFile, verbose=True):
+  r'''
+  Extract annotations from a BACH-style XML file and return a list of regions.
+
+  Parameters:
+    xmlFile (str): Path to the XML file containing annotations.
+    verbose (bool): Whether to print debug information (default True).
+
+  Returns:
+    list: A list of dictionaries, each containing the keys:
+      - "Text" (str): The region label/text.
+      - "Coords" (list): List of (x, y) integer coordinate tuples describing the polygon.
+  '''
+
+  if (not os.path.exists(xmlFile)):
+    raise FileNotFoundError(f"XML file not found: {xmlFile}")
+
+  # Parse the XML file into an ElementTree object.
+  tree = ET.parse(xmlFile)
+  # Get the root element of the parsed XML tree.
+  root = tree.getroot()
+  # Initialize the list that will hold parsed annotations.
+  anList = []  # List of annotations.
+
+  # Find all Annotation elements anywhere in the XML tree.
+  annotations = root.findall(".//Annotation")
+  if (verbose):
+    # Print the number of top-level Annotation elements found.
+    print("Number of annotations: ", len(annotations))
+
+  # If no annotations were found, return the empty list.
+  if (len(annotations) == 0):
+    return anList
+
+  # Iterate over each Annotation element found in the XML.
+  for annotation in annotations:
+    # Find all Region elements inside the current Annotation element.
+    regions = annotation.findall(".//Region")
+    if (verbose):
+      # Print how many Region elements were found in this Annotation.
+      print("- Number of regions: ", len(regions))
+    # Iterate over each Region element inside the current Annotation.
+    for region in regions:
+      if (verbose):
+        # Print the textual label associated with the current Region.
+        print("-- Region Text: ", region.attrib.get("Text", ""))
+      # Find all Vertex elements that define the polygon of the current Region.
+      vertices = region.findall(".//Vertex")
+      if (verbose):
+        # Print how many Vertex elements define this Region.
+        print("-- Number of vertices: ", len(vertices))
+
+      # Build a list of integer (x, y) coordinate tuples from the Vertex attributes.
+      coords = [
+        (
+          int(float(vertex.attrib.get("X", 0))),
+          int(float(vertex.attrib.get("Y", 0)))
+        )
+        for vertex in vertices
+      ]
+
+      # Append a dictionary with the Region text and coordinates to the annotations list.
+      anList.append(
+        {
+          "Text"  : region.attrib.get("Text", ""),
+          "Coords": coords
+        }
+      )
+
+  return anList
+
+
+def ExtractWSIRegion(slide, region):
+  r'''
+  Extract a region of interest (ROI) from a whole-slide image (WSI) and return
+  the full region image, a binary mask, and the masked ROI.
+
+  Parameters:
+    slide (openslide.OpenSlide): OpenSlide object or compatible slide-like object with
+      a `read_region` method and `level_count`/`level_downsamples` attributes.
+    region (dict): A dictionary containing a "Coords" key with a list of (x, y)
+      coordinate tuples describing the polygon to extract.
+
+  Returns:
+    tuple: A 3-tuple containing:
+      - regionImage (numpy.ndarray): The extracted region image as an RGB uint8 array (H, W, 3).
+      - regionMask (numpy.ndarray): Binary mask for the region as uint8 (H, W) with values 0/255.
+      - roi (numpy.ndarray): The region image with the mask applied (RGB uint8, H, W, 3).
+  '''
+
+  # Validate the input region dictionary.
+  if (region is None):
+    raise ValueError("Region cannot be None.")
+  if ("Coords" not in region):
+    raise KeyError("Region dictionary must contain `Coords` key.")
+
+  # Validate that the slide is an OpenSlide object.
+  if (not isinstance(slide, openslide.OpenSlide)):
+    raise TypeError("Slide must be an OpenSlide object.")
+  if (getattr(slide, "closed", False)):
+    raise ValueError("Slide is closed.")
+
+  # Extract the list of coordinate tuples for the selected region.
+  regionCoords = region["Coords"]
+  # Ensure there are enough points to form a polygon.
+  if (not regionCoords) or (len(regionCoords) < 1):
+    raise ValueError("Region `Coords` must contain at least one (x,y) point.")
+
+  # Build lists of x and y coordinates from the region coordinates.
+  regionX = [int(x) for x, y in regionCoords]
+  regionY = [int(y) for x, y in regionCoords]
+
+  # Compute inclusive bounding box for the region in pixels (add +1 to include boundary pixels).
+  minX = min(regionX)
+  maxX = max(regionX)
+  minY = min(regionY)
+  maxY = max(regionY)
+  regionWidth = maxX - minX + 1
+  regionHeight = maxY - minY + 1
+
+  # Reject degenerate boxes as they cannot form valid masks or images.
+  if ((regionWidth <= 0) or (regionHeight <= 0)):
+    raise ValueError("Computed region width/height must be positive.")
+
+  # Shift the region coordinates so the polygon starts at (0,0) for mask creation.
+  regionXShifted = [x - minX for x in regionX]
+  regionYShifted = [y - minY for y in regionY]
+
+  # Combine shifted x and y lists into a list of (x,y) tuples for the polygon.
+  regionCoordsShifted = [(x, y) for x, y in zip(regionXShifted, regionYShifted)]
+
+  # Convert the polygon coordinate list to a NumPy array of type int32 for OpenCV.
+  regionCoordsShifted = np.array(regionCoordsShifted, np.int32)
+
+  # Create an empty mask array of zeros with the region bounding box shape and uint8 dtype.
+  regionMask = np.zeros((regionHeight, regionWidth), dtype=np.uint8)
+
+  # Fill the polygon area on the mask with 255 to create a binary mask.
+  cv2.fillPoly(regionMask, [regionCoordsShifted], 255)
+
+  # Read the region image from the slide at level 0 using the bounding box top-left corner and size.
+  regionImage = slide.read_region(
+    (minX, minY),  # Top left corner.
+    0,
+    (regionWidth, regionHeight),  # Width x Height.
+  )
+
+  # Convert the PIL.Image returned by read_region to a NumPy uint8 array.
+  regionImage = np.array(regionImage).astype(np.uint8)
+  # Convert the image from RGBA to RGB color space for display.
+  regionImage = cv2.cvtColor(regionImage, cv2.COLOR_RGBA2RGB)
+  # Apply the mask to the region image to isolate the ROI using bitwise_and.
+  roi = cv2.bitwise_and(regionImage, regionImage, mask=regionMask)
+  # Convert the ROI from RGBA to RGB in case the image still contains alpha.
+  roi = cv2.cvtColor(roi, cv2.COLOR_RGBA2RGB)
+
+  # Return a tuple containing the region image, mask, and extracted ROI.
+  return regionImage, regionMask, roi
+
+
+def ExtractPyramidalWSITiles(
+  slide,
+  x=0,
+  y=0,
+  width=512,
+  height=512,
+):
+  r'''
+  Extract corresponding tiles from every pyramid level of a WSI and return them
+  together with a matplotlib figure useful for quick visualization.
+
+  Parameters:
+    slide (openslide.OpenSlide): OpenSlide object representing the WSI.
+    x (int): X coordinate (level-0 space) of the requested crop center/anchor (default 0).
+    y (int): Y coordinate (level-0 space) of the requested crop center/anchor (default 0).
+    width (int): Width in pixels of the requested crop at each level (default 512).
+    height (int): Height in pixels of the requested crop at each level (default 512).
+
+  Returns:
+    tuple: A tuple containing:
+      - tiles (dict): Mapping from level index to the extracted NumPy RGB tile for that level.
+      - figToReturn (matplotlib.figure.Figure): Figure containing the plotted tiles/verification crops.
+  '''
+
+  # Get the number of pyramid levels in the slide.
+  slideLevels = slide.level_count
+
+  # Create a new matplotlib figure to plot the regions from each level.
+  plt.figure()
+
+  # A dictionary to hold the extracted tiles for each level, keyed by level index.
+  tiles = {}
+
+  # Iterate over each level in the slide pyramid.
+  for slideLevel in range(slideLevels):
+    # Calculate the downsample ratio relative to the highest resolution level.
+    dRatio = int(slide.level_downsamples[slideLevel] / slide.level_downsamples[0])
+
+    # Calculate the horizontal offset factor used to center the crop at lower resolutions.
+    factorWidth = int((width / 2.0) * (1.0 - (1.0 / dRatio)))
+    # Calculate the vertical offset factor used to center the crop at lower resolutions.
+    factorHeight = int((height / 2.0) * (1.0 - (1.0 / dRatio)))
+
+    # Compute the new x-coordinate for the region at the current level.
+    xNew = x - dRatio * factorWidth
+    # Compute the new y-coordinate for the region at the current level.
+    yNew = y - dRatio * factorHeight
+
+    # print(f"Level {i}: Downsample Ratio={dRatio}, xNew={xNew}, yNew={yNew}")
+
+    # Read a region from the slide at the given level and coordinates.
+    regionSlide = slide.read_region(
+      (xNew, yNew),
+      slideLevel,
+      (width, height),
+    )
+    # Convert the returned PIL image to RGB mode.
+    regionSlide = regionSlide.convert("RGB")
+    # Convert the PIL image to a NumPy array for manipulation and display.
+    regionSlide = np.array(regionSlide)
+
+    # Select the subplot for displaying the full region at this pyramid level.
+    plt.subplot(2, slideLevels, slideLevel + 1)
+    # Render the region image in the subplot.
+    plt.imshow(regionSlide)
+    # Disable axis ticks and labels for the image subplot.
+    plt.axis("off")
+    # Adjust subplot layout to minimize overlaps.
+    plt.tight_layout()
+    # Set a title for the subplot including level and downsample factor.
+    plt.title(f"Level {slideLevel} ({dRatio}x)")
+
+    # Crop the rendered region to verify the corresponding area at the current level.
+    verify = regionSlide[
+      factorHeight:factorHeight + height // dRatio,
+      factorWidth:factorWidth + width // dRatio,
+    ]
+
+    # Select the subplot for displaying the verification crop.
+    plt.subplot(2, slideLevels, 3 + slideLevel + 1)
+    # Render the verification crop in the subplot.
+    plt.imshow(verify)
+    # Disable axis ticks and labels for the verification subplot.
+    plt.axis("off")
+    # Adjust layout for the verification subplot.
+    plt.tight_layout()
+    # Set a title for the verification subplot indicating the level verified.
+    plt.title(f"Cropped to Verify Level {slideLevel}")
+
+    # Store the extracted tile for the current level in the tiles dictionary.
+    tiles[slideLevel] = regionSlide
+
+  # Get the current figure to return it for display or saving.
+  figToReturn = plt.gcf()
+
+  return tiles, figToReturn
+
+
+def PrepareAnnotationsForLevel(annotation, dFactor=1.0):
+  r'''
+  Scale and prepare an annotation for a different pyramid level by applying a
+  downsample factor. Returns a dictionary with scaled coordinates, bounding box
+  and a precomputed binary mask useful for downstream tiling functions.
+
+  Parameters:
+    annotation (dict): A dictionary with a "Coords" key containing a list of (x, y) tuples.
+    dFactor (float): The downsample factor to apply to the coordinates (default is 1.0 for no change).
+
+  Returns:
+    dict: A new annotation dictionary containing keys:
+      - "Text": original annotation text (if present).
+      - "Coords": scaled coordinates (list of (x, y)).
+      - "MinX","MinY","MaxX","MaxY","Width","Height": bounding box values.
+      - "ShiftedCoords": coords shifted to start at (0,0) for mask creation.
+      - "dFactor": the factor applied.
+      - "Mask": uint8 binary mask of the annotation cropped to the bounding box.
+  '''
+
+  if (annotation is None):
+    raise ValueError("Annotation cannot be None.")
+  if ("Coords" not in annotation):
+    raise KeyError("Annotation dictionary must contain `Coords` key.")
+
+  # Extract the original coordinates from the annotation.
+  originalCoords = annotation["Coords"]
+
+  # Scale the coordinates by the downsample factor.
+  mappedCoords = [
+    (
+      int(float(a) / dFactor),
+      int(float(b) / dFactor)
+    )
+    for (a, b) in originalCoords
+  ]
+
+  # Shift the mapped coordinates so the polygon starts at (0,0) for mask creation.
+  minX = min(x for x, y in mappedCoords)
+  minY = min(y for x, y in mappedCoords)
+  maxX = max(x for x, y in mappedCoords)
+  maxY = max(y for x, y in mappedCoords)
+  shiftedCoords = [
+    (x - minX, y - minY)
+    for (x, y) in mappedCoords
+  ]
+
+  mask = np.zeros((maxY - minY, maxX - minX))
+  mask = cv2.fillPoly(mask, [np.array(shiftedCoords, np.int32)], 255)
+
+  # Pad the mask to match the size of the base mask.
+  baseWidth = int((maxX - minX) * dFactor)
+  baseHeight = int((maxY - minY) * dFactor)
+  padX = (baseWidth - mask.shape[1]) // 2
+  padY = (baseHeight - mask.shape[0]) // 2
+  mask = cv2.copyMakeBorder(
+    mask,
+    top=padY,
+    bottom=padY,
+    left=padX,
+    right=padX,
+    borderType=cv2.BORDER_CONSTANT,
+    value=0
+  )
+
+  # Update the shifted coordinates to account for the padding added to the mask.
+  shiftedCoords = [
+    (x + padX, y + padY)
+    for (x, y) in shiftedCoords
+  ]
+
+  # Return a new annotation dictionary with the same text and mapped coordinates.
+  return {
+    "Text"         : annotation.get("Text", ""),
+    "Coords"       : mappedCoords,
+    "MinX"         : minX,
+    "MinY"         : minY,
+    "MaxX"         : maxX,
+    "MaxY"         : maxY,
+    "Width"        : maxX - minX,
+    "Height"       : maxY - minY,
+    "ShiftedCoords": shiftedCoords,
+    "dFactor"      : dFactor,
+    "Mask"         : mask.astype(np.uint8),
+  }
+
+
+def ExtractRegionTiles(
+  slide,
+  region,
+  width=512,
+  height=512,
+  overlapWidth=0,
+  overlapHeight=0,
+  storageDir=None,
+  dpi=720,
+):
+  r'''
+  Tile a region of a WSI across all pyramid levels, apply the annotation mask,
+  and optionally save tiles, masks and ROIs for inspection.
+
+  Parameters:
+    slide (openslide.OpenSlide): The OpenSlide WSI object.
+    region (dict): Annotation dictionary with a "Coords" key describing the polygon.
+    width (int): Tile width in pixels (default 512).
+    height (int): Tile height in pixels (default 512).
+    overlapWidth (int): Horizontal overlap in pixels between tiles (default 0).
+    overlapHeight (int): Vertical overlap in pixels between tiles (default 0).
+    storageDir (str or None): Directory to save 'Tiles', 'Masks', 'ROIs', and 'Plots'. If None, nothing is saved.
+    dpi (int): Dots per inch for saving plots (default 720).
+  '''
+
+  # Create output directories when a storage directory is provided.
+  if (storageDir is not None):
+    # Compose the plots directory path and ensure it exists.
+    plotsDir = os.path.join(storageDir, "Plots")
+    os.makedirs(plotsDir, exist_ok=True)
+    # Compose the tiles directory path and ensure it exists.
+    tilesDir = os.path.join(storageDir, "Tiles")
+    os.makedirs(tilesDir, exist_ok=True)
+    # Compose the masks directory path and ensure it exists.
+    masksDir = os.path.join(storageDir, "Masks")
+    os.makedirs(masksDir, exist_ok=True)
+    # Compose the ROIs directory path and ensure it exists.
+    roisDir = os.path.join(storageDir, "ROIs")
+    os.makedirs(roisDir, exist_ok=True)
+    # Pre-create subdirectories for each pyramid level for tiles, masks, and ROIs.
+    for level in range(slide.level_count):
+      os.makedirs(os.path.join(tilesDir, f"Level_{level}"), exist_ok=True)
+      os.makedirs(os.path.join(masksDir, f"Level_{level}"), exist_ok=True)
+      os.makedirs(os.path.join(roisDir, f"Level_{level}"), exist_ok=True)
+  else:
+    plotsDir = tilesDir = masksDir = roisDir = None
+
+  # Initialize a dictionary to hold mapping data for all levels.
+  mappingData = {}
+  # Build mapping data for each pyramid level by preparing annotations for that level.
+  for level in range(slide.level_count):
+    # Compute the integer downsample factor relative to level 0.
+    dFactor = int(slide.level_downsamples[level] / slide.level_downsamples[0])
+    # Prepare the annotation scaled/mapped for the current level.
+    annotation = PrepareAnnotationsForLevel(region, dFactor)
+    # Store the prepared annotation into the mapping dictionary keyed by the level.
+    mappingData[level] = annotation
+
+  # Extract the start coordinates and dimensions of the region at the base level.
+  regionStartX = mappingData[0]["MinX"]
+  regionStartY = mappingData[0]["MinY"]
+  regionWidth = mappingData[0]["Width"]
+  regionHeight = mappingData[0]["Height"]
+  category = mappingData[0]["Text"]
+
+  xProgressBar = tqdm.tqdm(
+    range(regionStartX, regionStartX + regionWidth, width - overlapWidth),
+    desc="Processing X-axis",
+  )
+  yProgressBar = tqdm.tqdm(
+    range(regionStartY, regionStartY + regionHeight, height - overlapHeight),
+    desc="Processing Y-axis",
+    leave=False,
+  )
+  for x in xProgressBar:
+    for y in yProgressBar:
+      startX = x - regionStartX
+      startY = y - regionStartY
+
+      # Extract pyramidal tiles for the current window and receive the plotting figure.
+      tiles, fig1 = ExtractPyramidalWSITiles(
+        slide,
+        x=x,
+        y=y,
+        width=width,
+        height=height,
+      )
+      # Close the temporary figure to free up memory.
+      plt.close(fig1)
+
+      # Create a shapely polygon for the base-level annotation to test intersection with the tile.
+      baseCoordsPolygon = Polygon(mappingData[0]["ShiftedCoords"])
+      # Define the polygon for the current tile region in the region-local coordinate space.
+      tileRegion = Polygon([
+        (startX, startY),
+        (startX + width, startY),
+        (startX + width, startY + height),
+        (startX, startY + height),
+      ])
+      # Skip this tile if it does not intersect with the annotation polygon.
+      if (not baseCoordsPolygon.intersects(tileRegion)):
+        # print(f"Tile at x: {x}, y: {y} does not intersect with annotation region. Skipping.")
+        continue
+
+      # Prepare a plotting figure if storage is enabled so we can visualize results.
+      if (storageDir is not None):
+        plt.figure(figsize=(12, 3 * slide.level_count))
+
+      # Iterate over each pyramid level to crop masks and produce ROIs for saving/plotting.
+      for level in range(slide.level_count):
+        # Retrieve the tile image for the current level from the extracted tiles.
+        levelTile = tiles[level]
+        # Retrieve the precomputed mask for the current level from mappingData.
+        levelMask = mappingData[level]["Mask"]
+        # Retrieve the shifted coordinates used to align the mask for cropping.
+        levelShiftedCoords = mappingData[level]["ShiftedCoords"]
+        # Compute the minimum x coordinate of the shifted coordinates for the mask alignment.
+        levelStartX = min(coord[0] for coord in levelShiftedCoords)
+        # Compute the minimum y coordinate of the shifted coordinates for the mask alignment.
+        levelStartY = min(coord[1] for coord in levelShiftedCoords)
+
+        # Compute the downsample ratio integer for the current level relative to level 0.
+        dRatio = int(slide.level_downsamples[level] / slide.level_downsamples[0])
+
+        # Calculate the width padding factor to center crops at lower resolutions.
+        factorWidth = int((width / 2.0) * (1.0 - (1.0 / dRatio)))
+        # Calculate the height padding factor to center crops at lower resolutions.
+        factorHeight = int((height / 2.0) * (1.0 - (1.0 / dRatio)))
+
+        # Compute the x coordinate in the level mask coordinate space for cropping.
+        levelX = levelStartX - factorWidth + (startX // dRatio)
+        # Compute the y coordinate in the level mask coordinate space for cropping.
+        levelY = levelStartY - factorHeight + (startY // dRatio)
+        # Crop the mask tile from the full level mask using the computed coordinates and the requested size.
+        levelMaskTile = levelMask[levelY:levelY + height, levelX:levelX + width]
+        # Compute padding values needed to center the mask tile inside the level tile if sizes differ.
+        padX = (levelTile.shape[1] - levelMaskTile.shape[1]) // 2
+        padY = (levelTile.shape[0] - levelMaskTile.shape[0]) // 2
+        # Pad the mask tile so it matches the tile image size using a constant zero border.
+        levelMaskTile = cv2.copyMakeBorder(
+          levelMaskTile,  # Input mask tile to be padded.
+          top=padY,  # Number of pixels to pad on the top of the mask tile.
+          bottom=padY,  # Number of pixels to pad on the bottom of the mask tile.
+          left=padX,  # Number of pixels to pad on the left of the mask tile.
+          right=padX,  # Number of pixels to pad on the right of the mask tile.
+          borderType=cv2.BORDER_CONSTANT,  # Type of border to use for padding (constant value).
+          value=0,  # The constant value to use for padding (0 for black).
+        )
+        # Ensure the padded mask tile is of type uint8 for proper masking operations.
+        levelMaskTile = levelMaskTile.astype(np.uint8)
+
+        if ((levelMaskTile.shape[0] != levelTile.shape[0]) or (levelMaskTile.shape[1] != levelTile.shape[1])):
+          # Close the created figure.
+          plt.close()
+          break
+
+        # Compute the masked ROI by applying the binary mask to the tile image using a bitwise AND.
+        levelROI = cv2.bitwise_and(levelTile, levelTile, mask=levelMaskTile)
+
+        # Save tile, mask, and ROI images to disk when storage is enabled.
+        if (storageDir is not None):
+          imgName = f"{category}_{level}_{x}_{y}_{width}x{height}_{overlapWidth}x{overlapHeight}"
+          cv2.imwrite(os.path.join(tilesDir, f"Level_{level}", f"{imgName}.jpg"), levelTile)
+          cv2.imwrite(os.path.join(masksDir, f"Level_{level}", f"{imgName}.jpg"), levelMaskTile)
+          cv2.imwrite(os.path.join(roisDir, f"Level_{level}", f"{imgName}.jpg"), levelROI)
+
+        # When storage is enabled, plot the tile, mask, overlay, and ROI for visual inspection.
+        if (storageDir is not None):
+          plt.subplot(slide.level_count, 4, 1 + level * 4)
+          plt.imshow(levelTile)
+          plt.title("Tile")
+          plt.axis("off")
+          plt.subplot(slide.level_count, 4, 2 + level * 4)
+          plt.imshow(levelMaskTile, cmap="gray")
+          plt.title("Mask Tile")
+          plt.axis("off")
+          plt.subplot(slide.level_count, 4, 3 + level * 4)
+          plt.imshow(levelTile)
+          plt.imshow(levelMaskTile, alpha=0.5, cmap="jet")
+          plt.title("Tile with Annotation Overlay")
+          plt.axis("off")
+          plt.subplot(slide.level_count, 4, 4 + level * 4)
+          plt.imshow(levelROI)
+          plt.title("ROI (Masked Tile)")
+          plt.axis("off")
+
+      # When storage is enabled, finalize and save the plotted figure for the current tile.
+      if (storageDir is not None):
+        imgName = f"{category}_{x}_{y}_{width}x{height}_{overlapWidth}x{overlapHeight}"
+        plt.tight_layout()
+        plt.savefig(os.path.join(plotsDir, f"{imgName}.png"), dpi=720, bbox_inches="tight")
+        plt.close()
+
+
+if (__name__ == "__main__"):
+  # Define a placeholder path for a WSI slide that the user should replace with a real path.
+  slidePath = "PATH/TO/SLIDE.svs"
+
+  # Only attempt to open the slide when the provided path exists on disk.
+  if (os.path.exists(slidePath)):
+    # Open the slide using the provided helper function.
+    slide = ReadWSIViaOpenSlide(slidePath)
+    # Print a short description of the opened slide object.
+    print(f"Opened slide: {slidePath} -> {slide}.")
+  else:
+    # Inform the user that the example was skipped due to a missing slide file.
+    print(f"Skipping ReadWSIViaOpenSlide example; file not found: {slidePath}.")
+
+  # Define a placeholder path for a GeoJSON annotation file that the user should replace.
+  annotationFile = "PATH/TO/ANNOTATIONS.geojson"
+
+  # Only attempt to read the annotations file when it exists on disk.
+  if (os.path.exists(annotationFile)):
+    # Read the annotations from the GeoJSON file using the helper function.
+    annotationsExample = ReadGeoJSONAnnotations(annotationFile)
+    # Print the number of annotations that were read for verification.
+    print(f"ReadGeoJSONAnnotations returned {len(annotationsExample)} annotations from {annotationFile}.")
+  else:
+    # Inform the user that the GeoJSON example was skipped due to a missing file.
+    print(f"Skipping ReadGeoJSONAnnotations example; file not found: {annotationFile}.")
+
+  # Define a placeholder path for a regular image to demonstrate polygon drawing.
+  imagePath = "PATH/TO/IMAGE.jpg"
+
+  # Only attempt to draw a polygon when the image file exists.
+  if (os.path.exists(imagePath)):
+    # Read the image from disk using OpenCV.
+    imgArr = cv2.imread(imagePath)
+    # Define a sample polygon using CamelCase dict keys and integers for coordinates.
+    polygonCoords = [(10, 10), (200, 10), (200, 200), (10, 200)]
+    # Draw the polygon on the loaded image using the helper function.
+    imgWithPoly = DrawPolygonOnImage(imgArr, polygonCoords, outlineColor=(0, 255, 0), fillColor=None, width=3)
+    # Save the resulting image to a placeholder output path for inspection.
+    outputPolyPath = "PATH/TO/OUTPUT_Polygon.jpg"
+    # Persist the generated image with the polygon overlay using OpenCV.
+    cv2.imwrite(outputPolyPath, imgWithPoly)
+    # Print a message indicating where the polygon example was stored.
+    print(f"Saved polygon example to: {outputPolyPath}.")
+  else:
+    # Inform the user that the polygon drawing example was skipped due to a missing image.
+    print(f"Skipping DrawPolygonOnImage example; file not found: {imagePath}.")
+
+  # Define placeholder paths for WSI patch extraction that the user should adapt.
+  wsiFilePath = "PATH/TO/SLIDE_FOR_PATCHES.svs"
+  geojsonForPatches = "PATH/TO/PATCHES_ANNOTATIONS.geojson"
+  patchesOutputDir = "PATH/TO/PATCHES_OUTPUT_DIR"
+
+  # Only attempt patch extraction when both slide and annotations exist.
+  if (os.path.exists(wsiFilePath) and os.path.exists(geojsonForPatches)):
+    # Open the WSI slide via OpenSlide for patch extraction.
+    wsiSlide = ReadWSIViaOpenSlide(wsiFilePath)
+    # Read annotations for patch extraction from the GeoJSON file.
+    patchAnnotations = ReadGeoJSONAnnotations(geojsonForPatches)
+    # Call the patch extraction helper with conservative defaults.
+    ExtractPatchesFromWSI(
+      wsiSlide, wsiFilePath, patchAnnotations, patchesOutputDir,
+      patchSize=(256, 256),
+      overlap=(0, 0),
+      maxNumPatchesPerAnnotation=10,
+      label="ExampleLabel"
+    )
+    # Print a message indicating where patches were stored.
+    print(f"ExtractPatchesFromWSI saved patches to: {patchesOutputDir}.")
+  else:
+    # Inform the user that the patch extraction example was skipped due to missing files.
+    print(f"Skipping ExtractPatchesFromWSI example; required files not found: {wsiFilePath}, {geojsonForPatches}.")
+
+  # Define placeholder paths for a pair of slides to demonstrate alignment/tiling.
+  heSlidePath = "PATH/TO/HE_SLIDE.svs"
+  mtSlidePath = "PATH/TO/MT_SLIDE.svs"
+  alignmentStorage = "PATH/TO/ALIGNMENT_STORAGE"
+
+  # Only attempt tile alignment when both HE and MT slides exist.
+  if (os.path.exists(heSlidePath) and os.path.exists(mtSlidePath)):
+    # Run the tile extraction and alignment handler with visualization disabled for speed.
+    TileExtractionAlignmentHandler(
+      heSlidePath, mtSlidePath, alignmentStorage,
+      patchesPerSlide=100,
+      targetSize=(256, 256),
+      regionSize=(1024, 1024),
+      overlapSize=(128, 128),
+      doPlotting=False,
+      verbose=True
+    )
+    # Print a message indicating the alignment handler was invoked.
+    print(f"Invoked TileExtractionAlignmentHandler for HE:{heSlidePath} and MT:{mtSlidePath}.")
+  else:
+    # Inform the user that the alignment example was skipped due to missing slides.
+    print(f"Skipping TileExtractionAlignmentHandler example; required slides not found: {heSlidePath}, {mtSlidePath}.")
+
+  # Define placeholder folders for Free Form Deformation demonstration.
+  heFolder = "PATH/TO/HE_IMAGES_FOLDER"
+  mtFolder = "PATH/TO/MT_IMAGES_FOLDER"
+  heDeformedFolder = "PATH/TO/HE_DEFORMED_OUTPUT"
+
+  # Only attempt FFD when both source folders exist.
+  if (os.path.exists(heFolder) and os.path.exists(mtFolder)):
+    # Run the Free Form Deformation handler with default parameters and no plotting.
+    FreeFormDeformationHandler(heFolder, mtFolder, heDeformedFolder, doPlotting=False, verbose=False)
+    # Print a message indicating the FFD process was invoked.
+    print(f"Invoked FreeFormDeformationHandler for HE folder: {heFolder}.")
+  else:
+    # Inform the user that the FFD example was skipped due to missing folders.
+    print(f"Skipping FreeFormDeformationHandler example; required folders not found: {heFolder}, {mtFolder}.")
+
+  # Define placeholder paths for random tile extraction from images demonstration.
+  labelsCsv = "PATH/TO/LABELS.csv"
+  slidesDirectory = "PATH/TO/SLIDES_DIR"
+  tilesOutputDirectory = "PATH/TO/TILES_OUTPUT_DIR"
+
+  # Only attempt random tile extraction when the labels CSV exists.
+  if (os.path.exists(labelsCsv)):
+    # Call the extract random tiles helper with small sample size for quick testing.
+    results = ExtractRandomTilesFromImages(
+      labelsCsv,
+      slidesDir=slidesDirectory,
+      outputDir=tilesOutputDirectory,
+      targetShape=(256, 256),
+      numOfTiles=10,
+      verbose=True
+    )
+    # Print the summary of extracted tiles returned by the helper.
+    print(f"ExtractRandomTilesFromImages results: {results}.")
+  else:
+    # Inform the user that the random tile example was skipped due to missing labels file.
+    print(f"Skipping ExtractRandomTilesFromImages example; labels file not found: {labelsCsv}.")
+
+  # Define a placeholder path for a BACH XML annotation file to demonstrate XML parsing.
+  bachXml = "PATH/TO/BACH_ANNOTATIONS.xml"
+
+  # Only attempt to parse BACH annotations when the XML file exists.
+  if (os.path.exists(bachXml)):
+    # Extract regions from the BACH-style XML using the helper function.
+    bachRegions = ExtractBACHAnnotationsFromXML(bachXml, verbose=False)
+    # Print the number of regions parsed from the XML file for verification.
+    print(f"ExtractBACHAnnotationsFromXML returned {len(bachRegions)} regions from {bachXml}.")
+  else:
+    # Inform the user that the BACH XML example was skipped due to a missing file.
+    print(f"Skipping ExtractBACHAnnotationsFromXML example; file not found: {bachXml}.")
+
+  # Define a placeholder path for testing ExtractWSIRegion using an existing slide and a simple region example.
+  regionSlidePath = "PATH/TO/REGION_SLIDE.svs"
+  # Construct a sample region dictionary using CamelCase keys expected by the helper functions.
+  regionExample = {"Text": "ExampleRegion", "Coords": [(100, 100), (400, 100), (400, 400), (100, 400)]}
+
+  # Only attempt to extract the WSI region when the slide file exists.
+  if (os.path.exists(regionSlidePath)):
+    # Open the slide used for the region extraction example.
+    regionSlide = ReadWSIViaOpenSlide(regionSlidePath)
+    # Extract the region image, mask, and ROI using the helper function.
+    regionImage, regionMask, regionROI = ExtractWSIRegion(regionSlide, regionExample)
+    # Print basic info about the returned arrays for confirmation.
+    print(
+      f"ExtractWSIRegion returned image shape: {getattr(regionImage, 'shape', None)}, "
+      f"mask shape: {getattr(regionMask, 'shape', None)}."
+    )
+  else:
+    # Inform the user that the WSI region example was skipped due to a missing slide file.
+    print(f"Skipping ExtractWSIRegion example; file not found: {regionSlidePath}.")
+
+  # Define a placeholder path for a slide to demonstrate pyramidal tile extraction.
+  pyramidalSlidePath = "PATH/TO/PYRAMIDAL_SLIDE.svs"
+
+  # Only attempt the pyramidal tiles example when the slide file exists.
+  if (os.path.exists(pyramidalSlidePath)):
+    # Open the pyramidal slide for tile extraction.
+    pyramidalSlide = ReadWSIViaOpenSlide(pyramidalSlidePath)
+    # Extract tiles at multiple pyramid levels for a sample anchor point.
+    tilesDict, tilesFig = ExtractPyramidalWSITiles(pyramidalSlide, x=0, y=0, width=512, height=512)
+    # Print the number of pyramid levels that were returned by the helper.
+    print(f"ExtractPyramidalWSITiles returned {len(tilesDict)} levels.")
+  else:
+    # Inform the user that the pyramidal tiles example was skipped due to a missing slide.
+    print(f"Skipping ExtractPyramidalWSITiles example; file not found: {pyramidalSlidePath}.")
+
+  # Define a simple annotation to demonstrate PrepareAnnotationsForLevel processing.
+  simpleAnnotation = {"Text": "Simple", "Coords": [(0, 0), (100, 0), (100, 100), (0, 100)]}
+  # Prepare the annotation for a downsampled level using a sample dFactor.
+  prepared = PrepareAnnotationsForLevel(simpleAnnotation, dFactor=2.0)
+  # Print a summary of the prepared annotation to verify output keys and values.
+  print(f"PrepareAnnotationsForLevel produced keys: {list(prepared.keys())}.")
+
+  # Define a placeholder region and storage directory for region tiling demonstration.
+  regionTileSlidePath = "PATH/TO/REGION_TILE_SLIDE.svs"
+  regionTileStorage = "PATH/TO/REGION_TILE_OUTPUT"
+
+  # Only attempt region tiling when the slide for tiling exists.
+  if (os.path.exists(regionTileSlidePath)):
+    # Open the slide that will be used for region tiling.
+    regionTileSlide = ReadWSIViaOpenSlide(regionTileSlidePath)
+    # Use the previously defined simpleAnnotation as the region to tile.
+    ExtractRegionTiles(
+      regionTileSlide,
+      simpleAnnotation,
+      width=512,
+      height=512,
+      overlapWidth=0,
+      overlapHeight=0,
+      storageDir=regionTileStorage
+    )
+    # Print a message indicating where the region tiles were stored.
+    print(f"Invoked ExtractRegionTiles and stored outputs (when enabled) under: {regionTileStorage}.")
+  else:
+    # Inform the user that the region tiling example was skipped due to a missing slide.
+    print(f"Skipping ExtractRegionTiles example; slide not found: {regionTileSlidePath}.")

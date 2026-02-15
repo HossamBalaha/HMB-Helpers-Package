@@ -13,6 +13,101 @@ from scipy.stats import skew, kurtosis, bootstrap, wilcoxon
 from skimage.measure import shannon_entropy, moments
 from HMB.PlotsHelper import GetCmapColors
 
+# Categorize each method as Parametric, Non-Parametric, or Both/Context-Dependent.
+# Parametric Methods
+# These assume an underlying probability distribution (typically normal) and often rely on parameters such as the mean and variance.
+# Note: Geometric Mean, Harmonic Mean, Skewness, Kurtosis, and Autocorrelation are marked with an asterisk (*)
+# because they are distribution-sensitive; while they can be computed without assuming normality,
+# their inferential use often presumes parametric conditions.
+# Non-Parametric Methods
+# These make minimal or no assumptions about the underlying data distribution. They typically rely on ranks, order statistics, or resampling.
+# (or) These do not assume a specific distribution and often rely on ranks or medians instead of means.
+# Robust or Context-Dependent Methods
+# These methods can be used in both parametric and non-parametric contexts depending on the data and analysis goals.
+# They often provide robustness to outliers or distributional assumptions.
+# (or) These either relax strict parametric assumptions or adapt based on data characteristics.
+# Their classification depends on implementation and purpose.
+# - Trimmed Mean (10%): Reduces influence of outliers; often treated as non-parametric or robust.
+# - Winsorized Mean (10%): Similar to trimmed mean; robust against extremes.
+# - Modified Z-Score Method: Uses median absolute deviation; more robust than classic Z-scores.
+# - Effect Size: Can be parametric (e.g., Cohen’s d) or non-parametric (e.g., Cliff’s delta).
+# - Statistical Power: Depends on the test being powered; not inherently parametric or non-parametric.
+# - Anderson-Darling Test: Primarily used for normality (parametric), but applicable to other distributions.
+# - DistributionFitTesting: General term; method determines category.
+# - Outlier Handling Suggestion: Strategy varies by context and assumptions.
+# Comparison Table (Assumptions, Parameters, Power, Data Type, and Sensitivity):
+# |---------|--------------------|------------------------|
+# | Feature | Parametric Methods | Non-Parametric Methods |
+# |---------|--------------------|------------------------|
+# | Assumptions | Assume specific distribution (often normal) | Minimal or no distributional assumptions |
+# | Parameters | Rely on parameters like mean and variance | Often rely on ranks, medians, or order statistics |
+# | Power | Generally more powerful if assumptions are met | Less powerful but more robust to assumption violations |
+# | Power | Generally higher statistical power if assumptions hold | Lower power under normality, but more reliable when assumptions fail |
+# | Data Type | Best for interval/ratio data with symmetry | Suitable for ordinal data or skewed distributions |
+# | Sensitivity to Outliers | Sensitive to outliers and assumption violations | More robust to outliers and skewness |
+# |---------|--------------------|------------------------|
+
+# Define the list of statistical methods/techniques
+STAT_METHODS = [
+  "Mean", "Median", "Mode", "Standard Deviation (Sample)", "Standard Deviation (Population)",
+  "Coefficient of Variation (CV)", "Variance (Sample)", "Variance (Population)", "Minimum",
+  "Maximum", "Range", "Interquartile Range (IQR)", "Geometric Mean", "Harmonic Mean",
+  "Trimmed Mean (10%)", "Winsorized Mean (10%)", "Percentiles", "Skewness", "Kurtosis (Fisher)",
+  "Kurtosis (Pearson)", "Confidence Interval (Mean)", "Bootstrap CI (Mean)", "Bootstrap CI (Median)",
+  "Prediction Interval", "One-Sample T-Test", "Effect Size", "Statistical Power",
+  "Shapiro-Wilk Test", "D'Agostino's K^2 Test", "Jarque-Bera Test", "Anderson-Darling Test",
+  "Kolmogorov-Smirnov Test", "DistributionFitTesting", "IQR Method", "Z-Score Method",
+  "Modified Z-Score Method", "Outlier Handling Suggestion", "Log Transformation",
+  "Yeo-Johnson Transformation", "Standardized Data", "Min-Max Scaled Data", "Autocorrelation",
+  "Ljung-Box Test"
+]
+
+STATS_CATEGORIZATION = {
+  "Mean"                           : "Parametric",
+  "Median"                         : "Non-Parametric",
+  "Mode"                           : "Non-Parametric",
+  "Standard Deviation (Sample)"    : "Parametric",
+  "Standard Deviation (Population)": "Parametric",
+  "Coefficient of Variation (CV)"  : "Parametric",
+  "Variance (Sample)"              : "Parametric",
+  "Variance (Population)"          : "Parametric",
+  "Minimum"                        : "Non-Parametric",
+  "Maximum"                        : "Non-Parametric",
+  "Range"                          : "Non-Parametric",
+  "Interquartile Range (IQR)"      : "Non-Parametric",
+  "Geometric Mean"                 : "Parametric*",
+  "Harmonic Mean"                  : "Parametric*",
+  "Trimmed Mean (10%)"             : "Robust (Often Non-Parametric)",
+  "Winsorized Mean (10%)"          : "Robust (Often Non-Parametric)",
+  "Percentiles"                    : "Non-Parametric",
+  "Skewness"                       : "Parametric*",
+  "Kurtosis (Fisher)"              : "Parametric*",
+  "Kurtosis (Pearson)"             : "Parametric*",
+  "Confidence Interval (Mean)"     : "Parametric",
+  "Bootstrap CI (Mean)"            : "Non-Parametric",
+  "Bootstrap CI (Median)"          : "Non-Parametric",
+  "Prediction Interval"            : "Parametric",
+  "One-Sample T-Test"              : "Parametric",
+  "Effect Size"                    : "Both (Context-Dependent)",
+  "Statistical Power"              : "Both (Context-Dependent)",
+  "Shapiro-Wilk Test"              : "Parametric (Tests Normality)",
+  "D'Agostino's K^2 Test"          : "Parametric (Tests Normality)",
+  "Jarque-Bera Test"               : "Parametric (Tests Normality)",
+  "Anderson-Darling Test"          : "Both (Can be used for any distribution, but often for normality)",
+  "Kolmogorov-Smirnov Test"        : "Non-Parametric",
+  "DistributionFitTesting"         : "Both (Context-Dependent)",
+  "IQR Method"                     : "Non-Parametric",
+  "Z-Score Method"                 : "Parametric",
+  "Modified Z-Score Method"        : "Robust (Often Non-Parametric)",
+  "Outlier Handling Suggestion"    : "Both (Context-Dependent)",
+  "Log Transformation"             : "Parametric (Used to meet parametric assumptions)",
+  "Yeo-Johnson Transformation"     : "Parametric (Used to meet parametric assumptions)",
+  "Standardized Data"              : "Parametric",
+  "Min-Max Scaled Data"            : "Non-Parametric",
+  "Autocorrelation"                : "Parametric*",
+  "Ljung-Box Test"                 : "Parametric"
+}
+
 
 class GeneralStatisticsHelper(object):
   r'''
@@ -1424,7 +1519,7 @@ def StatisticalAnalysis(results, hypothesizedMean=0, secondMetricList=None, conf
   confInt = zconfint(results, alpha=1 - confidenceLevel)  # Confidence interval for the mean.
 
   def _bootstrapCI(data, statFunc=np.mean, nBootstraps=nBootstraps, alpha=1 - confidenceLevel):
-    '''
+    r'''
     Calculate bootstrap confidence interval for a statistic (e.g., mean).
 
     Parameters:
@@ -1447,14 +1542,15 @@ def StatisticalAnalysis(results, hypothesizedMean=0, secondMetricList=None, conf
     ciUpper = np.percentile(bootstrappedStats, upperPercentile)
     return ciLower, ciUpper
 
-  def _bootstrapCIAdvanced(data, statFunc=np.mean, nBootstraps=nBootstraps):
-    '''
+  def _bootstrapCIAdvanced(data, statFunc=np.mean, nBootstraps=nBootstraps, confidenceLevel=confidenceLevel):
+    r'''
     Calculate advanced bootstrap confidence interval using scipy's bootstrap.
 
     Parameters:
       data (array-like): Data to resample.
       statFunc (callable, optional): Statistic function to apply (default: np.mean).
       nBootstraps (int, optional): Number of bootstrap resamples.
+      confidenceLevel (float, optional): Confidence level for the interval.
 
     Returns:
       tuple: Lower and upper bounds of the confidence interval.
@@ -1476,7 +1572,7 @@ def StatisticalAnalysis(results, hypothesizedMean=0, secondMetricList=None, conf
     return bootstrappedStats.confidence_interval.low, bootstrappedStats.confidence_interval.high
 
   def _predicitonInterval(data, confidenceLevel=confidenceLevel):
-    '''
+    r'''
     Calculate approximate prediction interval for future observations.
 
     Parameters:

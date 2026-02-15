@@ -5,6 +5,21 @@ from typing import Dict, Tuple, Any, List, Optional
 
 # Define a profiler class for measuring model memory and compute characteristics.
 class PyTorchModelMemoryProfiler:
+  r'''
+  Profiler for estimating PyTorch model memory usage (parameters, gradients,
+  activations, optimizer state, attention matrices) and compute (FLOPs/GFLOPs)
+  for training and inference. Uses a dummy forward pass with hooks to gather
+  activation shapes and sizes.
+
+  Parameters:
+    model (nn.Module):  The PyTorch model to profile.
+    inputShape (Tuple[int, ...]):  Shape of a single input sample (channels, H, W, ...).
+    batchSize (int):  Batch size used for the dummy forward pass. Defaults to 1.
+    precision (str):  "FP32" or "FP16" -- affects bytes-per-parameter calculations.
+    device (str):  Target device string (e.g., "cpu" or "cuda"). Used for the
+      dummy forward pass attempt; profiling logic falls back to CPU if unavailable.
+  '''
+
   # Initialize the profiler with model and input configuration.
   def __init__(
     self, model: nn.Module,
@@ -46,6 +61,12 @@ class PyTorchModelMemoryProfiler:
 
   # Register forward hooks on leaf modules to capture activation metadata.
   def _RegisterForwardHooks(self) -> None:
+    r'''
+    Attach forward hooks to leaf (no-children) modules in the model so that
+    their output activations (shapes and bytes) are recorded during a
+    dummy forward pass.
+    '''
+
     # Remove any previously registered hooks to avoid duplicates.
     for handle in getattr(self, "_hookHandles", []):
       try:
@@ -63,8 +84,29 @@ class PyTorchModelMemoryProfiler:
 
     # Define a factory that returns a forward hook capturing the provided name.
     def MakeHook(name: str):
+      r'''
+      Factory that creates a forward hook function bound to a module name.
+
+      Parameters:
+        name (str):  Readable name for the module used in recorded entries.
+
+      Returns:
+        function:  A hook function suitable for register_forward_hook.
+      '''
+
       # The hook function will record activation shapes and sizes.
       def HookFunction(module: nn.Module, input: Tuple[torch.Tensor, ...], output) -> None:
+        r'''
+        Forward hook that records output tensor shapes, element counts, and
+        per-module parameter counts into self.activationMemoryList when the
+        module produces tensor outputs.
+
+        Parameters:
+          module (nn.Module):  The module being executed.
+          input (Tuple[torch.Tensor, ...]):  The inputs passed to the module.
+          output:  The output produced by the module (tensor, tuple, or list).
+        '''
+
         # Initialize a list to collect tensor outputs from the module.
         outputs: List[torch.Tensor] = []
 
@@ -132,6 +174,14 @@ class PyTorchModelMemoryProfiler:
 
   # Count total, trainable, and non-trainable parameters in the model.
   def _CountParameters(self) -> Dict[str, int]:
+    r'''
+    Walk model parameters and count total, trainable (requires_grad) and
+    non-trainable parameter elements.
+
+    Returns:
+      Dict[str, int]:  Dictionary with keys "TotalParameters", "TrainableParameters", and "NonTrainableParameters".
+    '''
+
     # Initialize counters for total and trainable parameters.
     totalParams = 0
     trainableParams = 0
@@ -160,6 +210,14 @@ class PyTorchModelMemoryProfiler:
 
   # Count buffer tensors (e.g., running stats) and their memory usage.
   def _CountBuffers(self) -> Dict[str, int]:
+    r'''
+    Count registered buffers (such as running_mean/running_var in BatchNorm)
+    and estimate their memory usage in bytes using each buffer's element size.
+
+    Returns:
+      Dict[str, int]:  Dictionary with keys "TotalBufferElements" and "BufferMemoryBytes".
+    '''
+
     # Initialize counters for buffer elements and bytes.
     totalBuffers = 0
     bufferBytes = 0
@@ -178,6 +236,19 @@ class PyTorchModelMemoryProfiler:
 
   # Estimate memory consumed by attention matrices for transformer models.
   def _EstimateAttentionMemory(self, sequenceLength: int, numHeads: int = 8, numLayers: int = 12) -> int:
+    r'''
+    Estimate memory used by attention score matrices for a transformer-style
+    model, which scale quadratically with sequence length.
+
+    Parameters:
+      sequenceLength (int):  Sequence length (N) used in attention.
+      numHeads (int):  Number of attention heads. Defaults to 8.
+      numLayers (int):  Number of layers with attention. Defaults to 12.
+
+    Returns:
+      int:  Estimated total attention memory in bytes.
+    '''
+
     # Compute the number of elements in a single attention matrix per layer and head.
     attentionMatrixSize = self.batchSize * numHeads * sequenceLength * sequenceLength
 
@@ -194,6 +265,20 @@ class PyTorchModelMemoryProfiler:
     optimizerType: str = "Adam",
     optimizerKwargs: Optional[Dict[str, Any]] = None
   ) -> int:
+    r'''
+    Estimate memory required for optimizer state tensors (e.g., Adam's m and
+    v buffers) given the number of trainable parameters and optimizer type.
+
+    Parameters:
+      trainableParams (int):  Number of trainable parameter elements.
+      optimizerType (str):  Optimizer name (e.g., "Adam", "SGD"). Defaults to "Adam".
+      optimizerKwargs (Optional[Dict[str, Any]]):  Optimizer options used to
+        determine additional state requirements (e.g., amsgrad, momentum).
+
+    Returns:
+      int:  Estimated optimizer state memory in bytes for the model.
+    '''
+
     # Normalize kwargs for safe access.
     opts = optimizerKwargs or {}
 
@@ -237,6 +322,15 @@ class PyTorchModelMemoryProfiler:
 
   # Estimate FLOPs for common layers using recorded activation shapes.
   def _EstimateFLOPs(self) -> Dict[str, Any]:
+    r'''
+    Estimate layer-wise and total FLOPs using recorded activation shapes
+    collected during the dummy forward pass. Supports common layers like
+    Conv2d, Linear, BatchNorm, pooling, activations and MultiheadAttention.
+
+    Returns:
+      Dict[str, Any]:  Dictionary containing "TotalFLOPs", "PerLayerFLOPs", and "TotalGFLOPs" (rounded conversion to GFLOPs).
+    '''
+
     # Initialize running totals for FLOPs and per-layer details.
     totalFlops = 0
     perLayerFlops: List[Dict[str, Any]] = []
@@ -308,7 +402,8 @@ class PyTorchModelMemoryProfiler:
               kW = k
             else:
               kH, kW = k
-            # AvgPool does adds/divides; MaxPool does comparisons. Approximate cost as kH*kW ops per output element.
+            # AvgPool does adds/divides; MaxPool does comparisons.
+            # Approximate cost as kH*kW ops per output element.
             flops = batch * channels * Hout * Wout * (kH * kW)
 
         # Compute elementwise operations like ReLU, Sigmoid, and Tanh based on activation size.
@@ -370,6 +465,17 @@ class PyTorchModelMemoryProfiler:
 
   # Return the top-K layers by activation memory and parameter count.
   def _TopKMemoryLayers(self, k: int = 10) -> Dict[str, Any]:
+    r'''
+    Identify the top-k layers by activation memory and by local parameter count
+    to help pinpoint memory hotspots in the model.
+
+    Parameters:
+      k (int):  Number of top entries to return for each category. Defaults to 10.
+
+    Returns:
+      Dict[str, Any]:  Dictionary containing "TopActivationLayers" and "TopParameterLayers".
+    '''
+
     # Sort activation entries by ActivationMemoryBytes in descending order.
     sortedByActivation = sorted(self.activationMemoryList, key=lambda x: x["ActivationMemoryBytes"], reverse=True)
 
@@ -394,6 +500,18 @@ class PyTorchModelMemoryProfiler:
 
   # Estimate realistic sustained GFLOPS based on device availability and model type.
   def _EstimateRealisticGFLOPS(self, peakGFLOPS: float, isTransformer: bool = False) -> float:
+    r'''
+    Apply a heuristic scaling factor to a device's theoretical peak GFLOPS to
+    estimate a more realistic sustained GFLOPS for the workload.
+
+    Parameters:
+      peakGFLOPS (float):  Theoretical peak GFLOPS of the device.
+      isTransformer (bool):  Whether the model is transformer-like (affects factor).
+
+    Returns:
+      float:  Estimated sustained GFLOPS.
+    '''
+
     # Decide on realism factor based on device.
     if ("cuda" in str(self.device).lower() or torch.cuda.is_available()):
       if (isTransformer):
@@ -420,6 +538,36 @@ class PyTorchModelMemoryProfiler:
     trainingMultiplier: float = 3.0,
     runMicroBenchmark: bool = False
   ) -> Dict[str, Any]:
+    r'''
+    Perform a full memory and compute profile for the configured model. This
+    runs a dummy forward pass (with hooks) to collect activation shapes,
+    estimates parameter/buffer/optimizer/attention memory, and computes
+    FLOPs-based performance estimates for training and inference.
+
+    Parameters:
+      optimizerType (str):  Optimizer used for estimating optimizer state memory.
+      optimizerKwargs (Optional[Dict[str, Any]]):  Options passed to optimizer
+        estimation (e.g., {"amsgrad": True}).
+      isTransformer (bool):  If True, uses transformer-specific attention
+        memory estimation; otherwise auto-detection may enable it.
+      sequenceLength (int):  Required when isTransformer is True; sequence
+        length used for attention memory estimation.
+      checkpointing (bool):  Whether gradient checkpointing is enabled (reduces
+        retained activation memory estimate).
+      checkpointSavingsFactor (float):  Fraction of activation memory saved by
+        checkpointing (0..1). Defaults to 0.5.
+      deviceFLOPSGFLOPS (Optional[float]):  Optional device GFLOPS peak to use
+        for performance estimates. If None a heuristic/default is chosen.
+      datasetSize (Optional[int]):  Dataset size to estimate steps per epoch.
+      trainingMultiplier (float):  Factor to scale forward GFLOPs to training
+        GFLOPs (includes backward and optimizer work). Defaults to 3.0.
+      runMicroBenchmark (bool):  If True attempts a small GEMM on the target
+        device to empirically measure GFLOPS and refine timing estimates.
+
+    Returns:
+      Dict[str, Any]:  A comprehensive dictionary containing memory breakdowns (bytes and MB), layer-wise activations, top-K lists, FLOPs estimates, and performance estimates.
+    '''
+
     # If a transformer is indicated but no sequence length is provided, raise an error.
     if (isTransformer and sequenceLength is None):
       raise ValueError("Sequence length must be provided for transformer models.")
@@ -726,12 +874,29 @@ class PyTorchModelMemoryProfiler:
 
   # Save the produced memory profile into a JSON file.
   def SaveProfileToJSON(self, memoryProfile: Dict[str, Any], path: str) -> None:
+    r'''
+    Persist a memory profile dictionary to a JSON file path using utf-8
+    encoding and pretty-print indentation for readability.
+
+    Parameters:
+      memoryProfile (Dict[str, Any]):  The profile produced by ProfileModelMemory.
+      path (str):  Filesystem path where the JSON will be written.
+    '''
+
     # Open the file and write the JSON dump with indentation.
     with open(path, "w", encoding="utf-8") as f:
       json.dump(memoryProfile, f, indent=2)
 
   # Print a human readable memory report to stdout.
   def PrintMemoryReport(self, memoryProfile: Dict[str, Any]) -> None:
+    r'''
+    Nicely format and print a human-readable memory and performance report to
+    standard output based on a profile produced by ProfileModelMemory.
+
+    Parameters:
+      memoryProfile (Dict[str, Any]):  The profile produced by ProfileModelMemory.
+    '''
+
     # Extract the MB breakdown dictionary for easy access.
     mbBreakdown = memoryProfile["MemoryBreakdownMB"]
 
