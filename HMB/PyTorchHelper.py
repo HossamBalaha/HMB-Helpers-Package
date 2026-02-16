@@ -143,7 +143,7 @@ def SaveCheckpoint(model, optimizer, filename="chk.pth.tar", epoch=None, hparams
   Save model and optimizer state to a checkpoint file.
   Useful for resuming training or inference later.
   This function saves the model's state dictionary and the optimizer's state dictionary
-  to a specified file. You can load it later using LoadCheckpoint() function from this module.
+  to a specified file. You can load it later using `LoadCheckpoint` function from this module.
 
   Parameters:
     model (torch.nn.Module): The model to save.
@@ -166,10 +166,10 @@ def SaveCheckpoint(model, optimizer, filename="chk.pth.tar", epoch=None, hparams
   torch.save(checkpoint, filename)
 
   # Print confirmation message with filename.
-  print(f"Checkpoint saved to {filename}. You can load it later using LoadCheckpoint().")
+  print(f"Checkpoint saved to {filename}. You can load it later using `LoadCheckpoint`.")
 
 
-def LoadCheckpoint(checkpointFile, model, optimizer, lr, device, strict):
+def LoadCheckpoint(checkpointFile, model, optimizer, lr, device, strict=True):
   r'''
   Load model and optimizer state from a checkpoint file.
   Updates the learning rate of the optimizer if provided.
@@ -182,7 +182,7 @@ def LoadCheckpoint(checkpointFile, model, optimizer, lr, device, strict):
     optimizer (torch.optim.Optimizer): The optimizer to load the state into.
     lr (float): The learning rate to set for the optimizer.
     device (torch.device): The device to load the model onto (e.g., "cpu" or "cuda").
-    strict (bool): Whether to strictly enforce that the keys in state_dict match the keys returned by the model's state_dict() function.
+    strict (bool): Whether to strictly enforce that the keys in the state dictionary match the model's keys when loading.
 
   Returns:
     dict: The loaded checkpoint dictionary.
