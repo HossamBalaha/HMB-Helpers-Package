@@ -5,12 +5,13 @@ import seaborn as sns
 import scipy.stats as stats
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
+from statsmodels.stats.power import TTestPower
 from statsmodels.stats.weightstats import zconfint
 from sklearn.linear_model import LinearRegression
-from statsmodels.stats.diagnostic import acorr_ljungbox
-from statsmodels.stats.power import TTestPower
-from scipy.stats import skew, kurtosis, bootstrap, wilcoxon
+from statsmodels.stats.diagnostic import lilliefors
 from skimage.measure import shannon_entropy, moments
+from statsmodels.stats.diagnostic import acorr_ljungbox
+from scipy.stats import skew, kurtosis, bootstrap, wilcoxon
 from HMB.PlotsHelper import GetCmapColors
 
 # Categorize each method as Parametric, Non-Parametric, or Both/Context-Dependent.
@@ -140,7 +141,7 @@ class GeneralStatisticsHelper(object):
     - Statsmodels documentation: https://www.statsmodels.org/
   '''
 
-  # Shape (N, ROWS, COLS, CH)
+  # Shape (N, ROWS, COLS, CH).
   # axis = None => all elements.
   # axis = 0 => alongside N.
   # axis = 1 => alongside ROWS.
@@ -1429,6 +1430,1178 @@ class GeneralStatisticsHelper(object):
     return (start, end)
 
 
+class StatisticalAnalysisFramework(object):
+  r'''
+  A modular validator for repeated-trial system evaluation.
+  Automatically selects, runs, and explains applicability of statistical methods.
+  The framework is designed to be extensible, allowing for new methods and tests to be added as needed.
+
+  Mermaid diagram of the validation pipeline:
+  flowchart TD
+      A["Start: Input Data<br>(baseline, threshold, etc.)"] --> B{Infer Data Structure}
+      B -->|1D Array| C1["Set isMultiConfig = False<br>sampleSize = len(data)"]
+      B -->|" 2D Array<br>(subjects × configs) "| C2["Set isMultiConfig = True<br>nConfigs = cols<br>sampleSize = rows"]
+      C1 --> D{Infer Data Type}
+      C2 --> D
+      D -->|Binary| E1["Set dataType = Binary"]
+      D -->|Continuous| E2["Set dataType = Continuous"]
+      E1 --> F["Skip Normality/Symmetry Checks"]
+      E2 --> G{Check Assumptions}
+      G --> H1["Shapiro-Wilk (n ≤ 5000)?"]
+      H1 -->|Yes| I1["Run Shapiro-Wilk<br>Set isNormal"]
+      H1 -->|No| I2["Skip Shapiro-Wilk"]
+      G --> H2["D'Agostino (n > 20)?"]
+      H2 -->|Yes| I3["Run D'Agostino<br>Update isNormal if n>5000"]
+      H2 -->|No| I4["Skip D'Agostino"]
+      G --> H3["Lilliefors (n > 5000)?"]
+      H3 -->|Yes| I5["Run Lilliefors<br>Set isNormal"]
+      H3 -->|No| I6["Skip Lilliefors"]
+      G --> H4["Baseline Provided?"]
+      H4 -->|Yes| I7["Compute Skewness<br>Set isSymmetric"]
+      H4 -->|No| I8["Assume Symmetric"]
+      I1 --> J
+      I2 --> J
+      I3 --> J
+      I4 --> J
+      I5 --> J
+      I6 --> J
+      I7 --> J
+      I8 --> J
+      F --> J["Assess Method Applicability"]
+      J --> K1{Has Threshold?}
+      K1 -->|Yes| L1["Evaluate One-Sample Tests:<br>t-test, Wilcoxon, Sign, Binomial"]
+      K1 -->|No| L2["Skip One-Sample Tests"]
+      J --> K2{Has Baseline?}
+      K2 -->|Yes| L3["Evaluate Paired Tests:<br>Paired t, Wilcoxon, Permutation,<br>McNemar, TOST"]
+      K2 -->|No| L4["Skip Paired Tests"]
+      J --> K3{isMultiConfig?}
+      K3 -->|Yes| L5["Evaluate Multi-Config Tests:<br>- ICC (≥2)<br>- Friedman / RM-ANOVA (≥3)<br>- Cochran's Q (Binary, ≥3)"]
+      K3 -->|No| L6["Skip Multi-Config Tests"]
+      J --> K4{Has predictions & labels?}
+      K4 -->|Yes| L7["Evaluate Calibration Tests:<br>CalibrationECE, HosmerLemeshow"]
+      K4 -->|No| L8["Skip Calibration Tests"]
+      J --> K5{Data Type?}
+      K5 -->|Binary| L9["Evaluate Binomial Methods:<br>Clopper-Pearson, Beta-Binomial"]
+      K5 -->|Continuous| L10["Evaluate CV, MAD, Effect Sizes"]
+      L1 --> M
+      L2 --> M
+      L3 --> M
+      L4 --> M
+      L5 --> M
+      L6 --> M
+      L7 --> M
+      L8 --> M
+      L9 --> M
+      L10 --> M
+      M["Generate Method Assessments:<br>Applied/Not Applied + Reasons"] --> N["Execute Applicable Tests"]
+  %% One-Sample Branch
+      N --> O1{One-Sample Tests?}
+      O1 -->|Yes| P1["Run: t-test / Wilcoxon / Sign / Binomial"]
+      O1 -->|No| P2["Skip One-Sample Tests"]
+  %% Paired Branch
+      N --> O2{Paired Tests?}
+      O2 -->|Yes| P3["Run: Paired t / Wilcoxon / Permutation /<br>McNemar / TOST"]
+      O2 -->|No| P4["Skip Paired Tests"]
+  %% Multi-Config Branch
+      N --> O3{Multi-Config Tests?}
+      O3 -->|Yes| P5["Run: ICC / Friedman / RM-ANOVA /<br>Cochran's Q"]
+      O3 -->|No| P6["Skip Multi-Config Tests"]
+  %% Calibration Branch
+      N --> O4{Calibration Tests?}
+      O4 -->|Yes| P7["Run: CalibrationECE / HosmerLemeshow"]
+      O4 -->|No| P8["Skip Calibration Tests"]
+  %% Descriptive Stats
+      N --> O5{Descriptive Stats?}
+      O5 -->|Yes| P9["Compute: CV, MAD"]
+      O5 -->|No| P10["Skip Descriptive Stats"]
+  %% Effect Size
+      N --> O6{Effect Size?}
+      O6 -->|Yes| P11["Compute: Cohen's d / Hedges' g / A12"]
+      O6 -->|No| P12["Skip Effect Size"]
+  %% Bootstrap
+      N --> O7{Bootstrap?}
+      O7 -->|Yes| P13["Compute BCa CIs:<br>Mean/Median/Proportion/5th %ile"]
+      O7 -->|No| P14["Skip Bootstrap (should not occur)"]
+  %% Tolerance Interval
+      N --> O8{Tolerance Interval?}
+      O8 -->|Yes| P15["Compute Bootstrap Approximation"]
+      O8 -->|No| P16["Skip Tolerance Interval"]
+  %% Extra Normality Tests
+      N --> O9{Normality Tests?}
+      O9 -->|Yes| P17["Run: Anderson-Darling / Jarque-Bera"]
+      O9 -->|No| P18["Skip Extra Normality Tests"]
+  %% Converge all paths
+      P1 --> Q
+      P2 --> Q
+      P3 --> Q
+      P4 --> Q
+      P5 --> Q
+      P6 --> Q
+      P7 --> Q
+      P8 --> Q
+      P9 --> Q
+      P10 --> Q
+      P11 --> Q
+      P12 --> Q
+      P13 --> Q
+      P14 --> Q
+      P15 --> Q
+      P16 --> Q
+      P17 --> Q
+      P18 --> Q
+      Q["Compile Results + Execution Log"] --> R["Return Results Dictionary"]
+      R --> S["End"]
+  '''
+
+  # Initialize the validator with data and optional references.
+  def __init__(self, data, baseline=None, threshold=None, equivalenceMargin=None, alpha=0.05):
+    r'''
+    Initialize the `StatisticalAnalysisFramework` with input data and parameters.
+
+    Parameters:
+      data (array-like): The primary dataset to analyze (e.g., performance metrics).
+      baseline (array-like, optional): A reference dataset for comparison (e.g., human performance).
+      threshold (float, optional): A performance threshold for certain tests (e.g., above chance).
+      equivalenceMargin (float, optional): Margin for equivalence testing.
+      alpha (float, optional): Significance level for hypothesis testing (default 0.05).
+
+    This constructor sets up the internal state of the validator, including storing the input data,
+    baseline, threshold, equivalence margin, and significance level. It also prepares structures for results
+    and logging decisions throughout the validation process.
+    '''
+
+    # Store the input data as a numpy array.
+    self.data = np.asarray(data)
+    # Store the baseline as a numpy array when provided.
+    self.baseline = np.asarray(baseline) if (baseline is not None) else None
+    # Store the threshold value when provided.
+    self.threshold = threshold
+    # Store the equivalence margin when provided.
+    self.equivalenceMargin = equivalenceMargin
+    # Store the significance level alpha.
+    self.alpha = alpha
+    # Prepare a results dictionary to collect outputs.
+    self.results = {}
+    # Prepare a log list to collect human-readable decisions.
+    self.log = []
+
+  # Run the overall validation pipeline and return results.
+  def RunValidation(self):
+    r'''
+    Execute the full validation process, including data type inference, assumption checks,
+    method applicability evaluation, method assessment, test execution, and result compilation.
+
+    Returns:
+      dict: A comprehensive results dictionary containing test outcomes, execution log, and method assessments.
+    '''
+
+    # Infer the data type from the sample values.
+    self.InferDataType()
+    # Check statistical assumptions such as normality and symmetry.
+    self.CheckAssumptions()
+    # Evaluate which methods are applicable based on assumptions.
+    self.EvaluateMethodApplicability()
+    # Assess methods to build an applied/skipped report with reasons.
+    self.AssessMethods()
+    # Select and run the applicable tests and collect results.
+    self.SelectAndRunTests()
+    # Attach the execution log to results under a CamelCase key.
+    self.results["ExecutionLog"] = self.log
+    # Attach the method assessments mapping to results under a CamelCase key.
+    self.results["MethodAssessments"] = self.methodAssessments
+    # Return the assembled the results' dictionary.
+    return self.results
+
+  # Infer if the data is binary or continuous based on unique values.
+  def InferDataType(self):
+    r'''
+    Infer the data type (Binary vs Continuous) based on unique values in the input data.
+    '''
+
+    # Compute unique values present in the data.
+    uniqueVals = np.unique(self.data)
+    # Detect whether the input is multi-configuration (2D: subjects x configurations/raters).
+    self.isMultiConfig = (hasattr(self.data, "ndim") and (self.data.ndim == 2) and (self.data.shape[1] > 1))
+    if (self.isMultiConfig):
+      # When multi-config, number of configurations equals number of columns.
+      self.nConfigs = int(self.data.shape[1])
+      # Number of subjects / repeated trials equals number of rows.
+      self.sampleSize = int(self.data.shape[0])
+      self.log.append(
+        f"Multi-configuration data detected with {self.sampleSize} observations and {self.nConfigs} configurations.")
+      # For multi-config inputs we leave per-configuration normality to specific tests; default conservative flags.
+      # Continue to flatten unique value detection on the full matrix to infer binary/continuous.
+      uniqueVals = np.unique(self.data)
+
+    # Determine if data is binary by checking for two unique values 0 and 1.
+    if ((len(uniqueVals) == 2) and (set(uniqueVals).issubset({0, 1}))):
+      # Set dataType to Binary when values are exactly 0 and 1.
+      self.dataType = "Binary"
+      # Log the inference decision.
+      self.log.append("`dataType` inferred as Binary because data contains only 0 and 1.")
+    else:
+      # Set dataType to Continuous for all other cases.
+      self.dataType = "Continuous"
+      # Log the inference decision for continuous data.
+      self.log.append(
+        "`dataType` inferred as Continuous because data has more "
+        "than two unique values or non-binary values."
+      )
+
+  # Check assumptions like normality and symmetry for continuous data.
+  def CheckAssumptions(self):
+    r'''
+    Check statistical assumptions such as normality and symmetry based on data type and sample size.
+    For Continuous data:
+      - Normality is assessed using Shapiro-Wilk for n <= 5000, D'Agostino's K^2 for n > 20, and Lilliefors for n > 5000.
+      - Symmetry is assessed via skewness of differences from baseline when a baseline is provided (paired design).
+      - Logs are generated for each test applied or skipped with reasons.
+    For Binary data:
+      - Normality is not applicable and set to False.
+      - Symmetry is treated as True by default.
+      - Logs are generated indicating that normality and symmetry checks were skipped for binary data.
+    '''
+
+    # Record the sample size n.
+    n = len(self.data)
+    # Store the sample size as an attribute.
+    self.sampleSize = n
+
+    # Only perform normality and symmetry checks when data is Continuous.
+    if (self.dataType == "Continuous"):
+      # Create a dictionary to hold normality test p-values.
+      self.normalityPValues = {}
+
+      # Use Shapiro-Wilk test for moderate sample sizes (n <= 5000).
+      if (n <= 5000):
+        # Perform Shapiro-Wilk normality test and capture the p-value.
+        _, pShapiro = stats.shapiro(self.data)
+        # Record the Shapiro-Wilk p-value.
+        self.normalityPValues["ShapiroWilk"] = pShapiro
+        # Determine normality flag based on p-value and alpha.
+        self.isNormal = (pShapiro > self.alpha)
+        # Log the application of Shapiro-Wilk test with p-value.
+        self.log.append(f"ShapiroWilk test applied because sample size ({n}) <= 5000; p-value = {pShapiro:.4f}.")
+      else:
+        # Log that Shapiro-Wilk is skipped for large sample sizes.
+        self.log.append(f"ShapiroWilk skipped because sample size ({n}) > 5000.")
+
+      # Use D'Agostino's K^2 test when sample size is greater than 20.
+      if (n > 20):
+        # Perform the D'Agostino K^2 normality test and capture the p-value.
+        _, pDagostino = stats.normaltest(self.data)
+        # Record the D'Agostino K2 p-value.
+        self.normalityPValues["DAgostinoK2"] = pDagostino
+        # When sample is very large use D'Agostino to set isNormal.
+        if (n > 5000):
+          # Set normality flag based on D'Agostino p-value.
+          self.isNormal = (pDagostino > self.alpha)
+        # Log the application of D'Agostino test with p-value.
+        self.log.append(f"DAgostinoK2 test applied because sample size ({n}) > 20; p-value = {pDagostino:.4f}.")
+      else:
+        # Log that D'Agostino is skipped for small sample sizes.
+        self.log.append(f"DAgostinoK2 skipped because sample size ({n}) <= 20.")
+
+      # Use Lilliefors test for very large sample sizes (n > 5000).
+      if (n > 5000):
+        # Perform the Lilliefors test and capture the p-value.
+        _, pLilliefors = lilliefors(self.data)
+        # Record the Lilliefors p-value.
+        self.normalityPValues["Lilliefors"] = pLilliefors
+        # Set the normality flag based on Lilliefors p-value.
+        self.isNormal = (pLilliefors > self.alpha)
+        # Log application of Lilliefors test with p-value.
+        self.log.append(f"Lilliefors test applied because sample size ({n}) > 5000; p-value = {pLilliefors:.4f}.")
+      else:
+        # Log that Lilliefors is skipped for moderate sample sizes.
+        self.log.append(f"Lilliefors skipped because sample size ({n}) <= 5000.")
+
+      # Only assess symmetry when a baseline is provided for paired designs.
+      if (self.baseline is not None):
+        # Compute differences between data and baseline.
+        diffs = self.data - self.baseline
+        # Compute skewness of differences as a symmetry proxy.
+        skewness = stats.skew(diffs)
+        # Consider symmetric when absolute skewness is below 0.5.
+        self.isSymmetric = (abs(skewness) < 0.5)
+        # Log the symmetry assessment result with skewness.
+        self.log.append(
+          f"Symmetry assessed via skewness = {skewness:.3f}; "
+          f"{'assumed symmetric' if self.isSymmetric else 'assumed asymmetric'}."
+        )
+      else:
+        # Default to symmetric when no baseline is available (one-sample context).
+        self.isSymmetric = True
+        # Log that symmetry was not assessed due to missing baseline.
+        self.log.append("Symmetry not assessed because no baseline provided (one-sample context).")
+    else:
+      # For binary data, normality is not applicable.
+      self.isNormal = False
+      # For binary data, treat symmetry as True by default.
+      self.isSymmetric = True
+      # Log that normality and symmetry checks were skipped for binary data.
+      self.log.append("Normality and symmetry not assessed because data is Binary.")
+
+  # Evaluate which statistical methods are applicable to this dataset.
+  def EvaluateMethodApplicability(self):
+    r'''
+    Evaluate the applicability of various statistical methods based on the inferred data type, sample size, and assumption checks.
+      - For Continuous data, applicability of normality tests, one-sample tests (t-test, Wilcoxon, Sign), paired
+          tests (Paired t-test, Wilcoxon signed-rank, Permutation), and effect size calculations (Cohen's d, Hedges' g)
+          are determined based on normality, symmetry, presence of baseline, and sample size.
+      - For Binary data, applicability of methods like Exact Binomial Test, Clopper-Pearson CI, Bayesian Beta-Binomial,
+          McNemar's test, and Cochran's Q is determined based on the presence of a threshold, baseline, and whether
+          the data is multi-config.
+      - Logs are generated for each method indicating whether it is applicable or not, along with the reasons based
+          on the data characteristics and assumptions.
+      - The results of this evaluation are stored in an `applicableMethods` dictionary mapping method names to
+          boolean flags indicating applicability.
+    '''
+
+    # Initialize an applicability dictionary to record decisions.
+    self.applicableMethods = {}
+    # Local alias of sample size for readability.
+    n = self.sampleSize
+
+    # Mark ShapiroWilk as applicable for Continuous when n <= 5000.
+    self.applicableMethods["ShapiroWilk"] = (self.dataType == "Continuous") and (n <= 5000)
+    # AndersonDarling applicable for Continuous when tail-sensitive normality is relevant.
+    self.applicableMethods["AndersonDarling"] = (self.dataType == "Continuous")
+    # DAgostinoK2 applicable for Continuous when n > 20.
+    self.applicableMethods["DAgostinoK2"] = (self.dataType == "Continuous") and (n > 20)
+    # Lillfors applicable for Continuous when n > 5000.
+    self.applicableMethods["Lillfors"] = (self.dataType == "Continuous") and (n > 5000)
+    # JarqueBera applicable for Continuous typically in large-sample contexts.
+    self.applicableMethods["JarqueBera"] = (self.dataType == "Continuous") and (n >= 30)
+    # TOST equivalence test applicable when baseline and equivalence margin provided.
+    self.applicableMethods["TOST"] = (self.baseline is not None) and (self.dataType == "Continuous") and (
+      self.equivalenceMargin is not None)
+
+    # Determine if one-sample threshold based methods should be considered.
+    hasThreshold = (self.threshold is not None)
+    # OneSampleTTest applicable for Continuous when threshold provided and either normal or large n.
+    self.applicableMethods["OneSampleTTest"] = (
+      hasThreshold and (self.dataType == "Continuous") and
+      ((self.isNormal) or (n >= 30))
+    )
+    # WilcoxonSignedRankOneSample applicable when non-normal but symmetric.
+    self.applicableMethods["WilcoxonSignedRankOneSample"] = (
+      hasThreshold and (self.dataType == "Continuous") and
+      (not ((self.isNormal) or (n >= 30))) and (self.isSymmetric)
+    )
+    # SignTest applicable when non-normal and not symmetric.
+    self.applicableMethods["SignTest"] = (
+      hasThreshold and (self.dataType == "Continuous") and
+      (not ((self.isNormal) or (n >= 30))) and (not (self.isSymmetric))
+    )
+    # ExactBinomialTest applicable for binary one-sample tests when threshold provided.
+    self.applicableMethods["ExactBinomialTest"] = hasThreshold and (self.dataType == "Binary")
+    # ClopperPearsonCI always applicable for binary data.
+    self.applicableMethods["ClopperPearsonCI"] = (self.dataType == "Binary")
+    # BayesianBetaBinomial always applicable for binary data.
+    self.applicableMethods["BayesianBetaBinomial"] = (self.dataType == "Binary")
+
+    # Determine applicability of paired tests when a baseline is present.
+    hasBaseline = (self.baseline is not None)
+    # PairedTTest applicable when baseline present, data is continuous and normal.
+    self.applicableMethods["PairedTTest"] = hasBaseline and (self.dataType == "Continuous") and (self.isNormal)
+    # PairedFTest applicable for variance comparisons in paired continuous data when normal.
+    self.applicableMethods["PairedFTest"] = hasBaseline and (self.dataType == "Continuous") and (self.isNormal)
+    # WilcoxonSignedRankPaired applicable when non-normal but symmetric.
+    self.applicableMethods["WilcoxonSignedRankPaired"] = (
+      hasBaseline and (self.dataType == "Continuous") and
+      (not (self.isNormal)) and (self.isSymmetric)
+    )
+    # PermutationTest applicable when non-normal and asymmetric.
+    self.applicableMethods["PermutationTest"] = (
+      hasBaseline and (self.dataType == "Continuous")
+      and (not (self.isNormal)) and (not (self.isSymmetric))
+    )
+    # McNemarTest applicable for binary paired comparisons.
+    self.applicableMethods["McNemarTest"] = hasBaseline and (self.dataType == "Binary")
+    # Cochran's Q applicable for binary multi-config repeated measures when k >= 3.
+    self.applicableMethods["CochransQ"] = self.isMultiConfig and (self.nConfigs >= 3) and (self.dataType == "Binary")
+
+    # Coefficient of Variation applicable for continuous data.
+    self.applicableMethods["CV"] = (self.dataType == "Continuous")
+    # Median Absolute Deviation applicable for continuous data.
+    self.applicableMethods["MAD"] = (self.dataType == "Continuous")
+
+    # ICC applicable when data is multi-config (subjects x raters/configs) with >=2 raters.
+    self.applicableMethods["ICC"] = self.isMultiConfig and (self.nConfigs >= 2)
+    # Friedman and RMANOVA: applicable for multi-config continuous or ordinal repeated measures with >=3 configurations.
+    self.applicableMethods["Friedman"] = self.isMultiConfig and (self.nConfigs >= 3) and (self.dataType == "Continuous")
+    self.applicableMethods["RMANOVA"] = self.isMultiConfig and (self.nConfigs >= 3) and (self.dataType == "Continuous")
+
+    # Effect size applicability depending on normality and baseline.
+    self.applicableMethods["CohensD"] = (hasBaseline and (self.dataType == "Continuous") and (self.isNormal))
+    self.applicableMethods["HedgesG"] = (hasBaseline and (self.dataType == "Continuous") and (self.isNormal))
+    self.applicableMethods["VarghaDelaneyA12"] = (
+      hasBaseline and (self.dataType == "Continuous") and
+      (not (self.isNormal))
+    )
+    # Determine applicability for tolerance interval estimation using bootstrap for continuous data.
+    self.applicableMethods["ToleranceInterval"] = (self.dataType == "Continuous") and (n >= 2)
+
+    # Calibration/ECE and Hosmer-Lemeshow require `predictions` (probabilities) and `labels` (binary true labels) to be set on the instance.
+    hasPreds = (hasattr(self, "predictions") and (getattr(self, "predictions") is not None)) and (
+      hasattr(self, "labels") and (getattr(self, "labels") is not None))
+    self.applicableMethods["CalibrationECE"] = hasPreds
+    self.applicableMethods["HosmerLemeshow"] = hasPreds
+
+    # Bootstrap is always applicable as a fallback.
+    self.applicableMethods["BCaBootstrap"] = True
+
+    # Multi-group tests allowed when multi-config repeated-measures are present.
+    # (Do not forcibly disable here; AssessMethods/GetSkipReason will explain when not applicable.)
+
+    # Log the applicability decisions for traceability.
+    for method, applicable in self.applicableMethods.items():
+      # Log applicable methods as APPLICABLE.
+      if (applicable):
+        self.log.append(f"{method} marked as APPLICABLE based on data properties.")
+      else:
+        # Compute and log a readable reason for skipping a method.
+        reason = self.GetSkipReason(method)
+        self.log.append(f"{method} SKIPPED because {reason}.")
+
+  # Provide a brief human-readable reason why an applicable method is chosen.
+  def GetApplyReason(self, methodName):
+    r'''
+    Get a human-readable reason for why a method is applied based on the data characteristics and assumptions.
+
+    Parameters:
+      methodName (str): The name of the method for which to generate the apply reason.
+
+    Returns:
+      str: A human-readable explanation for why the method is applied.
+    '''
+
+    # Normality checks: ShapiroWilk when sample size is moderate.
+    if (methodName == "ShapiroWilk"):
+      return f"Applied because data is Continuous and sample size ({self.sampleSize}) <= 5000."
+    # Anderson-Darling for tail-sensitive normality checks.
+    if (methodName == "AndersonDarling"):
+      return f"Applied because data is Continuous and Anderson–Darling provides tail-sensitive normality diagnostics."
+    # Normality checks: DAgostinoK2 when n > 20.
+    if (methodName == "DAgostinoK2"):
+      return f"Applied because data is Continuous and sample size ({self.sampleSize}) > 20."
+    # Normality checks: Lilliefors for very large n.
+    if (methodName == "Lillfors"):
+      return f"Applied because data is Continuous and sample size ({self.sampleSize}) > 5000."
+    # Jarque-Bera for large-sample asymptotic normality testing.
+    if (methodName == "JarqueBera"):
+      return "Applied because data is Continuous and sample size is large; Jarque–Bera tests skewness and kurtosis."
+    # One-sample or paired t-tests applied when normality or large n holds.
+    if (methodName in ["OneSampleTTest", "PairedTTest"]):
+      return "Applied because the data meets approximate normality or large-sample conditions."
+    if (methodName in ["PairedFTest"]):
+      return "Applied to compare variances of paired differences under normality assumption."
+    # Wilcoxon applied when data is non-normal but symmetric.
+    if (methodName in ["WilcoxonSignedRankOneSample", "WilcoxonSignedRankPaired"]):
+      return "Applied because data is non-normal but symmetry of differences is assumed."
+    # Sign test applied when non-normal and asymmetric.
+    if (methodName == "SignTest"):
+      return "Applied because data is non-normal and asymmetric, so sign test is distribution-free."
+    # Exact binomial for binary one-sample.
+    if (methodName == "ExactBinomialTest"):
+      return "Applied because data is Binary and a threshold proportion was specified."
+    # Clopper-Pearson for binary CI.
+    if (methodName == "ClopperPearsonCI"):
+      return "Applied because data is Binary; Clopper–Pearson provides exact interval coverage."
+    # BayesianBetaBinomial for binary posterior insights.
+    if (methodName == "BayesianBetaBinomial"):
+      return "Applied to produce a posterior distribution for the Bernoulli rate with a conjugate beta prior."
+    # Permutation test applied when non-parametric paired testing is required.
+    if (methodName == "PermutationTest"):
+      return "Applied because paired differences are non-normal and asymmetric; permutation provides an assumption-free test."
+    # McNemar applied for paired binary comparisons.
+    if (methodName == "McNemarTest"):
+      return "Applied because data is Binary and baseline is provided for paired comparisons."
+    # TOST equivalence when equivalence margin is provided.
+    if (methodName == "TOST"):
+      return "Applied because equivalence margin was provided and paired comparisons are possible."
+    # Effect sizes and variability metrics.
+    if (methodName in ["CohensD", "HedgesG", "VarghaDelaneyA12", "CV", "MAD"]):
+      return "Applied to quantify effect magnitude or robust variability as appropriate."
+    # Bootstrap always applied as fallback.
+    if (methodName == "BCaBootstrap"):
+      return "Applied as a distribution-free method to estimate confidence intervals for key statistics."
+    # Tolerance interval for coverage guarantees using bootstrap approximation.
+    if (methodName == "ToleranceInterval"):
+      return "Applied to estimate a distribution-free tolerance interval (bootstrap approximation for quantiles)."
+    if (methodName == "Friedman"):
+      return "Applied because multi-configuration repeated-measures data with >=3 configurations was provided."
+    if (methodName == "RMANOVA"):
+      return "Applied because multi-configuration repeated-measures data with >=3 configurations was provided; attempts repeated-measures ANOVA using statsmodels if available."
+    if (methodName == "CochransQ"):
+      return "Applied because binary multi-configuration repeated-measures data with >=3 configurations was provided."
+    if (methodName == "ICC"):
+      return "Applied to estimate intraclass correlation from multi-configuration (subjects x raters) data."
+    if (methodName == "CalibrationECE"):
+      return "Applied because predicted probabilities and true labels were provided; computes expected calibration error (ECE)."
+    if (methodName == "HosmerLemeshow"):
+      return "Applied because predicted probabilities and true labels were provided; computes Hosmer-Lemeshow goodness-of-fit statistic."
+    # Default reason when nothing specific is defined.
+    return "Applied because applicability rules were satisfied for this test."
+
+  # Assess methods and produce an applied/skipped mapping with reasons.
+  def AssessMethods(self):
+    r'''
+    Assess each method's applicability and produce a mapping of method names to whether they were applied or
+      skipped, along with human-readable reasons for each decision.
+      - Iterates over the `applicableMethods` dictionary to determine which methods are applied or skipped.
+      - For applied methods, it uses `GetApplyReason` to generate a reason for application and records this in
+          the `methodAssessments` dictionary.
+      - For skipped methods, it uses `GetSkipReason` to generate a reason for skipping and records this in
+          the `methodAssessments` dictionary.
+      - Logs the decision for each method in the execution log for transparency and traceability of the
+          validation process.
+      - The resulting `methodAssessments` dictionary maps each method name to a dictionary containing an
+          "Applied" boolean and a "Reason" string explaining the decision.
+      - This structured assessment allows for clear communication of which methods were used in the analysis and
+          why, as well as which methods were not used and the rationale for their exclusion.
+    '''
+
+    # Initialize the assessments' dictionary.
+    self.methodAssessments = {}
+    # Iterate over all methods declared in applicableMethods.
+    for method, applicable in self.applicableMethods.items():
+      # When a method is applicable, mark it as Applied and provide a reason.
+      if (applicable):
+        # Get a human-readable apply reason for the method.
+        reason = self.GetApplyReason(method)
+        # Record the assessment entry for applied method.
+        self.methodAssessments[method] = {"Applied": True, "Reason": reason}
+        # Log the application decision.
+        self.log.append(f"{method} APPLIED: {reason}")
+      else:
+        # For skipped methods, get the skip reason.
+        reason = self.GetSkipReason(method)
+        # Record the assessment entry for skipped method.
+        self.methodAssessments[method] = {"Applied": False, "Reason": reason}
+        # Log the skip decision.
+        self.log.append(f"{method} SKIPPED: {reason}")
+
+  # Provide human-readable reasons for skipping specific methods.
+  def GetSkipReason(self, methodName):
+    r'''
+    Get a human-readable reason for why a method is skipped based on the data characteristics and assumptions.
+
+    Parameters:
+      methodName (str): The name of the method for which to generate the skip reason.
+
+    Returns:
+      str: A human-readable explanation for why the method is skipped.
+    '''
+
+    # Return reason for multi-configuration methods.
+    if (methodName in ["Friedman", "RMANOVA", "CochransQ"]):
+      return "requires comparison of three or more configurations; only one system (or one vs baseline) provided"
+    # Return reason for ICC.
+    if (methodName in ["ICC"]):
+      return "requires multiple raters or repeated measurements per subject; not applicable to single-system trial metrics"
+    # Return reason for calibration tests.
+    if (methodName in ["CalibrationECE", "HosmerLemeshow"]):
+      return "requires predicted probabilities, not just binary outcomes or scalar metrics"
+    # Return reason for one-sample methods lacking threshold.
+    if (("OneSample" in methodName) and (self.threshold is None)):
+      return "no performance threshold specified"
+    # Return reason for methods that require a baseline when none provided.
+    if ((("Paired" in methodName) or (methodName in ["TOST", "McNemarTest"])) and (self.baseline is None)):
+      return "no baseline system provided for comparison"
+    # Return reason when data type mismatches method expectation.
+    if ((self.dataType == "Binary") and ("Continuous" in methodName)):
+      return "data is binary, not continuous"
+    if (
+      (self.dataType == "Continuous") and
+      (methodName in ["ExactBinomialTest", "ClopperPearsonCI", "BayesianBetaBinomial"])
+    ):
+      return "data is continuous, not binary"
+    # Return reason for coefficient of variation when data contains non-positive values.
+    if ((methodName == "CV") and (np.any(self.data <= 0))):
+      return "data contains non-positive values; CV undefined"
+    # Default fallback reason for skipping.
+    return "assumptions not met or redundant given other tests"
+
+  # Select the applicable tests and execute them to populate results.
+  def SelectAndRunTests(self):
+    r'''
+    Select and execute the applicable statistical tests based on the `applicableMethods` mapping, and populate the results dictionary with test outcomes.
+      - Iterates over the `applicableMethods` to identify which tests are marked as applicable.
+      - For each applicable test, the corresponding statistical test is executed using SciPy or custom implementations as needed.
+      - The results of each test (e.g., test statistics, p-values, confidence intervals) are stored in the `results` dictionary under keys corresponding to each test.
+      - For one-sample tests, if a threshold is provided, the relevant tests are executed and their results are stored under a "OneSampleTests" key in the results.
+      - For multi-configuration tests, the appropriate methods are executed and results are stored under keys corresponding to each method.
+      - For effect size calculations and variability metrics, the computed values are stored under descriptive keys in the results.
+      - The method assessments are included in the results for transparency, allowing users to see which methods were applied and the reasons for their application or exclusion.
+    '''
+
+    # Prepare an output dictionary for test results.
+    out = {}
+
+    # Include method assessments in the output for transparency.
+    out["MethodAssessments"] = self.methodAssessments
+
+    # Compute descriptive statistics when CV is applicable.
+    if (self.applicableMethods.get("CV", False)):
+      # Only compute CV when all data values are positive.
+      if (np.all(self.data > 0)):
+        # Compute coefficient of variation using sample standard deviation.
+        cv = np.std(self.data, ddof=1) / np.mean(self.data)
+        # Store the CV in the output dictionary under a CamelCase key.
+        out["CoefficientOfVariation"] = cv
+
+    # Compute MAD when applicable.
+    if (self.applicableMethods.get("MAD", False)):
+      # Compute median absolute deviation from the median.
+      mad = np.median(np.abs(self.data - np.median(self.data)))
+      # Store MAD under a CamelCase key.
+      out["MedianAbsoluteDeviation"] = mad
+
+    # Run Anderson-Darling normality test when applicable.
+    if (self.applicableMethods.get("AndersonDarling", False)):
+      # Use SciPy's Anderson test for the normal distribution.
+      adRes = stats.anderson(self.data, dist="norm")
+      # Store statistic and critical values for interpretation.
+      out["AndersonDarling"] = {
+        "Statistic"         : float(adRes.statistic),
+        "CriticalValues"    : list(adRes.critical_values),
+        "SignificanceLevels": list(adRes.significance_level)
+      }
+
+    # Run Jarque-Bera test when applicable.
+    if (self.applicableMethods.get("JarqueBera", False)):
+      # Use SciPy's jarque_bera for skewness/kurtosis-based normality.
+      jbStat, jbP = stats.jarque_bera(self.data)
+      # Record Jarque-Bera statistic and p-value.
+      out["JarqueBera"] = {"Statistic": float(jbStat), "pValue": float(jbP)}
+
+    # Run one-sample tests when a threshold was provided.
+    if (self.threshold is not None):
+      # Prepare a dictionary to collect one-sample test results.
+      oneSample = {}
+      # Run OneSampleTTest when applicable.
+      if (self.applicableMethods.get("OneSampleTTest", False)):
+        # Perform one-sample t-test against the threshold.
+        tStat, pVal = stats.ttest_1samp(self.data, self.threshold)
+        # Record t-test results under a CamelCase key.
+        oneSample["OneSampleTTest"] = {"tStatistic": tStat, "pValue": pVal}
+      # Run Wilcoxon signed-rank one-sample when applicable.
+      if (self.applicableMethods.get("WilcoxonSignedRankOneSample", False)):
+        # Perform Wilcoxon signed-rank test for differences to threshold.
+        wStat, pVal = stats.wilcoxon(self.data - self.threshold)
+        # Record Wilcoxon results under a CamelCase key.
+        oneSample["WilcoxonSignedRank"] = {"wStatistic": wStat, "pValue": pVal}
+      # Run sign test when applicable.
+      if (self.applicableMethods.get("SignTest", False)):
+        # Compute signs of deviations from threshold.
+        signs = np.sign(self.data - self.threshold)
+        # Count the number of non-zero deviations.
+        nNonZero = np.sum(signs != 0)
+        # Compute binomial p-value for the sign distribution when non-zero observations exist.
+        if (nNonZero > 0):
+          # Count the number of positive signs.
+          k = np.sum(signs > 0)
+          # Compute two-sided binomial p-value.
+          pVal = 2 * min(stats.binom.cdf(k, nNonZero, 0.5), 1 - stats.binom.cdf(k - 1, nNonZero, 0.5))
+        else:
+          # Default p-value when all differences are zero.
+          pVal = 1.0
+        # Record the sign test p-value.
+        oneSample["SignTest"] = {"pValue": pVal}
+      # Run exact binomial test when applicable for binary one-sample.
+      if (self.applicableMethods.get("ExactBinomialTest", False)):
+        # Count the number of successes in binary data.
+        successes = np.sum(self.data)
+        # Determine the number of trials.
+        nTrials = len(self.data)
+        # Compute an exact binomial test p-value against the threshold proportion using a compatibility wrapper.
+        pVal = self._safe_binom_test(successes, nTrials, self.threshold, alternative="two-sided")
+        # Record the exact binomial test result under a CamelCase key.
+        oneSample["ExactBinomialTest"] = {"pValue": pVal}
+      # Attach one-sample results to output when any tests were run.
+      if (oneSample):
+        out["OneSampleTests"] = oneSample
+
+    # Compute Clopper-Pearson confidence interval for binary data when applicable.
+    if (self.applicableMethods.get("ClopperPearsonCI", False)):
+      # Count successes and trials for binary proportion.
+      successes = np.sum(self.data)
+      # Determine the number of trials.
+      nTrials = len(self.data)
+      # Compute Clopper-Pearson interval using the beta distribution quantiles with edge-case handling.
+      if (successes == 0):
+        ciLow = 0.0
+        ciHigh = float(stats.beta.ppf(1 - self.alpha / 2, successes + 1, nTrials - successes))
+      elif (successes == nTrials):
+        ciLow = float(stats.beta.ppf(self.alpha / 2, successes, nTrials - successes + 1))
+        ciHigh = 1.0
+      else:
+        ciLow = float(stats.beta.ppf(self.alpha / 2, successes, nTrials - successes + 1))
+        ciHigh = float(stats.beta.ppf(1 - self.alpha / 2, successes + 1, nTrials - successes))
+      out["ClopperPearsonCI"] = {"Lower": ciLow, "Upper": ciHigh}
+
+    # Run Bayesian Beta-Binomial posterior calculations for binary data when applicable.
+    if (self.applicableMethods.get("BayesianBetaBinomial", False)):
+      # Count successes and trials for the binary posterior.
+      successes = np.sum(self.data)
+      # Determine the number of trials.
+      nTrials = len(self.data)
+      # Compute posterior alpha and beta parameters with a uniform prior (1,1).
+      alphaPost = successes + 1.0
+      betaPost = nTrials - successes + 1.0
+      # Compute posterior mean of the binomial probability.
+      postMean = alphaPost / (alphaPost + betaPost)
+      # Compute posterior probability the rate exceeds threshold when threshold provided or use 0.5 default.
+      pGreater = 1 - stats.beta.cdf(self.threshold if (self.threshold is not None) else 0.5, alphaPost, betaPost)
+      # Store Bayesian results under a CamelCase key.
+      out["BayesianBetaBinomial"] = {
+        "PosteriorMean"         : postMean,
+        "P_GreaterThanThreshold": pGreater
+      }
+
+    # Run paired tests when a baseline is provided and applicable.
+    if (self.baseline is not None):
+      # Prepare a dictionary to collect paired test results.
+      paired = {}
+      # Run PairedTTest when assumptions permit.
+      if (self.applicableMethods.get("PairedTTest", False)):
+        # Perform paired t-test between data and baseline.
+        tStat, pVal = stats.ttest_rel(self.data, self.baseline)
+        # Record paired t-test results.
+        paired["PairedTTest"] = {"tStatistic": tStat, "pValue": pVal}
+      if (self.applicableMethods.get("PairedFTest", False)):
+        # Perform paired F-test for variance comparison (Levene's test for paired samples).
+        fStat, pVal = stats.levene(self.data, self.baseline)
+        # Record paired F-test results.
+        paired["PairedFTest"] = {"fStatistic": fStat, "pValue": pVal}
+      # Run Wilcoxon signed-rank for paired samples when applicable.
+      if (self.applicableMethods.get("WilcoxonSignedRankPaired", False)):
+        # Perform Wilcoxon signed-rank paired test.
+        wStat, pVal = stats.wilcoxon(self.data, self.baseline)
+        # Record Wilcoxon paired results.
+        paired["WilcoxonSignedRank"] = {"wStatistic": wStat, "pValue": pVal}
+      # Run a simple permutation test for paired differences when applicable.
+      if (self.applicableMethods.get("PermutationTest", False)):
+        # Compute differences for paired observations.
+        diffs = self.data - self.baseline
+        # Compute observed mean difference.
+        obsMean = np.mean(diffs)
+        # Set number of permutations for the permutation test.
+        nPerm = 5000
+        # Prepare a list to collect permutation means.
+        permMeans = []
+        # Run permutation sampling with random sign flips.
+        for _ in range(nPerm):
+          # Randomly assign signs to differences.
+          signs = np.random.choice([-1, 1], size=len(diffs))
+          # Append the mean of signed differences to the permutation distribution.
+          permMeans.append(np.mean(signs * diffs))
+        # Compute two-sided permutation p-value as the proportion exceeding the observed mean.
+        pVal = (np.abs(permMeans) >= np.abs(obsMean)).mean()
+        # Record permutation test results with the permutation count.
+        paired["PermutationTest"] = {"pValue": pVal, "nPermutations": nPerm}
+      # Run McNemar test for binary paired comparisons when applicable.
+      if (self.applicableMethods.get("McNemarTest", False)):
+        # Count observations where both new and baseline are correct.
+        bothCorrect = int(np.sum((self.data == 1) & (self.baseline == 1)))
+        # Count observations where new is correct only.
+        newOnly = int(np.sum((self.data == 1) & (self.baseline == 0)))
+        # Count observations where baseline is correct only.
+        baseOnly = int(np.sum((self.data == 0) & (self.baseline == 1)))
+        # Count neither correct (both zero)
+        neither = int(np.sum((self.data == 0) & (self.baseline == 0)))
+        discordant = newOnly + baseOnly
+        # Use exact binomial test for small discordant counts.
+        if (discordant > 0) and (discordant < 25):
+          pVal = self._safe_binom_test(min(newOnly, baseOnly), discordant, 0.5, alternative="two-sided")
+        elif (discordant == 0):
+          pVal = 1.0
+        else:
+          # Use continuity-corrected McNemar chi-squared approximation for larger discordant counts.
+          stat = (abs(newOnly - baseOnly) - 1) ** 2 / (discordant + 1e-12)
+          pVal = 1 - stats.chi2.cdf(stat, df=1)
+        paired["McNemarTest"] = {"pValue": pVal, "DiscordantPairs": int(discordant)}
+      # Run TOST equivalence testing when applicable.
+      if (self.applicableMethods.get("TOST", False)):
+        # Implement TOST using t-distribution one-sided p-values computed from the sample differences.
+        diffs = self.data - self.baseline
+        nDiff = len(diffs)
+        meanDiff = float(np.mean(diffs))
+        sdDiff = float(np.std(diffs, ddof=1))
+        se = sdDiff / (nDiff ** 0.5) if (nDiff > 0) else float('nan')
+        # lower test: H0 mean <= -margin  vs H1 mean > -margin
+        tLower = (meanDiff - (-self.equivalenceMargin)) / (se + 1e-12)
+        pLower = 1.0 - stats.t.cdf(tLower, df=nDiff - 1)
+        # upper test: H0 mean >= margin vs H1 mean < margin
+        tUpper = (meanDiff - (self.equivalenceMargin)) / (se + 1e-12)
+        pUpper = stats.t.cdf(tUpper, df=nDiff - 1)
+        pTost = max(pLower, pUpper)
+        paired["TOST"] = {"pValue": float(pTost), "EquivalenceMargin": self.equivalenceMargin}
+      # Attach paired test results to output when any were run.
+      if (paired):
+        out["PairedTests"] = paired
+
+    # Compute effect size metrics when a baseline is provided.
+    if (self.baseline is not None):
+      # Prepare an effect size dictionary.
+      effect = {}
+      # Compute Cohen's d and Hedges' g when applicable.
+      if ((self.applicableMethods.get("CohensD", False)) or (self.applicableMethods.get("HedgesG", False))):
+        # Compute differences between data and baseline for effect size calculations.
+        diffs = self.data - self.baseline
+        # Compute Cohen's d as mean difference over sample standard deviation.
+        cohensD = np.mean(diffs) / np.std(diffs, ddof=1)
+        # Store Cohen's d under a CamelCase key.
+        effect["CohensD"] = cohensD
+        # Compute Hedges' g adjustment when applicable.
+        if (self.applicableMethods.get("HedgesG", False)):
+          # Determine sample size for the pairwise differences.
+          nDiff = len(diffs)
+          # Apply small-sample correction factor to Cohen's d for Hedges' g.
+          hedgeG = cohensD * (1 - 3 / (4 * nDiff - 9))
+          # Store Hedges' g under a CamelCase key.
+          effect["HedgesG"] = hedgeG
+      # Compute Vargha-Delaney A12 when non-normal effect size is required.
+      if (self.applicableMethods.get("VarghaDelaneyA12", False)):
+        # Determine sizes of the two groups for ranking.
+        m = len(self.data)
+        n = len(self.baseline)
+        # Concatenate the two samples for rank-based computations.
+        combined = np.concatenate([self.data, self.baseline])
+        # Compute ranks of the combined sample.
+        ranks = stats.rankdata(combined)
+        # Compute rank sum for the first group portion.
+        rankSum = np.sum(ranks[:m])
+        # Compute the Vargha-Delaney A12 measure from the rank sum.
+        a12 = (rankSum - m * (m + 1) / 2) / (m * n)
+        # Store the A12 measure under a CamelCase key.
+        effect["VarghaDelaneyA12"] = a12
+      # Attach effect size results to output when any were computed.
+      if (effect):
+        out["EffectSize"] = effect
+    # Compute Cochran's Q for binary multi-configuration repeated-measures when applicable.
+    if (self.applicableMethods.get("CochransQ", False)):
+      # Ensure data is a NumPy array for matrix operations.
+      dataMat = np.asarray(self.data)
+      # Determine the number of subjects from the data rows.
+      nSubjects = int(dataMat.shape[0])
+      # Determine the number of configurations from the data columns.
+      kConfigs = int(dataMat.shape[1])
+      # Compute the column-wise sums of successes for each configuration.
+      colSums = np.sum(dataMat, axis=0)
+      # Compute the total number of successes across all cells.
+      totalSuccesses = float(np.sum(colSums))
+      # Compute the numerator for Cochran's Q statistic.
+      numer = kConfigs * (kConfigs - 1) * np.sum((colSums - totalSuccesses / kConfigs) ** 2)
+      # Compute the denominator for Cochran's Q statistic.
+      rowSums = np.sum(dataMat, axis=1)
+      denom = np.sum(rowSums * (kConfigs - rowSums))
+      # Handle degenerate case where denominator is zero or negative.
+      if (denom <= 0):
+        out["CochransQ"] = {"Statistic": None, "pValue": None, "Message": "Degenerate data; denominator is zero."}
+      else:
+        # Compute the Cochran's Q statistic value.
+        qStat = float(numer / denom)
+        # Compute the p-value from the chi-square distribution with k-1 degrees of freedom.
+        qP = float(stats.chi2.sf(qStat, df=(kConfigs - 1)))
+        # Store the Cochran's Q results under a CamelCase key.
+        out["CochransQ"] = {"Statistic": qStat, "pValue": qP}
+
+    # Compute ICC(2,1) (two-way random effects single-measure) for multi-config continuous data when applicable.
+    if (self.applicableMethods.get("ICC", False)):
+      # Ensure the data matrix is a NumPy array.
+      dataMat = np.asarray(self.data)
+      # Determine the number of subjects.
+      nSubjects = int(dataMat.shape[0])
+      # Determine the number of configurations (raters).
+      kConfigs = int(dataMat.shape[1])
+      # Compute the grand mean of all observations.
+      grandMean = float(np.mean(dataMat))
+      # Compute the mean for each subject (row mean).
+      rowMeans = np.mean(dataMat, axis=1)
+      # Compute the mean for each rater/configuration (column mean).
+      colMeans = np.mean(dataMat, axis=0)
+      # Compute the sum of squares for rows (subjects).
+      ssr = float(kConfigs * np.sum((rowMeans - grandMean) ** 2))
+      # Compute the sum of squares for columns (raters/configs).
+      ssc = float(nSubjects * np.sum((colMeans - grandMean) ** 2))
+      # Compute the total sum of squares.
+      sst = float(np.sum((dataMat - grandMean) ** 2))
+      # Compute the sum of squares for residuals (error) by subtraction.
+      sse = float(sst - ssr - ssc)
+      # Compute mean square for rows.
+      msr = float(ssr / (nSubjects - 1)) if (nSubjects > 1) else float('nan')
+      # Compute mean square for columns.
+      msc = float(ssc / (kConfigs - 1)) if (kConfigs > 1) else float('nan')
+      # Compute mean square error.
+      mse = float(sse / ((nSubjects - 1) * (kConfigs - 1))) if ((nSubjects > 1) and (kConfigs > 1)) else float('nan')
+      # Compute the ICC denominator using the ICC(2,1) formula.
+      denomIcc = msr + (kConfigs - 1) * mse + (kConfigs * (msc - mse) / float(nSubjects))
+      # Handle degenerate denominator for ICC calculation.
+      if (denomIcc == 0) or (np.isnan(denomIcc)):
+        out["ICC"] = {"ICC": None, "Message": "Degenerate ICC computation; denominator is zero or NaN."}
+      else:
+        # Compute the ICC(2,1) value.
+        iccVal = float((msr - mse) / denomIcc)
+        # Store the ICC results under a CamelCase key.
+        out["ICC"] = {"ICC": iccVal, "n": nSubjects, "k": kConfigs}
+
+    # Compute Friedman test for multi-config repeated-measures when applicable.
+    if (self.applicableMethods.get("Friedman", False)):
+      # Convert data to a NumPy array for column-wise passing into scipy's function.
+      dataMat = np.asarray(self.data)
+      try:
+        # Run the Friedman test using column-wise samples as arguments.
+        friedmanStat, friedmanP = stats.friedmanchisquare(*tuple(dataMat.T))
+        # Store the Friedman test results under a CamelCase key.
+        out["Friedman"] = {"Statistic": float(friedmanStat), "pValue": float(friedmanP)}
+      except Exception as e:
+        # Store a failure message if the Friedman computation failed.
+        out["Friedman"] = {"Statistic": None, "pValue": None, "Message": str(e)}
+
+    # Attempt repeated-measures ANOVA using statsmodels AnovaRM when applicable.
+    if (self.applicableMethods.get("RMANOVA", False)):
+      try:
+        # Import AnovaRM from statsmodels for repeated-measures ANOVA.
+        from statsmodels.stats.anova import AnovaRM
+        # Prepare the data in long format for AnovaRM.
+        dataMat = np.asarray(self.data)
+        # Determine number of subjects and configs.
+        nSubjects = int(dataMat.shape[0])
+        kConfigs = int(dataMat.shape[1])
+        # Build subject indices repeated for each configuration.
+        subjectIdx = np.repeat(np.arange(nSubjects), kConfigs)
+        # Build configuration indices tiled for each subject.
+        configIdx = np.tile(np.arange(kConfigs), nSubjects)
+        # Flatten the data matrix to a 1-D array of values.
+        values = dataMat.ravel()
+        # Create a pandas DataFrame in long format for AnovaRM.
+        dfLong = pd.DataFrame({"subject": subjectIdx, "config": configIdx, "value": values})
+        # Fit AnovaRM to the long-format DataFrame.
+        anovaRes = AnovaRM(dfLong, "value", "subject", within=["config"]).fit()
+        # Attempt to extract the anova table for the within-subject effect.
+        anovaTable = anovaRes.anova_table
+        # Attempt to locate the row corresponding to the config effect.
+        if ("config" in anovaTable.index):
+          row = anovaTable.loc["config"]
+        else:
+          row = anovaTable.iloc[0]
+        # Extract F and p-value from the anova row with defensive key handling.
+        fVal = float(row.get("F Value", row.get("F", np.nan)))
+        pVal = float(row.get("Pr > F", row.get("PR(>F)", np.nan)))
+        # Store the RMANOVA results under a CamelCase key.
+        out["RMANOVA"] = {"F": fVal, "pValue": pVal}
+      except Exception:
+        # Store a message indicating RMANOVA could not be computed if an error occurred.
+        out["RMANOVA"] = {"Message": "statsmodels AnovaRM not available or failed to run."}
+
+    # Compute expected calibration error (ECE) when predicted probabilities and labels are available.
+    if (self.applicableMethods.get("CalibrationECE", False)):
+      # Convert predictions and labels to NumPy arrays for vectorized operations.
+      preds = np.asarray(self.predictions)
+      # Convert true labels to a NumPy array.
+      labs = np.asarray(self.labels)
+      # Define the number of bins to compute ECE over.
+      nBins = int(getattr(self, "eceBins", 10))
+      # Initialize the ECE accumulator.
+      eceVal = 0.0
+      # Compute bin edges using equal-width intervals over [0,1].
+      binEdges = np.linspace(0.0, 1.0, nBins + 1)
+      # Digitize predictions into bins according to edges.
+      binIdx = np.digitize(preds, binEdges, right=False) - 1
+      # Iterate over each bin to compute weighted absolute gaps.
+      for b in range(nBins):
+        # Select indices that belong to the current bin.
+        idx = (binIdx == b)
+        # Continue when the bin is empty to avoid division by zero.
+        if (np.sum(idx) == 0):
+          continue
+        # Compute the average predicted probability in the bin.
+        avgPred = float(np.mean(preds[idx]))
+        # Compute the average observed label in the bin.
+        avgLabel = float(np.mean(labs[idx]))
+        # Compute the weight of the bin as its fraction of total samples.
+        weight = float(np.sum(idx)) / float(len(preds))
+        # Accumulate the weighted absolute difference into the ECE value.
+        eceVal += weight * abs(avgPred - avgLabel)
+      # Store the ECE result under a CamelCase key.
+      out["CalibrationECE"] = {"ECE": float(eceVal), "nBins": nBins}
+
+    # Compute Hosmer-Lemeshow goodness-of-fit statistic when predicted probabilities and labels are available.
+    if (self.applicableMethods.get("HosmerLemeshow", False)):
+      # Convert predictions and labels to NumPy arrays for vectorized operations.
+      preds = np.asarray(self.predictions)
+      # Convert true labels to a NumPy array.
+      labs = np.asarray(self.labels)
+      # Define the number of groups (deciles) for the Hosmer-Lemeshow test.
+      groups = int(getattr(self, "hlGroups", 10))
+      # Attempt to create group edges using quantiles to ensure roughly equal-sized bins.
+      try:
+        edges = np.quantile(preds, np.linspace(0.0, 1.0, groups + 1))
+      except Exception:
+        # Fall back to equal-width edges when quantile computation fails.
+        edges = np.linspace(0.0, 1.0, groups + 1)
+      # Digitize predictions into HL groups according to edges.
+      groupIdx = np.digitize(preds, edges, right=True) - 1
+      # Initialize the Hosmer-Lemeshow statistic accumulator.
+      hlStat = 0.0
+      # Small epsilon to avoid division by zero.
+      eps = 1e-8
+      # Iterate over each group to compute observed and expected counts.
+      for g in range(groups):
+        # Select indices that belong to the current group.
+        idx = (groupIdx == g)
+        # Continue when the group is empty to avoid divisions by zero.
+        if (np.sum(idx) == 0):
+          continue
+        # Compute the number of observations in the group.
+        nGroup = float(np.sum(idx))
+        # Compute observed number of events in the group.
+        obs = float(np.sum(labs[idx]))
+        # Compute expected number of events as the sum of predicted probabilities in the group.
+        exp = float(np.sum(preds[idx]))
+        # Compute observed and expected non-events for the group.
+        obs0 = nGroup - obs
+        exp0 = nGroup - exp
+        # Accumulate the two components into the Hosmer-Lemeshow statistic.
+        hlStat += ((obs - exp) ** 2) / (exp + eps) + ((obs0 - exp0) ** 2) / (exp0 + eps)
+      # Compute p-value using chi-square survival function with groups-2 degrees of freedom.
+      hlP = float(stats.chi2.sf(hlStat, df=max(groups - 2, 1)))
+      # Store the Hosmer-Lemeshow results under a CamelCase key.
+      out["HosmerLemeshow"] = {"Chi2": float(hlStat), "pValue": hlP, "Groups": groups}
+
+    # Compute bootstrap BCa confidence intervals for key statistics when applicable.
+    if (self.applicableMethods.get("BCaBootstrap", False)):
+      # Compute BCa bootstrap intervals using a helper method.
+      boot = self.ComputeBCaBootstrap()
+      # Attach bootstrap results to output when available.
+      if (boot):
+        out["BootstrapCIs"] = boot
+
+    # Compute a distribution-free approximate tolerance interval using bootstrap when applicable.
+    if (self.applicableMethods.get("ToleranceInterval", False)):
+      # Define default coverage and confidence if not specified on the instance.
+      coverage = getattr(self, "toleranceCoverage", 0.95)
+      confidence = getattr(self, "toleranceConfidence", 0.95)
+      # Compute quantile levels for a two-sided interval.
+      qLow = (1 - coverage) / 2
+      qHigh = 1 - qLow
+      # Run bootstrap sampling to estimate sampling distribution of these quantiles.
+      nBoot = 2000
+      bootLow = []
+      bootHigh = []
+      for _ in range(nBoot):
+        # Draw a bootstrap sample.
+        sample = np.random.choice(self.data, size=len(self.data), replace=True)
+        # Compute the sample quantiles.
+        bootLow.append(np.percentile(sample, qLow * 100))
+        bootHigh.append(np.percentile(sample, qHigh * 100))
+      # Compute confidence intervals for the population quantiles using bootstrap percentiles.
+      alphaCI = (1 - confidence) / 2
+      tolLow = np.percentile(bootLow, 100 * alphaCI)
+      tolHigh = np.percentile(bootHigh, 100 * (1 - alphaCI))
+      # Record the tolerance interval approximation and parameters.
+      out["ToleranceInterval"] = {
+        "Coverage"  : coverage,
+        "Confidence": confidence,
+        "Lower"     : float(tolLow),
+        "Upper"     : float(tolHigh)
+      }
+
+    # Update the object's results dictionary with the computed outputs.
+    self.results.update(out)
+
+  # Compute BCa bootstrap confidence intervals for relevant statistics.
+  def ComputeBCaBootstrap(self, nBoot=5000, ciLevel=0.95):
+    r'''
+    Compute bias-corrected and accelerated (BCa) bootstrap confidence intervals for key statistics based on the provided data.
+      - This method implements the BCa bootstrap procedure to compute confidence intervals for statistics such as mean, median, and proportions.
+      - It generates bootstrap samples by resampling the original data with replacement and computes the statistic of interest on each bootstrap sample to create a distribution of bootstrap estimates.
+      - The bias-correction (z0) and acceleration (acc) parameters are computed using the bootstrap distribution and jackknife replicates, respectively, to adjust the percentile positions for the confidence interval.
+      - The method returns a dictionary containing the point estimate and the lower and upper bounds of the BCa confidence interval for each relevant statistic, formatted with CamelCase keys for clarity.
+
+    Parameters:
+      nBoot (int, optional): Number of bootstrap resamples to perform. Default is 5000.
+      ciLevel (float, optional): Confidence level for the intervals (e.g., 0.95 for 95% CI). Default is 0.95.
+
+    Returns:
+      dict: A dictionary containing the BCa confidence intervals and point estimates for relevant statistics based on the data type (proportion for binary data, mean/median/fifth percentile for continuous data).
+    '''
+
+    # Import norm for quantile functions used in BCa computations.
+    from scipy.stats import norm
+
+    # Define an inner function to compute a BCa CI for a statistic function.
+    def bcaCI(data, statFunc, nBoot=nBoot, ciLevel=ciLevel):
+      # Compute sample size for the provided data.
+      n = len(data)
+      # Return None when no data is available.
+      if (n == 0):
+        return None
+      # Generate bootstrap replicates of the statistic.
+      bootStats = []
+      for _ in range(nBoot):
+        # Draw a bootstrap sample with replacement.
+        sample = np.random.choice(data, size=n, replace=True)
+        # Evaluate the statistic on the bootstrap sample.
+        bootStats.append(statFunc(sample))
+      # Convert bootstrap replicates to a numpy array.
+      bootStats = np.array(bootStats)
+      # Compute the observed statistic on the original sample.
+      thetaHat = statFunc(data)
+      # Compute the bias-correction z0 parameter for BCa.
+      z0 = norm.ppf(np.mean(bootStats < thetaHat) + 1e-8)
+      # Compute jackknife replicates for acceleration computation.
+      jackStats = []
+      for i in range(n):
+        # Remove a single observation to form a jackknife sample.
+        jackSample = np.delete(data, i)
+        # Compute the statistic on the jackknife sample.
+        jackStats.append(statFunc(jackSample))
+      # Convert jackknife replicates to a numpy array.
+      jackStats = np.array(jackStats)
+      # Compute mean of jackknife replicates.
+      meanJack = np.mean(jackStats)
+      # Compute denominator used in acceleration formula.
+      denominator = np.sum((meanJack - jackStats) ** 2)
+      # Handle the degenerate case where denominator is zero.
+      if (denominator == 0):
+        # Set acceleration to zero when denominator is zero.
+        acc = 0.0
+      else:
+        # Compute acceleration parameter using third central moment of jackknife.
+        acc = np.sum((meanJack - jackStats) ** 3) / (6 * (denominator) ** 1.5)
+      # Compute alpha tail probability for the requested CI level.
+      alpha = (1 - ciLevel) / 2
+      # Compute z-scores for alpha and (1-alpha).
+      zAlpha = norm.ppf(alpha)
+      zBeta = norm.ppf(1 - alpha)
+      # Compute adjusted percentile positions using BCa formulas.
+      p1 = norm.cdf(z0 + (z0 + zAlpha) / (1 - acc * (z0 + zAlpha) + 1e-8))
+      p2 = norm.cdf(z0 + (z0 + zBeta) / (1 - acc * (z0 + zBeta) + 1e-8))
+      # Extract percentiles from bootstrap replicates for lower and upper CI.
+      ciLow = np.percentile(bootStats, p1 * 100)
+      ciHigh = np.percentile(bootStats, p2 * 100)
+      # Return the BCa CI and point estimate as a dictionary.
+      return {"Estimate": float(thetaHat), "Lower": float(ciLow), "Upper": float(ciHigh)}
+
+    # Prepare the output dictionary for bootstrap CIs.
+    out = {}
+    # Compute BCa CI for proportions when data is binary.
+    if (self.dataType == "Binary"):
+      # Compute BCa CI for the sample proportion.
+      out["Proportion"] = bcaCI(self.data, np.mean)
+    else:
+      # Compute BCa CI for mean, median, and fifth percentile for continuous data.
+      out["Mean"] = bcaCI(self.data, np.mean)
+      out["Median"] = bcaCI(self.data, np.median)
+      out["FifthPercentile"] = bcaCI(self.data, lambda x: np.percentile(x, 5))
+    # Return the assembled bootstrap CI dictionary.
+    return out
+
+
 def StatisticalAnalysis(results, hypothesizedMean=0, secondMetricList=None, confidenceLevel=0.95, nBootstraps=1000):
   r'''
   Perform comprehensive statistical analysis on a list of results.
@@ -2227,7 +3400,7 @@ def PlotMetrics(
   cmap="viridis",  # Color map for the plots.
   differentColors=True,  # Whether to use different colors for different plots.
   fixedTicksColors=True,  # Whether to use fixed ticks colors for consistency across plots.
-  fixedTicksColor="black",  # Color to use for fixed ticks if fixedTicksColors is True.
+  fixedTicksColor="black",  # Color to use for fixed ticks if `fixedTicksColors` is True.
   extension=".pdf",  # File extension for saved plots.
 ):
   r'''

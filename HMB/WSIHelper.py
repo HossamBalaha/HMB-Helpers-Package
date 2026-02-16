@@ -1530,7 +1530,8 @@ def ExtractRegionTiles(
         imgName = f"{category}_{x}_{y}_{width}x{height}_{overlapWidth}x{overlapHeight}"
         plt.tight_layout()
         plt.savefig(os.path.join(plotsDir, f"{imgName}.png"), dpi=720, bbox_inches="tight")
-        plt.close()
+        plt.close("all")
+        plt.gcf().clear()
 
 
 if (__name__ == "__main__"):
