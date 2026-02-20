@@ -2206,6 +2206,8 @@ def HistoryPlotter(
   display=True,  # Whether to display the plot.
   figSize=(10, 5),  # Figure size.
   returnFig=False,  # Whether to return the figure object.
+  smooth=True,  # Whether to apply smoothing to the curves.
+  smoothFactor=0.6,  # Smoothing factor for curves (0 to 1).
 ):
   r'''
   Plot training history metrics (e.g., loss, accuracy) for train and validation sets.
@@ -2224,6 +2226,8 @@ def HistoryPlotter(
     display (bool): Whether to display the plot. Default is True.
     figSize (tuple): Figure size in inches. Default is (10, 5).
     returnFig (bool): Whether to return the matplotlib figure object. Default is False.
+    smooth (bool): Whether to apply smoothing to the curves. Default is True.
+    smoothFactor (float): Smoothing factor for curves (0 to 1). Default is 0.6.
 
   Returns:
     matplotlib.figure.Figure or None: The axes object, figure object if returnFig is True, otherwise None.
@@ -2277,6 +2281,34 @@ def HistoryPlotter(
     for metric in metrics:
       trainKey = f"train_{metric}"
       valKey = f"val_{metric}"
+
+      # Get the values for train and validation metrics from history.
+      trainValues = history.get(trainKey, [])
+      valValues = history.get(valKey, [])
+
+      if (smooth):
+        # Apply exponential moving average smoothing if requested.
+        smoothedTrainValues, smoothedValValues = [], []
+        for i in range(len(trainValues)):
+          if (len(smoothedTrainValues) == 0):
+            smoothedTrainValues.append(trainValues[i])
+            smoothedValValues.append(valValues[i])
+          else:
+            # Exponential moving average.
+            # smoothed(t) = alpha * value(t) + (1 - alpha) * smoothed(t - 1).
+            smoothedTrainValues.append(
+              smoothFactor * trainValues[i] +
+              (1 - smoothFactor) * smoothedTrainValues[-1]
+            )
+            smoothedValValues.append(
+              smoothFactor * valValues[i] +
+              (1 - smoothFactor) * smoothedValValues[-1]
+            )
+        # Replace the original values with the smoothed values.
+        trainValues = smoothedTrainValues
+        valValues = smoothedValValues
+
+
       if (trainKey in history):
         # Plot training metric.
         plt.plot(
