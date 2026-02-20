@@ -310,19 +310,58 @@ def EnsureCUDAAvailable(strict=True):
 # -------------------------------------------------- #
 
 # -------------------------------------------------- #
+def NLTKFindDownload(resource):
+  r'''
+  Find and download the specified NLTK resource if it is not already available.
+
+  Parameters:
+    resource (str): The name of the NLTK resource to find and download (e.g., "punkt", "stopwords", "wordnet").
+  '''
+
+  import nltk
+
+  mapping = {
+    "punkt"                         : "tokenizers/punkt",
+    "stopwords"                     : "corpora/stopwords",
+    "wordnet"                       : "corpora/wordnet",
+    "averaged_perceptron_tagger"    : "taggers/averaged_perceptron_tagger",
+    "omw-1.4"                       : "corpora/omw-1.4",
+    "punkt_tab"                     : "tokenizers/punkt_tab",
+    "words"                         : "corpora/words",
+    "averaged_perceptron_tagger_eng": "taggers/averaged_perceptron_tagger_eng",
+  }
+
+  if (resource not in mapping):
+    print(f"Resource '{resource}' is not recognized. Please check the resource name.")
+    return
+
+  try:
+    nltk.data.find(mapping[resource])
+    print(f"NLTK resource '{resource}' is already available.")
+  except LookupError:
+    print(f"NLTK resource '{resource}' not found. Downloading...")
+    nltk.download(resource)
+    print(f"NLTK resource '{resource}' downloaded successfully.")
+
+
 def DownloadNLTKPackages():
+  r'''
+  Download necessary NLTK packages for text processing.
+  This function ensures that the required NLTK resources are available for natural language processing tasks.
+  '''
+
   import nltk
 
   # Download necessary NLTK resources for tokenization and POS tagging.
   # This is useful for natural language processing tasks.
-  nltk.download("punkt")  # Tokenizer for splitting text into sentences and words.
-  nltk.download("stopwords")  # List of common stop words in various languages.
-  nltk.download("wordnet")  # WordNet lexical database for English.
-  nltk.download("averaged_perceptron_tagger")  # Part-of-speech tagger.
-  nltk.download("omw-1.4")  # Open Multilingual WordNet.
-  nltk.download("punkt_tab")  # For tokenization.
-  nltk.download("words")  # For tokenization.
-  nltk.download("averaged_perceptron_tagger_eng")  # For POS tagging.
+  NLTKFindDownload("punkt")  # Tokenizer for splitting text into sentences and words.
+  NLTKFindDownload("stopwords")  # List of common stop words in various languages.
+  NLTKFindDownload("wordnet")  # WordNet lexical database for English.
+  NLTKFindDownload("averaged_perceptron_tagger")  # Part-of-speech tagger.
+  NLTKFindDownload("omw-1.4")  # Open Multilingual WordNet.
+  NLTKFindDownload("punkt_tab")  # For tokenization.
+  NLTKFindDownload("words")  # For tokenization.
+  NLTKFindDownload("averaged_perceptron_tagger_eng")  # For POS tagging.
   print("NLTK packages downloaded successfully.")
 
 
@@ -341,6 +380,33 @@ def IncreaseSysRecursionLimit(limit=10000):
   # This allows for deeper recursive calls without hitting the recursion limit.
   sys.setrecursionlimit(int(limit))
   print(f"System recursion limit increased to {limit}.")
+
+
+# -------------------------------------------------- #
+
+
+# -------------------------------------------------- #
+def LoadEnglishModelSpacy(modelName="en_core_web_sm"):
+  r'''
+  Load the specified English model for spaCy.
+  This function loads the specified spaCy model for natural language processing tasks.
+
+  Parameters:
+    modelName (str): The name of the spaCy model to load (e.g., "en_core_web_sm", "en_core_web_md", "en_core_web_lg").
+  '''
+
+  import spacy
+
+  try:
+    nlp = spacy.load(modelName)
+    print(f"spaCy model '{modelName}' loaded successfully.")
+    return nlp
+  except OSError:
+    print(f"spaCy model '{modelName}' not found. Please download it using 'python -m spacy download {modelName}'.")
+    return None
+
+# -------------------------------------------------- #
+
 
 # -------------------------------------------------- #
 

@@ -100,6 +100,7 @@ Quickstart
    PlotsHelper
    PyTorchClassificationLosses
    PyTorchHelper
+   PyTorchModelMemoryProfiler
    PyTorchSegmentationLosses
    StatisticalAnalysisHelper
    StringsHelper
@@ -107,6 +108,7 @@ Quickstart
    TFHelper
    TextGenerationMetrics
    TextHelper
+   UNetHelper
    Utils
    VectorsHelper
    VideosHelper

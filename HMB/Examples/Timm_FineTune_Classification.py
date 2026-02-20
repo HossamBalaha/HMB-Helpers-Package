@@ -412,8 +412,7 @@ def Main():
     (args.forceSplit) or (
     (not os.path.exists(os.path.join(args.dataDir + " Split", "train"))) and
     (not os.path.exists(os.path.join(args.dataDir + " Split", "val")))
-  )
-  ):
+  )):
     # Print message about existence of train and validation folders.
     print("Train and validation folders already exist.")
     # Conditionally split the dataset if requested by the argument.

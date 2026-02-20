@@ -15,35 +15,65 @@
 SCRIPT="/path/to/Timm_FineTune_Classification.py"
 
 # Global settings that can be adjusted.
+# NUM_CLASSES: Number of output classes for the classifier (integer).
 NUM_CLASSES=3
+# DATA_DIR: Root path to your dataset. Expected structure depends on the training script
+#           (commonly a folder per class or a pre-split train/val directory).
 DATA_DIR="/path/to/dataset/"
+# BASE_OUTPUT_DIR: Base directory where results, logs and checkpoints will be saved.
 BASE_OUTPUT_DIR="/path/to/output/"
+# MODEL_NAME: Name of the timm model architecture to use (e.g. resnet50, densenet121, vit_base_patch16_224).
 MODEL_NAME="densenet"
+# OPTIMIZER: Optimizer type to use (e.g. adamw, sgd). Must be supported by the training script.
 OPTIMIZER="adamw"
+# DO_SPLIT: If set (1) the dataset will be split into train/val according to SPLIT_RATIO; 0 disables splitting.
 DO_SPLIT=1
+# FORCE_SPLIT: If set (1) force re-creating the train/val split even if split folders exist.
 FORCE_SPLIT=0
+# SPLIT_RATIO: Fraction of the data to reserve for validation (0.0 - 1.0).
 SPLIT_RATIO=0.2
+# EPOCHS: Total number of training epochs.
 EPOCHS=125
+# WARMUP_EPOCHS: Number of warmup epochs used by the LR scheduler (if supported).
 WARMUP_EPOCHS=1
+# BATCH_SIZES: Array of batch sizes to try in separate runs (loops over these values).
 BATCH_SIZES=(256 128)
+# TRIALS: Array of trial identifiers; useful for repeating experiments with different seeds.
 TRIALS=(1 2 3 4 5)
+# LEARNING_RATE: Initial learning rate used by the optimizer.
 LEARNING_RATE=1e-5
+# WEIGHT_DECAY: Weight decay (L2 regularization) for the optimizer.
 WEIGHT_DECAY=0.01
+# NUM_WORKERS: Number of DataLoader worker processes for loading data.
 NUM_WORKERS=8
+# DEVICE: Device to run training on (e.g. "cuda" or "cpu"). The training script should accept this flag.
 DEVICE="cuda"
+# RESUME_FROM_CHECKPOINT: Path to a checkpoint file to resume training from. Leave empty to disable.
 RESUME_FROM_CHECKPOINT=""  # Leave empty to not pass the argument.
+# VERBOSE: Verbosity level passed to the script (e.g. 0=quiet, 1=normal, 2=debug). Check the script for exact meanings.
 VERBOSE=1
-JUDGE_BY="both"               # val_loss, val_accuracy, or both.
-EARLY_STOPPING_PATIENCE=""    # Empty means disabled; set an integer to enable.
+# JUDGE_BY: Metric used to select the best model when saving ("val_loss", "val_accuracy", or "both").
+JUDGE_BY="both"
+# EARLY_STOPPING_PATIENCE: If set to an integer, training stops after this many epochs without improvement. Leave empty to disable.
+EARLY_STOPPING_PATIENCE=""
+# GRAD_ACCUM_STEPS: Number of steps to accumulate gradients before performing an optimizer step.
 GRAD_ACCUM_STEPS=1
-MAX_GRAD_NORM=""              # Empty means disabled; set float to enable.
+# MAX_GRAD_NORM: If set (float), gradients will be clipped to this maximum norm. Leave empty to disable.
+MAX_GRAD_NORM=""
+# USE_AMP: Enable automatic mixed precision (1) or disable (0) if supported by the training script.
 USE_AMP=1
+# USE_MIXUP_FN: Enable (1) or disable (0) mixup augmentation function during training.
 USE_MIXUP_FN=0
+# MIXUP_ALPHA: Mixup alpha parameter controlling strength of mixup augmentation.
 MIXUP_ALPHA=0.5
+# USE_EMA: Use Exponential Moving Average (EMA) of model weights for evaluation/saving (1/0).
 USE_EMA=0
-SAVE_EVERY=""                 # Empty means disabled; set integer to save every N epochs.
-SPLIT_TRAIN_FOLDER=""         # Optional explicit path to a pre-split training folder.
-SPLIT_VAL_FOLDER=""           # Optional explicit path to a pre-split validation folder.
+# SAVE_EVERY: Save a checkpoint every N epochs. Leave empty to rely on the script's default/save-on-improvement.
+SAVE_EVERY=""
+# SPLIT_TRAIN_FOLDER: Optional explicit path to a pre-split training folder. If provided, splitting is skipped/overridden.
+SPLIT_TRAIN_FOLDER=""
+# SPLIT_VAL_FOLDER: Optional explicit path to a pre-split validation folder. If provided, splitting is skipped/overridden.
+SPLIT_VAL_FOLDER=""
 
 # Loop over trials and batch sizes and run the training script with constructed args.
 for TRIAL in "${TRIALS[@]}"; do

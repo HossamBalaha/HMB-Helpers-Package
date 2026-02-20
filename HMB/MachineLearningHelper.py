@@ -935,6 +935,139 @@ def PerformFeatureSelection(tech, fsRatio, xTrain, yTrain, xTest, yTest, returnF
   return xTrainFS, xTestFS, fs
 
 
+def PerformFeatureRanking(trainDF, testDF, columns, rankTechStr, noOfFeatures):
+  r'''
+  Apply feature ranking to training and test DataFrames and return reduced DataFrames.
+
+  This function ranks features using a specified ranking technique and selects the top
+  percentage or absolute number of features specified by noOfFeatures.
+  Supported ranking techniques include: "UDFS", "MCFS", "MRMR", "CMIM", "JMI", "MIM",
+  "MIFS", "CIFE", "ICAP", "DISR".
+
+  Parameters:
+    trainDF (pandas.DataFrame): The training data as a DataFrame.
+    testDF (pandas.DataFrame): The test data as a DataFrame.
+    columns (list): List of feature column names to be used for ranking.
+    rankTechStr (str): The ranking technique to be used.
+    noOfFeatures (int or float): The number of features to select. If <= 100, interpreted as a percentage.
+
+  Returns:
+    tuple: A tuple containing the reduced training DataFrame, reduced test DataFrame, and the list of selected columns.
+  '''
+
+  # Validate that trainDF is a pandas DataFrame.
+  if (not isinstance(trainDF, pd.DataFrame)):
+    raise ValueError("trainDF must be a pandas DataFrame.")
+  # Validate that testDF is a pandas DataFrame.
+  if (not isinstance(testDF, pd.DataFrame)):
+    raise ValueError("testDF must be a pandas DataFrame.")
+  # Extract feature matrix X and target y from training DataFrame.
+  xTrain, yTrain = trainDF[columns], trainDF["activity"]
+  # Extract feature matrix X and target y from test DataFrame.
+  xTest, yTest = testDF[columns], testDF["activity"]
+  # Initialize selectedColumns with all training columns by default.
+  selectedColumns = xTrain.columns
+  # Check if a ranking technique was provided.
+  if (rankTechStr is not None):
+    # Handle UDFS ranking technique.
+    if (rankTechStr == "UDFS"):
+      # Import UDFS module.
+      from skfeature.function.sparse_learning_based import UDFS
+      # Compute ordering using UDFS.
+      ordering = UDFS.udfs(xTrain.values)
+    # Handle MCFS ranking technique.
+    elif (rankTechStr == "MCFS"):
+      # Import MCFS module.
+      from skfeature.function.sparse_learning_based import MCFS
+      # Compute ordering using MCFS.
+      ordering = MCFS.mcfs(xTrain.values)
+    # Handle MRMR ranking technique.
+    elif (rankTechStr == "MRMR"):
+      # Import MRMR module.
+      from skfeature.function.information_theoretical_based import MRMR
+      # Compute ordering using MRMR and ignore other returned values.
+      ordering, _, _ = MRMR.mrmr(xTrain.values, yTrain.values)
+    # Handle CMIM ranking technique.
+    elif (rankTechStr == "CMIM"):
+      # Import CMIM module.
+      from skfeature.function.information_theoretical_based import CMIM
+      # Compute ordering using CMIM and ignore other returned values.
+      ordering, _, _ = CMIM.cmim(xTrain.values, yTrain.values)
+    # Handle JMI ranking technique.
+    elif (rankTechStr == "JMI"):
+      # Import JMI module.
+      from skfeature.function.information_theoretical_based import JMI
+      # Compute ordering using JMI and ignore other returned values.
+      ordering, _, _ = JMI.jmi(xTrain.values, yTrain.values)
+    # Handle MIM ranking technique.
+    elif (rankTechStr == "MIM"):
+      # Import MIM module.
+
+      from skfeature.function.information_theoretical_based import MIM
+      # Compute ordering using MIM and ignore other returned values.
+      ordering, _, _ = MIM.mim(xTrain.values, yTrain.values)
+    # Handle MIFS ranking technique.
+    elif (rankTechStr == "MIFS"):
+      # Import MIFS module.
+      from skfeature.function.information_theoretical_based import MIFS
+      # Compute ordering using MIFS and ignore other returned values.
+      ordering, _, _ = MIFS.mifs(xTrain.values, yTrain.values)
+    # Handle CIFE ranking technique.
+    elif (rankTechStr == "CIFE"):
+      # Import CIFE module.
+      from skfeature.function.information_theoretical_based import CIFE
+      # Compute ordering using CIFE and ignore other returned values.
+      ordering, _, _ = CIFE.cife(xTrain.values, yTrain.values)
+    # Handle ICAP ranking technique.
+    elif (rankTechStr == "ICAP"):
+      # Import ICAP module.
+
+      from skfeature.function.information_theoretical_based import ICAP
+      # Compute ordering using ICAP and ignore other returned values.
+      ordering, _, _ = ICAP.icap(xTrain.values, yTrain.values)
+    # Handle DISR ranking technique.
+    elif (rankTechStr == "DISR"):
+      # Import DISR module.
+      from skfeature.function.information_theoretical_based import DISR
+      # Compute ordering using DISR and ignore other returned values.
+      ordering, _, _ = DISR.disr(xTrain.values, yTrain.values)
+    # Raise error for unsupported ranking technique.
+    else:
+      raise ValueError("Invalid ranking technique specified.")
+    # Print which ranking technique was applied.
+    print("Applied feature ranking technique:", rankTechStr)
+    # Convert noOfFeatures from percent to absolute count if it looks like a percentage.
+    if (noOfFeatures <= 100):
+      noOfFeaturesCount = int(np.round(noOfFeatures / 100.0 * xTrain.shape[1]))
+    # Otherwise treat noOfFeatures as absolute count.
+    else:
+      noOfFeaturesCount = int(noOfFeatures)
+    # Ensure at least one feature is selected and not more than available.
+    noOfFeaturesCount = max(1, min(noOfFeaturesCount, xTrain.shape[1]))
+    # Derive ordered column names from ordering indices.
+    orderedCols = xTrain.columns[ordering]
+    # Select the top columns based on the computed ordering.
+    selectedColumns = orderedCols[:noOfFeaturesCount]
+    # Reduce the training feature set to the selected columns.
+    xTrain = xTrain[selectedColumns]
+    # Reduce the test feature set to the selected columns.
+    xTest = xTest[selectedColumns]
+  # If no ranking technique was provided, keep all columns.
+  else:
+    # Preserve original columns as selectedColumns.
+    selectedColumns = xTrain.columns
+    # Ensure training DataFrame uses the selected columns.
+    xTrain = xTrain[selectedColumns]
+    # Ensure test DataFrame uses the selected columns.
+    xTest = xTest[selectedColumns]
+  # Concatenate the reduced training features with the target column.
+  trainDF = pd.concat([xTrain, yTrain], axis=1)
+  # Concatenate the reduced test features with the target column.
+  testDF = pd.concat([xTest, yTest], axis=1)
+  # Return the reduced DataFrames and the list of selected columns.
+  return trainDF, testDF, selectedColumns
+
+
 def PerformDataBalancing(xTrain, yTrain, techniqueStr="SMOTE"):
   r'''
   Perform data balancing on training data using the specified oversampling or undersampling technique.
@@ -1266,6 +1399,7 @@ def MachineLearningClassification(
     targetColumn (str): Name of the target column in the dataset (default: "Class").
     dropFirstColumn (bool): Whether to drop the first column (usually an index or ID, default: True).
     dropNAColumns (bool): Whether to drop columns with any null values (default: True).
+    encodeCategorical (bool): Whether to encode categorical features (if any, default: True).
     eps (float): Small value to avoid division by zero (if needed, default: 1e-8).
 
   Returns:
