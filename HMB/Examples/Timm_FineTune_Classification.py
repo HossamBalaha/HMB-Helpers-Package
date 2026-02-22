@@ -5,7 +5,7 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from HMB.Initializations import IgnoreWarnings, DoRandomSeeding
-from HMB.PyTorchHelper import CustomDataset, TrainEvaluateModel, GetOptimizer
+from HMB.PyTorchHelper import CustomDataset, TrainEvaluateModel, GetOptimizer, InferenceWithPlots
 
 # Ensure all prints flush by default to make logs appear promptly.
 # Save the original built-in print function for delegation.
@@ -170,6 +170,13 @@ def GetArgs():
     default=None,
     help="Optional explicit path to a pre-split validation folder"
   )
+  # Add optional argument to point to an already-split test folder.
+  parser.add_argument(
+    "--splitTestFolder",
+    type=str,
+    default=None,
+    help="Optional explicit path to a pre-split test folder"
+  )
   # Return the parsed arguments from the command line.
   return parser.parse_args()
 
@@ -278,13 +285,13 @@ def ValidateArgs(args):
     raise ValueError("--maxGradNorm must be positive or None")
 
   # Ensure boolean flags are booleans.
-  for bool_attr in ("useAmp", "useMixupFn", "useEma", "doSplit", "forceSplit", "verbose"):
+  for boolAttr in ("useAmp", "useMixupFn", "useEma", "doSplit", "forceSplit", "verbose"):
     # Retrieve the boolean attribute from args.
-    val = getattr(args, bool_attr)
+    val = getattr(args, boolAttr)
     # Ensure val is a boolean type.
     if (not isinstance(val, bool)):
       # Raise when a boolean flag is invalid.
-      raise ValueError(f"--{bool_attr} must be a boolean (True/False)")
+      raise ValueError(f"--{boolAttr} must be a boolean (True/False)")
 
   # Validate mixUpAlpha when mixup is enabled.
   if (args.useMixupFn):
@@ -332,6 +339,13 @@ def ValidateArgs(args):
     if (not isinstance(args.splitValFolder, str) or not os.path.isdir(args.splitValFolder)):
       # Raise when splitValFolder is invalid.
       raise ValueError("--splitValFolder must be a path to an existing directory or None")
+
+  # Validate explicit splitTestFolder when provided.
+  if (args.splitTestFolder):
+    # Ensure splitTestFolder points to an existing directory.
+    if (not isinstance(args.splitTestFolder, str) or not os.path.isdir(args.splitTestFolder)):
+      # Raise when splitTestFolder is invalid.
+      raise ValueError("--splitTestFolder must be a path to an existing directory or None")
 
   # Return the validated and possibly modified args object.
   return args
@@ -395,7 +409,7 @@ def CreateModel(args):
 
 
 # Main entry point for script execution.
-def Main():
+def MainTrain():
   # Parse command line arguments into the args variable.
   args = GetArgs()
   # Validate and possibly normalize args early.
@@ -508,11 +522,46 @@ def Main():
   print("Training complete.")
 
 
+def MainTest():
+  # Parse and validate arguments as in MainTrain.
+  args = GetArgs()
+  args = ValidateArgs(args)
+  # Create the model and load the best checkpoint.
+  model = CreateModel(args)
+
+  assert (
+    os.path.isdir(args.testDataDir),
+    f"Test data directory not found at {args.testDataDir}. Please ensure the path is correct and contains the test data organized in class subfolders."
+  )
+
+  InferenceWithPlots(
+    dataDir=args.testDataDir,  # Directory containing test data organized in class subfolders.
+    model=model,  # Model to use for inference.
+    modelCheckpointName="BestModel.pth",  # Name of the model checkpoint file to load from the output directory.
+    transform=None,  # Image transform to apply.
+    device=torch.device(args.device),  # Device to run inference on.
+    batchSize=1,  # Batch size for inference.
+    imageSize=448,  # Image size for transforms.
+    expDirs=[args.outputDir],  # List of experiment directories.
+    overallResultsPath=os.path.join(args.outputDir, "OverallResults.csv"),  # Path to save overall results CSV.
+    appendResults=True,  # Whether to append to existing overall results CSV.
+    plotFontSize=16,  # Font size for plots.
+    plotFigSize=(8, 8),  # Figure size for confusion matrix.
+    rocFigSize=(5, 5),  # Figure size for ROC/PRC curves.
+    dpi=720,  # DPI for saving plots.
+    verbose=True,  # Whether to print progress.
+  )
+
+  print("Inference and plotting complete.")
+
+
 # Execute the script when run directly.
 if (__name__ == "__main__"):
   # Suppress noisy warnings early in execution.
   IgnoreWarnings()
   # Set random seeds for reproducibility.
   DoRandomSeeding()
-  # Run the main entry point.
-  Main()
+  # Run the main (train) entry point to perform training and validation.
+  MainTrain()
+  # Run the main test entry point to perform inference and plotting.
+  MainTest()

@@ -1030,7 +1030,8 @@ def EvaluateOneEpoch(
   totalLoss = 0.0
   totalAccuracy = 0.0
 
-  with torch.no_grad():
+  # with torch.no_grad():
+  with torch.inference_mode():
     # Iterate over the evaluation data loader with a progress bar.
     for batchIdx, batch in tqdm.tqdm(
       enumerate(dataLoader),  # Enumerate over batches.
@@ -1090,6 +1091,7 @@ def InferenceWithPlots(
   model,  # Model architecture.
   modelCheckpointName=None,  # Path to model checkpoint.
   transform=None,  # Image transform to apply.
+  useDefaultTransform=False,  # Whether to use default image transform if none provided.
   device=None,  # Device to run inference on.
   batchSize=1,  # Batch size for inference.
   imageSize=448,  # Image size for transforms.
@@ -1110,6 +1112,7 @@ def InferenceWithPlots(
     model (torch.nn.Module): Model architecture.
     modelCheckpointName (str, optional): Name of the model checkpoint.
     transform (callable, optional): Image transform to apply.
+    useDefaultTransform (bool, optional): Whether to use default image transform if none provided.
     device (str or torch.device, optional): Device to run inference on.
     batchSize (int, optional): Batch size for inference.
     imageSize (int, optional): Image size for transforms.
@@ -1136,12 +1139,13 @@ def InferenceWithPlots(
     if (verbose):
       print("No transform provided. Using default transform.")
 
-    # Prepare image transform.
-    transform = transforms.Compose([
-      transforms.Resize((imageSize, imageSize)),  # Resize images.
-      transforms.ToTensor(),  # Convert to tensor.
-      transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),  # Normalize.
-    ])
+    if (useDefaultTransform):
+      # Prepare image transform.
+      transform = transforms.Compose([
+        transforms.Resize((imageSize, imageSize)),  # Resize images.
+        transforms.ToTensor(),  # Convert to tensor.
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),  # Normalize.
+      ])
 
   # Create dataset and dataloader.
   dataset = CustomDataset(dataDir, transform=transform)
@@ -1174,11 +1178,11 @@ def InferenceWithPlots(
       #  You can use LoadModel function if preferred.
       model = LoadModel(modelPath, model, device=device)
 
-    cmFilePath = os.path.join(expDirPath, "CM.pdf")
-    rocFilePath = os.path.join(expDirPath, "ROC.pdf")
-    rocpFilePath = os.path.join(expDirPath, "ROCP.pdf")
-    prcFilePath = os.path.join(expDirPath, "PRC.pdf")
-    prcpFilePath = os.path.join(expDirPath, "PRCP.pdf")
+    cmFilePath = os.path.join(expDirPath, "Inference CM.pdf")
+    rocFilePath = os.path.join(expDirPath, "Inference ROC.pdf")
+    rocpFilePath = os.path.join(expDirPath, "Inference ROCP.pdf")
+    prcFilePath = os.path.join(expDirPath, "Inference PRC.pdf")
+    prcpFilePath = os.path.join(expDirPath, "Inference PRCP.pdf")
 
     # Move the model to the selected device (CPU or GPU).
     model = model.to(device)
@@ -1189,10 +1193,10 @@ def InferenceWithPlots(
     # Lists to store true labels, predicted labels, and probabilities.
     yTrue, yPred, yProbs = [], [], []
 
-    # Disable gradient calculation for evaluation.
-    with torch.no_grad():
+    # Disable gradient calculation for evaluation. Use inference mode for better performance if available.
+    with torch.inference_mode():
       # Iterate over the dataloader with a progress bar.
-      for imgs, labels in tqdm.tqdm(dataloader, desc="Evaluating", unit="Image"):
+      for imgs, labels in tqdm.tqdm(dataloader, desc="Inference", unit="Image"):
         # Move images and labels to the selected device.
         imgs = imgs.to(device)
         labels = labels.to(device)
@@ -1215,7 +1219,7 @@ def InferenceWithPlots(
     # Compute the confusion matrix.
     cm = confusion_matrix(yTrue, yPred)
     # Calculate performance metrics using the confusion matrix.
-    metrics = CalculatePerformanceMetrics(cm, addWeightedAverage=True)
+    metrics = CalculatePerformanceMetrics(cm, addWeightedAverage=True, eps=1e-8)
     metrics["Path"] = expDirPath
     metrics["File"] = os.path.basename(expDirPath)
     overallHistory.append(metrics)

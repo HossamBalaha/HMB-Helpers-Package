@@ -74,6 +74,8 @@ SAVE_EVERY=""
 SPLIT_TRAIN_FOLDER=""
 # SPLIT_VAL_FOLDER: Optional explicit path to a pre-split validation folder. If provided, splitting is skipped/overridden.
 SPLIT_VAL_FOLDER=""
+# SPLIT_TEST_FOLDER: Optional explicit path to a pre-split test folder. If provided, splitting is skipped/overridden.
+SPLIT_TEST_FOLDER=""
 
 # Loop over trials and batch sizes and run the training script with constructed args.
 for TRIAL in "${TRIALS[@]}"; do
@@ -119,6 +121,10 @@ for TRIAL in "${TRIALS[@]}"; do
 
     if [ -n "$SPLIT_VAL_FOLDER" ]; then
       CMD+=(--splitValFolder "$SPLIT_VAL_FOLDER")
+    fi
+
+    if [ -n "$SPLIT_TEST_FOLDER" ]; then
+      CMD+=(--splitTestFolder "$SPLIT_TEST_FOLDER")
     fi
 
     if [ -n "$EARLY_STOPPING_PATIENCE" ]; then

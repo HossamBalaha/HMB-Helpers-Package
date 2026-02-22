@@ -275,7 +275,7 @@ def PrintGPUSpecs():
     print(f"- GPU UUID: {gpu.uuid}.")
 
 
-def EnsureCUDAAvailable(strict=True):
+def EnsureCUDAAvailable(strict=True, which="pytorch"):
   r'''
   Ensure that CUDA is available for GPU computations.
   This function checks if CUDA is available and exits the program if not.
@@ -287,24 +287,52 @@ def EnsureCUDAAvailable(strict=True):
     bool: True if CUDA is available, False otherwise.
   '''
 
-  import sys, torch
+  import sys
 
-  try:
-    if (not torch.cuda.is_available()):
-      print("ERROR: CUDA is not available. A GPU is required for training.", flush=True)
+  if (which.lower() == "pytorch"):
+    import torch
+
+    try:
+      if (not torch.cuda.is_available()):
+        print("ERROR: CUDA is not available. A GPU is required for training.", flush=True)
+        if (strict):
+          sys.exit(1)
+        else:
+          return False
+    except Exception:
+      print("ERROR: PyTorch is not installed or failed to import.", flush=True)
       if (strict):
         sys.exit(1)
       else:
         return False
-  except Exception:
-    print("ERROR: PyTorch is not installed or failed to import.", flush=True)
+
+    print("Current device:", torch.cuda.get_device_name(0))
+    return True
+  elif (which.lower() == "tensorflow"):
+    import tensorflow as tf
+
+    try:
+      if (not tf.config.list_physical_devices("GPU")):
+        print("ERROR: CUDA is not available. A GPU is required for training.", flush=True)
+        if (strict):
+          sys.exit(1)
+        else:
+          return False
+    except Exception:
+      print("ERROR: TensorFlow is not installed or failed to import.", flush=True)
+      if (strict):
+        sys.exit(1)
+      else:
+        return False
+
+    print("Current device:", tf.config.list_physical_devices("GPU"))
+    return True
+  else:
+    print(f"ERROR: Unsupported library '{which}'. Supported libraries are 'pytorch' and 'tensorflow'.", flush=True)
     if (strict):
       sys.exit(1)
     else:
       return False
-
-  print("Current device:", torch.cuda.get_device_name(0))
-  return True
 
 
 # -------------------------------------------------- #
