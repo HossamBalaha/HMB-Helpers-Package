@@ -15,7 +15,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, CosineAnnealingL
 import torch.nn.functional as F
 from HMB.Initializations import IMAGE_SUFFIXES
 from HMB.PerformanceMetrics import (
-  CalculatePerformanceMetrics, PlotConfusionMatrix,
+  CalculatePerformanceMetrics, PlotConfusionMatrix, HistoryPlotter,
   PlotROCAUCCurve, PlotPRCCurve, ComputeECE, ComputeBrierScore
 )
 from HMB.Utils import DumpJsonFile, AppendOrCreateNewCSV
@@ -345,6 +345,8 @@ def CreateTimmModel(modelName, numClasses, pretrained=True):
 def MixupFn(inputs, targets, alpha=0.4, numClasses=None):
   r'''
   Apply MixUp data augmentation to inputs and targets.
+  This function mixes pairs of samples in the batch using a Beta distribution to create new training examples.
+  Useful for improving model generalization and robustness.
 
   Parameters:
     inputs (torch.Tensor): Input data of shape (batch_size, ...).
@@ -844,6 +846,36 @@ def TrainEvaluateModel(
     if (verbose):
       print(f"Saved final model after {numEpochs} epochs to {finalModelStoragePath}")
 
+  if (verbose):
+    print("Training complete. Plotting training history...")
+  HistoryPlotter(
+    history,  # Dictionary containing training history.
+    title="Training and Validation History",  # Title of the plot.
+    metrics=("loss", "accuracy"),  # Tuple or list of metrics to plot.
+    xLabel="Epochs",  # Label for x-axis.
+    fontSize=14,  # Font size for labels and title.
+    save=True,  # Whether to save the plot.
+    savePath=os.path.join(os.path.dirname(bestModelStoragePath), "TrainingHistory.pdf"),  # Path to save the plot.
+    dpi=720,  # DPI for saving the figure.
+    colors=None,  # Optional dict of colors for each metric.
+    labels=None,  # Optional dict of labels for each metric.
+    display=False,  # Whether to display the plot.
+    figSize=(10, 5),  # Figure size.
+    returnFig=False,  # Whether to return the figure object.
+    smooth=True,  # Whether to apply smoothing to the curves.
+    smoothFactor=0.6,  # Smoothing factor for curves (0 to 1).
+  )
+  if (verbose):
+    print("Training history plot saved.")
+    print("Saving training history to CSV file...")
+  # Saving the training history to a CSV file for future reference.
+  historyCsvPath = os.path.join(os.path.dirname(bestModelStoragePath), "TrainingHistory.csv")
+  df = pd.DataFrame(history)
+  df.to_csv(historyCsvPath, index=False)
+  if (verbose):
+    print(f"Training history saved to {historyCsvPath}")
+    print("Training and evaluation process completed.")
+
   return history
 
 
@@ -1176,7 +1208,7 @@ def InferenceWithPlots(
       # else:
       #   model.load_state_dict(stateDict)
       #  You can use LoadModel function if preferred.
-      model = LoadModel(modelPath, model, device=device)
+      model = LoadModel(model, modelPath, device=device)
 
     cmFilePath = os.path.join(expDirPath, "Inference CM.pdf")
     rocFilePath = os.path.join(expDirPath, "Inference ROC.pdf")
@@ -1225,7 +1257,7 @@ def InferenceWithPlots(
     overallHistory.append(metrics)
 
     # Plot and save the confusion matrix.
-    pm.PlotConfusionMatrix(
+    PlotConfusionMatrix(
       cm,  # Confusion matrix (2D list or numpy array).
       classes=list(dataset.classToIdx.keys()),  # List of class names.
       normalize=False,  # Whether to normalize the confusion matrix.
@@ -1243,7 +1275,7 @@ def InferenceWithPlots(
     )
 
     # Plot and save the ROC curve and AUC (predicted labels).
-    pm.PlotROCAUCCurve(
+    PlotROCAUCCurve(
       yTrue,  # True labels.
       yPred,  # Predicted labels.
       classes=list(dataset.classToIdx.keys()),  # List of class names.
@@ -1263,7 +1295,7 @@ def InferenceWithPlots(
     )
 
     # Plot and save the ROC curve and AUC (probabilities).
-    pm.PlotROCAUCCurve(
+    PlotROCAUCCurve(
       yTrue,  # True labels.
       yProbs,  # Predicted probabilities.
       classes=list(dataset.classToIdx.keys()),  # List of class names.
@@ -1283,7 +1315,7 @@ def InferenceWithPlots(
     )
 
     # Plot and save the PRC curve (predicted labels).
-    pm.PlotPRCCurve(
+    PlotPRCCurve(
       yTrue,  # True labels.
       yPred,  # Predicted labels.
       classes=list(dataset.classToIdx.keys()),  # List of class names.
@@ -1302,7 +1334,7 @@ def InferenceWithPlots(
     )
 
     # Plot and save the PRC curve (probabilities).
-    pm.PlotPRCCurve(
+    PlotPRCCurve(
       yTrue,  # True labels.
       yProbs,  # Predicted probabilities.
       classes=list(dataset.classToIdx.keys()),  # List of class names.

@@ -1726,3 +1726,28 @@ def GatherSegmentationPairs(rootDir: str):
   print(f"Paired {len(pairedImages)} image-mask pairs.")
   # Return the paired image and mask file lists.
   return pairedImages, pairedMasks
+
+
+# Define a function to discover CSV files in a directory.
+def DiscoverCsvFiles(dataDir: str) -> List[str]:
+  r'''
+  Recursively discover CSV files in the given directory.
+
+  Parameters:
+    dataDir (str): The root directory to search for CSV files.
+
+  Returns:
+    List[str]: A list of file paths to discovered CSV files.
+  '''
+
+  # Create an empty list to collect CSV file paths.
+  csvFiles = []
+  # Walk the directory tree to find CSV files.
+  for root, _, files in os.walk(dataDir):
+    for file in files:
+      # Check if the file name ends with .csv.
+      if (file.lower().endswith(".csv")):
+        # Append the absolute path of the CSV file to the list.
+        csvFiles.append(os.path.join(root, file))
+  # Return the list of discovered CSV files.
+  return csvFiles

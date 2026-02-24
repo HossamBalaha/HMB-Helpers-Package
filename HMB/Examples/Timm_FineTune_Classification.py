@@ -1,11 +1,15 @@
 import argparse, splitfolders, os, torch, timm
 import numpy as np
+import pandas as pd
 import torch.nn as nn
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from HMB.Initializations import IgnoreWarnings, DoRandomSeeding
-from HMB.PyTorchHelper import CustomDataset, TrainEvaluateModel, GetOptimizer, InferenceWithPlots
+from HMB.PyTorchHelper import (
+  CustomDataset, TrainEvaluateModel, GetOptimizer, InferenceWithPlots,
+  GenericEvaluatePredictPlotSubset, LoadModel
+)
 
 # Ensure all prints flush by default to make logs appear promptly.
 # Save the original built-in print function for delegation.
@@ -52,6 +56,13 @@ def GetArgs():
     type=str,
     default="eva02_large_patch14_448.mim_m38m_ft_in22k_in1k",
     help="Model name from timm"
+  )
+  # Add argument for image size to resize to.
+  parser.add_argument(
+    "--imageSize",
+    type=int,
+    default=448,
+    help="Image size to resize to"
   )
   # Add argument for the optimizer type to use during training.
   parser.add_argument(
@@ -235,15 +246,19 @@ def ValidateArgs(args):
   if (not isinstance(args.modelName, str) or not args.modelName):
     # Raise when modelName is invalid.
     raise ValueError("--modelName must be a non-empty timm model name string")
+  # Ensure imageSize is a positive integer.
+  if (not isinstance(args.imageSize, int) or args.imageSize <= 0):
+    # Raise when imageSize is invalid.
+    raise ValueError("--imageSize must be a positive integer (e.g. 224 or 448)")
   # Ensure optimizer is a non-empty string.
   if (not isinstance(args.optimizer, str) or not args.optimizer):
     # Raise when optimizer is invalid.
-    raise ValueError("--optimizer must be a non-empty string (e.g. \"adamw\" or \"sgd\")")
+    raise ValueError("--optimizer must be a non-empty string (e.g. 'adamw' or 'sgd')")
 
   # Ensure device is a string and not empty.
   if (not isinstance(args.device, str) or not args.device):
     # Raise when device is invalid.
-    raise ValueError("--device must be a string like \"cpu\" or \"cuda\" or \"cuda:0\"")
+    raise ValueError("--device must be a string like 'cpu' or 'cuda' or 'cuda:0'")
   # Fall back to CPU if CUDA was requested but is not available.
   if (args.device.startswith("cuda") and not torch.cuda.is_available()):
     # Inform the user when falling back to CPU.
@@ -404,6 +419,7 @@ def CreateModel(args):
   print("Creating model...")
   # Instantiate the timm model with the requested number of classes.
   model = timm.create_model(args.modelName, pretrained=True, num_classes=args.numClasses)
+  print(f"Model {args.modelName} created with {args.numClasses} output classes.")
   # Return the constructed model object.
   return model
 
@@ -491,7 +507,7 @@ def MainTrain():
   )
   print(f"Optimizer ({args.optimizer}) created.")
 
-  # Call TrainEvaluateModel to perform training and evaluation and store the history.
+  # Call `TrainEvaluateModel` to perform training and evaluation and store the history.
   history = TrainEvaluateModel(
     model=model,  # Model to train and evaluate.
     criterion=criterion,  # Loss function.
@@ -518,6 +534,10 @@ def MainTrain():
     useEma=args.useEma,  # Whether to use Exponential Moving Average for model parameters.
     saveEvery=args.saveEvery,  # Save model every N epochs.
   )
+  # Save the training history as a CSV file in the output directory.
+  historyCsvPath = os.path.join(args.outputDir, "TrainingHistory.csv")
+  pd.DataFrame(history).to_csv(historyCsvPath, index=False)
+  print(f"Training history saved to: {historyCsvPath}")
   # Print a message indicating training completion.
   print("Training complete.")
 
@@ -529,36 +549,86 @@ def MainTest():
   # Create the model and load the best checkpoint.
   model = CreateModel(args)
 
-  assert (
-    os.path.isdir(args.testDataDir),
-    f"Test data directory not found at {args.testDataDir}. Please ensure the path is correct and contains the test data organized in class subfolders."
-  )
+  # Try to load the best checkpoint from the output directory if present.
+  bestModelPath = os.path.join(args.outputDir, "BestModel.pth")
+  if (os.path.exists(bestModelPath)):
+    # Load weights into model and move to device.
+    model = LoadModel(model, bestModelPath, device=args.device)
+  else:
+    print(f"Warning: Best model checkpoint not found at {bestModelPath}. Using model with random/init weights.")
 
-  InferenceWithPlots(
-    dataDir=args.testDataDir,  # Directory containing test data organized in class subfolders.
-    model=model,  # Model to use for inference.
-    modelCheckpointName="BestModel.pth",  # Name of the model checkpoint file to load from the output directory.
-    transform=None,  # Image transform to apply.
-    device=torch.device(args.device),  # Device to run inference on.
-    batchSize=1,  # Batch size for inference.
-    imageSize=448,  # Image size for transforms.
-    expDirs=[args.outputDir],  # List of experiment directories.
-    overallResultsPath=os.path.join(args.outputDir, "OverallResults.csv"),  # Path to save overall results CSV.
-    appendResults=True,  # Whether to append to existing overall results CSV.
-    plotFontSize=16,  # Font size for plots.
-    plotFigSize=(8, 8),  # Figure size for confusion matrix.
-    rocFigSize=(5, 5),  # Figure size for ROC/PRC curves.
-    dpi=720,  # DPI for saving plots.
-    verbose=True,  # Whether to print progress.
-  )
+  # Prepare a prediction callable that accepts a HWC numpy image and returns 1D probability vector.
+  # This matches the expected interface of GenericEvaluatePredictPlotSubset.
+  # Create a default transform from timm for the model if available.
+  try:
+    dataConfig = timm.data.resolve_model_data_config(model)
+    defaultTransform = timm.data.create_transform(**dataConfig, is_training=False)
+  except Exception:
+    # Fallback basic transform.
+    defaultTransform = transforms.Compose([
+      transforms.Resize((args.imageSize, args.imageSize)),
+      transforms.ToTensor(),
+      transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+    ])
 
-  print("Inference and plotting complete.")
+  device = torch.device(args.device)
+  model.to(device)
+  model.eval()
+
+  def PredictCallable(imageNp, imagePath=None, trueClassName=None):
+    # image_np expected HWC uint8 (RGB).
+    try:
+      pil = Image.fromarray(imageNp)
+    except Exception:
+      # If input is already PIL-like, try using it directly.
+      pil = imageNp
+    # Apply transform -> tensor CxHxW
+    try:
+      tensor = defaultTransform(pil)
+    except Exception:
+      # If the transform expects PIL and got a tensor/ndarray, try converting.
+      tensor = transforms.Compose([transforms.ToTensor()])(pil)
+    tensor = tensor.unsqueeze(0).to(device)
+    with torch.inference_mode():
+      outputs = model(tensor)
+      probs = torch.softmax(outputs, dim=1).cpu().numpy().squeeze().tolist()
+    return probs
+
+  for split in ["train", "val", "test"]:
+    splitFolder = (
+      getattr(args, f"split{split.capitalize()}Folder")
+      if (getattr(args, f"split{split.capitalize()}Folder"))
+      else os.path.join(args.dataDir + " Split", split)
+    )
+    print(f"{split.capitalize()} folder: {splitFolder}")
+
+    # Run inference and generate plots for the current split using the `GenericEvaluatePredictPlotSubset` helper.
+    (
+      predsCsvPath, weightedMetrics, allPredsIndices, allGtsIndices, allPredsProbs,
+      allPredsConfs, predictionsRecords, classNames, cm
+    ) = GenericEvaluatePredictPlotSubset(
+      datasetDir=splitFolder,
+      model=PredictCallable,
+      subset=None,
+      prefix=split.capitalize(),
+      storageDir=args.outputDir,
+      heavy=True,
+      computeECE=True,
+      exportFailureCases=True,
+      saveArtifacts=True,
+      maxSamples=None,
+      preprocessFn=None,
+      dpi=720,
+    )
+
+  print(f"Per-sample predictions CSV path: {predsCsvPath}")
+  print("Inference and per-sample export complete.")
 
 
 # Execute the script when run directly.
 if (__name__ == "__main__"):
   # Suppress noisy warnings early in execution.
-  IgnoreWarnings()
+  # IgnoreWarnings()
   # Set random seeds for reproducibility.
   DoRandomSeeding()
   # Run the main (train) entry point to perform training and validation.

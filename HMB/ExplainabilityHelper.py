@@ -49,7 +49,9 @@ class SHAPExplainer(object):
       testFilename="test_data.csv",
       targetColumn="target",
       pickleFilePath=None,
-      shapStorageKeyword="SHAP_Results"
+      shapStorageKeyword="SHAP_Results",
+      dpi=1080,
+      csvName="Optuna_Best_Params.csv"
     )
     explainer.LoadModelAndData(maxNoRecords=100)
     explainer.ComputeShapValues()
@@ -77,6 +79,7 @@ class SHAPExplainer(object):
     targetColumn,
     pickleFilePath,
     shapStorageKeyword,
+    csvName="Optuna_Best_Params.csv",
     dpi=1080,
   ):
     r'''
@@ -89,6 +92,7 @@ class SHAPExplainer(object):
       targetColumn (str): Name of the target column in the dataset.
       pickleFilePath (str): Path to the pickled model/storage file (if not provided, it will be constructed).
       shapStorageKeyword (str): Keyword for the storage path where SHAP results will be saved.
+      csvName (str, optional): Filename for the CSV containing Optuna's best parameters (default: "Optuna_Best_Params.csv").
       dpi (int, optional): Dots per inch for saving plots (default: 1080).
 
     Notes
@@ -103,6 +107,7 @@ class SHAPExplainer(object):
     self.targetColumn = targetColumn  # Store the target column name.
     self.pickleFilePath = pickleFilePath  # Store the pickle file path.
     self.shapStorageKeyword = shapStorageKeyword  # Store the storage path for results.
+    self.csvName = csvName  # Store the CSV filename for Optuna's best parameters.
     self.dpi = dpi  # Store the DPI for saving plots.
 
     self.objects = None  # Placeholder for loaded model objects.
@@ -144,9 +149,7 @@ class SHAPExplainer(object):
     '''
 
     # Define the path to the file containing the best parameters from Optuna.
-    optunaBestParamsFile = os.path.join(
-      self.baseDir, self.experimentFolderName, "Optuna Best Params.csv"
-    )
+    optunaBestParamsFile = os.path.join(self.baseDir, self.experimentFolderName, self.csvName)
     # Load the best parameters from the Optuna file.
     optunaBestParamsDF = pd.read_csv(optunaBestParamsFile)
     # Replace NaN values with "None".

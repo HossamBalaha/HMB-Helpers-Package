@@ -275,13 +275,15 @@ def PrintGPUSpecs():
     print(f"- GPU UUID: {gpu.uuid}.")
 
 
-def EnsureCUDAAvailable(strict=True, which="pytorch"):
+def EnsureCUDAAvailable(strict=True, which="pytorch", verbose=False):
   r'''
   Ensure that CUDA is available for GPU computations.
   This function checks if CUDA is available and exits the program if not.
 
   Parameters:
     strict (bool): If True, the program will exit if CUDA is not available.
+    which (str): The library to check for CUDA availability ("pytorch" or "tensorflow").
+    verbose (bool): If True, prints additional information about the GPU and CUDA availability.
 
   Returns:
     bool: True if CUDA is available, False otherwise.
@@ -294,41 +296,48 @@ def EnsureCUDAAvailable(strict=True, which="pytorch"):
 
     try:
       if (not torch.cuda.is_available()):
-        print("ERROR: CUDA is not available. A GPU is required for training.", flush=True)
+        if (verbose):
+          print("ERROR: CUDA is not available. A GPU is required for training.", flush=True)
         if (strict):
           sys.exit(1)
         else:
           return False
     except Exception:
-      print("ERROR: PyTorch is not installed or failed to import.", flush=True)
+      if (verbose):
+        print("ERROR: PyTorch is not installed or failed to import.", flush=True)
       if (strict):
         sys.exit(1)
       else:
         return False
 
-    print("Current device:", torch.cuda.get_device_name(0))
+    if (verbose):
+      print("Current device:", torch.cuda.get_device_name(0))
     return True
   elif (which.lower() == "tensorflow"):
     import tensorflow as tf
 
     try:
       if (not tf.config.list_physical_devices("GPU")):
-        print("ERROR: CUDA is not available. A GPU is required for training.", flush=True)
+        if (verbose):
+          print("ERROR: CUDA is not available. A GPU is required for training.", flush=True)
         if (strict):
           sys.exit(1)
         else:
           return False
     except Exception:
-      print("ERROR: TensorFlow is not installed or failed to import.", flush=True)
+      if (verbose):
+        print("ERROR: TensorFlow is not installed or failed to import.", flush=True)
       if (strict):
         sys.exit(1)
       else:
         return False
 
-    print("Current device:", tf.config.list_physical_devices("GPU"))
+    if (verbose):
+      print("Current device:", tf.config.list_physical_devices("GPU"))
     return True
   else:
-    print(f"ERROR: Unsupported library '{which}'. Supported libraries are 'pytorch' and 'tensorflow'.", flush=True)
+    if (verbose):
+      print(f"ERROR: Unsupported library '{which}'. Supported libraries are 'pytorch' and 'tensorflow'.", flush=True)
     if (strict):
       sys.exit(1)
     else:

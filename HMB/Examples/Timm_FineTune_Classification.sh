@@ -24,6 +24,8 @@ DATA_DIR="/path/to/dataset/"
 BASE_OUTPUT_DIR="/path/to/output/"
 # MODEL_NAME: Name of the timm model architecture to use (e.g. resnet50, densenet121, vit_base_patch16_224).
 MODEL_NAME="densenet"
+# IMAGE_SIZE: Input image size expected by the model (e.g. 224 for 224x224). The training script should handle resizing.
+IMAGE_SIZE=448
 # OPTIMIZER: Optimizer type to use (e.g. adamw, sgd). Must be supported by the training script.
 OPTIMIZER="adamw"
 # DO_SPLIT: If set (1) the dataset will be split into train/val according to SPLIT_RATIO; 0 disables splitting.
@@ -106,6 +108,10 @@ for TRIAL in "${TRIALS[@]}"; do
     )
 
     # Conditionally append optional args only if they are set (non-empty).
+    if [ -n "$IMAGE_SIZE" ]; then
+      CMD+=(--imageSize "$IMAGE_SIZE")
+    fi
+
     if [ -n "$RESUME_FROM_CHECKPOINT" ]; then
       CMD+=(--resumeFromCheckpoint "$RESUME_FROM_CHECKPOINT")
     fi
@@ -114,7 +120,6 @@ for TRIAL in "${TRIALS[@]}"; do
       CMD+=(--judgeBy "$JUDGE_BY")
     fi
 
-    # Conditionally append explicit split folders when provided.
     if [ -n "$SPLIT_TRAIN_FOLDER" ]; then
       CMD+=(--splitTrainFolder "$SPLIT_TRAIN_FOLDER")
     fi
