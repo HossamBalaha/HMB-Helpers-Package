@@ -808,14 +808,15 @@ def TrainEvaluateModel(
             )
           break
 
-    # For ReduceLROnPlateau we need to step with the validation loss after evaluation.
+    # For `ReduceLROnPlateau` we need to step with the validation loss after evaluation.
     try:
       if (isinstance(scheduler, (ReduceLROnPlateau,))):
         scheduler.step(avgValEpochLoss)
       else:
         scheduler.step()
     except Exception:
-      pass
+      if (verbose):
+        print("Warning: Failed to step the scheduler. Continuing without stepping.")
 
     if (saveEvery is not None and (epoch + 1) % saveEvery == 0):
       epochPath = os.path.join(
@@ -997,6 +998,11 @@ def TrainOneEpoch(
     # Accumulate the total accuracy for the epoch.
     totalEpochAccuracy += accuracy
 
+    # Add accuracy as a metric to the progress bar description.
+    tqdm.tqdm.set_description(
+      f"Epoch {epoch + 1}/{numEpochs} - Loss: {lossScalar:.4f}, Acc: {accuracy:.4f}"
+    )
+
     loss = loss / gradAccumSteps  # Normalize loss for gradient accumulation.
     # Backward pass and optimization step with mixed precision.
     scaler.scale(loss).backward()
@@ -1112,8 +1118,8 @@ def EvaluateOneEpoch(
       totalAccuracy += accuracy
 
   # Calculate average loss and accuracy for the validation epoch.
-  avgValLoss = totalLoss / max(1, len(dataLoader))
-  avgValAccuracy = totalAccuracy / max(1, len(dataLoader))
+  avgValLoss = totalLoss / float(max(1, len(dataLoader)))
+  avgValAccuracy = totalAccuracy / float(max(1, len(dataLoader)))
 
   return avgValLoss, avgValAccuracy
 
@@ -1370,7 +1376,7 @@ def InferenceWithPlots(
       if (verbose):
         print(f"Overall results appended to {overallResultsPath}.")
 
-
+# TODO: PyTorchHelper.ApplyDynamicQuantizationTorch TO BE CHECKED.
 def ApplyDynamicQuantizationTorch(modelPath: str, outputPath: str, exampleInput=None, inputShape=None):
   r'''
   Apply dynamic quantization to a PyTorch model checkpoint and save a portable TorchScript file.
@@ -1682,8 +1688,8 @@ def GenericEvaluatePredictPlotSubset(
             if (len(probs) != numClasses):
               raise ValueError(
                 f"Number of classes mismatch: expected {numClasses}, got {len(probs)}\n"
-                f"Image path: {imagePath}"
-                f", probs: {probs}"
+                f"Image path: {imagePath}, "
+                f"probs: {probs}"
               )
 
             predictedClassIndex = int(np.argmax(probs))

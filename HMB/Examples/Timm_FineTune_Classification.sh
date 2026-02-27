@@ -91,8 +91,6 @@ for TRIAL in "${TRIALS[@]}"; do
     CMD=(python "$SCRIPT"
       --numClasses "$NUM_CLASSES"
       --dataDir "$DATA_DIR"
-      --doSplit "$DO_SPLIT"
-      --forceSplit "$FORCE_SPLIT"
       --splitRatio "$SPLIT_RATIO"
       --epochs "$EPOCHS"
       --modelName "$MODEL_NAME"
@@ -104,15 +102,28 @@ for TRIAL in "${TRIALS[@]}"; do
       --numWorkers "$NUM_WORKERS"
       --device "$DEVICE"
       --outputDir "$OUTPUT_DIR"
-      --verbose "$VERBOSE"
     )
 
     # Conditionally append optional args only if they are set (non-empty).
+    # -n means "if the string is non-empty". For boolean flags, we check if they are set to 1.
+
+    if [ -n "$DO_SPLIT" ] && [ "$DO_SPLIT" -eq 1 ]; then
+      CMD+=(--doSplit)
+    fi
+
+    if [ -n "$FORCE_SPLIT" ] && [ "$FORCE_SPLIT" -eq 1 ]; then
+      CMD+=(--forceSplit)
+    fi
+
+    if [ -n "$VERBOSE" ] && [ "$VERBOSE" -eq 1 ]; then
+      CMD+=(--verbose)
+    fi
+
     if [ -n "$IMAGE_SIZE" ]; then
       CMD+=(--imageSize "$IMAGE_SIZE")
     fi
 
-    if [ -n "$RESUME_FROM_CHECKPOINT" ]; then
+    if [ -n "$RESUME_FROM_CHECKPOINT" ] && [ -f "$RESUME_FROM_CHECKPOINT" ]; then
       CMD+=(--resumeFromCheckpoint "$RESUME_FROM_CHECKPOINT")
     fi
 
@@ -136,16 +147,26 @@ for TRIAL in "${TRIALS[@]}"; do
       CMD+=(--earlyStoppingPatience "$EARLY_STOPPING_PATIENCE")
     fi
 
-    CMD+=(--gradAccumSteps "$GRAD_ACCUM_STEPS")
+    if [ -n "$GRAD_ACCUM_STEPS" ]; then
+      CMD+=(--gradAccumSteps "$GRAD_ACCUM_STEPS")
+    fi
 
     if [ -n "$MAX_GRAD_NORM" ]; then
       CMD+=(--maxGradNorm "$MAX_GRAD_NORM")
     fi
 
-    CMD+=(--useAmp "$USE_AMP")
-    CMD+=(--useMixupFn "$USE_MIXUP_FN")
-    CMD+=(--mixUpAlpha "$MIXUP_ALPHA")
-    CMD+=(--useEma "$USE_EMA")
+    if [ -n "$USE_AMP" ] && [ "$USE_AMP" -eq 1 ]; then
+      CMD+=(--useAmp)
+    fi
+
+    if [ -n "$USE_MIXUP_FN" ] && [ "$USE_MIXUP_FN" -eq 1 ]; then
+      CMD+=(--useMixupFn)
+      CMD+=(--mixUpAlpha "$MIXUP_ALPHA")
+    fi
+
+    if [ -n "$USE_EMA" ] && [ "$USE_EMA" -eq 1 ]; then
+      CMD+=(--useEma)
+    fi
 
     if [ -n "$SAVE_EVERY" ]; then
       CMD+=(--saveEvery "$SAVE_EVERY")

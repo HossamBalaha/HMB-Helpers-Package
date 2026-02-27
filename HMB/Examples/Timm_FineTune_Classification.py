@@ -7,8 +7,8 @@ from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from HMB.Initializations import IgnoreWarnings, DoRandomSeeding
 from HMB.PyTorchHelper import (
-  CustomDataset, TrainEvaluateModel, GetOptimizer, InferenceWithPlots,
-  GenericEvaluatePredictPlotSubset, LoadModel
+  CustomDataset, TrainEvaluateModel, GetOptimizer,
+  GenericEvaluatePredictPlotSubset, LoadModel, LoadPyTorchDict
 )
 
 # Ensure all prints flush by default to make logs appear promptly.
@@ -72,9 +72,17 @@ def GetArgs():
     help="Optimizer to use (e.g., adamw, sgd)"
   )
   # Add boolean argument to control dataset splitting.
-  parser.add_argument("--doSplit", type=bool, default=True, help="Whether to split the dataset")
+  parser.add_argument(
+    "--doSplit",
+    action="store_true",
+    help="Whether to split the dataset"
+  )
   # Add boolean argument to force re-splitting of the dataset.
-  parser.add_argument("--forceSplit", type=bool, default=False, help="Whether to force re-splitting the dataset")
+  parser.add_argument(
+    "--forceSplit",
+    action="store_true",
+    help="Whether to force re-splitting the dataset"
+  )
   # Add argument to set validation split ratio.
   parser.add_argument("--splitRatio", type=float, default=0.2, help="Train/validation split ratio")
   # Add argument to set number of training epochs.
@@ -103,7 +111,7 @@ def GetArgs():
     help="Path to checkpoint to resume from"
   )
   # Add verbose flag argument for more detailed logging.
-  parser.add_argument("--verbose", type=bool, default=False, help="Whether to print detailed logs")
+  parser.add_argument("--verbose", action="store_true", help="Whether to print detailed logs")
   # Add argument to select how to judge the best model during training.
   parser.add_argument(
     "--judgeBy",
@@ -135,15 +143,13 @@ def GetArgs():
   # Add argument to enable or disable automatic mixed precision.
   parser.add_argument(
     "--useAmp",
-    type=bool,
-    default=True,
+    action="store_true",
     help="Whether to use automatic mixed precision"
   )
   # Add argument to enable or disable MixUp augmentation.
   parser.add_argument(
     "--useMixupFn",
-    type=bool,
-    default=False,
+    action="store_true",
     help="Whether to use MixUp data augmentation"
   )
   # Add argument for MixUp alpha value.
@@ -156,8 +162,7 @@ def GetArgs():
   # Add argument to enable or disable exponential moving average for model parameters.
   parser.add_argument(
     "--useEma",
-    type=bool,
-    default=False,
+    action="store_true",
     help="Whether to use Exponential Moving Average for model parameters"
   )
   # Add argument to control saving frequency (save every N epochs, or None to rely on best model only).
@@ -188,18 +193,23 @@ def GetArgs():
     default=None,
     help="Optional explicit path to a pre-split test folder"
   )
+  # Example of verbose:
+  # xxx.py --dataDir /path/to/dataset --numClasses 10 --modelName resnet50 --imageSize 224 --optimizer adamw --doSplit True --splitRatio 0.2 --epochs 20 --batchSize 16 --learningRate 1e-4 --weightDecay 0.01 --warmupEpochs 2 --numWorkers 4 --device cuda:0 --resumeFromCheckpoint /path/to/checkpoint.pth --verbose True
+  # To make it --verbose without needing to specify True, you can change the argument definition to:
+  # parser.add_argument("--verbose", action="store_true", help="Whether to print detailed logs")
+
   # Return the parsed arguments from the command line.
   return parser.parse_args()
 
 
 # Validate and normalize command-line arguments.
 def ValidateArgs(args):
-  """Validate and (lightly) normalize command-line arguments.
+  '''Validate and (lightly) normalize command-line arguments.
 
   Raises informative exceptions for invalid values and adjusts a couple of
   settings (for example falling back to CPU if CUDA isn't available).
   Returns the (possibly modified) args object.
-  """
+  '''
   # Ensure dataDir is a string and not empty.
   if (not isinstance(args.dataDir, str) or not args.dataDir):
     # Raise an informative error when dataDir is invalid.
@@ -362,6 +372,11 @@ def ValidateArgs(args):
       # Raise when splitTestFolder is invalid.
       raise ValueError("--splitTestFolder must be a path to an existing directory or None")
 
+  print("-" * 40)
+  for k, v in vars(args).items():
+    print(f"{k}: {v}")
+  print("-" * 40)
+
   # Return the validated and possibly modified args object.
   return args
 
@@ -390,6 +405,22 @@ def CreateTimmDataLoaders(args, splitTrainFolder=None, splitValFolder=None):
   else:
     # Create the validation dataset directly from the data directory.
     valDataset = CustomDataset(splitValFolder, transform=valTransforms)
+
+  if (args.verbose):
+    print(
+      f"Training dataset created with {len(trainDataset)} samples from "
+      f"{splitTrainFolder if splitTrainFolder else os.path.join(args.dataDir + ' Split', 'train')}"
+    )
+    print(
+      f"Validation dataset created with {len(valDataset)} samples from "
+      f"{splitValFolder if splitValFolder else os.path.join(args.dataDir + ' Split', 'val')}"
+    )
+    print(f"Data configuration used for transforms: {dataConfig}")
+    print(f"Example training transform pipeline: {trainTransforms}")
+    print(f"Example validation transform pipeline: {valTransforms}")
+    print("Classes:", trainDataset.classes)
+    print("Class to index mapping:", trainDataset.classToIdx)
+    print(f"First 5 samples in training dataset: {[trainDataset[i][1] for i in range(min(5, len(trainDataset)))]}")
 
   # Create the DataLoader for the training dataset with shuffling enabled.
   trainLoader = DataLoader(
@@ -449,7 +480,7 @@ def MainTrain():
     if (args.doSplit):
       # Compute the training ratio based on the split ratio argument.
       trainRatio = 1.0 - args.splitRatio
-      # Perform the folder split using splitfolders.ratio with a fixed seed.
+      # Perform the folder split using `splitfolders.ratio` with a fixed seed.
       splitfolders.ratio(
         args.dataDir,
         output=args.dataDir + " Split",
@@ -542,6 +573,26 @@ def MainTrain():
   print("Training complete.")
 
 
+# Create a callable factory for timm model predictions.
+def CreateTimmPredictCallable(model, transform, device, imageSize):
+  '''Return a callable(imageNp, imagePath=None, trueClassName=None) -> 1D numpy prob vector.'''
+
+  def PredictCallable(img, imagePath=None, trueClassName=None):
+    # Convert the input HWC numpy image to a PIL Image for transformation.
+    # Resize the image to the expected input size for the model using the provided transform.
+    from PIL import Image
+    imgPIL = Image.fromarray(img).convert("RGB").resize((imageSize, imageSize))
+    # Apply the provided transform to the image and add a batch dimension.
+    inputTensor = transform(imgPIL).unsqueeze(0).to(device)
+    # Perform inference with the model in evaluation mode and no gradient tracking.
+    with torch.inference_mode():
+      output = model(inputTensor)
+      probs = torch.softmax(output, dim=1).cpu().numpy()[0]
+    return probs
+
+  return PredictCallable
+
+
 def MainTest():
   # Parse and validate arguments as in MainTrain.
   args = GetArgs()
@@ -558,41 +609,20 @@ def MainTest():
     print(f"Warning: Best model checkpoint not found at {bestModelPath}. Using model with random/init weights.")
 
   # Prepare a prediction callable that accepts a HWC numpy image and returns 1D probability vector.
-  # This matches the expected interface of GenericEvaluatePredictPlotSubset.
+  # This matches the expected interface of `GenericEvaluatePredictPlotSubset`.
   # Create a default transform from timm for the model if available.
   try:
     dataConfig = timm.data.resolve_model_data_config(model)
-    defaultTransform = timm.data.create_transform(**dataConfig, is_training=False)
+    modelTransform = timm.data.create_transform(**dataConfig, is_training=False)
   except Exception:
-    # Fallback basic transform.
-    defaultTransform = transforms.Compose([
-      transforms.Resize((args.imageSize, args.imageSize)),
-      transforms.ToTensor(),
-      transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-    ])
+    raise ValueError(
+      "Failed to create default transform from timm data config. "
+      "Ensure the model name is correct and timm is properly installed."
+    )
 
   device = torch.device(args.device)
   model.to(device)
   model.eval()
-
-  def PredictCallable(imageNp, imagePath=None, trueClassName=None):
-    # image_np expected HWC uint8 (RGB).
-    try:
-      pil = Image.fromarray(imageNp)
-    except Exception:
-      # If input is already PIL-like, try using it directly.
-      pil = imageNp
-    # Apply transform -> tensor CxHxW
-    try:
-      tensor = defaultTransform(pil)
-    except Exception:
-      # If the transform expects PIL and got a tensor/ndarray, try converting.
-      tensor = transforms.Compose([transforms.ToTensor()])(pil)
-    tensor = tensor.unsqueeze(0).to(device)
-    with torch.inference_mode():
-      outputs = model(tensor)
-      probs = torch.softmax(outputs, dim=1).cpu().numpy().squeeze().tolist()
-    return probs
 
   for split in ["train", "val", "test"]:
     splitFolder = (
@@ -608,7 +638,7 @@ def MainTest():
       allPredsConfs, predictionsRecords, classNames, cm
     ) = GenericEvaluatePredictPlotSubset(
       datasetDir=splitFolder,
-      model=PredictCallable,
+      model=CreateTimmPredictCallable(model, modelTransform, device, args.imageSize),
       subset=None,
       prefix=split.capitalize(),
       storageDir=args.outputDir,
@@ -632,6 +662,66 @@ if (__name__ == "__main__"):
   # Set random seeds for reproducibility.
   DoRandomSeeding()
   # Run the main (train) entry point to perform training and validation.
-  MainTrain()
+  # MainTrain()
   # Run the main test entry point to perform inference and plotting.
-  MainTest()
+  # MainTest()
+
+  import random, cv2
+  from PIL import Image
+
+  bestModelPath = r"C:\Users\Hossam\Downloads\Results_32_T1\BestModel.pth"
+  datasetPath = r"C:\Users\Hossam\Downloads\test"
+  modelName = "mobilenetv3_small_100.lamb_in1k"
+  model = timm.create_model(modelName, pretrained=True, num_classes=4)
+  stateDict = LoadPyTorchDict(bestModelPath)
+  model.load_state_dict(stateDict["model_state_dict"])
+
+  # Save the model state dict to a temporary file and load it back to ensure compatibility with LoadModel.
+  # tempModelPath = "temp_model.pth"
+  # torch.save(model.state_dict(), tempModelPath)
+  # model = timm.create_model(modelName, pretrained=True, num_classes=4, checkpoint_path=tempModelPath)
+  model = model.to("cuda")
+
+  # timm.models.load_state_dict(model, bestModelPath)
+  dataConfig = timm.data.resolve_model_data_config(model)
+  transform = timm.data.create_transform(**dataConfig, is_training=False)
+  classes = sorted(os.listdir(datasetPath))
+  print(f"Classes found in dataset: {classes}")
+  customDataset = CustomDataset(datasetPath, transform=transform)
+  dataloader = DataLoader(customDataset, batch_size=32, shuffle=False, num_workers=1, pin_memory=False)
+  allPreds = []
+  allGts = []
+  for batch in dataloader:
+    images, labels = batch
+    images = images.to("cuda")
+    with torch.inference_mode():
+      outputs = model(images)
+      probs = torch.softmax(outputs, dim=1).cpu().numpy()
+    allPreds.extend(probs.argmax(axis=1))
+    allGts.extend(labels.numpy())
+  acc = sum([1 if p == g else 0 for p, g in zip(allPreds, allGts)]) / len(allGts)
+  print(
+    f"Overall accuracy on the dataset: {acc:.4f} ({sum([1 if p == g else 0 for p, g in zip(allPreds, allGts)])}/{len(allGts)})")
+  exit()
+
+  rndCls = classes[1]
+  rndClsPath = os.path.join(datasetPath, rndCls)
+  actual = []
+  predicted = []
+  for img in os.listdir(rndClsPath):
+    imgPath = os.path.join(rndClsPath, img)
+    img = cv2.imread(str(imgPath))
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    imgPIL = Image.fromarray(img)
+    img = np.array(imgPIL)
+    predictFn = CreateTimmPredictCallable(model, transform, device="cuda", imageSize=224)
+    probs = predictFn(img)
+    actual.append(rndCls)
+    predicted.append(classes[probs.argmax()])
+  correct = sum([1 if a == p else 0 for a, p in zip(actual, predicted)])
+  total = len(actual)
+  accuracy = correct / total if total > 0 else 0
+  print(f"Accuracy on class '{rndCls}': {accuracy:.4f} ({correct}/{total})")
+
+  # Stat. analysis and other similar to YOLO.
+  # Ensure that GenericEvaluatePredictPlotSubset is working correctly and producing expected outputs.

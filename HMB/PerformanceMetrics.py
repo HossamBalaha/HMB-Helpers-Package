@@ -820,6 +820,7 @@ def PlotMultiTrialROCAUC(
   allYPred,  # List of predicted probabilities from all trials (list of arrays).
   classes,  # List of class names.
   confidenceLevel=0.95,  # Confidence level for CI (default 95%).
+  which="CI",  # Method for confidence intervals: "CI" for confidence intervals, "SD" for standard deviation.
   title="Multi-Trial ROC Curve with Confidence Intervals",  # Plot title.
   figSize=(8, 8),  # Figure size.
   cmap=None,  # Colormap for ROC curves.
@@ -831,15 +832,17 @@ def PlotMultiTrialROCAUC(
   showLegend=True,  # Show legend.
   returnFig=False,  # Return figure object.
   dpi=720,  # DPI for saving the figure.
+  addZoomedInset=True,  # Whether to add a zoomed inset for the top-left corner.
 ):
   '''
   Plot averaged ROC curves across multiple trials with confidence intervals.
 
   Parameters:
-    allYTrue (list): List of ground truth arrays from all trials. Each element shape: (n_samples, n_classes) or (n_samples,)
-    allYPred (list): List of prediction probability arrays from all trials. Each element shape: (n_samples, n_classes)
+    allYTrue (list): List of ground truth arrays from all trials. Each element shape: (nSamples, nClasses) or (nSamples,).
+    allYPred (list): List of prediction probability arrays from all trials. Each element shape: (nSamples, nClasses).
     classes (list): List of class names.
     confidenceLevel (float): Confidence level for intervals (default 0.95).
+    which (str): Method for confidence intervals: "CI" for confidence intervals, "SD" for standard deviation.
     title (str): Plot title.
     figSize (tuple): Figure size in inches.
     cmap (colormap): Matplotlib colormap for different classes.
@@ -851,6 +854,7 @@ def PlotMultiTrialROCAUC(
     showLegend (bool): Whether to show legend.
     returnFig (bool): Whether to return figure object.
     dpi (int): DPI for saving the figure.
+    addZoomedInset (bool): Whether to add a zoomed inset for the top-left corner of the ROC plot.
 
   Returns:
     matplotlib.figure.Figure or None: The matplotlib figure object if returnFig is True, otherwise None.
@@ -912,6 +916,7 @@ def PlotMultiTrialROCAUC(
       allYPred,
       classes=classLabels,
       confidenceLevel=0.95,
+      which="CI",
       title="Multi-Trial ROC Curve with Confidence Intervals",
       display=True,
       save=False
@@ -921,15 +926,19 @@ def PlotMultiTrialROCAUC(
   from scipy import stats
   from sklearn.metrics import roc_curve, auc
 
+  assert which in ["CI", "SD"], "Parameter 'which' must be either 'CI' or 'SD'."
+
   # Convert to numpy arrays.
-  allYTrue = [np.array(yt) for yt in allYTrue]
+  # Check if allYTrue is just a single array (not a list of arrays), and if so, repeat it to match the length of allYPred.
+  if (isinstance(allYTrue, np.ndarray)):
+    allYTrue = [allYTrue] * len(allYPred)
+  elif (isinstance(allYTrue, list) and len(allYTrue) == 1 and isinstance(allYTrue[0], np.ndarray)):
+    allYTrue = allYTrue * len(allYPred)
+
   allYPred = [np.array(yp) for yp in allYPred]
 
   numClasses = len(classes)
   numTrials = len(allYTrue)
-
-  # Calculate alpha for confidence intervals.
-  alpha = 1 - confidenceLevel
 
   # Get colors for each class.
   if (cmap is None):
@@ -991,27 +1000,39 @@ def PlotMultiTrialROCAUC(
     meanAuc = np.mean(aucs)
     stdAuc = np.std(aucs)
 
-    # Calculate confidence intervals.
-    # Using normal approximation for CI.
-    z = stats.norm.ppf(1 - alpha / 2)  # Z-score for confidence level.
+    if (which == "CI"):
+      # Calculate alpha for confidence intervals.
+      alpha = 1 - confidenceLevel
+      # Calculate confidence intervals using normal approximation for CI.
+      z = stats.norm.ppf(1 - alpha / 2)  # Z-score for confidence level.
+      # CI for TPR.
+      tprUpper = np.minimum(meanTpr + z * stdTpr / np.sqrt(numTrials), 1.0)
+      tprLower = np.maximum(meanTpr - z * stdTpr / np.sqrt(numTrials), 0.0)
+      # CI for AUC.
+      aucUpper = meanAuc + z * stdAuc / np.sqrt(numTrials)
+      aucLower = meanAuc - z * stdAuc / np.sqrt(numTrials)
 
-    # CI for TPR.
-    tprUpper = np.minimum(meanTpr + z * stdTpr / np.sqrt(numTrials), 1.0)
-    tprLower = np.maximum(meanTpr - z * stdTpr / np.sqrt(numTrials), 0.0)
+      labelPlot = f"{className} (AUC={meanAuc:.3f} ± {stdAuc:.3f} CI)"
+      labelFill = f"{className} {int(confidenceLevel * 100)}% CI"
+    else:
+      # Use standard deviation as bounds.
+      tprUpper = np.minimum(meanTpr + stdTpr, 1.0)
+      tprLower = np.maximum(meanTpr - stdTpr, 0.0)
+      aucUpper = meanAuc + stdAuc
+      aucLower = meanAuc - stdAuc
 
-    # CI for AUC.
-    aucUpper = meanAuc + z * stdAuc / np.sqrt(numTrials)
-    aucLower = meanAuc - z * stdAuc / np.sqrt(numTrials)
+      labelPlot = f"{className} (AUC={meanAuc:.3f} ± {stdAuc:.3f} SD)"
+      labelFill = f"{className} ± 1 SD"
 
     # Store results.
     resultsDict[className] = {
-      "mean_auc"    : meanAuc,
-      "std_auc"     : stdAuc,
-      "auc_ci_lower": aucLower,
-      "auc_ci_upper": aucUpper,
-      "mean_tpr"    : meanTpr,
-      "tpr_ci_lower": tprLower,
-      "tpr_ci_upper": tprUpper,
+      "meanAuc"   : meanAuc,
+      "stdAuc"    : stdAuc,
+      "aucCiLower": aucLower,
+      "aucCiUpper": aucUpper,
+      "meanTpr"   : meanTpr,
+      "tprCiLower": tprLower,
+      "tprCiUpper": tprUpper,
     }
 
     # Plot mean ROC curve.
@@ -1020,7 +1041,7 @@ def PlotMultiTrialROCAUC(
       meanTpr,
       color=colors[classIdx],
       linewidth=2,
-      label=f"{className} (AUC={meanAuc:.3f} ± {stdAuc:.3f})",
+      label=labelPlot,
     )
 
     # Plot confidence interval as shaded region.
@@ -1030,7 +1051,7 @@ def PlotMultiTrialROCAUC(
       tprUpper,
       color=colors[classIdx],
       alpha=0.2,
-      label=f"{className} {int(confidenceLevel * 100)}% CI",
+      label=labelFill,
     )
 
   # Plot diagonal reference line.
@@ -1059,6 +1080,37 @@ def PlotMultiTrialROCAUC(
 
   # Tight layout.
   plt.tight_layout()
+
+  if (addZoomedInset):
+    # Add a small plot on the plot for a zoomed-in view of the top-left corner.
+    axInset = fig.add_axes([0.2, 0.2, 0.25, 0.25])  # [left, bottom, width, height].
+    for classIdx in range(numClasses):
+      className = classes[classIdx]
+      meanTpr = resultsDict[className]["meanTpr"]
+      tprLower = resultsDict[className]["tprCiLower"]
+      tprUpper = resultsDict[className]["tprCiUpper"]
+
+      axInset.plot(
+        meanFPR,
+        meanTpr,
+        color=colors[classIdx],
+        linewidth=2,
+      )
+      axInset.fill_between(
+        meanFPR,
+        tprLower,
+        tprUpper,
+        color=colors[classIdx],
+        alpha=0.2,
+      )
+    axInset.plot([0, 1], [0, 1], "k--", linewidth=1)
+    axInset.set_xlim(0.0, 0.2)
+    axInset.set_ylim(0.8, 1.0)
+    axInset.set_title("Zoomed In", fontsize=fontSize * 0.75)
+    axInset.set_xlabel("FPR", fontsize=fontSize * 0.6)
+    axInset.set_ylabel("TPR", fontsize=fontSize * 0.6)
+    axInset.tick_params(axis="both", which="major", labelsize=fontSize * 0.5)
+    axInset.grid(True, alpha=0.3)
 
   # Save if requested.
   if (save):
@@ -1090,23 +1142,25 @@ def PlotMultiTrialPRCurve(
   allYPred,  # List of predicted probabilities from all trials.
   classes,  # List of class names.
   confidenceLevel=0.95,  # Confidence level for CI.
+  which="CI",  # Method for confidence intervals: "CI" for confidence intervals, "SD" for standard deviation.
   title="Multi-Trial Precision-Recall Curve with Confidence Intervals",
-  figSize=(8, 8),
-  cmap=None,
-  display=True,
-  save=False,
-  fileName="MultiTrial_PRC.pdf",
-  fontSize=15,
-  showLegend=True,
-  returnFig=False,
-  dpi=720,
+  figSize=(8, 8), # Figure size in inches.
+  cmap=None, # Colormap for different classes.
+  display=True, # Whether to display the plot.
+  save=False, # Whether to save the plot.
+  fileName="MultiTrial_PRC.pdf", # File name for saving.
+  fontSize=15, # Font size for labels and annotations.
+  showLegend=True, # Whether to show legend.
+  returnFig=False, # Whether to return the matplotlib figure object.
+  dpi=720, # DPI for saving the figure.
+  addZoomedInset=True,  # Whether to add a zoomed inset for the top-right corner of the PRC plot.
 ):
   '''
   Plot averaged Precision-Recall curves across multiple trials with confidence intervals.
 
   Parameters:
-    allYTrue (list): List of ground truth arrays from all trials. Each element shape: (n_samples, n_classes) or (n_samples,).
-    allYPred (list): List of prediction probability arrays from all trials. Each element shape: (n_samples, n_classes).
+    allYTrue (list): List of ground truth arrays from all trials. Each element shape: (nSamples, nClasses) or (nSamples,).
+    allYPred (list): List of prediction probability arrays from all trials. Each element shape: (nSamples, nClasses).
     classes (list): List of class names.
     confidenceLevel (float): Confidence level for intervals (default 0.95).
     title (str): Plot title.
@@ -1119,6 +1173,7 @@ def PlotMultiTrialPRCurve(
     showLegend (bool): Whether to show legend.
     returnFig (bool): Whether to return figure object.
     dpi (int): DPI for saving.
+    addZoomedInset (bool): Whether to add a zoomed inset for the top-right corner of the PRC plot.
 
   Returns:
     matplotlib.figure.Figure or None: The matplotlib figure object if returnFig is True, otherwise None.
@@ -1189,15 +1244,18 @@ def PlotMultiTrialPRCurve(
   from scipy import stats
   from sklearn.metrics import precision_recall_curve, average_precision_score
 
+  assert which in ["CI", "SD"], "Parameter 'which' must be either 'CI' or 'SD'."
+
   # Convert to numpy arrays.
-  allYTrue = [np.array(yt) for yt in allYTrue]
+  # Check if allYTrue is just a single array (not a list of arrays), and if so, repeat it to match the length of allYPred.
+  if (isinstance(allYTrue, np.ndarray)):
+    allYTrue = [allYTrue] * len(allYPred)
+  elif (isinstance(allYTrue, list) and len(allYTrue) == 1 and isinstance(allYTrue[0], np.ndarray)):
+    allYTrue = allYTrue * len(allYPred)
   allYPred = [np.array(yp) for yp in allYPred]
 
   numClasses = len(classes)
   numTrials = len(allYTrue)
-
-  # Calculate alpha for confidence intervals.
-  alpha = 1 - confidenceLevel
 
   # Get colors for each class.
   if (cmap is None):
@@ -1257,23 +1315,41 @@ def PlotMultiTrialPRCurve(
     meanAp = np.mean(aps)
     stdAp = np.std(aps)
 
-    # Calculate confidence intervals.
-    z = stats.norm.ppf(1 - alpha / 2)
+    if (which == "CI"):
+      # Calculate alpha for confidence intervals.
+      alpha = 1 - confidenceLevel
+      # Calculate confidence intervals.
+      z = stats.norm.ppf(1 - alpha / 2)
 
-    # CI for Precision.
-    precisionUpper = np.minimum(meanPrecision + z * stdPrecision / np.sqrt(numTrials), 1.0)
-    precisionLower = np.maximum(meanPrecision - z * stdPrecision / np.sqrt(numTrials), 0.0)
+      # CI for Precision.
+      precisionUpper = np.minimum(meanPrecision + z * stdPrecision / np.sqrt(numTrials), 1.0)
+      precisionLower = np.maximum(meanPrecision - z * stdPrecision / np.sqrt(numTrials), 0.0)
 
-    # CI for AP.
-    apUpper = meanAp + z * stdAp / np.sqrt(numTrials)
-    apLower = meanAp - z * stdAp / np.sqrt(numTrials)
+      # CI for AP.
+      apUpper = meanAp + z * stdAp / np.sqrt(numTrials)
+      apLower = meanAp - z * stdAp / np.sqrt(numTrials)
+
+      labelPlot = f"{className} (AP={meanAp:.3f} ± {stdAp:.3f} CI)"
+      labelFill = f"{className} {int(confidenceLevel * 100)}% CI"
+    else:
+      # Use standard deviation as bounds.
+      precisionUpper = np.minimum(meanPrecision + stdPrecision, 1.0)
+      precisionLower = np.maximum(meanPrecision - stdPrecision, 0.0)
+      apUpper = meanAp + stdAp
+      apLower = meanAp - stdAp
+
+      labelPlot = f"{className} (AP={meanAp:.3f} ± {stdAp:.3f} SD)"
+      labelFill = f"{className} ± 1 SD"
 
     # Store results.
     resultsDict[className] = {
-      "mean_ap"    : meanAp,
-      "std_ap"     : stdAp,
-      "ap_ci_lower": apLower,
-      "ap_ci_upper": apUpper,
+      "meanAp"   : meanAp,
+      "stdAp"    : stdAp,
+      "apCiLower": apLower,
+      "apCiUpper": apUpper,
+      "meanPrecision": meanPrecision,
+      "precisionCiLower": precisionLower,
+      "precisionCiUpper": precisionUpper,
     }
 
     # Plot mean PR curve.
@@ -1282,7 +1358,7 @@ def PlotMultiTrialPRCurve(
       meanPrecision,
       color=colors[classIdx],
       linewidth=2,
-      label=f"{className} (AP={meanAp:.3f} ± {stdAp:.3f})",
+      label=labelPlot,
     )
 
     # Plot confidence interval.
@@ -1292,7 +1368,7 @@ def PlotMultiTrialPRCurve(
       precisionUpper,
       color=colors[classIdx],
       alpha=0.2,
-      label=f"{className} {int(confidenceLevel * 100)}% CI",
+      label=labelFill,
     )
 
   # Set labels and title.
@@ -1317,6 +1393,36 @@ def PlotMultiTrialPRCurve(
 
   # Tight layout.
   plt.tight_layout()
+
+  if (addZoomedInset):
+    # Add a small plot on the plot for a zoomed-in view of the top-right corner.
+    axInset = fig.add_axes([0.5, 0.5, 0.25, 0.25])  # [left, bottom, width, height].
+    for classIdx in range(numClasses):
+      className = classes[classIdx]
+      meanPrecision = resultsDict[className]["meanPrecision"]
+      precisionLower = resultsDict[className]["precisionCiLower"]
+      precisionUpper = resultsDict[className]["precisionCiUpper"]
+
+      axInset.plot(
+        meanRecall,
+        meanPrecision,
+        color=colors[classIdx],
+        linewidth=2,
+      )
+      axInset.fill_between(
+        meanRecall,
+        precisionLower,
+        precisionUpper,
+        color=colors[classIdx],
+        alpha=0.2,
+      )
+    axInset.set_xlim(0.8, 1.0)
+    axInset.set_ylim(0.8, 1.05)
+    axInset.set_title("Zoomed In", fontsize=fontSize * 0.75)
+    axInset.set_xlabel("Recall", fontsize=fontSize * 0.6)
+    axInset.set_ylabel("Precision", fontsize=fontSize * 0.6)
+    axInset.tick_params(axis="both", which="major", labelsize=fontSize * 0.5)
+    axInset.grid(True, alpha=0.3)
 
   # Save if requested.
   if (save):
@@ -2307,7 +2413,6 @@ def HistoryPlotter(
         # Replace the original values with the smoothed values.
         trainValues = smoothedTrainValues
         valValues = smoothedValValues
-
 
       if (trainKey in history):
         # Plot training metric.
