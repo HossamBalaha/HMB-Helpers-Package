@@ -23,7 +23,7 @@ DATA_DIR="/path/to/dataset/"
 # BASE_OUTPUT_DIR: Base directory where results, logs and checkpoints will be saved.
 BASE_OUTPUT_DIR="/path/to/output/"
 # MODEL_NAME: Name of the timm model architecture to use (e.g. resnet50, densenet121, vit_base_patch16_224).
-MODEL_NAME="densenet"
+MODEL_NAME="eva02_large_patch14_448.mim_m38m_ft_in22k_in1k"
 # IMAGE_SIZE: Input image size expected by the model (e.g. 224 for 224x224). The training script should handle resizing.
 IMAGE_SIZE=448
 # OPTIMIZER: Optimizer type to use (e.g. adamw, sgd). Must be supported by the training script.
@@ -41,7 +41,7 @@ WARMUP_EPOCHS=1
 # BATCH_SIZES: Array of batch sizes to try in separate runs (loops over these values).
 BATCH_SIZES=(256 128)
 # TRIALS: Array of trial identifiers; useful for repeating experiments with different seeds.
-TRIALS=(1 2 3 4 5)
+TRIALS=(1 2 3 4 5 6 7 8 9 10)
 # LEARNING_RATE: Initial learning rate used by the optimizer.
 LEARNING_RATE=1e-5
 # WEIGHT_DECAY: Weight decay (L2 regularization) for the optimizer.
@@ -73,11 +73,11 @@ USE_EMA=0
 # SAVE_EVERY: Save a checkpoint every N epochs. Leave empty to rely on the script's default/save-on-improvement.
 SAVE_EVERY=""
 # SPLIT_TRAIN_FOLDER: Optional explicit path to a pre-split training folder. If provided, splitting is skipped/overridden.
-SPLIT_TRAIN_FOLDER=""
+SPLIT_TRAIN_FOLDER="C:\Users\Hossam\Downloads\Brain Tumor MRI Dataset\Training"
 # SPLIT_VAL_FOLDER: Optional explicit path to a pre-split validation folder. If provided, splitting is skipped/overridden.
-SPLIT_VAL_FOLDER=""
+SPLIT_VAL_FOLDER="C:\Users\Hossam\Downloads\Brain Tumor MRI Dataset\Testing"
 # SPLIT_TEST_FOLDER: Optional explicit path to a pre-split test folder. If provided, splitting is skipped/overridden.
-SPLIT_TEST_FOLDER=""
+SPLIT_TEST_FOLDER="C:\Users\Hossam\Downloads\Brain Tumor MRI Dataset\Testing"
 
 # Loop over trials and batch sizes and run the training script with constructed args.
 for TRIAL in "${TRIALS[@]}"; do
@@ -176,7 +176,7 @@ for TRIAL in "${TRIALS[@]}"; do
     echo "Running: ${CMD[*]}"
     "${CMD[@]}"
     if [[ $? -ne 0 ]]; then
-      echo "Error: Command failed for Batch Size ${BATCH_SIZE}, Trial ${TRIAL}"
+      echo "Error: Command failed..."
       exit 1
     fi
 

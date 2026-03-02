@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from collections import Counter
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 from sklearn.metrics import confusion_matrix, classification_report
 from torch.amp import autocast, GradScaler
 from torch.utils.data import DataLoader
@@ -409,56 +409,90 @@ def MixupCriterion(logits, softTargets):
 
 class ExponentialMovingAverage(object):
   r'''
-  Implements Exponential Moving Average (EMA) for model parameters.
+  Implements Exponential Moving Average (EMA) for model parameters and buffers.
+
+  This class maintains a shadow copy of a model, updating its parameters via an
+  exponential moving average of the main model's parameters. It ensures that
+  persistent buffers (e.g., BatchNorm running statistics) are synchronized
+  correctly to prevent performance degradation during evaluation.
 
   Parameters:
-    model (torch.nn.Module, optional): Model to initialize EMA with. If None, EMA will be initialized on first update.
+    model (torch.nn.Module, optional): Model to initialize EMA with. If None,
+      EMA will be initialized on the first update.
     decay (float): Decay rate for EMA. Default is 0.9999.
-    device (str or torch.device, optional): Device to store EMA weights. If None, uses the same device as the model.
+    device (str or torch.device, optional): Device to store EMA weights. If None,
+      uses the same device as the model provided during update.
   '''
 
-  def __init__(self, model=None, decay=0.9999, device=None):
+  def __init__(
+    self,
+    model: Optional[torch.nn.Module] = None,
+    decay: float = 0.9999,
+    device: Optional[Union[str, torch.device]] = None
+  ):
     self.decay = float(decay)
-    self.numUpdates = 0
-    self.device = torch.device(device) if device is not None else None
-    self.module = None
-    self._backup = None
+    self.num_updates: int = 0
+    self.device: Optional[torch.device] = torch.device(device) if (device is not None) else None
+    self.module: Optional[torch.nn.Module] = None
+    self._backup: Optional[Dict[str, torch.Tensor]] = None
+    self._buffer_backup: Optional[Dict[str, torch.Tensor]] = None
 
     if (model is not None):
-      # Keep a CPU/GPU copy of the model to expose EMA weights easily.
-      self.module = copy.deepcopy(model)
-      self.module.eval()
-      for p in self.module.parameters():
-        p.requires_grad = False
-      if (self.device is not None):
-        self.module.to(self.device)
+      self._initialize_module(model)
 
-  def update(self, model):
+  def _initialize_module(self, model: torch.nn.Module) -> None:
     r'''
-    Update EMA weights using the current model parameters.
+    Internal method to initialize the EMA module as a deep copy of the provided model.
+    '''
+
+    self.module = copy.deepcopy(model)
+    self.module.eval()
+    for p in self.module.parameters():
+      p.requires_grad = False
+
+    if self.device is not None:
+      self.module.to(self.device)
+
+  def update(self, model: torch.nn.Module) -> None:
+    r'''
+    Update EMA weights and buffers using the current model parameters.
+
+    Parameters are updated using the EMA formula. Buffers are copied directly
+    from the current model to ensure statistics (e.g., BatchNorm) remain valid.
 
     Parameters:
       model (torch.nn.Module): Model with current parameters to update EMA from.
     '''
 
     if (self.module is None):
-      self.module = copy.deepcopy(model)
-      self.module.eval()
-      for p in self.module.parameters():
-        p.requires_grad = False
-      if self.device is not None:
-        self.module.to(self.device)
+      self._initialize_module(model)
 
-    self.numUpdates += 1
+    # Ensure EMA module resides on the correct device.
+    if (self.device is None):
+      self.module.to(next(model.parameters()).device)
+
+    self.num_updates += 1
     decay = self.decay
 
-    # Update each parameter: ema = decay * ema + (1 - decay) * param.
     with torch.no_grad():
-      for emaP, modelData in zip(self.module.parameters(), model.parameters()):
-        modelData = modelData.detach().to(emaP.device)
-        emaP.data.mul_(decay).add_(modelData, alpha=(1.0 - decay))
+      # Create dictionaries for name-based alignment.
+      emaParams = dict(self.module.named_parameters())
+      emaBuffers = dict(self.module.named_buffers())
 
-  def to(self, device):
+      # Update Parameters.
+      for name, modelParam in model.named_parameters():
+        if (name in emaParams):
+          emaParam = emaParams[name]
+          modelData = modelParam.detach().to(emaParam.device)
+          emaParam.data.mul_(decay).add_(modelData, alpha=(1.0 - decay))
+
+      # Update Buffers (Direct Copy).
+      for name, modelBuffer in model.named_buffers():
+        if (name in emaBuffers):
+          emaBuffer = emaBuffers[name]
+          emaBuffer.copy_(modelBuffer.detach().to(emaBuffer.device))
+
+  def to(self, device: Union[str, torch.device]) -> None:
     r'''
     Move EMA weights to the specified device.
 
@@ -470,7 +504,7 @@ class ExponentialMovingAverage(object):
     if (self.module is not None):
       self.module.to(self.device)
 
-  def state_dict(self):
+  def state_dict(self) -> Dict[str, Any]:
     r'''
     Get the state dictionary for EMA.
 
@@ -480,12 +514,12 @@ class ExponentialMovingAverage(object):
 
     sd = {
       "decay"            : self.decay,
-      "num_updates"      : self.numUpdates,
+      "num_updates"      : self.num_updates,
       "module_state_dict": self.module.state_dict() if (self.module is not None) else None,
     }
     return sd
 
-  def load_state_dict(self, sd):
+  def load_state_dict(self, sd: Dict[str, Any]) -> None:
     r'''
     Load the state dictionary for EMA.
 
@@ -494,21 +528,23 @@ class ExponentialMovingAverage(object):
     '''
 
     self.decay = float(sd.get("decay", self.decay))
-    self.numUpdates = int(sd.get("num_updates", self.numUpdates))
+    self.num_updates = int(sd.get("num_updates", self.num_updates))
     mstate = sd.get("module_state_dict", None)
 
     if (mstate is not None):
       if (self.module is None):
-        # lazy: create a module by deep-copying nothing isn't possible; caller should initialize EMA with a model first.
         raise RuntimeError(
           "EMA module is not initialized. "
           "Initialize `ExponentialMovingAverage` with a model before loading module state."
         )
       self.module.load_state_dict(mstate)
 
-  def apply_shadow(self, model):
+  def apply_shadow(self, model: torch.nn.Module) -> None:
     r'''
-    Apply EMA weights to the given model, backing up original weights.
+    Apply EMA weights and buffers to the given model, backing up original weights.
+
+    This method allows for evaluation using EMA weights without permanently
+    altering the training model.
 
     Parameters:
       model (torch.nn.Module): Model to apply EMA weights to.
@@ -516,29 +552,52 @@ class ExponentialMovingAverage(object):
 
     if (self.module is None):
       raise RuntimeError("No EMA weights available. Call update() at least once or initialize EMA with a model.")
-    self._backup = {}
-    for (name, param), ema_p in zip(model.named_parameters(), self.module.parameters()):
-      self._backup[name] = param.detach().clone()
-      param.data.copy_(ema_p.data.to(param.device))
 
-  def restore(self, model):
+    self._backup = {}
+    self._buffer_backup = {}
+
+    # Backup and Apply Parameters.
+    for name, param in model.named_parameters():
+      self._backup[name] = param.detach().clone()
+      if (name in dict(self.module.named_parameters())):
+        emaP = dict(self.module.named_parameters())[name]
+        param.data.copy_(emaP.data.to(param.device))
+
+    # Backup and Apply Buffers.
+    for name, buffer in model.named_buffers():
+      self._buffer_backup[name] = buffer.detach().clone()
+      if (name in dict(self.module.named_buffers())):
+        emaB = dict(self.module.named_buffers())[name]
+        buffer.copy_(emaB.to(buffer.device))
+
+  def restore(self, model: torch.nn.Module) -> None:
     r'''
-    Restore original model weights from backup.
+    Restore original model weights and buffers from backup.
 
     Parameters:
       model (torch.nn.Module): Model to restore original weights to.
     '''
 
-    if (self._backup is None):
+    if (self._backup is None and self._buffer_backup is None):
       return
-    nameToParam = {n: p for n, p in model.named_parameters()}
-    for name, orig in self._backup.items():
-      if (name in nameToParam):
-        nameToParam[name].data.copy_(orig.to(nameToParam[name].device))
-    self._backup = None
 
-  # Convenience alias.
-  def update_from(self, model):
+    # Restore Parameters.
+    if (self._backup is not None):
+      for name, orig in self._backup.items():
+        param = dict(model.named_parameters()).get(name)
+        if (param is not None):
+          param.data.copy_(orig.to(param.device))
+      self._backup = None
+
+    # Restore Buffers
+    if (self._buffer_backup is not None):
+      for name, orig in self._buffer_backup.items():
+        buffer = dict(model.named_buffers()).get(name)
+        if (buffer is not None):
+          buffer.copy_(orig.to(buffer.device))
+      self._buffer_backup = None
+
+  def update_from(self, model: torch.nn.Module) -> None:
     r'''
     Alias for update() method.
 
@@ -687,11 +746,21 @@ def TrainEvaluateModel(
     stateDict = LoadPyTorchDict(bestModelStoragePath, device=device)
     if (stateDict):
       model.load_state_dict(stateDict["model_state_dict"])
+      if (ema is not None):
+        ema.load_state_dict(stateDict["ema_state_dict"])
       optimizer.load_state_dict(stateDict["optimizer_state_dict"])
       scaler.load_state_dict(stateDict["scaler_state_dict"])
-      startEpoch = stateDict.get("epoch", 0)
+      # Start from the next epoch after the one saved in the checkpoint.
+      startEpoch = stateDict.get("epoch", 0) + 1
       bestValLoss = stateDict.get("best_val_loss", float("inf"))
       bestValAccuracy = stateDict.get("best_val_accuracy", 0.0)
+
+      if (verbose):
+        print(
+          f"Loaded checkpoint from {bestModelStoragePath} with epoch {stateDict.get('epoch', 'N/A')}, "
+          f"best val loss {bestValLoss:.4f}, and best val accuracy {bestValAccuracy:.4f}."
+        )
+        print("Training will resume from the next epoch.")
     else:
       if (verbose):
         print("Failed to load checkpoint. Starting training from scratch.")
@@ -768,33 +837,23 @@ def TrainEvaluateModel(
     if (conditionToSave):
       bestValLoss = avgValEpochLoss
       bestValAccuracy = avgValEpochAccuracy
-      try:
-        if (useEma and ema is not None):
-          try:
-            modelState = ema.module.state_dict()
-          except Exception:
-            try:
-              modelState = ema.state_dict()
-            except Exception:
-              modelState = model.state_dict()
-        else:
-          modelState = model.state_dict()
-      except Exception:
-        modelState = model.state_dict()
 
       # SaveModel(model, bestModelStoragePath)
       SavePyTorchDict({
-        "model_state_dict"    : modelState,
-        "optimizer_state_dict": optimizer.state_dict() if (optimizer is not None) else None,
-        "epoch"               : epoch + 1,
-        "scaler_state_dict"   : scaler.state_dict() if (scaler is not None) else None,
-        "best_val_loss"       : bestValLoss,
-        "best_val_accuracy"   : bestValAccuracy,
+        "model_state_dict"     : model.state_dict(),
+        "ema_state_dict"       : ema.state_dict() if (useEma and ema is not None) else None,
+        "ema_module_state_dict": ema.module.state_dict() if (useEma and ema is not None) else None,
+        "optimizer_state_dict" : optimizer.state_dict() if (optimizer is not None) else None,
+        "epoch"                : epoch + 1,
+        "scaler_state_dict"    : scaler.state_dict() if (scaler is not None) else None,
+        "best_val_loss"        : bestValLoss,
+        "best_val_accuracy"    : bestValAccuracy,
       }, filename=bestModelStoragePath)
       if (verbose):
         print(
           f"Saved new best model with val loss: {bestValLoss:.4f} "
-          f"and val accuracy: {bestValAccuracy:.4f}"
+          f"and val accuracy: {bestValAccuracy:.4f} "
+          f"at epoch {epoch + 1} to {bestModelStoragePath}"
         )
       currentPatience = 0  # Reset patience counter on improvement.
     else:
@@ -814,9 +873,9 @@ def TrainEvaluateModel(
         scheduler.step(avgValEpochLoss)
       else:
         scheduler.step()
-    except Exception:
+    except Exception as e:
       if (verbose):
-        print("Warning: Failed to step the scheduler. Continuing without stepping.")
+        print(f"Warning: Failed to step the scheduler. Error: {e}. Continuing without stepping.")
 
     if (saveEvery is not None and (epoch + 1) % saveEvery == 0):
       epochPath = os.path.join(
@@ -824,12 +883,14 @@ def TrainEvaluateModel(
         f"ModelEpoch.epoch{epoch + 1}.pth"
       )
       SavePyTorchDict({
-        "model_state_dict"    : model.state_dict(),
-        "optimizer_state_dict": optimizer.state_dict(),
-        "epoch"               : epoch + 1,
-        "scaler_state_dict"   : scaler.state_dict(),
-        "best_val_loss"       : bestValLoss,
-        "best_val_accuracy"   : bestValAccuracy,
+        "model_state_dict"     : model.state_dict(),
+        "ema_state_dict"       : ema.state_dict() if (useEma and ema is not None) else None,
+        "ema_module_state_dict": ema.module.state_dict() if (useEma and ema is not None) else None,
+        "optimizer_state_dict" : optimizer.state_dict(),
+        "epoch"                : epoch + 1,
+        "scaler_state_dict"    : scaler.state_dict(),
+        "best_val_loss"        : bestValLoss,
+        "best_val_accuracy"    : bestValAccuracy,
       }, filename=epochPath)
       if (verbose):
         print(f"Saved model at epoch {epoch + 1} to {epochPath}")
@@ -837,12 +898,14 @@ def TrainEvaluateModel(
   # Save the final model after training if a path is provided.
   if (finalModelStoragePath):
     SavePyTorchDict({
-      "model_state_dict"    : model.state_dict(),
-      "optimizer_state_dict": optimizer.state_dict(),
-      "epoch"               : numEpochs,
-      "scaler_state_dict"   : scaler.state_dict(),
-      "best_val_loss"       : bestValLoss,
-      "best_val_accuracy"   : bestValAccuracy,
+      "model_state_dict"     : model.state_dict(),
+      "ema_state_dict"       : ema.state_dict() if (useEma and ema is not None) else None,
+      "ema_module_state_dict": ema.module.state_dict() if (useEma and ema is not None) else None,
+      "optimizer_state_dict" : optimizer.state_dict(),
+      "epoch"                : numEpochs,
+      "scaler_state_dict"    : scaler.state_dict(),
+      "best_val_loss"        : bestValLoss,
+      "best_val_accuracy"    : bestValAccuracy,
     }, filename=finalModelStoragePath)
     if (verbose):
       print(f"Saved final model after {numEpochs} epochs to {finalModelStoragePath}")
@@ -941,12 +1004,14 @@ def TrainOneEpoch(
     ("cuda" in str(device))
   ) else "cpu"
 
-  # Iterate over the training data loader with a progress bar.
-  for batchIdx, batch in tqdm.tqdm(
+  loop = tqdm.tqdm(
     enumerate(dataLoader),  # Enumerate over batches.
     total=len(dataLoader),  # Total number of batches.
     desc=f"Epoch {epoch + 1}/{numEpochs}",  # Description for the progress bar.
-  ):
+  )
+
+  # Iterate over the training data loader with a progress bar.
+  for batchIdx, batch in loop:
     # Get data and labels from the batch and move them to the specified device.
     data, labels = batch
     data = data.to(device, non_blocking=True)
@@ -999,7 +1064,7 @@ def TrainOneEpoch(
     totalEpochAccuracy += accuracy
 
     # Add accuracy as a metric to the progress bar description.
-    tqdm.tqdm.set_description(
+    loop.set_description(
       f"Epoch {epoch + 1}/{numEpochs} - Loss: {lossScalar:.4f}, Acc: {accuracy:.4f}"
     )
 
@@ -1070,12 +1135,13 @@ def EvaluateOneEpoch(
 
   # with torch.no_grad():
   with torch.inference_mode():
-    # Iterate over the evaluation data loader with a progress bar.
-    for batchIdx, batch in tqdm.tqdm(
+    loop = tqdm.tqdm(
       enumerate(dataLoader),  # Enumerate over batches.
       total=len(dataLoader),  # Total number of batches.
       desc="Evaluating",  # Description for the progress bar.
-    ):
+    )
+    # Iterate over the evaluation data loader with a progress bar.
+    for batchIdx, batch in loop:
       # Get data and labels from the batch and move them to the specified device.
       data, labels = batch
       data = data.to(device, non_blocking=True)
@@ -1100,7 +1166,7 @@ def EvaluateOneEpoch(
       # Compute the loss using the specified criterion.
       loss = criterion(outputs, labels)
       # If loss is a tensor, convert it to a scalar value.
-      loss = loss.item() if isinstance(loss, torch.Tensor) else loss
+      loss = loss.item() if (isinstance(loss, torch.Tensor)) else loss
       # Accumulate the total loss for the validation epoch.
       totalLoss += loss
 
@@ -1116,6 +1182,10 @@ def EvaluateOneEpoch(
 
       # Accumulate the total accuracy for the validation epoch.
       totalAccuracy += accuracy
+
+      loop.set_description(
+        f"Evaluating - Loss: {loss:.4f}, Acc: {accuracy:.4f}"
+      )
 
   # Calculate average loss and accuracy for the validation epoch.
   avgValLoss = totalLoss / float(max(1, len(dataLoader)))
@@ -1375,6 +1445,7 @@ def InferenceWithPlots(
       dfCombined.to_csv(overallResultsPath, index=False)
       if (verbose):
         print(f"Overall results appended to {overallResultsPath}.")
+
 
 # TODO: PyTorchHelper.ApplyDynamicQuantizationTorch TO BE CHECKED.
 def ApplyDynamicQuantizationTorch(modelPath: str, outputPath: str, exampleInput=None, inputShape=None):

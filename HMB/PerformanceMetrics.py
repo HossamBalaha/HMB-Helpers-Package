@@ -934,6 +934,8 @@ def PlotMultiTrialROCAUC(
     allYTrue = [allYTrue] * len(allYPred)
   elif (isinstance(allYTrue, list) and len(allYTrue) == 1 and isinstance(allYTrue[0], np.ndarray)):
     allYTrue = allYTrue * len(allYPred)
+  elif (isinstance(allYTrue, list) and np.ndim(allYTrue[0]) == 1):
+    allYTrue = allYTrue * len(allYPred)
 
   allYPred = [np.array(yp) for yp in allYPred]
 
@@ -964,8 +966,8 @@ def PlotMultiTrialROCAUC(
 
     # Collect ROC data from all trials.
     for trialIdx in range(numTrials):
-      yTrue = allYTrue[trialIdx]
-      yPred = allYPred[trialIdx]
+      yTrue = np.array(allYTrue[trialIdx])
+      yPred = np.array(allYPred[trialIdx])
 
       # Check if yTrue is one-hot encoded or class indices.
       if (yTrue.ndim == 1):
@@ -1144,15 +1146,15 @@ def PlotMultiTrialPRCurve(
   confidenceLevel=0.95,  # Confidence level for CI.
   which="CI",  # Method for confidence intervals: "CI" for confidence intervals, "SD" for standard deviation.
   title="Multi-Trial Precision-Recall Curve with Confidence Intervals",
-  figSize=(8, 8), # Figure size in inches.
-  cmap=None, # Colormap for different classes.
-  display=True, # Whether to display the plot.
-  save=False, # Whether to save the plot.
-  fileName="MultiTrial_PRC.pdf", # File name for saving.
-  fontSize=15, # Font size for labels and annotations.
-  showLegend=True, # Whether to show legend.
-  returnFig=False, # Whether to return the matplotlib figure object.
-  dpi=720, # DPI for saving the figure.
+  figSize=(8, 8),  # Figure size in inches.
+  cmap=None,  # Colormap for different classes.
+  display=True,  # Whether to display the plot.
+  save=False,  # Whether to save the plot.
+  fileName="MultiTrial_PRC.pdf",  # File name for saving.
+  fontSize=15,  # Font size for labels and annotations.
+  showLegend=True,  # Whether to show legend.
+  returnFig=False,  # Whether to return the matplotlib figure object.
+  dpi=720,  # DPI for saving the figure.
   addZoomedInset=True,  # Whether to add a zoomed inset for the top-right corner of the PRC plot.
 ):
   '''
@@ -1252,6 +1254,9 @@ def PlotMultiTrialPRCurve(
     allYTrue = [allYTrue] * len(allYPred)
   elif (isinstance(allYTrue, list) and len(allYTrue) == 1 and isinstance(allYTrue[0], np.ndarray)):
     allYTrue = allYTrue * len(allYPred)
+  elif (isinstance(allYTrue, list) and np.ndim(allYTrue[0]) == 1):
+    allYTrue = allYTrue * len(allYPred)
+
   allYPred = [np.array(yp) for yp in allYPred]
 
   numClasses = len(classes)
@@ -1281,8 +1286,8 @@ def PlotMultiTrialPRCurve(
 
     # Collect PR data from all trials.
     for trialIdx in range(numTrials):
-      yTrue = allYTrue[trialIdx]
-      yPred = allYPred[trialIdx]
+      yTrue = np.array(allYTrue[trialIdx])
+      yPred = np.array(allYPred[trialIdx])
 
       # Check if yTrue is one-hot encoded or class indices.
       if (yTrue.ndim == 1):
@@ -1343,11 +1348,11 @@ def PlotMultiTrialPRCurve(
 
     # Store results.
     resultsDict[className] = {
-      "meanAp"   : meanAp,
-      "stdAp"    : stdAp,
-      "apCiLower": apLower,
-      "apCiUpper": apUpper,
-      "meanPrecision": meanPrecision,
+      "meanAp"          : meanAp,
+      "stdAp"           : stdAp,
+      "apCiLower"       : apLower,
+      "apCiUpper"       : apUpper,
+      "meanPrecision"   : meanPrecision,
       "precisionCiLower": precisionLower,
       "precisionCiUpper": precisionUpper,
     }

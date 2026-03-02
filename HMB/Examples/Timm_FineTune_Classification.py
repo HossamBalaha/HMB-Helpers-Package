@@ -7,8 +7,9 @@ from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from HMB.Initializations import IgnoreWarnings, DoRandomSeeding
 from HMB.PyTorchHelper import (
-  CustomDataset, TrainEvaluateModel, GetOptimizer,
-  GenericEvaluatePredictPlotSubset, LoadModel, LoadPyTorchDict
+  CustomDataset, TrainEvaluateModel,
+  GetOptimizer, LoadPyTorchDict,
+  GenericEvaluatePredictPlotSubset,
 )
 
 # Ensure all prints flush by default to make logs appear promptly.
@@ -494,6 +495,12 @@ def MainTrain():
   os.makedirs(args.outputDir, exist_ok=True)
   print(f"Output directory: {args.outputDir}")
 
+  # Save the training configuration arguments to a JSON file in the output directory for future reference.
+  argsJsonPath = os.path.join(args.outputDir, "TrainingArgs.json")
+  with open(argsJsonPath, "w") as f:
+    import json
+    json.dump(vars(args), f, indent=4)
+
   # Select the device for computation and wrap it in a torch.device.
   device = torch.device(args.device)
   # Print the selected device to the console.
@@ -600,13 +607,27 @@ def MainTest():
   # Create the model and load the best checkpoint.
   model = CreateModel(args)
 
-  # Try to load the best checkpoint from the output directory if present.
   bestModelPath = os.path.join(args.outputDir, "BestModel.pth")
-  if (os.path.exists(bestModelPath)):
-    # Load weights into model and move to device.
-    model = LoadModel(model, bestModelPath, device=args.device)
-  else:
-    print(f"Warning: Best model checkpoint not found at {bestModelPath}. Using model with random/init weights.")
+  stateDict = LoadPyTorchDict(bestModelPath, device=args.device)
+
+  # isEMA = args.useEma
+  # if (isEMA):
+  #   modelStateDict = stateDict.get("ema_module_state_dict", None)
+  #   if (modelStateDict is None):
+  #     raise ValueError(
+  #       "EMA state dict not found in checkpoint. Ensure that --useEma was enabled during training and "
+  #       "that the checkpoint contains the EMA state."
+  #     )
+  # else:
+
+  modelStateDict = stateDict.get("model_state_dict", None)
+  if (modelStateDict is None):
+    raise ValueError(
+      "Model state dict not found in checkpoint. Ensure that the checkpoint contains the model state."
+    )
+
+  model.load_state_dict(modelStateDict)
+  print(f"Model loaded from checkpoint: {bestModelPath}")
 
   # Prepare a prediction callable that accepts a HWC numpy image and returns 1D probability vector.
   # This matches the expected interface of `GenericEvaluatePredictPlotSubset`.
@@ -614,10 +635,11 @@ def MainTest():
   try:
     dataConfig = timm.data.resolve_model_data_config(model)
     modelTransform = timm.data.create_transform(**dataConfig, is_training=False)
-  except Exception:
+  except Exception as e:
     raise ValueError(
       "Failed to create default transform from timm data config. "
-      "Ensure the model name is correct and timm is properly installed."
+      "Ensure the model name is correct and timm is properly installed. "
+      f"Original error: {e}"
     )
 
   device = torch.device(args.device)
@@ -662,66 +684,6 @@ if (__name__ == "__main__"):
   # Set random seeds for reproducibility.
   DoRandomSeeding()
   # Run the main (train) entry point to perform training and validation.
-  # MainTrain()
+  MainTrain()
   # Run the main test entry point to perform inference and plotting.
-  # MainTest()
-
-  import random, cv2
-  from PIL import Image
-
-  bestModelPath = r"C:\Users\Hossam\Downloads\Results_32_T1\BestModel.pth"
-  datasetPath = r"C:\Users\Hossam\Downloads\test"
-  modelName = "mobilenetv3_small_100.lamb_in1k"
-  model = timm.create_model(modelName, pretrained=True, num_classes=4)
-  stateDict = LoadPyTorchDict(bestModelPath)
-  model.load_state_dict(stateDict["model_state_dict"])
-
-  # Save the model state dict to a temporary file and load it back to ensure compatibility with LoadModel.
-  # tempModelPath = "temp_model.pth"
-  # torch.save(model.state_dict(), tempModelPath)
-  # model = timm.create_model(modelName, pretrained=True, num_classes=4, checkpoint_path=tempModelPath)
-  model = model.to("cuda")
-
-  # timm.models.load_state_dict(model, bestModelPath)
-  dataConfig = timm.data.resolve_model_data_config(model)
-  transform = timm.data.create_transform(**dataConfig, is_training=False)
-  classes = sorted(os.listdir(datasetPath))
-  print(f"Classes found in dataset: {classes}")
-  customDataset = CustomDataset(datasetPath, transform=transform)
-  dataloader = DataLoader(customDataset, batch_size=32, shuffle=False, num_workers=1, pin_memory=False)
-  allPreds = []
-  allGts = []
-  for batch in dataloader:
-    images, labels = batch
-    images = images.to("cuda")
-    with torch.inference_mode():
-      outputs = model(images)
-      probs = torch.softmax(outputs, dim=1).cpu().numpy()
-    allPreds.extend(probs.argmax(axis=1))
-    allGts.extend(labels.numpy())
-  acc = sum([1 if p == g else 0 for p, g in zip(allPreds, allGts)]) / len(allGts)
-  print(
-    f"Overall accuracy on the dataset: {acc:.4f} ({sum([1 if p == g else 0 for p, g in zip(allPreds, allGts)])}/{len(allGts)})")
-  exit()
-
-  rndCls = classes[1]
-  rndClsPath = os.path.join(datasetPath, rndCls)
-  actual = []
-  predicted = []
-  for img in os.listdir(rndClsPath):
-    imgPath = os.path.join(rndClsPath, img)
-    img = cv2.imread(str(imgPath))
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    imgPIL = Image.fromarray(img)
-    img = np.array(imgPIL)
-    predictFn = CreateTimmPredictCallable(model, transform, device="cuda", imageSize=224)
-    probs = predictFn(img)
-    actual.append(rndCls)
-    predicted.append(classes[probs.argmax()])
-  correct = sum([1 if a == p else 0 for a, p in zip(actual, predicted)])
-  total = len(actual)
-  accuracy = correct / total if total > 0 else 0
-  print(f"Accuracy on class '{rndCls}': {accuracy:.4f} ({correct}/{total})")
-
-  # Stat. analysis and other similar to YOLO.
-  # Ensure that GenericEvaluatePredictPlotSubset is working correctly and producing expected outputs.
+  MainTest()

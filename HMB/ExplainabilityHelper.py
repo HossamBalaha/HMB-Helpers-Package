@@ -531,7 +531,7 @@ class CAMExplainerPyTorch(object):
 
     # Process a single image and save overlay/annotated outputs.
     img = Image.fromarray((np.random.rand(224, 224, 3) * 255).astype("uint8"))
-    tmpPath = Path("./tmp_sample.png")
+    tmpPath = Path("./tempSampleImage.png")
     img.save(tmpPath)
     result = explainer.ProcessImage(tmpPath, classNames={i: str(i) for i in range(10)})
     print(result)
@@ -1136,7 +1136,7 @@ class CAMExplainerPyTorch(object):
       - File names use CamelCase for the fixed parts to match project conventions.
     '''
 
-    # Validate the inputs:
+    # Validate the inputs.
     if (classNames is not None and not isinstance(classNames, dict)):
       raise ValueError("`classNames` must be a dict mapping class indices to class names.")
     imgPath = Path(imagePath)
@@ -1181,7 +1181,8 @@ class CAMExplainerPyTorch(object):
     )
     # Resize and overlay the map onto the original image.
     saliencyResized = cv2.resize(
-      saliencyMap, (originalImage.shape[1], originalImage.shape[0]),
+      saliencyMap,
+      (originalImage.shape[1], originalImage.shape[0]),
       interpolation=cv2.INTER_LINEAR
     )
     overlay = self.ApplyHeatmapOverlay(originalImage, saliencyResized, alpha=self.alpha)
