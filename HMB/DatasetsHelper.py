@@ -161,12 +161,12 @@ class GenericImagesDatasetHandler(object):
   '''
 
   def __init__(
-    self,
-    sourceDir: Path,
-    configPath: Path = None,
-    imageExtensions: set = None,
-    autoDetect: bool = True,
-    requiredSplits: set = {"train", "val", "test"},
+      self,
+      sourceDir: Path,
+      configPath: Path = None,
+      imageExtensions: set = None,
+      autoDetect: bool = True,
+      requiredSplits: set = {"train", "val", "test"},
   ):
     r'''
     Initialize the dataset handler.
@@ -498,11 +498,11 @@ class GenericImagesDatasetHandler(object):
       self.config = configs
 
   def CreateConfigFile(
-    self,
-    outputPath: Path = None,
-    splits: dict = None,
-    minSamplesPerClass: int = None,
-    description: str = None
+      self,
+      outputPath: Path = None,
+      splits: dict = None,
+      minSamplesPerClass: int = None,
+      description: str = None
   ) -> Path:
     r'''
     Auto-generate a complete dataset configuration JSON based on detected mapping
@@ -561,13 +561,13 @@ class GenericImagesDatasetHandler(object):
     return self.config if (self.config is not None) else {}
 
   def PlotClassDistribution(
-    self,
-    fileName="ClassDistribution.pdf",
-    title="Class Distribution",
-    save=False,
-    display=True,
-    fontSize=12,
-    dpi=720,
+      self,
+      fileName="ClassDistribution.pdf",
+      title="Class Distribution",
+      save=False,
+      display=True,
+      fontSize=12,
+      dpi=720,
   ):
     r'''
     Plot a bar chart of the class distribution in the dataset.
@@ -770,14 +770,14 @@ class GenericImagesDatasetHandler(object):
     return manifestPath
 
   def Prepare(
-    self,
-    outputDir: Path,
-    valSplit: float = 0.1,
-    testSplit: float = 0.1,
-    balance: bool = None,
-    balanceMethod: str = "duplication",
-    balanceTarget: Union[str, int] = "max",
-    randomSeed: int = 42,
+      self,
+      outputDir: Path,
+      valSplit: float = 0.1,
+      testSplit: float = 0.1,
+      balance: bool = None,
+      balanceMethod: str = "duplication",
+      balanceTarget: Union[str, int] = "max",
+      randomSeed: int = 42,
   ):
     r'''
     Prepare dataset in a standard train/val/test layout by creating train/val/test
@@ -889,12 +889,12 @@ class GenericImagesDatasetHandler(object):
     return splitMapping
 
   def PrepareNested(
-    self,
-    outputDir: Path,
-    trainSplit: float,
-    valSplit: float,
-    testSplit: float,
-    randomSeed: int = 42,
+      self,
+      outputDir: Path,
+      trainSplit: float,
+      valSplit: float,
+      testSplit: float,
+      randomSeed: int = 42,
   ):
     r'''
     Prepare dataset from nested class folder structure by splitting each class
@@ -984,12 +984,12 @@ class GenericImagesDatasetHandler(object):
     return splitMapping
 
   def PrepareFlat(
-    self,
-    outputDir: Path,
-    trainSplit: float,
-    valSplit: float,
-    testSplit: float,
-    randomSeed: int = 42,
+      self,
+      outputDir: Path,
+      trainSplit: float,
+      valSplit: float,
+      testSplit: float,
+      randomSeed: int = 42,
   ):
     r'''
     Prepare dataset from a flat filename layout where class is encoded as the
@@ -1124,11 +1124,11 @@ names: {classNameDict}
     return yamlPath
 
   def _ApplyBalancing(
-    self,
-    outputDir: Path,
-    method: str = "duplication",
-    target: Union[str, int] = "max",
-    randomSeed: int = 42
+      self,
+      outputDir: Path,
+      method: str = "duplication",
+      target: Union[str, int] = "max",
+      randomSeed: int = 42
   ):
     r'''
     Internal helper to balance class counts inside the "train" split.
@@ -1283,12 +1283,12 @@ class SegmentationDataset(torch.utils.data.Dataset):
 
   # Initialize the dataset with lists of image and mask paths, transforms, and target size.
   def __init__(
-    self,
-    imagePaths: List[str],
-    maskPaths: List[str],
-    transforms: Optional[Callable] = None,
-    imageSize: int = 256,
-    numClasses: int = 1
+      self,
+      imagePaths: List[str],
+      maskPaths: List[str],
+      transforms: Optional[Callable] = None,
+      imageSize: int = 256,
+      numClasses: int = 1
   ):
     r'''
     Initialize the segmentation dataset instance.
@@ -1564,12 +1564,14 @@ class SegmentationDataset(torch.utils.data.Dataset):
 
 
 def CreateSegmentationDataLoaders(
-  dataDir: str,
-  imageSize: int = 256,
-  batchSize: int = 8,
-  numWorkers: int = 4,
-  numClasses: int = 1,
-  pinMemory: bool = False,
+    dataDir: str,
+    imageSize: int = 256,
+    batchSize: int = 8,
+    numWorkers: int = 4,
+    numClasses: int = 1,
+    pinMemory: bool = False,
+    imagesFolderName: str = "Images",
+    masksFolderName: str = "Masks"
 ):
   r'''
   Create PyTorch DataLoader objects for segmentation tasks from a directory
@@ -1587,15 +1589,17 @@ def CreateSegmentationDataLoaders(
     numWorkers (int): Number of worker processes for the DataLoader. Default 4.
     numClasses (int): Number of segmentation classes (used by `SegmentationDataset`).
     pinMemory (bool): Whether to use pinned memory in DataLoaders for faster GPU transfer.
+    imagesFolderName (str): Name of the folder containing input images (default "Images").
+    masksFolderName (str): Name of the folder containing segmentation masks (default "Masks").
 
   Returns:
     tuple: (trainLoader, valLoader) PyTorch DataLoader instances for training and validation.
   '''
 
   # Build paths for images and masks inside the provided data directory.
-  imagesDir = os.path.join(dataDir, "Images")
+  imagesDir = os.path.join(dataDir, imagesFolderName)
   # Build masks directory path.
-  masksDir = os.path.join(dataDir, "Masks")
+  masksDir = os.path.join(dataDir, masksFolderName)
   # If standard Images/Masks structure is missing, attempt to gather pairs recursively.
   if (not os.path.isdir(imagesDir)) or (not os.path.isdir(masksDir)):
     # Gather image and mask pairs across the dataset tree.

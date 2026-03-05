@@ -9,10 +9,11 @@ from HMB.PerformanceMetrics import (
   ComputeMonteCarloUncertaintyMeasures,
   ComputeECEPlotReliability
 )
-from HMB.StatisticalAnalysisHelper import ExtractDataFromSummaryFile, PlotMetrics
+from HMB.StatisticalAnalysisHelper import ExtractDataFromSummaryFile, PlotMetrics, StatisticalAnalysis
 from HMB.ExplainabilityHelper import CAMExplainerPyTorch
 from HMB.PyTorchHelper import LoadPyTorchDict, EvaluateModelOnPerturbations
 from HMB.Initializations import IMAGE_SUFFIXES
+from HMB.PyTorchModelMemoryProfiler import PyTorchModelMemoryProfiler
 
 # Ensure all prints flush by default to make logs appear promptly.
 # Use the real built-in print function for delegation to avoid analyzer warnings.
@@ -148,7 +149,8 @@ def ValidateArgs(args):
 
   # If explainDatasetDir is provided, it must be a valid directory; also require it if explainMethods are specified.
   if (
-    args.explainDatasetDir and (not os.path.exists(args.explainDatasetDir) or not os.path.isdir(args.explainDatasetDir))
+      args.explainDatasetDir and (
+      not os.path.exists(args.explainDatasetDir) or not os.path.isdir(args.explainDatasetDir))
   ):
     raise FileNotFoundError(f"--explainDatasetDir path does not exist or is not a directory: {args.explainDatasetDir}")
 
@@ -181,7 +183,7 @@ def ValidateArgs(args):
   return args
 
 
-# Create and configure the timm model for the current task.
+# Create and configure the model for the current task.
 def CreateModel(modelName, numClasses):
   # Notify that model creation has started.
   print("Creating model...")
@@ -192,8 +194,24 @@ def CreateModel(modelName, numClasses):
   return model
 
 
-# Create a callable factory for timm model predictions.
-def CreateTimmPredictCallable(model, transform, device, imageSize):
+def CereateModelTransforms(model):
+  # Prepare a prediction callable that accepts a HWC numpy image and returns 1D probability vector.
+  # This matches the expected interface of `GenericEvaluatePredictPlotSubset`.
+  # Create a default transform from timm for the model if available.
+  try:
+    dataConfig = timm.data.resolve_model_data_config(model)
+    modelTransform = timm.data.create_transform(**dataConfig, is_training=False)
+  except Exception as e:
+    raise ValueError(
+      "Failed to create default transform from timm data config. "
+      "Ensure the model name is correct and timm is properly installed. "
+      f"Original error: {e}"
+    )
+  return modelTransform
+
+
+# Create a callable factory for the model predictions.
+def CreatePredictCallable(model, transform, device, imageSize):
   '''Return a callable(imageNp, imagePath=None, trueClassName=None) -> 1D numpy prob vector.'''
 
   def PredictCallable(img, imagePath=None, trueClassName=None):
@@ -224,20 +242,20 @@ def Main():
   args = ValidateArgs(args)
 
   def ProcessSystem(
-    subsets,
-    predCSVFileFix,
-    baseOutputDir,
-    verbose,
-    actualColName,
-    actualColIDColName,
-    predictionColName,
-    probabilityColName,
-    dpi,
-    explainMethods=None,
-    maxExplainImages=0,
-    explainDatasetDir=None,
-    device="cuda",
-    maxPerturbImages=0,
+      subsets,
+      predCSVFileFix,
+      baseOutputDir,
+      verbose,
+      actualColName,
+      actualColIDColName,
+      predictionColName,
+      probabilityColName,
+      dpi,
+      explainMethods=None,
+      maxExplainImages=0,
+      explainDatasetDir=None,
+      device="cuda",
+      maxPerturbImages=0,
   ):
     trials = [
       el for el in os.listdir(baseOutputDir)
@@ -323,26 +341,58 @@ def Main():
           )
 
         model.load_state_dict(modelStateDict)
-        print(f"Model loaded from checkpoint: {bestModelPath}")
+        if (verbose):
+          print(f"Model loaded from checkpoint: {bestModelPath}")
 
-        # Prepare a prediction callable that accepts a HWC numpy image and returns 1D probability vector.
-        # This matches the expected interface of `GenericEvaluatePredictPlotSubset`.
-        # Create a default transform from timm for the model if available.
+        modelTransform = CereateModelTransforms(model)
+        if (verbose):
+          print(f"Model transform created for model '{modelName}' with expected input size {imgSize}x{imgSize}.")
+
+        # Create profiler instance with standard ImageNet input dimensions.
+        profiler = PyTorchModelMemoryProfiler(
+          model=model,
+          inputShape=(3, imgSize, imgSize),  # Use the inferred image size for profiling.
+          batchSize=1,
+          precision="FP32",
+          device=device,
+        )
+        # Profile transformer with sequence length derived from patch embedding.
         try:
-          dataConfig = timm.data.resolve_model_data_config(model)
-          modelTransform = timm.data.create_transform(**dataConfig, is_training=False)
-        except Exception as e:
-          raise ValueError(
-            "Failed to create default transform from timm data config. "
-            "Ensure the model name is correct and timm is properly installed. "
-            f"Original error: {e}"
+          # Execute comprehensive memory profiling.
+          memoryReport = profiler.ProfileModelMemory(
+            optimizerType="Adam",
+            isTransformer=False,
+            checkpointing=True,
+            checkpointSavingsFactor=0.5,
+            deviceFLOPSGFLOPS=5000.0,
+            datasetSize=100000,
+            trainingMultiplier=3.0,
+            runMicroBenchmark=False
           )
+        except Exception as e:
+          if (verbose):
+            print(f"Error during memory profiling for trial '{trial}': {e}")
+          memoryReport = profiler.ProfileModelMemory(
+            optimizerType="Adam",
+            optimizerKwargs={"amsgrad": True},
+            isTransformer=True,
+            sequenceLength=4096,
+            checkpointing=True,
+            checkpointSavingsFactor=0.5,
+            deviceFLOPSGFLOPS=5000.0,
+            datasetSize=100000,
+            trainingMultiplier=3.0,
+            runMicroBenchmark=False
+          )
+        profiler.PrintMemoryReport(memoryReport)
+        reportFilePath = os.path.join(trialDir, "MemoryReport.json")
+        profiler.SaveProfileToJSON(memoryReport, reportFilePath)
 
         device = torch.device(device)
         model.to(device)
         model.eval()
 
-        callable = CreateTimmPredictCallable(model, modelTransform, device, imgSize)
+        callable = CreatePredictCallable(model, modelTransform, device, imgSize)
         if (verbose):
           print(f"Created prediction callable for model '{modelName}' on trial '{trial}'")
 
@@ -380,6 +430,7 @@ def Main():
                 imgSize=imgSize,
                 outputBase=os.path.join(trialDir, f"CAM_Explanations_{method}"),
                 debug=verbose,
+                figsize=(14, 16),
               )
 
               classes = sorted(os.listdir(explainDatasetDir))
@@ -707,6 +758,24 @@ def Main():
       extension=".pdf",  # File extension for saved plots.
     )
 
+    print("\u2713 Performance plots generated.")
+    print("\nGenerating statistical analysis report...")
+    overallReport = []
+    for metric in metrics:
+      for index, data in enumerate(history):
+        report = StatisticalAnalysis(
+          data[metric]["Trials"],
+          hypothesizedMean=data[metric]["Mean"],
+          secondMetricList=None,
+        )
+        report["Type"] = names[index]
+        report["Metric"] = metric
+        overallReport.append(report)
+    reportDF = pd.DataFrame(overallReport)
+    reportCsvPath = os.path.join(baseOutputDir, "Statistical_Analysis_Report.csv")
+    reportDF.to_csv(reportCsvPath, index=False)
+    print(f"\u2713 Statistical analysis report saved: {reportCsvPath}")
+
     if (verbose):
       print(f"Names of the metrics plotted: {names}")
       print(f"Metrics plotted: {metrics}")
@@ -793,7 +862,22 @@ def Main():
             f"the number of rows in previous systems ({dataOnly.shape[0]}). "
             f"This may indicate inconsistent metric extraction."
           )
-        continue
+        if (noOfRows < dataOnly.shape[0]):
+          if (verbose):
+            print(
+              f"System '{system}' has fewer metric rows ({noOfRows}) than previous systems ({dataOnly.shape[0]}). "
+              f"Some metrics may be missing for this system."
+            )
+          continue
+        else:
+          if (verbose):
+            print(
+              f"System '{system}' has more metric rows ({noOfRows}) than previous systems ({dataOnly.shape[0]}). "
+              f"Some metrics may be extra for this system."
+            )
+            # Trim the extra rows to match the previous systems for consistency in comparison.
+          dfMetrics = dfMetrics.head(dataOnly.shape[0])
+
       # Stack metrics side-by-side for subsequent systems.
       temp = []
       for i in range(dataOnly.shape[0]):
@@ -850,6 +934,24 @@ def Main():
     fixedTicksColor="black",  # Color to use for fixed ticks if `fixedTicksColors` is True.
     extension=".pdf",  # File extension for saved plots.
   )
+
+  print("\u2713 Performance plots generated.")
+  print("\nGenerating statistical analysis report...")
+  overallReport = []
+  for metric in metrics:
+    for index, data in enumerate(history):
+      report = StatisticalAnalysis(
+        data[metric]["Trials"],
+        hypothesizedMean=data[metric]["Mean"],
+        secondMetricList=None,
+      )
+      report["Type"] = names[index]
+      report["Metric"] = metric
+      overallReport.append(report)
+  reportDF = pd.DataFrame(overallReport)
+  reportCsvPath = os.path.join(baseExpDir, "All_Systems_Statistical_Analysis_Report.csv")
+  reportDF.to_csv(reportCsvPath, index=False)
+  print(f"\u2713 Statistical analysis report saved: {reportCsvPath}")
 
   if (verbose):
     print(f"Generated combined performance metric plots for all systems saved in: {newFolderName}")

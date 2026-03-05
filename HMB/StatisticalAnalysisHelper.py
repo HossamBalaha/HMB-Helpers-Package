@@ -1022,7 +1022,7 @@ class GeneralStatisticsHelper(object):
       data (array-like): Input data.
       bins (int): Number of bins.
       returnFreqOnly (bool): If True return only frequency array.
-      returnMean (bool): If True return mean of results.
+      returnMean (bool): If True return the mean of results.
 
     Returns:
       array or tuple: Relative frequency outputs depending on flags.
@@ -1771,7 +1771,7 @@ class StatisticalAnalysisFramework(object):
     self.applicableMethods["DAgostinoK2"] = (self.dataType == "Continuous") and (n > 20)
     # Lillfors applicable for Continuous when n > 5000.
     self.applicableMethods["Lillfors"] = (self.dataType == "Continuous") and (n > 5000)
-    # JarqueBera applicable for Continuous typically in large-sample contexts.
+    # Jarque-Bera applicable for Continuous typically in large-sample contexts.
     self.applicableMethods["JarqueBera"] = (self.dataType == "Continuous") and (n >= 30)
     # TOST equivalence test applicable when baseline and equivalence margin provided.
     self.applicableMethods["TOST"] = (self.baseline is not None) and (self.dataType == "Continuous") and (
@@ -1886,7 +1886,7 @@ class StatisticalAnalysisFramework(object):
     # Normality checks: DAgostinoK2 when n > 20.
     if (methodName == "DAgostinoK2"):
       return f"Applied because data is Continuous and sample size ({self.sampleSize}) > 20."
-    # Normality checks: Lilliefors for very large n.
+    # Normality checks: Lillfors for very large n.
     if (methodName == "Lillfors"):
       return f"Applied because data is Continuous and sample size ({self.sampleSize}) > 5000."
     # Jarque-Bera for large-sample asymptotic normality testing.
@@ -3087,7 +3087,7 @@ def ExtractDataFromSummaryFile(file):
 
     import HMB.StatisticalAnalysisHelper as sah
 
-    history, names, metrics = sah.ExtractDataFromSummaryFile("path/to/your/summary_file.csv")
+    history, names, metrics = sah.ExtractDataFromSummaryFile("path/to/your/summaryFile.csv")
     print("Names:", names)
     print("Metrics:", metrics)
     for record in history:
@@ -3479,6 +3479,7 @@ def PlotMetrics(
       differentColors=True,
       fixedTicksColors=True,
       fixedTicksColor="black",
+      extension=".pdf",
     )
   '''
 
@@ -3784,7 +3785,7 @@ def PlotMetrics(
         plt.savefig(f"QQResidualPlot_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
         if (showFigures):
           plt.show()
-        plt.close()
+        plt.close()  # Close the figure to free memory.
         plt.clf()  # Clear the current figure.
       else:
         print("QQResidualPlots: No data available to plot.")
@@ -3886,7 +3887,7 @@ def PlotMetrics(
       plt.savefig(f"Histogram_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
       if (showFigures):
         plt.show()
-      plt.close()
+      plt.close()  # Close the figure to free memory.
       plt.clf()  # Clear the current figure.
   except Exception as e:
     print(f"Error generating Histograms: {str(e)}")
@@ -4304,7 +4305,7 @@ def PlotMetrics(
       if (showFigures):
         plt.show()
       plt.close()  # Close the figure to free memory.
-    plt.clf()  # Clear the current figure.
+      plt.clf()  # Clear the current figure.
   except Exception as e:
     print(f"Error generating CDF Plots: {str(e)}")
     print(traceback.format_exc())
@@ -4366,13 +4367,10 @@ def PlotMetrics(
           size=3,  # Smaller markers to reduce placement failures.
           edgecolor="0.5",  # Numeric gray to avoid grayscale FutureWarning.
           linewidth=0.4,
-          alpha=0.8
+          alpha=0.8  # Transparency for better visibility.
         )
         color = cmapColors[i]
-        plt.title(
-          f"Swarm Plot of {metric} Results",
-          color=color
-        )
+        plt.title(f"Swarm Plot of {metric} Results", color=color)
         plt.xticks(range(len(names)), names, rotation=xTicksRotation, color=GetTickColor(i))
         plt.yticks(color=GetTickColor(i))
         plt.ylabel("Performance Metric", color=GetTickColor(i))
@@ -4503,6 +4501,8 @@ def PlotMetrics(
   # ==============================================================================================================
   try:
     if ("HexbinPlots" in whichToPlot):
+      # Print a message indicating the start of hexbin plot generation.
+      print("Generating hexbin plots...")
       # Count the number of unique pairs for subplots.
       uniquePairs = [(i, j) for i in range(len(metrics)) for j in range(len(metrics)) if (i < j)]
       numPairs = len(uniquePairs)
@@ -4515,9 +4515,10 @@ def PlotMetrics(
           hbRows = 2 if (numPairs < 8) else (3 if (numPairs < 12) else 4)
           hbCols = (numPairs // hbRows + 1) if (numPairs % hbRows != 0) else (numPairs // hbRows)
 
-        # Adjust figure size based on the number of pairs.
+        # Create a new figure for the hexbin plots.
         plt.figure(figsize=(factor * hbCols, factor * hbRows))
 
+        # Loop through each unique pair and create subplots.
         for plotIdx, (i, j) in enumerate(uniquePairs):
           metric1 = metrics[i]  # X-axis.
           metric2 = metrics[j]  # Y-axis.

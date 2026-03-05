@@ -1,12 +1,31 @@
-import time, signal, multiprocessing
-import numpy as np
+import time, signal
 from threading import Thread
-from PIL import PngImagePlugin
 
 IMAGE_SUFFIXES = {
   ".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".gif", ".webp",
   ".JPG", ".JPEG", ".PNG", ".BMP", ".TIFF", ".TIF", ".GIF", ".WEBP"
 }
+
+
+def CheckInstalledModules(modules):
+  r'''
+  Check if the specified modules are installed and can be imported.
+  This function attempts to import each module in the provided list and prints the result.
+
+  Parameters:
+    modules (list): A list of module names (as strings) to check for installation.
+  '''
+
+  for module in modules:
+    print(f"Checking if module '{module}' is installed...")
+    try:
+      __import__(module)
+      print(f"- Module '{module}' is installed and can be imported.")
+    except ImportError:
+      raise ImportError(
+        f"- Module '{module}' is not installed. "
+        f"Try to install it using 'pip install {module}' or search for installation instructions online."
+      )
 
 
 def UpdateMatplotlibSettings():
@@ -68,6 +87,8 @@ def SetMaxTextChunkSize(maxChunkSize=100 * (1024 ** 2)):
   This is useful for controlling the size of metadata stored in PNG files.
   '''
 
+  from PIL import PngImagePlugin
+
   # Set the maximum size for text chunks in PNG images to 100 MB.
   # This is useful for controlling the size of metadata stored in PNG files.
   # The default value is set to 100 MB (100 * 1024 * 1024 bytes).
@@ -106,6 +127,8 @@ def MaximizeThreads():
   Maximize the number of threads used by libraries like OpenBLAS, MKL, and OMP.
   This is useful for optimizing performance on multi-core CPUs.
   '''
+
+  import multiprocessing
 
   # Get the maximum number of threads available on the system.
   # This is useful for optimizing performance on multi-core CPUs.
@@ -206,6 +229,8 @@ def DoRandomSeeding():
   Perform random seeding for reproducibility.
   This function sets the random seed for various libraries to ensure consistent results across runs.
   '''
+
+  import numpy as np
 
   # Set the random seed for reproducibility.
   maxInt = np.iinfo(np.int32).max

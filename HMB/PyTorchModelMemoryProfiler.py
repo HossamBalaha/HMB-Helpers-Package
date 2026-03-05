@@ -22,11 +22,11 @@ class PyTorchModelMemoryProfiler:
 
   # Initialize the profiler with model and input configuration.
   def __init__(
-    self, model: nn.Module,
-    inputShape: Tuple[int, ...],
-    batchSize: int = 1,
-    precision: str = "FP32",
-    device: str = "cpu"
+      self, model: nn.Module,
+      inputShape: Tuple[int, ...],
+      batchSize: int = 1,
+      precision: str = "FP32",
+      device: str = "cpu"
   ):
     # Store the model reference for later analysis.
     self.model = model
@@ -260,10 +260,10 @@ class PyTorchModelMemoryProfiler:
 
   # Estimate memory used by optimizer state based on optimizer type and options.
   def _EstimateOptimizerStateMemory(
-    self,
-    trainableParams: int,
-    optimizerType: str = "Adam",
-    optimizerKwargs: Optional[Dict[str, Any]] = None
+      self,
+      trainableParams: int,
+      optimizerType: str = "Adam",
+      optimizerKwargs: Optional[Dict[str, Any]] = None
   ) -> int:
     r'''
     Estimate memory required for optimizer state tensors (e.g., Adam's m and
@@ -526,17 +526,17 @@ class PyTorchModelMemoryProfiler:
 
   # Profile memory for the model including parameters, activations, optimizer state, attention, and checkpointing.
   def ProfileModelMemory(
-    self,
-    optimizerType: str = "Adam",
-    optimizerKwargs: Optional[Dict[str, Any]] = None,
-    isTransformer: bool = False,
-    sequenceLength: int = None,
-    checkpointing: bool = False,
-    checkpointSavingsFactor: float = 0.5,
-    deviceFLOPSGFLOPS: Optional[float] = None,
-    datasetSize: Optional[int] = None,
-    trainingMultiplier: float = 3.0,
-    runMicroBenchmark: bool = False
+      self,
+      optimizerType: str = "Adam",
+      optimizerKwargs: Optional[Dict[str, Any]] = None,
+      isTransformer: bool = False,
+      sequenceLength: int = None,
+      checkpointing: bool = False,
+      checkpointSavingsFactor: float = 0.5,
+      deviceFLOPSGFLOPS: Optional[float] = None,
+      datasetSize: Optional[int] = None,
+      trainingMultiplier: float = 3.0,
+      runMicroBenchmark: bool = False
   ) -> Dict[str, Any]:
     r'''
     Perform a full memory and compute profile for the configured model. This
@@ -696,13 +696,13 @@ class PyTorchModelMemoryProfiler:
 
     # Compute total memory required for training in bytes.
     totalTrainingMemory = (
-      parameterMemory +
-      gradientMemory +
-      optimizerMemory +
-      totalActivationMemory +
-      activationGradientMemory +
-      attentionMemory +
-      bufferCounts["BufferMemoryBytes"]
+        parameterMemory +
+        gradientMemory +
+        optimizerMemory +
+        totalActivationMemory +
+        activationGradientMemory +
+        attentionMemory +
+        bufferCounts["BufferMemoryBytes"]
     )
 
     # Compute approximate inference memory in bytes.
@@ -725,7 +725,7 @@ class PyTorchModelMemoryProfiler:
       else:
         trainingMultiplier = 3.0
 
-    # Compute training GFLOPs per step using trainingMultiplier.
+    # Compute training GFLOps per step using trainingMultiplier.
     trainingGFLOpsPerStep = forwardGFLOPs * trainingMultiplier
 
     # Get peak GFLOPS.
@@ -872,6 +872,109 @@ class PyTorchModelMemoryProfiler:
     # Return the assembled memory profile dictionary.
     return memoryProfile
 
+  # Helper to convert non-JSON-serializable objects into serializable forms.
+  def _ToJsonSerializable(self, obj):
+    r'''
+    Convert common PyTorch / NumPy / Python objects to JSON-serializable
+    representations. This is used as the `default` callable for json.dump.
+    '''
+
+    # Handle torch objects specially when torch is available.
+    try:
+      import numpy as _np
+    except Exception:
+      _np = None
+
+    # Torch device (e.g., device(type="cuda", index=0)) -> string.
+    # Torch dtype -> string.
+    try:
+      if (
+          isinstance(obj, torch.device) or
+          isinstance(obj, torch.dtype)
+      ):
+        return str(obj)
+    except Exception:
+      pass
+
+    # Torch Size -> list.
+    # Sets -> lists.
+    try:
+      if (
+          isinstance(obj, torch.Size) or
+          isinstance(obj, set)
+      ):
+        return list(obj)
+    except Exception:
+      pass
+
+    # Torch Tensor -> small values as lists, otherwise summary dict.
+    try:
+      if (isinstance(obj, torch.Tensor)):
+        # Move to CPU and detach to avoid GPU tensors in serialization.
+        try:
+          t = obj.detach().cpu()
+        except Exception:
+          t = obj
+        numel = 0
+        try:
+          numel = int(t.numel())
+        except Exception:
+          numel = -1
+        if (numel >= 0 and numel <= 16):
+          try:
+            return t.tolist()
+          except Exception:
+            return str(t)
+        # For large tensors, return a compact summary to avoid huge JSON files.
+        return {"__tensor__": True, "shape": list(t.shape), "dtype": str(t.dtype)}
+    except Exception:
+      pass
+
+    # NumPy scalar types -> Python scalars.
+    if (_np is not None):
+      try:
+        if (isinstance(obj, (_np.integer, _np.floating))):
+          return obj.item()
+        if (isinstance(obj, _np.ndarray)):
+          if (obj.size <= 16):
+            return obj.tolist()
+          return {"__ndarray__": True, "shape": list(obj.shape), "dtype": str(obj.dtype)}
+      except Exception:
+        pass
+
+    # Bytes -> try decode else hex.
+    try:
+      if (isinstance(obj, (bytes, bytearray))):
+        try:
+          return obj.decode("utf-8")
+        except Exception:
+          return obj.hex()
+    except Exception:
+      pass
+
+    # Fallback: try to convert __dict__ or use string repr.
+    try:
+      if (hasattr(obj, "__dict__")):
+        d = {}
+        for k, v in obj.__dict__.items():
+          try:
+            json.dumps(v)
+            d[k] = v
+          except TypeError:
+            try:
+              d[k] = str(v)
+            except Exception:
+              d[k] = None
+        return d
+    except Exception:
+      pass
+
+    # Last-resort: string representation.
+    try:
+      return str(obj)
+    except Exception:
+      return None
+
   # Save the produced memory profile into a JSON file.
   def SaveProfileToJSON(self, memoryProfile: Dict[str, Any], path: str) -> None:
     r'''
@@ -883,9 +986,10 @@ class PyTorchModelMemoryProfiler:
       path (str):  Filesystem path where the JSON will be written.
     '''
 
-    # Open the file and write the JSON dump with indentation.
+    # Open the file and write the JSON dump with indentation using the
+    # custom default serializer to handle torch/np types and other objects.
     with open(path, "w", encoding="utf-8") as f:
-      json.dump(memoryProfile, f, indent=2)
+      json.dump(memoryProfile, f, indent=2, default=self._ToJsonSerializable)
 
   # Print a human readable memory report to stdout.
   def PrintMemoryReport(self, memoryProfile: Dict[str, Any]) -> None:

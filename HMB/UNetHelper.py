@@ -27,8 +27,8 @@ AVAILABLE_UNETS = [
 # ---------------------------------------------------- #
 
 def PreparePredTensorToNumpy(
-  predTensor: torch.Tensor,
-  doScale2Image: bool = False,
+    predTensor: torch.Tensor,
+    doScale2Image: bool = False,
 ) -> np.ndarray:
   r'''
   Utility to convert model output tensor after the sigmoid/softmax activation to a numpy array of class indices.
@@ -143,12 +143,12 @@ class ConfigConv(nn.Module):
 
   # Initialize configurable conv block.
   def __init__(
-    self,
-    inChannels: int,
-    outChannels: int,
-    norm: str = "batch",
-    dropout: float = 0.0,
-    residual: bool = False
+      self,
+      inChannels: int,
+      outChannels: int,
+      norm: str = "batch",
+      dropout: float = 0.0,
+      residual: bool = False
   ):
     # Call super initializer.
     super(ConfigConv, self).__init__()
@@ -992,11 +992,11 @@ class UNet(nn.Module):
 
   # Initialize UNet with input channels and number of classes.
   def __init__(
-    self,
-    inputChannels: int = 3,
-    numClasses: int = 2,
-    baseChannels: int = 64,
-    useConvTranspose2d=True,
+      self,
+      inputChannels: int = 3,
+      numClasses: int = 2,
+      baseChannels: int = 64,
+      useConvTranspose2d=True,
   ):
     # Call super initializer.
     super(UNet, self).__init__()
@@ -2742,8 +2742,8 @@ class TransUNet(nn.Module):
 
   # Initialize TransUNet.
   def __init__(
-    self, inputChannels=3, numClasses=2, baseChannels=64, embedDim=256, numHeads=8, numEncoders=2,
-    useConvTranspose2d=True
+      self, inputChannels=3, numClasses=2, baseChannels=64, embedDim=256, numHeads=8, numEncoders=2,
+      useConvTranspose2d=True
   ):
     # Call super initializer.
     super(TransUNet, self).__init__()
@@ -3045,12 +3045,12 @@ class BoundaryAwareUNet(nn.Module):
 
   # Initialize boundary-aware U-Net.
   def __init__(
-    self,
-    inputChannels=3,
-    numClasses=2,
-    baseChannels=64,
-    useConvTranspose2d=True,
-    boundaryWeight=0.5
+      self,
+      inputChannels=3,
+      numClasses=2,
+      baseChannels=64,
+      useConvTranspose2d=True,
+      boundaryWeight=0.5
   ):
     # Call parent initializer.
     super(BoundaryAwareUNet, self).__init__()
@@ -3180,7 +3180,7 @@ class BoundaryAwareUNet(nn.Module):
       xBoundary = self.boundaryUpsamples[i](xBoundary)
       # Align spatial dimensions when necessary.
       if (xEnc.size(2) != encoderFeatures[-(i + 1)].size(2)) or (
-        xEnc.size(3) != encoderFeatures[-(i + 1)].size(3)
+          xEnc.size(3) != encoderFeatures[-(i + 1)].size(3)
       ):
         # Interpolate standard features to match skip connection.
         xEnc = F.interpolate(
@@ -3194,7 +3194,7 @@ class BoundaryAwareUNet(nn.Module):
         )
       # Align boundary features similarly.
       if (xBoundary.size(2) != boundaryFeatures[-(i + 1)].size(2)) or (
-        xBoundary.size(3) != boundaryFeatures[-(i + 1)].size(3)
+          xBoundary.size(3) != boundaryFeatures[-(i + 1)].size(3)
       ):
         # Interpolate boundary features to match skip connection.
         xBoundary = F.interpolate(
@@ -3253,15 +3253,15 @@ class BoundaryAwareUNet(nn.Module):
 
 # Extended factory override to include the newly appended UNet variants.
 def CreateUNet(
-  inputChannels: int = 3,
-  numClasses: int = 2,
-  baseChannels: int = 64,
-  depth: int = 4,
-  upMode: str = "transpose",
-  norm: str = "batch",
-  dropout: float = 0.0,
-  residual: bool = False,
-  modelType: str = "dynamic",
+    inputChannels: int = 3,
+    numClasses: int = 2,
+    baseChannels: int = 64,
+    depth: int = 4,
+    upMode: str = "transpose",
+    norm: str = "batch",
+    dropout: float = 0.0,
+    residual: bool = False,
+    modelType: str = "dynamic",
 ):
   r'''
   Extended factory that supports a large set of UNet variants by modelType.
@@ -3430,6 +3430,70 @@ def CreateUNet(
     dropout=dropout,
     residual=residual,
   )
+
+
+def GetUNetModel(modelName: str, inputChannels: int, numClasses: int, baseChannels: int = 64):
+  r'''
+  Factory function to instantiate a UNet variant based on the provided model name.
+
+  Parameters:
+    modelName (str): Name of the UNet variant to instantiate.
+    inputChannels (int): Number of input channels for the model.
+    numClasses (int): Number of output classes for the model.
+    baseChannels (int): Base number of channels for the model. Default is 64.
+
+  Returns:
+    nn.Module: An instance of the requested UNet variant.
+  '''
+
+  # Return UNet when the requested model name contains 'unet'.
+  if (modelName == "ResidualAttentionUNet"):
+    # Instantiate and return a Residual Attention UNet model.
+    return ResidualAttentionUNet(inputChannels, numClasses, baseChannels)
+  elif (modelName == "TransUNet"):
+    # Instantiate and return a TransUNet model.
+    return TransUNet(inputChannels, numClasses)
+  elif (modelName == "UNet"):
+    # Instantiate and return a standard UNet model.
+    return UNet(inputChannels, numClasses, baseChannels)
+  elif (modelName == "CBAMUNet"):
+    # Instantiate and return a CBAMUNet model.
+    return CBAMUNet(inputChannels, numClasses, baseChannels)
+  elif (modelName == "EfficientUNet"):
+    # Instantiate and return an EfficientUNet model.
+    return EfficientUNet(inputChannels, numClasses, baseChannels)
+  elif (modelName == "BoundaryAwareUNet"):
+    # Instantiate and return a BoundaryAwareUNet model.
+    return BoundaryAwareUNet(inputChannels, numClasses, baseChannels)
+  elif (modelName == "DynamicUNet"):
+    # Instantiate and return a DynamicUNet model with default parameters.
+    return DynamicUNet(inputChannels, numClasses, baseChannels)
+  elif (modelName == "MultiResUNet"):
+    # Instantiate and return a MultiResUNet model.
+    return MultiResUNet(inputChannels, numClasses, baseChannels)
+  elif (modelName == "DenseUNet"):
+    # Instantiate and return a DenseUNet model.
+    return DenseUNet(inputChannels, numClasses, baseChannels)
+  elif (modelName == "R2UNet"):
+    # Instantiate and return an R2UNet model.
+    return R2UNet(inputChannels, numClasses, baseChannels)
+  elif (modelName == "ASPPUNet"):
+    # Instantiate and return an ASPPUNet model.
+    return ASPPUNet(inputChannels, numClasses, baseChannels)
+  elif (modelName == "MobileUNet"):
+    # Instantiate and return a MobileUNet model.
+    return MobileUNet(inputChannels, numClasses, baseChannels)
+  elif (modelName == "SEUNet"):
+    # Instantiate and return an SEUNet model.
+    return SEUNet(inputChannels, numClasses, baseChannels)
+  elif (modelName == "ResidualUNet"):
+    # Instantiate and return a ResidualUNet model.
+    return ResidualUNet(inputChannels, numClasses, baseChannels)
+  elif (modelName == "AttentionUNet"):
+    # Instantiate and return an AttentionUNet model.
+    return AttentionUNet(inputChannels, numClasses, baseChannels)
+  # Raise an error when the model name is not recognized.
+  raise ValueError(f"Unknown model name: {modelName}")
 
 
 if __name__ == "__main__":

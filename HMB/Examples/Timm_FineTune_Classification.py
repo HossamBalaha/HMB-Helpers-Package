@@ -1,4 +1,4 @@
-import argparse, splitfolders, os, torch, timm
+import argparse, splitfolders, os, torch, timm, json
 import numpy as np
 import pandas as pd
 import torch.nn as nn
@@ -498,7 +498,6 @@ def MainTrain():
   # Save the training configuration arguments to a JSON file in the output directory for future reference.
   argsJsonPath = os.path.join(args.outputDir, "TrainingArgs.json")
   with open(argsJsonPath, "w") as f:
-    import json
     json.dump(vars(args), f, indent=4)
 
   # Select the device for computation and wrap it in a torch.device.

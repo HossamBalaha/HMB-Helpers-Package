@@ -957,10 +957,10 @@ def PerformFeatureRanking(trainDF, testDF, columns, rankTechStr, noOfFeatures):
 
   # Validate that trainDF is a pandas DataFrame.
   if (not isinstance(trainDF, pd.DataFrame)):
-    raise ValueError("trainDF must be a pandas DataFrame.")
+    raise ValueError("`trainDF` must be a pandas DataFrame.")
   # Validate that testDF is a pandas DataFrame.
   if (not isinstance(testDF, pd.DataFrame)):
-    raise ValueError("testDF must be a pandas DataFrame.")
+    raise ValueError("`testDF` must be a pandas DataFrame.")
   # Extract feature matrix X and target y from training DataFrame.
   xTrain, yTrain = trainDF[columns], trainDF["activity"]
   # Extract feature matrix X and target y from test DataFrame.
@@ -2018,7 +2018,7 @@ class OptunaTuningClassification(object):
     loadStudy=True,  # Whether to load an existing study if available.
     verbose=False,  # Whether to print verbose output.
   ):
-    '''
+    r'''
     Initializes the OptunaTuningClassification class with the provided hyperparameters.
 
     Parameters:
@@ -2128,7 +2128,7 @@ class OptunaTuningClassification(object):
     self,
     trial,  # Optuna trial object.
   ):
-    '''
+    r'''
     Objective function for Optuna to optimize hyperparameters for machine learning classification.
     This function performs machine learning classification using the specified hyperparameters,
     saves the results, and returns the weighted average of the metrics.
