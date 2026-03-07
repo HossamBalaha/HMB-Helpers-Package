@@ -168,46 +168,26 @@ def SaveGradCamsForSamples(
     overlay.save(outPath)
 
 
-def CreateFitPretrainedAttentionModel(
-    trainGenNew,
-    validGenNew,
+def BuildPretrainedAttentionModel(
     baseModelString,
     attentionBlockStr,
     inputShape,
     numClasses,
-    callbacks,
-    modelCheckpointPath=None,
-    initialEpochs=10,
-    fineTuneEpochs=20,
-    fineTuneAt=100,
     optimizer=None,
-    storageDir="History",
-    verbose=1,
 ):
   r'''
-  Create a CNN model with a specified backbone and attention block.
+  Reconstruct model architecture used in training so weights can be loaded.
+  This mirrors the model construction portion of Code.py (no training code here).
 
   Parameters:
-    trainGenNew (ImageDataGenerator): Training data generator.
-    validGenNew (ImageDataGenerator): Validation data generator.
-    baseModelString (str): Backbone model name (e.g., "Xception").
-    attentionBlockStr (str): Attention block name (e.g., "CBAM").
-    inputShape (tuple): Input shape for the model.
-    numClasses (int): Number of output classes.
-    callbacks (list): List of Keras callbacks for training.
-    modelCheckpointPath (str or None): Optional path to save the best model; if None, defaults to "BestModel_{baseModelString}_{attentionBlockStr}.keras".
-    initialEpochs (int): Number of initial training epochs.
-    fineTuneEpochs (int): Number of fine-tuning epochs.
-    fineTuneAt (int): Layer index to start fine-tuning from (default: 100).
-    optimizer (tf.keras.optimizers.Optimizer or None): Optional optimizer to use; if None, defaults to Adam with lr=1e-3.
-    storageDir (str): Directory to save the best model and history.
-    verbose (int): Verbosity level for training (0 = silent, 1 = progress bar, 2 = one line per epoch).
+    baseModelString (str): backbone model name (e.g. "Xception").
+    attentionBlockStr (str): attention block name (e.g. "CBAM").
+    inputShape (tuple): input shape used for training (H, W, C).
+    numClasses (int): number of target classes.
+    optimizer (tensorflow.keras.optimizers.Optimizer or None): optional optimizer to use; if None, defaults to Adam with lr=1e-4.
 
   Returns:
-    model (tensorflow.keras.Model): The trained Keras model.
-    history (tensorflow.keras.callbacks.History): Training history for initial training.
-    historyFine (tensorflow.keras.callbacks.History): Training history for fine-tuning.
-    configs (dict): Dictionary of training configurations and parameters.
+    model (tensorflow.keras.Model): compiled model ready to load weights and predict.
   '''
 
   from tensorflow.keras.models import Model
@@ -328,6 +308,59 @@ def CreateFitPretrainedAttentionModel(
     metrics=["accuracy"],
   )
 
+  return model
+
+
+def CreateFitPretrainedAttentionModel(
+    trainGenNew,
+    validGenNew,
+    baseModelString,
+    attentionBlockStr,
+    inputShape,
+    numClasses,
+    callbacks,
+    modelCheckpointPath=None,
+    initialEpochs=10,
+    fineTuneEpochs=20,
+    fineTuneAt=100,
+    optimizer=None,
+    storageDir="History",
+    verbose=1,
+):
+  r'''
+  Create a CNN model with a specified backbone and attention block.
+
+  Parameters:
+    trainGenNew (ImageDataGenerator): Training data generator.
+    validGenNew (ImageDataGenerator): Validation data generator.
+    baseModelString (str): Backbone model name (e.g., "Xception").
+    attentionBlockStr (str): Attention block name (e.g., "CBAM").
+    inputShape (tuple): Input shape for the model.
+    numClasses (int): Number of output classes.
+    callbacks (list): List of Keras callbacks for training.
+    modelCheckpointPath (str or None): Optional path to save the best model; if None, defaults to "BestModel_{baseModelString}_{attentionBlockStr}.keras".
+    initialEpochs (int): Number of initial training epochs.
+    fineTuneEpochs (int): Number of fine-tuning epochs.
+    fineTuneAt (int): Layer index to start fine-tuning from (default: 100).
+    optimizer (tensorflow.keras.optimizers.Optimizer or None): Optional optimizer to use; if None, defaults to Adam with lr=1e-3.
+    storageDir (str): Directory to save the best model and history.
+    verbose (int): Verbosity level for training (0 = silent, 1 = progress bar, 2 = one line per epoch).
+
+  Returns:
+    model (tensorflow.keras.Model): The trained Keras model.
+    history (tensorflow.keras.callbacks.History): Training history for initial training.
+    historyFine (tensorflow.keras.callbacks.History): Training history for fine-tuning.
+    configs (dict): Dictionary of training configurations and parameters.
+  '''
+
+  model = BuildPretrainedAttentionModel(
+    baseModelString=baseModelString,
+    attentionBlockStr=attentionBlockStr,
+    inputShape=inputShape,
+    numClasses=numClasses,
+    optimizer=optimizer,
+  )
+
   # Step 1: Frozen training.
   # Train model on frozen backbone.
   history = model.fit(
@@ -404,6 +437,7 @@ def CreateFitPretrainedAttentionModel(
 def TrainPretrainedAttentionModelFromDataFrame(
     dataFrame,
     columnsMap={"imagePath": "image_path", "categoryEncoded": "category_encoded", "split": "split"},
+    labelEncoder=None,
     imgShape=(512, 512, 3),
     batchSize=32,
     baseModelString="Xception",
@@ -427,6 +461,7 @@ def TrainPretrainedAttentionModelFromDataFrame(
   Parameters:
     dataFrame (pandas.DataFrame): DataFrame containing image paths and labels.
     columnsMap (dict): Mapping of required column names in the DataFrame.
+    labelEncoder (sklearn.preprocessing.LabelEncoder or None): Optional label encoder for encoding string labels to integers; if None, a new LabelEncoder will be created and fitted on the "categoryEncoded" column.
     imgShape (tuple): Input shape for the model (height, width, channels).
     batchSize (int): Batch size for training and evaluation.
     baseModelString (str): Base model architecture (e.g., "Xception").
@@ -537,10 +572,15 @@ def TrainPretrainedAttentionModelFromDataFrame(
   augmentedImages, augmentedLabels = next(trainGenNew)
   # Display a few augmented images.
   for i in range(6):
+    labelIdx = int(augmentedLabels[i])
+    if (labelEncoder is not None):
+      labelName = labelEncoder.inverse_transform([labelIdx])[0]
+    else:
+      labelName = str(labelIdx)
     plt.subplot(1, 6, i + 1)
     plt.imshow(augmentedImages[i])
     plt.axis("off")
-    plt.title("Label: {}".format(augmentedLabels[i]))
+    plt.title("Label: {}".format(labelName))
   plt.tight_layout()  # Adjust layout.
   # Save augmentation samples.
   figStoragePath = os.path.join(storageDir, "AugmentedImagesSamples.pdf")
@@ -594,6 +634,7 @@ def TrainPretrainedAttentionModelFromDataFrame(
     initialEpochs=initialEpochs,
     fineTuneEpochs=fineTuneEpochs,
     modelCheckpointPath=modelCheckpointPath,
+    verbose=verbose,
   )
 
   configs.update({
@@ -620,6 +661,11 @@ def TrainPretrainedAttentionModelFromDataFrame(
     "numClasses"           : numClasses,
     "batchSize"            : batchSize,
   })
+
+  if (labelEncoder is not None):
+    configs["labelEncoderClasses"] = labelEncoder.classes_.tolist()
+    configs["labelEncoderClassMapping"] = dict(
+      zip(labelEncoder.classes_, labelEncoder.transform(labelEncoder.classes_)))
 
   # Evaluate on test set.
   # Evaluate model on test set.
@@ -752,3 +798,234 @@ def TrainPretrainedAttentionModelFromDataFrame(
   resultsFilePath = os.path.join(storageDir, "FinalResults.json")
   # Save final results and configs to JSON.
   DumpJsonFile(resultsFilePath, configs)
+
+
+def EvaluatePretrainedAttentionModelFromDataFrame(
+    dataFrame,
+    modelPath,
+    columnsMap={"imagePath": "image_path", "categoryEncoded": "category_encoded", "split": "split"},
+    labelEncoder=None,
+    imgShape=(512, 512, 3),
+    batchSize=32,
+    storageDir="History",
+    dpi=720,
+    verbose=1,
+    ensureCUDA=True,
+):
+  r'''
+  Evaluate a trained model on the test set and save results.
+
+  Parameters:
+    dataFrame (pandas.DataFrame): DataFrame containing image paths and labels.
+    modelPath (str): Path to the saved Keras model (.keras file).
+    columnsMap (dict): Mapping of required column names in the DataFrame.
+    labelEncoder (sklearn.preprocessing.LabelEncoder or None): Optional label encoder to decode class labels; if None, class labels will be taken from the generator's class indices.
+    imgShape (tuple): Input shape for the model (height, width, channels).
+    batchSize (int): Batch size for evaluation.
+    storageDir (str): Directory where evaluation results will be saved.
+    dpi (int): Dots per inch for saving figures.
+    verbose (int): Verbosity level for evaluation (0 = silent, 1 = progress bar, 2 = one line per epoch).
+  '''
+
+  # Verify that the dataFrame contains the required columns.
+  requiredColumns = set(columnsMap.values())
+  if (not requiredColumns.issubset(dataFrame.columns)):
+    raise ValueError(f"DataFrame must contain columns: {requiredColumns}")
+
+  import os
+  import numpy as np
+  import pandas as pd
+  import matplotlib.pyplot as plt
+  from sklearn.metrics import confusion_matrix, classification_report
+  from tensorflow.keras.preprocessing.image import ImageDataGenerator
+  from HMB.Utils import DumpJsonFile
+  from HMB.Initializations import (
+    DoRandomSeeding, EnsureCUDAAvailable, ClearTensorFlowSession, UpdateMatplotlibSettings
+  )
+  from HMB.PerformanceMetrics import PlotConfusionMatrix, CalculatePerformanceMetrics
+
+  ClearTensorFlowSession()
+  DoRandomSeeding()
+  UpdateMatplotlibSettings()
+
+  if (ensureCUDA):
+    EnsureCUDAAvailable("tensorflow")
+
+  # Define generator for evaluation without augmentation.
+  tsGen = ImageDataGenerator(rescale=1.0 / 255)
+  # Create data generator for the test set.
+  splitCol = columnsMap["split"]
+  testDfNew = dataFrame[dataFrame[splitCol] == "test"].copy()
+  xCol = columnsMap["imagePath"]
+  yCol = columnsMap["categoryEncoded"]
+  testGenNew = tsGen.flow_from_dataframe(
+    testDfNew,
+    x_col=xCol,
+    y_col=yCol,
+    target_size=imgShape[:2],
+    class_mode="sparse",
+    color_mode="rgb",
+    shuffle=False,
+    batch_size=batchSize,
+  )
+
+  customObjects = {
+    "CBAMBlock": None,
+    "BAMBlock" : None,
+    "SEBlock"  : None,
+    "ECABlock" : None,
+    "GCBlock"  : None,
+  }
+  if ("CBAM" in modelPath):
+    from HMB.TFAttentionBlocks import CBAMBlock
+    customObjects["CBAMBlock"] = CBAMBlock
+  elif ("BAM" in modelPath):
+    from HMB.TFAttentionBlocks import BAMBlock
+    customObjects["BAMBlock"] = BAMBlock
+  elif ("SE" in modelPath):
+    from HMB.TFAttentionBlocks import SEBlock
+    customObjects["SEBlock"] = SEBlock
+  elif ("ECA" in modelPath):
+    from HMB.TFAttentionBlocks import ECABlock
+    customObjects["ECABlock"] = ECABlock
+  elif ("GC" in modelPath):
+    from HMB.TFAttentionBlocks import GCBlock
+    customObjects["GCBlock"] = GCBlock
+  else:
+    raise ValueError(
+      "Could not determine attention block from model path. "
+      "Ensure the model file name contains one of the attention block identifiers (CBAM, BAM, SE, ECA, GC)."
+    )
+
+  # Load the trained model.
+  model = tf.keras.models.load_model(modelPath, custom_objects=customObjects)
+  # Evaluate on test set.
+  testLoss, testAccuracy = model.evaluate(testGenNew, verbose=verbose)
+  print(f"Test Accuracy: {testAccuracy:.4f}, Test Loss: {testLoss:.4f}")
+
+  # Compute predictions for confusion matrix and classification report.
+  testGenNew.reset()
+  yTrue = []
+  yPred = []
+  yPredProb = []
+  yPredConfidences = []
+  for i in range(len(testGenNew)):
+    images, labelsBatch = next(testGenNew)
+    preds = model.predict(images, verbose=verbose)
+    yTrue.extend(labelsBatch)
+    yPred.extend(np.argmax(preds, axis=1))
+    yPredProb.extend(preds)
+    yPredConfidences.extend(np.max(preds, axis=1))
+
+  yTrue = np.array(yTrue)
+  yPred = np.array(yPred)
+  yPredProb = np.array(yPredProb)
+  yPredConfidences = np.array(predConfidences)
+
+  if (labelEncoder is not None):
+    yTrueLabels = labelEncoder.inverse_transform(yTrue)
+    yPredLabels = labelEncoder.inverse_transform(yPred)
+  else:
+    yTrueLabels = yTrue
+    yPredLabels = yPred
+
+  # Store evaluation results as DataFrame and save to CSV.
+  evalResults = {
+    "yTrue"           : yTrue.tolist(),
+    "yPred"           : yPred.tolist(),
+    "yPredProb"       : yPredProb.tolist(),
+    "yPredConfidences": yPredConfidences.tolist(),
+    "yTrueLabels"     : yTrueLabels.tolist(),
+    "yPredLabels"     : yPredLabels.tolist(),
+  }
+  evalResultsDf = pd.DataFrame(evalResults)
+  evalResultsFilePath = os.path.join(storageDir, "TestResults.csv")
+  evalResultsDf.to_csv(evalResultsFilePath, index=False)
+
+  # Get class label names from the generator's class indices.
+  classLabels = list(testGenNew.class_indices.keys())
+  cm = confusion_matrix(yTrue, yPred)
+  cmPath = os.path.join(storageDir, "TestConfusionMatrix.pdf")
+  PlotConfusionMatrix(
+    cm,  # Confusion matrix (2D list or numpy array).
+    classLabels,  # List of class labels.
+    normalize=False,  # Whether to normalize the confusion matrix.
+    roundDigits=3,  # Number of decimal places to round normalized values.
+    title="Confusion Matrix",  # Title of the plot.
+    cmap="Blues",  # Colormap for the heatmap.
+    display=False,  # Whether to display the plot.
+    save=True,  # Whether to save the plot.
+    fileName=cmPath,  # File name to save the plot.
+    fontSize=15,  # Font size for labels and annotations.
+    annotate=True,  # Whether to annotate cells with values.
+    figSize=(8, 8),  # Figure size in inches.
+    colorbar=True,  # Whether to show colorbar.
+    returnFig=False,  # Whether to return the figure object.
+    dpi=dpi,  # DPI for saving the figure.
+  )
+  print("\nClassification Report:")
+  print(classification_report(yTrue, yPred, target_names=classLabels))
+
+  pm = CalculatePerformanceMetrics(
+    confMatrix=cm,
+    eps=1e-10,  # Small value to avoid division by zero.
+    addWeightedAverage=True,  # Whether to include weighted averages in the output.
+    addPerClass=True,  # Whether to include per-class metrics in the output.
+  )
+  pmDf = pd.DataFrame(pm)
+  pmFilePath = os.path.join(storageDir, "TestPerformanceMetrics.csv")
+  pmDf.to_csv(pmFilePath, index=False)
+  for key, value in pm.items():
+    print(f"{key}: {value}")
+
+  rocPath = os.path.join(storageDir, "TestROCCurve.pdf")
+  PlotROCAUCCurve(
+    yTrue,  # True labels (one-hot or binary).
+    yPredProb,  # Predicted labels (one-hot or binary).
+    classLabels,  # List of class names.
+    areProbabilities=True,  # Whether yPred are probabilities.
+    title="ROC Curve & AUC",  # Plot title.
+    figSize=(5, 5),  # Figure size.
+    cmap=None,  # Colormap for ROC curves.
+    display=False,  # Display the plot.
+    save=True,  # Save the plot.
+    fileName=rocPath,  # File name.
+    fontSize=16,  # Font size.
+    plotDiagonal=True,  # Plot diagonal reference line.
+    annotateAUC=True,  # Annotate AUC value on plot.
+    showLegend=True,  # Show legend.
+    returnFig=False,  # Return figure object.
+    dpi=720,  # DPI for saving the figure.
+  )
+
+  prcPath = os.path.join(storageDir, "TestPRCCurve.pdf")
+  PlotPRCCurve(
+    yTrue,  # True labels (one-hot or binary).
+    yPredProb,  # Predicted labels (one-hot or binary).
+    classLabels,  # List of class names.
+    areProbabilities=True,  # Whether yPred are probabilities.
+    title="PRC Curve",  # Plot title.
+    figSize=(5, 5),  # Figure size.
+    cmap=None,  # Colormap for PRC curves.
+    display=False,  # Display the plot.
+    save=True,  # Save the plot.
+    fileName=prcPath,  # File name.
+    fontSize=16,  # Font size.
+    annotateAvg=True,  # Annotate average precision value on plot.
+    showLegend=True,  # Show legend.
+    returnFig=False,  # Return figure object.
+    dpi=720,  # DPI for saving the figure.
+  )
+
+  clsWisePRFPath = os.path.join(storageDir, "TestClasswisePRFBarPlot.pdf")
+  PlotClasswisePRFBar(
+    cm,
+    classNames=classLabels,
+    fontSize=14,
+    figsize=(8, 5),
+    display=False,
+    save=True,
+    fileName=clsWisePRFPath,
+    dpi=720,
+    returnFig=False,
+  )

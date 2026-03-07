@@ -6,13 +6,13 @@ from HMB.TFHelper import TrainPretrainedAttentionModelFromDataFrame
 if (__name__ == "__main__"):
   # Define the dataset base paths using camelCase naming for clarity.
   basePaths = {
-    "train": r"\path\to\the\project\dataset/Training",
-    "test" : r"\path\to\the\project\dataset/Test",
-    "val"  : r"\path\to\the\project\dataset/Validation"
+    "train": r"/path/to/the/project/Dataset/Training",
+    "test" : r"/path/to/the/project/Dataset/Test",
+    "val"  : r"/path/to/the/project/Dataset/Validation"
   }
 
   # Base directory for storing experiment results.
-  baseStorageDir = r"\path\to\the\project\experiments"
+  baseStorageDir = r"/path/to/the/project/Experiments"
   # Ensure the base storage directory exists.
   if (not os.path.exists(baseStorageDir)):
     os.makedirs(baseStorageDir)
@@ -87,4 +87,5 @@ if (__name__ == "__main__"):
     ensureCUDA=True,
     storageDir=expDir,
     dpi=720,
+    verbose=2,
   )
