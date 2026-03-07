@@ -613,6 +613,175 @@ def GetMLClassificationModelObject(modelName, hyperparameters={}):
     raise ValueError("Invalid model name.")
 
 
+def GetClassifierModelSpace(classifierName, noOfFeatures=None, noOfSamples=None):
+  r'''
+  Get the hyperparameter search space for a given classifier.
+
+  This function returns a dictionary representing the hyperparameter search space for a specified classifier.
+  The search space is defined based on common hyperparameters for each classifier type, and can be adjusted
+  based on the number of features and samples in the dataset.
+
+  Parameters:
+    classifierName (str): The name of the classifier for which to retrieve the hyperparameter search space.
+      Supported values include "DT", "SVM", "LR", "RF", "KNN", "LGBM", "XGB", "HGB", "GB", "AdaBoost", "CatBoost",
+      and "MLP".
+    noOfFeatures (int, optional): The number of features in the dataset. This can be used to adjust the search
+      space for certain hyperparameters (e.g., max_depth). If not provided, default values will be used.
+    noOfSamples (int, optional): The number of samples in the dataset. This can be used to adjust the search space
+     for certain hyperparameters (e.g., n_neighbors for KNN). If not provided, default values will be used.
+
+  Returns:
+    dict: A dictionary representing the hyperparameter search space for the specified classifier.
+  '''
+
+  # Assign a default value to noOfFeatures if it is not provided.
+  if (noOfFeatures is None):
+    noOfFeatures = 50
+  # Assign a default value to noOfSamples if it is not provided.
+  if (noOfSamples is None):
+    noOfSamples = 1000
+
+  # Ensure noOfFeatures is at least 1 to prevent empty ranges.
+  noOfFeatures = max(1, noOfFeatures)
+  # Ensure noOfSamples is at least 2 to prevent empty ranges.
+  noOfSamples = max(2, noOfSamples)
+
+  # Check if the classifier name corresponds to Decision Tree.
+  if (classifierName == "DT"):
+    # Define the search space for Decision Tree parameters.
+    modelSpace = {
+      "max_depth"        : list(range(1, noOfFeatures + 1)),
+      "splitter"         : ["best", "random"],
+      "criterion"        : ["gini", "entropy", "log_loss"],
+      "min_samples_split": [2, 5, 10],
+      "min_samples_leaf" : [1, 2, 4],
+    }
+  # Check if the classifier name corresponds to Support Vector Machine.
+  elif (classifierName == "SVM"):
+    # Define the search space for Support Vector Machine parameters.
+    modelSpace = {
+      "C"     : [0.01, 0.1, 1.0, 10.0, 100.0],
+      "kernel": ["linear", "rbf", "poly", "sigmoid"],
+      "gamma" : ["scale", "auto"],
+      "degree": [2, 3, 4],
+    }
+  # Check if the classifier name corresponds to Logistic Regression.
+  elif (classifierName == "LR"):
+    # Define the search space for Logistic Regression parameters.
+    modelSpace = {
+      "C"       : [0.01, 0.1, 1.0, 10.0, 100.0],
+      "penalty" : ["l1", "l2", "elasticnet"],
+      "solver"  : ["liblinear", "lbfgs", "saga"],
+      "max_iter": [100, 500, 1000],
+    }
+  # Check if the classifier name corresponds to Random Forest.
+  elif (classifierName == "RF"):
+    # Define the search space for Random Forest parameters.
+    modelSpace = {
+      "n_estimators"     : list(range(50, 501, 50)),
+      "max_depth"        : list(range(1, noOfFeatures + 1)),
+      "criterion"        : ["gini", "entropy", "log_loss"],
+      "max_features"     : ["sqrt", "log2", None],
+      "min_samples_split": [2, 5, 10],
+    }
+  # Check if the classifier name corresponds to K-Nearest Neighbors.
+  elif (classifierName == "KNN"):
+    # Calculate the maximum number of neighbors based on sample size.
+    maxNeighbors = max(2, int(noOfSamples / 2.0))
+    # Define the search space for K-Nearest Neighbors parameters.
+    modelSpace = {
+      "n_neighbors": list(range(1, maxNeighbors)),
+      "weights"    : ["uniform", "distance"],
+      "algorithm"  : ["ball_tree", "kd_tree", "brute"],
+      "metric"     : ["minkowski", "euclidean", "manhattan"],
+    }
+  # Check if the classifier name corresponds to LightGBM.
+  elif (classifierName == "LGBM"):
+    # Define the search space for LightGBM parameters.
+    modelSpace = {
+      "n_estimators"    : list(range(50, 501, 50)),
+      "num_leaves"      : list(range(10, 100, 5)),
+      "max_depth"       : list(range(-1, noOfFeatures + 1)),
+      "learning_rate"   : [0.01, 0.05, 0.1, 0.3],
+      "subsample"       : [0.6, 0.8, 1.0],
+      "colsample_bytree": [0.6, 0.8, 1.0],
+    }
+  # Check if the classifier name corresponds to XGBoost.
+  elif (classifierName == "XGB"):
+    # Define the search space for XGBoost parameters.
+    modelSpace = {
+      "n_estimators"    : list(range(50, 501, 50)),
+      "max_depth"       : list(range(3, 11)),
+      "learning_rate"   : [0.01, 0.05, 0.1, 0.3],
+      "subsample"       : [0.6, 0.8, 1.0],
+      "colsample_bytree": [0.6, 0.8, 1.0],
+      "min_child_weight": [1, 3, 5],
+    }
+  # Check if the classifier name corresponds to HistGradientBoosting.
+  elif (classifierName == "HGB"):
+    # Define the search space for HistGradientBoosting parameters.
+    modelSpace = {
+      "max_iter"         : [100, 200, 300],
+      "max_leaf_nodes"   : list(range(15, 100)),
+      "learning_rate"    : [0.01, 0.05, 0.1, 0.3],
+      "l2_regularization": [0.01, 0.1, 1.0, 10.0],
+    }
+  # Check if the classifier name corresponds to Gradient Boosting.
+  elif (classifierName == "GB"):
+    # Define the search space for Gradient Boosting parameters.
+    modelSpace = {
+      "n_estimators"     : list(range(50, 501, 50)),
+      "max_depth"        : list(range(1, 11)),
+      "learning_rate"    : [0.01, 0.05, 0.1, 0.3],
+      "subsample"        : [0.6, 0.8, 1.0],
+      "min_samples_split": [2, 5, 10],
+    }
+  # Check if the classifier name corresponds to AdaBoost.
+  elif (classifierName == "AdaBoost"):
+    # Define the search space for AdaBoost parameters.
+    modelSpace = {
+      "n_estimators" : list(range(50, 501, 50)),
+      "learning_rate": [0.01, 0.1, 0.5, 1.0],
+    }
+  # Check if the classifier name corresponds to CatBoost.
+  elif (classifierName == "CatBoost"):
+    # Define the search space for CatBoost parameters.
+    modelSpace = {
+      "iterations"   : list(range(50, 501, 50)),
+      "depth"        : list(range(4, 11)),
+      "learning_rate": [0.01, 0.05, 0.1, 0.3],
+      "l2_leaf_reg"  : [1.0, 5.0, 10.0],
+    }
+  # Check if the classifier name corresponds to Multi-Layer Perceptron.
+  elif (classifierName == "MLP"):
+    # Generate a list of tuple options for hidden layer sizes.
+    layerOptions = [(i,) for i in range(16, 257, 16)] + [(i, i // 2) for i in range(32, 257, 32)]
+    # Define the search space for Multi-Layer Perceptron parameters.
+    modelSpace = {
+      "activation"        : ["logistic", "relu", "tanh"],
+      "solver"            : ["lbfgs", "sgd", "adam"],
+      "alpha"             : [1e-5, 1e-4, 1e-3, 1e-2, 1e-1],
+      "hidden_layer_sizes": layerOptions,
+      "learning_rate_init": [0.0001, 0.001, 0.01, 0.1],
+    }
+  # Check if the classifier name corresponds to Extra Trees.
+  elif (classifierName == "ET"):
+    # Define the search space for Extra Trees parameters.
+    modelSpace = {
+      "n_estimators": list(range(50, 501, 50)),
+      "max_depth"   : list(range(1, noOfFeatures + 1)),
+      "criterion"   : ["gini", "entropy", "log_loss"],
+      "max_features": ["sqrt", "log2", None],
+    }
+  # Handle the case where the classifier name is invalid.
+  else:
+    # Raise an error if the classifier name does not match any known option.
+    raise ValueError("Invalid classifier name.")
+  # Return the defined model search space dictionary.
+
+  return modelSpace
+
+
 def GetMLRegressorModelObject(modelName, hyperparameters={}):
   r'''
   Get a machine learning regressor model object based on the given name and hyperparameters.
@@ -1227,10 +1396,10 @@ def PerformDataBalancing(xTrain, yTrain, techniqueStr="SMOTE"):
 
 
 def PerformOutlierDetection(
-  xTrain,
-  techniqueStr="IQR",
-  contamination=0.05,
-  returnMask=False,
+    xTrain,
+    techniqueStr="IQR",
+    contamination=0.05,
+    returnMask=False,
 ):
   r'''
   Detect and optionally remove outliers from training data using the specified technique.
@@ -1354,21 +1523,21 @@ def PerformOutlierDetection(
 
 
 def MachineLearningClassification(
-  datasetFilePath,  # Dataset file name (CSV format).
-  scalerName,  # Name of the scaler to use.
-  modelName,  # Name of the machine learning classification model.
-  fsTechName,  # Feature selection technique name.
-  fsTechRatio=0.2,  # Ratio of features to select.
-  dataBalanceTech=None,  # Data balancing technique to be applied.
-  outlierTech=None,  # Outlier detection technique to be applied.
-  contamination=0.05,  # Proportion of outliers in the data (for outlier detection techniques).
-  testRatio=0.2,  # Ratio of the test data.
-  testFilePath=None,  # Optional test file for evaluation.
-  targetColumn="Class",  # Name of the target column in the dataset.
-  dropFirstColumn=True,  # Whether to drop the first column (usually an index or ID).
-  dropNAColumns=True,  # Whether to drop columns with any null values.
-  encodeCategorical=True,  # Whether to encode categorical features (if any).
-  eps=1e-8,  # Small value to avoid division by zero (if needed).
+    datasetFilePath,  # Dataset file name (CSV format).
+    scalerName,  # Name of the scaler to use.
+    modelName,  # Name of the machine learning classification model.
+    fsTechName,  # Feature selection technique name.
+    fsTechRatio=0.2,  # Ratio of features to select.
+    dataBalanceTech=None,  # Data balancing technique to be applied.
+    outlierTech=None,  # Outlier detection technique to be applied.
+    contamination=0.05,  # Proportion of outliers in the data (for outlier detection techniques).
+    testRatio=0.2,  # Ratio of the test data.
+    testFilePath=None,  # Optional test file for evaluation.
+    targetColumn="Class",  # Name of the target column in the dataset.
+    dropFirstColumn=True,  # Whether to drop the first column (usually an index or ID).
+    dropNAColumns=True,  # Whether to drop columns with any null values.
+    encodeCategorical=True,  # Whether to encode categorical features (if any).
+    eps=1e-8,  # Small value to avoid division by zero (if needed).
 ):
   r'''
   Perform machine learning classification on a dataset with optional scaling,
@@ -1498,7 +1667,7 @@ def MachineLearningClassification(
 
   # Encode categorical features if any and if encodeCategorical is True.
   featuresEncoders = {}
-  le = None
+  # le = None
   if (encodeCategorical):
     categoricalCols = X.select_dtypes(include=["object", "category"]).columns
     if (len(categoricalCols) > 0):
@@ -1694,17 +1863,17 @@ def MachineLearningClassification(
 
 
 def MachineLearningRegression(
-  datasetFilePath,  # Dataset file name (CSV format).
-  scalerName,  # Name of the scaler to use.
-  modelName,  # Name of the machine learning regression model.
-  fsTechName,  # Feature selection technique name.
-  fsTechRatio=0.2,  # Ratio of features to select.
-  testRatio=0.2,  # Ratio of the test data.
-  testFilePath=None,  # Optional test file for evaluation.
-  targetColumn="Target",  # Name of the target column in the dataset.
-  dropFirstColumn=True,  # Whether to drop the first column (usually an index or ID).
-  dropNAColumns=True,  # Whether to drop columns with any null values.
-  encodeCategorical=True,  # Whether to encode categorical features (if any).
+    datasetFilePath,  # Dataset file name (CSV format).
+    scalerName,  # Name of the scaler to use.
+    modelName,  # Name of the machine learning regression model.
+    fsTechName,  # Feature selection technique name.
+    fsTechRatio=0.2,  # Ratio of features to select.
+    testRatio=0.2,  # Ratio of the test data.
+    testFilePath=None,  # Optional test file for evaluation.
+    targetColumn="Target",  # Name of the target column in the dataset.
+    dropFirstColumn=True,  # Whether to drop the first column (usually an index or ID).
+    dropNAColumns=True,  # Whether to drop columns with any null values.
+    encodeCategorical=True,  # Whether to encode categorical features (if any).
 ):
   r'''
   Perform machine learning regression on a dataset with optional scaling and feature selection.
@@ -1993,30 +2162,30 @@ class OptunaTuningClassification(object):
   '''
 
   def __init__(
-    self,
-    baseDir,  # Base directory where the dataset is stored.
-    scalers,  # List of scalers to be used in the tuning process.
-    models,  # List of machine learning models to be used in the tuning process.
-    fsTechs,  # List of feature selection techniques to be used in the tuning process.
-    fsRatios,  # List of feature selection ratios to be used in the tuning process.
-    dataBalanceTechniques,  # List of data balancing techniques to be used in the tuning process.
-    outliersTechniques,  # List of outlier detection techniques to be used in the tuning process.
-    datasetFilename,  # Name of the dataset file.
-    storageFolderPath,  # Path to the folder where results will be stored.
-    testFilename,  # Name of the test dataset file.
-    testRatio=0.2,  # Ratio of the test data.
-    contamination=0.05,  # Proportion of outliers in the data (for outlier detection techniques).
-    numTrials=100,  # Number of trials for hyperparameter tuning.
-    prefix="Optuna",  # Prefix for the study name and storage files.
-    samplerTech="TPE",  # Sampler technique to be used for hyperparameter tuning.
-    targetColumn="Class",  # Name of the target column in the dataset.
-    dropFirstColumn=True,  # Whether to drop the first column (usually an index or ID).
-    dropNAColumns=True,  # Whether to drop columns with any null values.
-    encodeCategorical=True,  # Whether to encode categorical features (if any).
-    saveFigures=True,  # Whether to save the performance plots.
-    eps=1e-8,  # Small value to avoid division by zero (if needed).
-    loadStudy=True,  # Whether to load an existing study if available.
-    verbose=False,  # Whether to print verbose output.
+      self,
+      baseDir,  # Base directory where the dataset is stored.
+      scalers,  # List of scalers to be used in the tuning process.
+      models,  # List of machine learning models to be used in the tuning process.
+      fsTechs,  # List of feature selection techniques to be used in the tuning process.
+      fsRatios,  # List of feature selection ratios to be used in the tuning process.
+      dataBalanceTechniques,  # List of data balancing techniques to be used in the tuning process.
+      outliersTechniques,  # List of outlier detection techniques to be used in the tuning process.
+      datasetFilename,  # Name of the dataset file.
+      storageFolderPath,  # Path to the folder where results will be stored.
+      testFilename,  # Name of the test dataset file.
+      testRatio=0.2,  # Ratio of the test data.
+      contamination=0.05,  # Proportion of outliers in the data (for outlier detection techniques).
+      numTrials=100,  # Number of trials for hyperparameter tuning.
+      prefix="Optuna",  # Prefix for the study name and storage files.
+      samplerTech="TPE",  # Sampler technique to be used for hyperparameter tuning.
+      targetColumn="Class",  # Name of the target column in the dataset.
+      dropFirstColumn=True,  # Whether to drop the first column (usually an index or ID).
+      dropNAColumns=True,  # Whether to drop columns with any null values.
+      encodeCategorical=True,  # Whether to encode categorical features (if any).
+      saveFigures=True,  # Whether to save the performance plots.
+      eps=1e-8,  # Small value to avoid division by zero (if needed).
+      loadStudy=True,  # Whether to load an existing study if available.
+      verbose=False,  # Whether to print verbose output.
   ):
     r'''
     Initializes the OptunaTuningClassification class with the provided hyperparameters.
@@ -2046,6 +2215,33 @@ class OptunaTuningClassification(object):
       loadStudy (bool): Whether to load an existing study if available.
       verbose (bool): Whether to print verbose output.
     '''
+
+    if (not scalers or len(scalers) <= 0):
+      raise ValueError("The list of scalers cannot be empty or None.")
+    if (not models or len(models) <= 0):
+      raise ValueError("The list of models cannot be empty or None.")
+    if (not fsTechs or len(fsTechs) <= 0):
+      raise ValueError("The list of feature selection techniques cannot be empty or None.")
+    if (not fsRatios or len(fsRatios) <= 0):
+      raise ValueError("The list of feature selection ratios cannot be empty or None.")
+    if (not dataBalanceTechniques or len(dataBalanceTechniques) <= 0):
+      raise ValueError("The list of data balancing techniques cannot be empty or None.")
+    if (not outliersTechniques or len(outliersTechniques) <= 0):
+      raise ValueError("The list of outlier detection techniques cannot be empty or None.")
+
+    if (not baseDir or len(baseDir) <= 0):
+      raise ValueError("The base directory cannot be empty or None.")
+    if (not datasetFilename or len(datasetFilename) <= 0):
+      raise ValueError("The dataset filename cannot be empty or None.")
+    if (not storageFolderPath or len(storageFolderPath) <= 0):
+      raise ValueError("The storage folder path cannot be empty or None.")
+
+    if (not os.path.exists(os.path.join(baseDir, datasetFilename))):
+      raise FileNotFoundError(f"The dataset file '{datasetFilename}' does not exist in the base directory '{baseDir}'.")
+    if (testFilename and not os.path.exists(os.path.join(baseDir, testFilename))):
+      raise FileNotFoundError(
+        f"The test dataset file '{testFilename}' does not exist in the base directory '{baseDir}'."
+      )
 
     self.scalers = scalers  # List of scalers to be used in the tuning process.
     self.models = models  # List of machine learning models to be used in the tuning process.
@@ -2125,8 +2321,8 @@ class OptunaTuningClassification(object):
       print("OptunaTuningClassification initialized.", flush=True)
 
   def ObjectiveFunction(
-    self,
-    trial,  # Optuna trial object.
+      self,
+      trial,  # Optuna trial object.
   ):
     r'''
     Objective function for Optuna to optimize hyperparameters for machine learning classification.
@@ -2193,8 +2389,8 @@ class OptunaTuningClassification(object):
       if (objects is not None):
         # Save the trained model and scaler objects using pickle.
         with open(
-          os.path.join(self.storageFolderPath, f"{pattern}.p"),
-          "wb",  # Open the file in write-binary mode.
+            os.path.join(self.storageFolderPath, f"{pattern}.p"),
+            "wb",  # Open the file in write-binary mode.
         ) as f:
           pickle.dump(objects, f)  # Save the model and scaler objects.
 
@@ -2353,6 +2549,154 @@ class OptunaTuningClassification(object):
     return self.study
 
 
+def MachineLearningClassificationInference(
+    X,
+    objects=None,
+    storageFolderPath=None,
+    objectFilenames=None,
+    returnProba=False,
+):
+  r'''
+  Run inference using a saved preprocessing + model objects bundle.
+
+  Parameters:
+    X: numpy array, list, or pandas.DataFrame containing one or more samples (rows).
+    objects: dict (optional). If provided, should contain keys used below.
+    storageFolderPath: str (optional). If provided and objects is None, function will try to load a pickled objects dict from disk.
+    objectFilenames: list (optional). Filenames to try (pickle). Defaults to common names.
+    returnProba: bool (optional). If True and model supports predict_proba, returns probabilities alongside predictions.
+
+  Returns:
+    predictions: array-like of predicted labels (decoded with labelEncoder if available).
+    proba (optional): probability array if returnProba and supported.
+  '''
+
+  # Try loading objects from folder if not provided.
+  if (objects is None) and storageFolderPath is not None:
+    if objectFilenames is None:
+      objectFilenames = [
+        "ML_Objects.p",
+        "Objects.p",
+        "Saved Objects.p",
+        "BestModel.p",
+        "Model.p",
+        "Objects.pkl",
+        "model_objects.p",
+      ]
+    loaded = False
+    for fn in objectFilenames:
+      fp = os.path.join(storageFolderPath, fn)
+      if os.path.exists(fp):
+        with open(fp, "rb") as f:
+          try:
+            objects = pickle.load(f)
+            loaded = True
+            break
+          except Exception:
+            # ignore and try next
+            continue
+    if not loaded and objects is None:
+      raise FileNotFoundError("No pickled objects found in storageFolderPath and no `objects` provided.")
+
+  if objects is None:
+    raise ValueError("`objects` must be provided or `storageFolderPath` must contain a pickled objects bundle.")
+
+  # Normalize X to DataFrame
+  if isinstance(X, (list, tuple)):
+    X = np.asarray(X)
+  if isinstance(X, np.ndarray):
+    if X.ndim == 1:
+      X = X.reshape(1, -1)
+    # If selectedColumns known, use them as columns; otherwise create numeric columns
+    if "selectedColumns" in objects and objects["selectedColumns"] is not None:
+      cols = list(objects["selectedColumns"])
+      if X.shape[1] != len(cols):
+        # if mismatch, try to proceed but warn by raising error
+        raise ValueError("Input has different number of features than the saved `selectedColumns`.")
+      xdf = pd.DataFrame(X, columns=cols)
+    else:
+      cols = [f"f{i}" for i in range(X.shape[1])]
+      xdf = pd.DataFrame(X, columns=cols)
+  elif isinstance(X, pd.DataFrame):
+    xdf = X.copy()
+  else:
+    raise ValueError("Unsupported X type. Provide numpy array, list, or pandas DataFrame.")
+
+  # If objects include featuresEncoders: apply them column-wise
+  featuresEncoders = objects.get("featuresEncoders", None)
+  if featuresEncoders:
+    for col, enc in featuresEncoders.items():
+      if col in xdf.columns:
+        # encoder expected to have transform method
+        try:
+          xdf[col] = enc.transform(
+            xdf[[col]].values.ravel() if hasattr(enc, "transform") and xdf[[col]].shape[1] == 1 else xdf[[col]])
+        except Exception:
+          # fallback: try reshaping
+          xdf[col] = enc.transform(xdf[[col]].values)
+      # else: ignore missing encoder column
+
+  # If a scaler exists, apply it
+  scaler = objects.get("scaler", None)
+  if scaler is not None:
+    try:
+      x_scaled = scaler.transform(xdf)
+      # scaler.transform returns ndarray. Convert back to DataFrame with same columns
+      xdf = pd.DataFrame(x_scaled, columns=xdf.columns, index=xdf.index)
+    except Exception as ex:
+      raise RuntimeError(f"Scaler transform failed: {ex}")
+
+  # If a feature selector / dimensionality reducer exists, apply it.
+  fs = objects.get("fs", None)
+  if fs is not None:
+    try:
+      X_trans = fs.transform(xdf)
+      # After transform, column names may be lost; keep as ndarray for model
+      X_model = np.asarray(X_trans)
+    except Exception as ex:
+      raise RuntimeError(f"Feature selector transform failed: {ex}")
+  else:
+    # If selectedColumns are present and xdf has extra columns, reduce to those
+    sel_cols = objects.get("selectedColumns", None)
+    if sel_cols is not None:
+      sel_cols = [c for c in sel_cols if c in xdf.columns]
+      X_model = xdf[sel_cols].values
+    else:
+      X_model = xdf.values
+
+  # Load model
+  model = objects.get("model", None)
+  if model is None:
+    # try common pickle names inside objects dict
+    raise ValueError("No `model` found in `objects`.")
+
+  # Predict
+  try:
+    if returnProba and hasattr(model, "predict_proba"):
+      proba = model.predict_proba(X_model)
+      preds = model.predict(X_model)
+    else:
+      preds = model.predict(X_model)
+      proba = None
+  except Exception as ex:
+    raise RuntimeError(f"Model prediction failed: {ex}")
+
+  # If label encoder for target exists, inverse transform predictions
+  le = objects.get("labelEncoder", None)
+  if (le is not None) and hasattr(le, "inverse_transform"):
+    try:
+      preds_out = le.inverse_transform(preds)
+    except Exception:
+      # If inverse_transform fails (e.g., classes mismatch), return raw preds
+      preds_out = preds
+  else:
+    preds_out = preds
+
+  if return_proba:
+    return preds_out, proba
+  return preds_out
+
+
 if __name__ == "__main__":
   import numpy as np
   import HMB.MachineLearningHelper as mlh
@@ -2409,3 +2753,5 @@ if __name__ == "__main__":
   print(f"Outlier Detection Technique: {rndOutlierTech}", flush=True)
   print(f"xTrain shape after outlier detection: {xTrain.shape}", flush=True)
   print(f"yTrain distribution after outlier detection: {np.bincount(yTrain)}", flush=True)
+
+

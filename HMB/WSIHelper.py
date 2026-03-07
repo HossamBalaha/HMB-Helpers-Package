@@ -173,15 +173,15 @@ def DrawPolygonOnImage(imageArr, coords, outlineColor=(255, 0, 0), fillColor=Non
 
 
 def ExtractPatchesFromWSI(
-  wsi,
-  wsiFile,
-  annotations,
-  outputDir,
-  patchSize=(256, 256),
-  overlap=(0, 0),
-  maxNumPatchesPerAnnotation=100,
-  label=None,
-  tissueThreshold=0.3,  # Fraction of non-background pixels required
+    wsi,
+    wsiFile,
+    annotations,
+    outputDir,
+    patchSize=(256, 256),
+    overlap=(0, 0),
+    maxNumPatchesPerAnnotation=100,
+    label=None,
+    tissueThreshold=0.3,  # Fraction of non-background pixels required
 ):
   r'''
   Extract patches from WSI within annotated regions, skipping background tiles.
@@ -283,21 +283,21 @@ def ExtractPatchesFromWSI(
 
 
 def TileExtractionAlignmentHandler(
-  heSlidePath,  # Path to the HE slide.
-  mtSlidePath,  # Path to the MT slide.
-  storageDir,  # Directory to store extracted patches and visualizations.
-  patchesPerSlide=5000,  # Total number of patches to extract per slide.
-  targetSize=(512, 512),  # Size of each patch to extract.
-  regionSize=(256 * 16, 256 * 16),  # Size of the region used for processing.
-  overlapSize=(256, 256),  # Overlap size between adjacent patches.
-  thumbnailSize=(1024, 1024),  # Size of the thumbnail for visualization.
-  toleranceSIFT=0.50,  # Tolerance for SIFT matching (default is 0.50).
-  maxNumFeaturesORB=5000,  # Maximum number of features to detect for matching.
-  maxGoodMatchesORB=25,  # Maximum number of good matches to consider for alignment.
-  emptyPercentageThreshold=80,  # Threshold for empty percentage in patches (default is 80%).
-  doPlotting=True,  # Whether to generate and save plots for visualization.
-  verbose=False,  # Whether to print verbose output during processing.
-  dpi=720,  # DPI for saved plots. Default is 720 for high-quality visualization.
+    heSlidePath,  # Path to the HE slide.
+    mtSlidePath,  # Path to the MT slide.
+    storageDir,  # Directory to store extracted patches and visualizations.
+    patchesPerSlide=5000,  # Total number of patches to extract per slide.
+    targetSize=(512, 512),  # Size of each patch to extract.
+    regionSize=(256 * 16, 256 * 16),  # Size of the region used for processing.
+    overlapSize=(256, 256),  # Overlap size between adjacent patches.
+    thumbnailSize=(1024, 1024),  # Size of the thumbnail for visualization.
+    toleranceSIFT=0.50,  # Tolerance for SIFT matching (default is 0.50).
+    maxNumFeaturesORB=5000,  # Maximum number of features to detect for matching.
+    maxGoodMatchesORB=25,  # Maximum number of good matches to consider for alignment.
+    emptyPercentageThreshold=80,  # Threshold for empty percentage in patches (default is 80%).
+    doPlotting=True,  # Whether to generate and save plots for visualization.
+    verbose=False,  # Whether to print verbose output during processing.
+    dpi=720,  # DPI for saved plots. Default is 720 for high-quality visualization.
 ):
   r'''
   Extracts and aligns patches from HE (Hematoxylin-Eosin) and MT (Masson's Trichrome) slides,
@@ -529,16 +529,16 @@ def TileExtractionAlignmentHandler(
 
 
 def ExtractPatch(
-  topLeftRegion,  # Top-left corner coordinates of the region to extract.
-  heSlide,  # HE slide object.
-  mtSlide,  # MT slide object.
-  mtContour,  # Contour defining the boundaries of the MT slide region.
-  heContour,  # Contour defining the boundaries of the HE slide region.
-  regionSize,  # Size of the region to extract (width, height).
-  targetSize,  # Target size for the final extracted patch (width, height).
-  homography,  # Homography matrix for transforming coordinates.
-  maxNumFeaturesORB=5000,  # Maximum number of features to detect for matching.
-  maxGoodMatchesORB=25,  # Maximum number of good matches to consider for alignment.
+    topLeftRegion,  # Top-left corner coordinates of the region to extract.
+    heSlide,  # HE slide object.
+    mtSlide,  # MT slide object.
+    mtContour,  # Contour defining the boundaries of the MT slide region.
+    heContour,  # Contour defining the boundaries of the HE slide region.
+    regionSize,  # Size of the region to extract (width, height).
+    targetSize,  # Target size for the final extracted patch (width, height).
+    homography,  # Homography matrix for transforming coordinates.
+    maxNumFeaturesORB=5000,  # Maximum number of features to detect for matching.
+    maxGoodMatchesORB=25,  # Maximum number of good matches to consider for alignment.
 ):
   r'''
   Extracts and processes patches from HE (Hematoxylin & Eosin) and MT (Trichrome) slides.
@@ -582,8 +582,8 @@ def ExtractPatch(
 
   # Check if the downsampled point lies within both the MT and HE contours.
   topLeftFlag = (
-    IsPointInsideContour(topLeftDownsampled, mtContour) and
-    IsPointInsideContour(topLeftDownsampled, heContour)
+      IsPointInsideContour(topLeftDownsampled, mtContour) and
+      IsPointInsideContour(topLeftDownsampled, heContour)
   )
 
   # Apply the homography transformation to the downsampled point.
@@ -690,19 +690,19 @@ def ExtractPatch(
 
 
 def FreeFormDeformationHandler(
-  heFolderPath,  # Path to the folder containing HE images.
-  mtFolderPath,  # Path to the folder containing corresponding MT images.
-  heDeformedFolderPath,  # Path to the folder where deformed HE images will be saved.
-  doPlotting=False,  # Whether to store visualizations.
-  visualizationFolderPath=None,  # Path to the folder for storing visualizations (optional, default is None).
-  gridSize=[10, 10],  # Grid size for the B-spline transform.
-  numberOfHistogramBins=50,  # Number of histogram bins for the metric.
-  samplingPercentage=0.1,  # Percentage of pixels to sample for the metric.
-  learningRate=0.01,  # Learning rate for the optimizer.
-  numberOfIterations=500,  # Maximum number of iterations.
-  convergenceMinimumValue=1e-6,  # Convergence threshold.
-  convergenceWindowSize=10,  # Window size for convergence determination.
-  verbose=False,  # Whether to print verbose output during processing.
+    heFolderPath,  # Path to the folder containing HE images.
+    mtFolderPath,  # Path to the folder containing corresponding MT images.
+    heDeformedFolderPath,  # Path to the folder where deformed HE images will be saved.
+    doPlotting=False,  # Whether to store visualizations.
+    visualizationFolderPath=None,  # Path to the folder for storing visualizations (optional, default is None).
+    gridSize=[10, 10],  # Grid size for the B-spline transform.
+    numberOfHistogramBins=50,  # Number of histogram bins for the metric.
+    samplingPercentage=0.1,  # Percentage of pixels to sample for the metric.
+    learningRate=0.01,  # Learning rate for the optimizer.
+    numberOfIterations=500,  # Maximum number of iterations.
+    convergenceMinimumValue=1e-6,  # Convergence threshold.
+    convergenceWindowSize=10,  # Window size for convergence determination.
+    verbose=False,  # Whether to print verbose output during processing.
 ):
   r'''
   Apply Free Form Deformation (FFD) to HE images and save the deformed results.
@@ -863,16 +863,16 @@ def FreeFormDeformationHandler(
 
 
 def ExtractRandomTilesFromImages(
-  labelsFile,  # Path to CSV labels or a pandas.DataFrame.
-  slidesDir="Slides",  # Directory where slide files live (joined with filenames from labels).
-  outputDir="Tiles",  # Root output directory where class folders will be created.
-  targetShape=(256, 256),  # (width, height) of tiles to extract.
-  numOfTiles=1000,  # Number of tiles to extract per slide.
-  allowedBackgroundRatio=0.65,  # Maximum allowed ratio of (mostly) background pixels.
-  filenameColumn="filename",  # Column name in labels CSV that contains filenames.
-  categoryColumn="Category",  # Column name that contains category / class integer.
-  maxAttemptsFactor=10,  # Maximum attempts = numOfTiles * maxAttemptsFactor (avoid infinite loops).
-  verbose=False,  # Verbose logging.
+    labelsFile,  # Path to CSV labels or a pandas.DataFrame.
+    slidesDir="Slides",  # Directory where slide files live (joined with filenames from labels).
+    outputDir="Tiles",  # Root output directory where class folders will be created.
+    targetShape=(256, 256),  # (width, height) of tiles to extract.
+    numOfTiles=1000,  # Number of tiles to extract per slide.
+    allowedBackgroundRatio=0.65,  # Maximum allowed ratio of (mostly) background pixels.
+    filenameColumn="filename",  # Column name in labels CSV that contains filenames.
+    categoryColumn="Category",  # Column name that contains category / class integer.
+    maxAttemptsFactor=10,  # Maximum attempts = numOfTiles * maxAttemptsFactor (avoid infinite loops).
+    verbose=False,  # Verbose logging.
 ):
   r'''
   Extract random tiles from a set of large images using pyvips for efficient IO and
@@ -996,16 +996,14 @@ def ExtractRandomTilesFromImages(
 
 def ExtractBACHAnnotationsFromXML(xmlFile, verbose=True):
   r'''
-  Extract annotations from a BACH-style XML file and return a list of regions.
+  Extract annotations from a BACH XML file.
 
   Parameters:
     xmlFile (str): Path to the XML file containing annotations.
-    verbose (bool): Whether to print debug information (default True).
+    verbose (bool): Whether to print debug information.
 
   Returns:
-    list: A list of dictionaries, each containing the keys:
-      - "Text" (str): The region label/text.
-      - "Coords" (list): List of (x, y) integer coordinate tuples describing the polygon.
+    list: A list of dictionaries, each containing "Text" and "Coords" keys.
   '''
 
   if (not os.path.exists(xmlFile)):
@@ -1039,7 +1037,7 @@ def ExtractBACHAnnotationsFromXML(xmlFile, verbose=True):
     for region in regions:
       if (verbose):
         # Print the textual label associated with the current Region.
-        print("-- Region Text: ", region.attrib.get("Text", ""))
+        print("-- Region Text: ", region.attrib["Text"])
       # Find all Vertex elements that define the polygon of the current Region.
       vertices = region.findall(".//Vertex")
       if (verbose):
@@ -1049,8 +1047,8 @@ def ExtractBACHAnnotationsFromXML(xmlFile, verbose=True):
       # Build a list of integer (x, y) coordinate tuples from the Vertex attributes.
       coords = [
         (
-          int(float(vertex.attrib.get("X", 0))),
-          int(float(vertex.attrib.get("Y", 0)))
+          int(float(vertex.attrib["X"])),
+          int(float(vertex.attrib["Y"]))
         )
         for vertex in vertices
       ]
@@ -1058,7 +1056,7 @@ def ExtractBACHAnnotationsFromXML(xmlFile, verbose=True):
       # Append a dictionary with the Region text and coordinates to the annotations list.
       anList.append(
         {
-          "Text"  : region.attrib.get("Text", ""),
+          "Text"  : region.attrib["Text"],
           "Coords": coords
         }
       )
@@ -1068,20 +1066,19 @@ def ExtractBACHAnnotationsFromXML(xmlFile, verbose=True):
 
 def ExtractWSIRegion(slide, region):
   r'''
-  Extract a region of interest (ROI) from a whole-slide image (WSI) and return
-  the full region image, a binary mask, and the masked ROI.
+  Extract a region of interest (ROI) from a whole-slide image (WSI) using OpenSlide.
+  The extracted region is from the highest resolution level (level 0) and is masked
+  according to the polygon defined by the annotation.
 
   Parameters:
-    slide (openslide.OpenSlide): OpenSlide object or compatible slide-like object with
-      a `read_region` method and `level_count`/`level_downsamples` attributes.
-    region (dict): A dictionary containing a "Coords" key with a list of (x, y)
-      coordinate tuples describing the polygon to extract.
+    slide (openslide.OpenSlide or slide-like): The OpenSlide object representing the WSI or an object with a `read_region` method and `dimensions` attribute.
+    region (dict): A dictionary with a "Coords" key containing a list of (x, y) tuples.
 
   Returns:
-    tuple: A 3-tuple containing:
-      - regionImage (numpy.ndarray): The extracted region image as an RGB uint8 array (H, W, 3).
-      - regionMask (numpy.ndarray): Binary mask for the region as uint8 (H, W) with values 0/255.
-      - roi (numpy.ndarray): The region image with the mask applied (RGB uint8, H, W, 3).
+    tuple: A tuple containing:
+      - regionImage (numpy.ndarray): The extracted region image as a NumPy RGB array (H,W,3) uint8.
+      - regionMask (numpy.ndarray): The binary mask for the region as a NumPy uint8 array (H,W) with 0/255 values.
+      - roi (numpy.ndarray): The extracted region of interest (ROI) as a NumPy RGB array (H,W,3) uint8.
   '''
 
   # Validate the input region dictionary.
@@ -1155,29 +1152,12 @@ def ExtractWSIRegion(slide, region):
 
 
 def ExtractPyramidalWSITiles(
-  slide,
-  x=0,
-  y=0,
-  width=512,
-  height=512,
+    slide,
+    x=0,
+    y=0,
+    width=512,
+    height=512,
 ):
-  r'''
-  Extract corresponding tiles from every pyramid level of a WSI and return them
-  together with a matplotlib figure useful for quick visualization.
-
-  Parameters:
-    slide (openslide.OpenSlide): OpenSlide object representing the WSI.
-    x (int): X coordinate (level-0 space) of the requested crop center/anchor (default 0).
-    y (int): Y coordinate (level-0 space) of the requested crop center/anchor (default 0).
-    width (int): Width in pixels of the requested crop at each level (default 512).
-    height (int): Height in pixels of the requested crop at each level (default 512).
-
-  Returns:
-    tuple: A tuple containing:
-      - tiles (dict): Mapping from level index to the extracted NumPy RGB tile for that level.
-      - figToReturn (matplotlib.figure.Figure): Figure containing the plotted tiles/verification crops.
-  '''
-
   # Get the number of pyramid levels in the slide.
   slideLevels = slide.level_count
 
@@ -1254,22 +1234,14 @@ def ExtractPyramidalWSITiles(
 
 def PrepareAnnotationsForLevel(annotation, dFactor=1.0):
   r'''
-  Scale and prepare an annotation for a different pyramid level by applying a
-  downsample factor. Returns a dictionary with scaled coordinates, bounding box
-  and a precomputed binary mask useful for downstream tiling functions.
+  Map annotation coordinates from one pyramid level to another by applying a downsample factor.
 
   Parameters:
     annotation (dict): A dictionary with a "Coords" key containing a list of (x, y) tuples.
     dFactor (float): The downsample factor to apply to the coordinates (default is 1.0 for no change).
 
   Returns:
-    dict: A new annotation dictionary containing keys:
-      - "Text": original annotation text (if present).
-      - "Coords": scaled coordinates (list of (x, y)).
-      - "MinX","MinY","MaxX","MaxY","Width","Height": bounding box values.
-      - "ShiftedCoords": coords shifted to start at (0,0) for mask creation.
-      - "dFactor": the factor applied.
-      - "Mask": uint8 binary mask of the annotation cropped to the bounding box.
+    dict: A new annotation dictionary with the same "Text" and scaled "Coords".
   '''
 
   if (annotation is None):
@@ -1340,35 +1312,49 @@ def PrepareAnnotationsForLevel(annotation, dFactor=1.0):
 
 
 def ExtractRegionTiles(
-  slide,
-  region,
-  width=512,
-  height=512,
-  overlapWidth=0,
-  overlapHeight=0,
-  storageDir=None,
-  dpi=720,
+    slide,
+    region,
+    width=512,
+    height=512,
+    overlapWidth=0,
+    overlapHeight=0,
+    storageDir=None,
+    maxTiles=None,
+    addPlots=True,
+    prefix="",
+    blackRatioThreshold=0.90,
+    removeBackgroundTiles=True,
+    convertBlackToWhite=True,
 ):
   r'''
-  Tile a region of a WSI across all pyramid levels, apply the annotation mask,
-  and optionally save tiles, masks and ROIs for inspection.
+  Extract tiles from a specified region of a whole-slide image (WSI) across all pyramid levels,
+  applying annotation masks and saving results. The function handles the mapping of annotations
+  to each level, extracts tiles, applies masks, and optionally saves the tiles, masks, and ROIs to disk.
 
   Parameters:
-    slide (openslide.OpenSlide): The OpenSlide WSI object.
-    region (dict): Annotation dictionary with a "Coords" key describing the polygon.
-    width (int): Tile width in pixels (default 512).
-    height (int): Tile height in pixels (default 512).
-    overlapWidth (int): Horizontal overlap in pixels between tiles (default 0).
-    overlapHeight (int): Vertical overlap in pixels between tiles (default 0).
-    storageDir (str or None): Directory to save 'Tiles', 'Masks', 'ROIs', and 'Plots'. If None, nothing is saved.
-    dpi (int): Dots per inch for saving plots (default 720).
+    slide (openslide.OpenSlide): The OpenSlide object representing the WSI.
+    region (dict): A dictionary with a "Coords" key containing a list of (x, y) tuples representing the annotation polygon.
+    width (int): The width of the tiles to extract in pixels (default is 512).
+    height (int): The height of the tiles to extract in pixels (default is 512).
+    overlapWidth (int): The horizontal overlap between tiles in pixels (default is 0).
+    overlapHeight (int): The vertical overlap between tiles in pixels (default is 0).
+    storageDir (str or None): The directory path to save the extracted tiles, masks, and ROIs. If None, no files will be saved (default is None).
+    maxTiles (int or None): The maximum number of tiles to extract for the region. If None, all tiles will be extracted (default is None).
+    addPlots (bool): Whether to create and save plots visualizing the tiles, masks, and ROIs (default is True).
+    prefix (str): A string prefix to add to saved file names for organization (default is an empty string).
+    blackRatioThreshold (float): The maximum allowed ratio of black pixels in a tile to be considered valid (default is 0.90). Tiles with a higher ratio will be skipped.
+    removeBackgroundTiles (bool): Whether to skip tiles that are considered background based on the black pixel ratio (default is True).
+    convertBlackToWhite (bool): Whether to convert black pixels to white in the ROI before background analysis to avoid skewing metrics (default is True).
   '''
 
   # Create output directories when a storage directory is provided.
   if (storageDir is not None):
-    # Compose the plots directory path and ensure it exists.
-    plotsDir = os.path.join(storageDir, "Plots")
-    os.makedirs(plotsDir, exist_ok=True)
+    if (addPlots):
+      # Compose the plots directory path and ensure it exists.
+      plotsDir = os.path.join(storageDir, "Plots")
+      os.makedirs(plotsDir, exist_ok=True)
+    else:
+      plotsDir = None
     # Compose the tiles directory path and ensure it exists.
     tilesDir = os.path.join(storageDir, "Tiles")
     os.makedirs(tilesDir, exist_ok=True)
@@ -1407,12 +1393,16 @@ def ExtractRegionTiles(
   xProgressBar = tqdm.tqdm(
     range(regionStartX, regionStartX + regionWidth, width - overlapWidth),
     desc="Processing X-axis",
+    position=0,
   )
   yProgressBar = tqdm.tqdm(
     range(regionStartY, regionStartY + regionHeight, height - overlapHeight),
     desc="Processing Y-axis",
     leave=False,
+    position=1,
   )
+  # Initialize a counter to keep track of the number of tiles processed (optional, can be used for maxTiles limit).
+  counter = 0
   for x in xProgressBar:
     for y in yProgressBar:
       startX = x - regionStartX
@@ -1426,8 +1416,9 @@ def ExtractRegionTiles(
         width=width,
         height=height,
       )
-      # Close the temporary figure to free up memory.
+      # Close the temporary figure to free-associated resources.
       plt.close(fig1)
+      plt.gcf().clear()  # Clear the current figure to reset the plotting state for the next iteration.
 
       # Create a shapely polygon for the base-level annotation to test intersection with the tile.
       baseCoordsPolygon = Polygon(mappingData[0]["ShiftedCoords"])
@@ -1444,8 +1435,10 @@ def ExtractRegionTiles(
         continue
 
       # Prepare a plotting figure if storage is enabled so we can visualize results.
-      if (storageDir is not None):
+      if (addPlots and storageDir is not None):
         plt.figure(figsize=(12, 3 * slide.level_count))
+
+      whatToStore = {}
 
       # Iterate over each pyramid level to crop masks and produce ROIs for saving/plotting.
       for level in range(slide.level_count):
@@ -1493,45 +1486,196 @@ def ExtractRegionTiles(
         if ((levelMaskTile.shape[0] != levelTile.shape[0]) or (levelMaskTile.shape[1] != levelTile.shape[1])):
           # Close the created figure.
           plt.close()
+          whatToStore = {}
+          break
+
+        blackRatio = np.sum(levelMaskTile == 0) / levelMaskTile.size
+        if ((level == 0) and (blackRatio > blackRatioThreshold)):
+          # Close the created figure.
+          plt.close()
+          whatToStore = {}
           break
 
         # Compute the masked ROI by applying the binary mask to the tile image using a bitwise AND.
         levelROI = cv2.bitwise_and(levelTile, levelTile, mask=levelMaskTile)
 
-        # Save tile, mask, and ROI images to disk when storage is enabled.
-        if (storageDir is not None):
-          imgName = f"{category}_{level}_{x}_{y}_{width}x{height}_{overlapWidth}x{overlapHeight}"
-          cv2.imwrite(os.path.join(tilesDir, f"Level_{level}", f"{imgName}.jpg"), levelTile)
-          cv2.imwrite(os.path.join(masksDir, f"Level_{level}", f"{imgName}.jpg"), levelMaskTile)
-          cv2.imwrite(os.path.join(roisDir, f"Level_{level}", f"{imgName}.jpg"), levelROI)
+        if (convertBlackToWhite):
+          # Convert black pixels to white in the ROI.
+          levelROI[levelROI == 0] = 255
 
-        # When storage is enabled, plot the tile, mask, overlay, and ROI for visual inspection.
-        if (storageDir is not None):
-          plt.subplot(slide.level_count, 4, 1 + level * 4)
-          plt.imshow(levelTile)
-          plt.title("Tile")
-          plt.axis("off")
-          plt.subplot(slide.level_count, 4, 2 + level * 4)
-          plt.imshow(levelMaskTile, cmap="gray")
-          plt.title("Mask Tile")
-          plt.axis("off")
-          plt.subplot(slide.level_count, 4, 3 + level * 4)
-          plt.imshow(levelTile)
-          plt.imshow(levelMaskTile, alpha=0.5, cmap="jet")
-          plt.title("Tile with Annotation Overlay")
-          plt.axis("off")
-          plt.subplot(slide.level_count, 4, 4 + level * 4)
-          plt.imshow(levelROI)
-          plt.title("ROI (Masked Tile)")
-          plt.axis("off")
+        if ((level == 0) and (removeBackgroundTiles)):
+          isBackground, metrics = IsBackgroundTile(
+            None,
+            image=levelROI.copy(),
+            entropyThreshold=5.5,
+            colorVarianceThreshold=1500,
+            tissueAreaThreshold=0.20,
+            convertBlackToWhite=convertBlackToWhite,
+          )
+          if (isBackground):
+            # Close the created figure.
+            plt.close()
+            whatToStore = {}
+            break
+
+        whatToStore[level] = {
+          "Tile": levelTile,
+          "Mask": levelMaskTile,
+          "ROI" : levelROI,
+        }
+
+      # Check if we have valid data to store for all levels before attempting to save or plot.
+      if (whatToStore):
+        for level in range(slide.level_count):
+          levelTile = whatToStore[level]["Tile"]
+          levelMaskTile = whatToStore[level]["Mask"]
+          levelROI = whatToStore[level]["ROI"]
+
+          # Save tile, mask, and ROI images to disk when storage is enabled.
+          if (storageDir is not None):
+            imgName = f"{level}_{x}_{y}_{width}x{height}_{overlapWidth}x{overlapHeight}"
+            if (prefix):
+              imgName = f"{prefix}_{imgName}"
+            os.makedirs(os.path.join(tilesDir, f"Level_{level}", category), exist_ok=True)
+            os.makedirs(os.path.join(masksDir, f"Level_{level}", category), exist_ok=True)
+            os.makedirs(os.path.join(roisDir, f"Level_{level}", category), exist_ok=True)
+            cv2.imwrite(os.path.join(tilesDir, f"Level_{level}", category, f"{imgName}.jpg"), levelTile)
+            cv2.imwrite(os.path.join(masksDir, f"Level_{level}", category, f"{imgName}.jpg"), levelMaskTile)
+            cv2.imwrite(os.path.join(roisDir, f"Level_{level}", category, f"{imgName}.jpg"), levelROI)
+
+          # When storage is enabled, plot the tile, mask, overlay, and ROI for visual inspection.
+          if (addPlots and storageDir is not None):
+            plt.subplot(slide.level_count, 4, 1 + level * 4)
+            plt.imshow(levelTile)
+            plt.title("Tile")
+            plt.axis("off")
+            plt.subplot(slide.level_count, 4, 2 + level * 4)
+            plt.imshow(levelMaskTile, cmap="gray")
+            plt.title("Mask Tile")
+            plt.axis("off")
+            plt.subplot(slide.level_count, 4, 3 + level * 4)
+            plt.imshow(levelTile)
+            plt.imshow(levelMaskTile, alpha=0.5, cmap="jet")
+            plt.title("Tile with Annotation Overlay")
+            plt.axis("off")
+            plt.subplot(slide.level_count, 4, 4 + level * 4)
+            plt.imshow(levelROI)
+            plt.title("ROI (Masked Tile)")
+            plt.axis("off")
+      else:
+        # print(f"Tile at x: {x}, y: {y} has invalid mask or ROI. Skipping storage and plotting.")
+        continue
 
       # When storage is enabled, finalize and save the plotted figure for the current tile.
-      if (storageDir is not None):
-        imgName = f"{category}_{x}_{y}_{width}x{height}_{overlapWidth}x{overlapHeight}"
+      if (addPlots and storageDir is not None):
+        imgName = f"{x}_{y}_{width}x{height}_{overlapWidth}x{overlapHeight}"
+        if (prefix):
+          imgName = f"{prefix}_{imgName}"
+        os.makedirs(os.path.join(plotsDir, category), exist_ok=True)
         plt.tight_layout()
-        plt.savefig(os.path.join(plotsDir, f"{imgName}.png"), dpi=720, bbox_inches="tight")
+        plt.savefig(os.path.join(plotsDir, category, f"{imgName}.png"), dpi=300, bbox_inches="tight")
         plt.close("all")
         plt.gcf().clear()
+
+      counter += 1
+      if ((maxTiles is not None) and (counter >= maxTiles)):
+        print(f"Reached maximum tile limit of {maxTiles}. Stopping extraction.")
+        return
+
+
+def IsBackgroundTile(
+    imagePath,  # Path to the tile image to analyze for background detection.
+    image=None,  # Optional pre-loaded image as a NumPy array (H,W,3) uint8. If provided, imagePath will be ignored.
+    # Threshold for Shannon entropy to detect uniformity. Adjust based on the expected variability in tissue tiles.
+    entropyThreshold=5.5,
+    # Threshold for color variance to detect lack of color diversity. Adjust based on the expected variability in tissue tiles.
+    colorVarianceThreshold=1500,
+    tissueAreaThreshold=0.20,  # Minimum ratio of tissue area to total area to consider the tile as non-background.
+    convertBlackToWhite=True,  # Convert black pixels to white before analysis to avoid skewing the metrics.
+):
+  '''
+  Detect background tiles using multiple criteria suitable for non-black backgrounds.
+
+  Parameters:
+    imagePath: Path to the tile image.
+    image: Optional pre-loaded image as a NumPy array (H,W,3) uint8. If provided, imagePath will be ignored.
+    entropyThreshold: Threshold for Shannon entropy to detect uniformity.
+    colorVarianceThreshold: Threshold for color variance to detect lack of color diversity.
+    tissueAreaThreshold: Threshold for the ratio of tissue area to total area.
+    convertBlackToWhite: Whether to convert black pixels to white before analysis (default is True).
+
+  Returns:
+    bool: True if the tile is considered background, False otherwise.
+    dict: A dictionary containing the computed metrics for debugging and analysis.
+  '''
+
+  import cv2
+  import numpy as np
+  from skimage.filters import threshold_otsu
+  from skimage.measure import shannon_entropy
+
+  if (image is None):
+    if (not os.path.exists(imagePath)):
+      raise FileNotFoundError(f"Image file not found: {imagePath}")
+    image = cv2.imread(imagePath)
+
+  # Convert black pixels to white to handle non-black backgrounds (e.g., white background in H&E slides).
+  if (image is None):
+    raise ValueError(f"Failed to load image from path: {imagePath}")
+
+  if (convertBlackToWhite):
+    image[image == 0] = 255
+
+  # Convert to different color spaces for analysis.
+  gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+  hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+  lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+
+  # 1. ENTROPY ANALYSIS (detects uniformity).
+  entropyValue = shannon_entropy(gray)
+
+  # 2. COLOR VARIANCE (H&E has characteristic pink/purple colors).
+  colorVariance = np.var(image)
+
+  # 3. TISSUE DETECTION using Otsu thresholding.
+  # Invert since tissue is typically darker than background.
+  thresh = threshold_otsu(gray)
+  binary = gray < thresh
+  tissueRatio = np.sum(binary) / binary.size
+
+  # 4. SATURATION CHECK (H&E stained tissue has color saturation).
+  saturation = hsv[:, :, 1]
+  meanSaturation = np.mean(saturation)
+
+  # 5. TEXTURE ANALYSIS (Laplacian variance).
+  laplacian = cv2.Laplacian(gray, cv2.CV_64F)
+  textureVariance = np.var(laplacian)
+
+  # Decision logic - tile is background if MOST criteria indicate background.
+  backgroundScore = 0
+
+  if (entropyValue < entropyThreshold):
+    backgroundScore += 1
+  if (colorVariance < colorVarianceThreshold):
+    backgroundScore += 1
+  if (tissueRatio < tissueAreaThreshold):
+    backgroundScore += 1
+  if (meanSaturation < 20):  # Low saturation = grayscale/white background.
+    backgroundScore += 1
+  if (textureVariance < 100):  # Low texture = smooth background.
+    backgroundScore += 1
+
+  # Consider background if 3 or more criteria agree.
+  isBackground = backgroundScore >= 3
+
+  return isBackground, {
+    'entropy'        : entropyValue,
+    'colorVariance'  : colorVariance,
+    'tissueRatio'    : tissueRatio,
+    'meanSaturation' : meanSaturation,
+    'textureVariance': textureVariance,
+    'backgroundScore': backgroundScore,
+  }
 
 
 if (__name__ == "__main__"):

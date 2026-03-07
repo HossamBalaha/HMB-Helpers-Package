@@ -27,7 +27,7 @@ set "TRIALS=1"
 n:: Iterate trials and batch sizes
 for %%T in (%TRIALS%) do (
   for %%B in (%BATCH_SIZES%) do (
-    set "OUTPUT_RUN_DIR=%OutputDir%\Results_%%B_T%%T"
+    set "OUTPUT_RUN_DIR=%OutputDir%\%ModelName%_%%B_T%%T"
     echo.
     echo ==================================================
     echo Starting run: Trial %%T, Batch Size %%B

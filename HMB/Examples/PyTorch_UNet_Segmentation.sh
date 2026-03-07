@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=unet_seg        # Job name.
-#SBATCH --partition=gpu            # GPU partition.
-#SBATCH --cpus-per-task=12        # CPU cores.
-#SBATCH --mem=80G                 # Memory.
-#SBATCH --nodes=1                 # Nodes.
-#SBATCH --gpus=1                  # GPUs.
-#SBATCH --time=24:00:00           # Walltime.
+#SBATCH --job-name=hmb         # Job name.
+#SBATCH --partition=gpu             # Specify the GPU partition (e.g., "gpu", "compute").
+#SBATCH --cpus-per-task=48           # Request CPU cores.
+#SBATCH --mem=250G                     # Request memory (adjust as needed).
+#SBATCH --nodes=1                   # Request one or more nodes.
+#SBATCH --gpus=1                   # Request one or more GPUs (adjust as needed).
+#SBATCH --time=48:00:00             # Wall time limit (HH:MM:SS).
 #SBATCH --output="/Jobs/PyTorch_UNet_Segmentation_Output_%j.log"
 #SBATCH --error="/Jobs/PyTorch_UNet_Segmentation_Error_%j.log"
 
@@ -35,7 +35,7 @@ TRIALS=(1)
 # Loop over trials and batch sizes
 for TRIAL in "${TRIALS[@]}"; do
   for BATCH_SIZE in "${BatchSizes[@]}"; do
-    OUTPUT_RUN_DIR="${OutputDir}/Results_${BATCH_SIZE}_T${TRIAL}"
+    OUTPUT_RUN_DIR="${OutputDir}/${ModelName}_${BATCH_SIZE}_T${TRIAL}"
     echo "Starting run: Trial ${TRIAL}, Batch Size ${BATCH_SIZE}"
 
     CMD=(python "$SCRIPT"

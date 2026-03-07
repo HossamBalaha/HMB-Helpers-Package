@@ -72,11 +72,20 @@ def UpdateMatplotlibSettings():
 
     "lines.linewidth"   : 2.0,  # Set default line width.
     "lines.markersize"  : 6,  # Set default marker size.
+
+    "axes.axisbelow"    : True,  # Ensure grid is behind other plot elements.
+    "axes.edgecolor"    : "black",  # Set axes edge color.
+    "axes.linewidth"    : 1.0,  # Set axes line width.
   }
-  plt.rcParams.update(params)  # Update Matplotlib rcParams with the defined settings.
+
+  # Filter out any parameters that are not recognized by Matplotlib to avoid warnings.
+  validParams = {key: value for key, value in params.items() if key in plt.rcParams}
+
+  # Update Matplotlib rcParams with the defined settings.
+  plt.rcParams.update(validParams)
 
   print("Matplotlib settings updated for better visualization.")
-  for key, value in params.items():
+  for key, value in validParams.items():
     print(f"{key}: {value}")
 
 
@@ -316,7 +325,7 @@ def EnsureCUDAAvailable(strict=True, which="pytorch", verbose=False):
 
   import sys
 
-  if (which.lower() == "pytorch"):
+  if (which.lower() in ["pytorch", "torch"]):
     import torch
 
     try:
@@ -338,7 +347,7 @@ def EnsureCUDAAvailable(strict=True, which="pytorch", verbose=False):
     if (verbose):
       print("Current device:", torch.cuda.get_device_name(0))
     return True
-  elif (which.lower() == "tensorflow"):
+  elif (which.lower() in ["tensorflow", "tf", "keras"]):
     import tensorflow as tf
 
     try:
@@ -467,8 +476,25 @@ def LoadEnglishModelSpacy(modelName="en_core_web_sm"):
     print(f"spaCy model '{modelName}' not found. Please download it using 'python -m spacy download {modelName}'.")
     return None
 
+
 # -------------------------------------------------- #
 
+
+# -------------------------------------------------- #
+def ClearTensorFlowSession():
+  r'''
+  Clear the TensorFlow session to free up resources.
+  This is useful for resetting the state of TensorFlow and releasing GPU memory.
+  '''
+
+  import tensorflow as tf
+
+  # Clear the TensorFlow session to free up resources.
+  # This is useful for resetting the state of TensorFlow and releasing GPU memory.
+  tf.keras.backend.clear_session()
+  print("TensorFlow session cleared.")
+
+# -------------------------------------------------- #
 
 # -------------------------------------------------- #
 

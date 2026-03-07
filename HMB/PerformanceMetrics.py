@@ -7,10 +7,10 @@ from HMB.PlotsHelper import GetCmapColors
 
 
 def CalculatePerformanceMetrics(
-  confMatrix,  # Confusion matrix (2D list or numpy array).
-  eps=1e-10,  # Small value to avoid division by zero.
-  addWeightedAverage=False,  # Whether to include weighted averages in the output.
-  addPerClass=False,  # Whether to include per-class metrics in the output.
+    confMatrix,  # Confusion matrix (2D list or numpy array).
+    eps=1e-10,  # Small value to avoid division by zero.
+    addWeightedAverage=False,  # Whether to include weighted averages in the output.
+    addPerClass=False,  # Whether to include per-class metrics in the output.
 ):
   r'''
   Calculate performance metrics from a confusion matrix.
@@ -115,6 +115,9 @@ def CalculatePerformanceMetrics(
     accuracy = (TP + TN) / (TP + TN + FP + FN)
     specificity = TN / (TN + FP)
     bac = 0.5 * (recall + specificity)
+    mcc = (TP * TN - FP * FN) / np.sqrt((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN))
+    youden = recall + specificity - 1
+    yule = (TP * TN - FP * FN) / (TP * TN + FP * FN)
 
     for i in range(len(precision)):
       metrics.update({
@@ -124,6 +127,9 @@ def CalculatePerformanceMetrics(
         f"Class {i} Accuracy"   : accuracy[i],
         f"Class {i} Specificity": specificity[i],
         f"Class {i} BAC"        : bac[i],
+        f"Class {i} MCC"        : mcc[i],
+        f"Class {i} Youden"     : youden[i],
+        f"Class {i} Yule"       : yule[i],
         f"TP Class {i}"         : TP[i],
         f"FP Class {i}"         : FP[i],
         f"FN Class {i}"         : FN[i],
@@ -137,6 +143,9 @@ def CalculatePerformanceMetrics(
   accuracy = np.mean(TP + TN) / np.sum(confMatrix)
   specificity = np.mean(TN / (TN + FP))
   bac = 0.5 * (recall + specificity)
+  mcc = (TP * TN - FP * FN) / np.sqrt((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN))
+  youden = recall + specificity - 1
+  yule = (TP * TN - FP * FN) / (TP * TN + FP * FN)
 
   # Add macro metrics to the dictionary.
   metrics.update({
@@ -146,13 +155,18 @@ def CalculatePerformanceMetrics(
     "Macro Accuracy"   : accuracy,
     "Macro Specificity": specificity,
     "Macro BAC"        : bac,
+    "Macro MCC"        : mcc,
+    "Macro Youden"     : youden,
+    "Macro Yule"       : yule,
   })
 
   # If requested, calculate the macro average of the metrics.
   if (addWeightedAverage):
     avg = (precision + recall + f1 + accuracy + specificity + bac) / 6.0
+    avg9 = (precision + recall + f1 + accuracy + specificity + bac + mcc + youden + yule) / 9.0
     metrics.update({
-      "Macro Average": avg,
+      "Macro Average"  : avg,
+      "Macro Average 9": avg9,
     })
 
   # Calculate micro-averaged precision, recall, F1, accuracy, and specificity.
@@ -162,6 +176,10 @@ def CalculatePerformanceMetrics(
   accuracy = np.sum(TP + TN) / np.sum(TP + TN + FP + FN)
   specificity = np.sum(TN) / np.sum(TN + FP)
   bac = 0.5 * (recall + specificity)
+  mcc = (np.sum(TP) * np.sum(TN) - np.sum(FP) * np.sum(FN)) / np.sqrt(
+    (np.sum(TP) + np.sum(FP)) * (np.sum(TP) + np.sum(FN)) * (np.sum(TN) + np.sum(FP)) * (np.sum(TN) + np.sum(FN)))
+  youden = recall + specificity - 1
+  yule = (np.sum(TP) * np.sum(TN) - np.sum(FP) * np.sum(FN)) / (np.sum(TP) * np.sum(TN) + np.sum(FP) * np.sum(FN))
 
   # Add micro metrics to the dictionary.
   metrics.update({
@@ -171,13 +189,18 @@ def CalculatePerformanceMetrics(
     "Micro Accuracy"   : accuracy,
     "Micro Specificity": specificity,
     "Micro BAC"        : bac,
+    "Micro MCC"        : mcc,
+    "Micro Youden"     : youden,
+    "Micro Yule"       : yule,
   })
 
   # If requested, calculate the micro average of the metrics.
   if (addWeightedAverage):
     avg = (precision + recall + f1 + accuracy + specificity + bac) / 6.0
+    avg9 = (precision + recall + f1 + accuracy + specificity + bac + mcc + youden + yule) / 9.0
     metrics.update({
-      "Micro Average": avg,
+      "Micro Average"  : avg,
+      "Micro Average 9": avg9,
     })
 
   # Calculate the number of samples per class by summing the rows of the confusion matrix.
@@ -193,6 +216,9 @@ def CalculatePerformanceMetrics(
   accuracy = np.sum((TP + TN) * weights) / np.sum(confMatrix)
   specificity = np.sum(TN / (TN + FP) * weights)
   bac = 0.5 * (recall + specificity)
+  mcc = np.sum((TP * TN - FP * FN) / np.sqrt((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN)) * weights)
+  youden = recall + specificity - 1
+  yule = np.sum((TP * TN - FP * FN) / (TP * TN + FP * FN) * weights)
 
   # Add weights and weighted metrics to the dictionary.
   metrics.update({
@@ -203,13 +229,18 @@ def CalculatePerformanceMetrics(
     "Weighted Accuracy"   : accuracy,
     "Weighted Specificity": specificity,
     "Weighted BAC"        : bac,
+    "Weighted MCC"        : mcc,
+    "Weighted Youden"     : youden,
+    "Weighted Yule"       : yule,
   })
 
   # If requested, calculate the weighted average of the metrics.
   if (addWeightedAverage):
     avg = (precision + recall + f1 + accuracy + specificity + bac) / 6.0
+    avg9 = (precision + recall + f1 + accuracy + specificity + bac + mcc + youden + yule) / 9.0
     metrics.update({
-      "Weighted Average": avg,
+      "Weighted Average"  : avg,
+      "Weighted Average 9": avg9,
     })
 
   # Return the dictionary containing all calculated metrics.
@@ -217,21 +248,21 @@ def CalculatePerformanceMetrics(
 
 
 def PlotConfusionMatrix(
-  cm,  # Confusion matrix (2D list or numpy array).
-  classes,  # List of class labels.
-  normalize=False,  # Whether to normalize the confusion matrix.
-  roundDigits=3,  # Number of decimal places to round normalized values.
-  title="Confusion Matrix",  # Title of the plot.
-  cmap=plt.cm.Blues,  # Colormap for the plot.
-  display=True,  # Whether to display the plot.
-  save=False,  # Whether to save the plot.
-  fileName="ConfusionMatrix.pdf",  # File name to save the plot.
-  fontSize=15,  # Font size for labels and annotations.
-  annotate=True,  # Whether to annotate cells with values.
-  figSize=(8, 8),  # Figure size in inches.
-  colorbar=True,  # Whether to show colorbar.
-  returnFig=False,  # Whether to return the figure object.
-  dpi=720,  # DPI for saving the figure.
+    cm,  # Confusion matrix (2D list or numpy array).
+    classes,  # List of class labels.
+    normalize=False,  # Whether to normalize the confusion matrix.
+    roundDigits=3,  # Number of decimal places to round normalized values.
+    title="Confusion Matrix",  # Title of the plot.
+    cmap=plt.cm.Blues,  # Colormap for the plot.
+    display=True,  # Whether to display the plot.
+    save=False,  # Whether to save the plot.
+    fileName="ConfusionMatrix.pdf",  # File name to save the plot.
+    fontSize=15,  # Font size for labels and annotations.
+    annotate=True,  # Whether to annotate cells with values.
+    figSize=(8, 8),  # Figure size in inches.
+    colorbar=True,  # Whether to show colorbar.
+    returnFig=False,  # Whether to return the figure object.
+    dpi=720,  # DPI for saving the figure.
 ):
   r'''
   Plot a confusion matrix with options for normalization, annotation, saving, and display.
@@ -376,16 +407,16 @@ def PlotConfusionMatrix(
 
 
 def PlotRegressionResults(
-  yTrue,
-  yPred,
-  title="Regression Results",
-  fontSize=14,
-  figsize=(10, 5),
-  display=True,
-  save=False,
-  fileName="RegressionResults.pdf",
-  dpi=720,
-  returnFig=False,
+    yTrue,
+    yPred,
+    title="Regression Results",
+    fontSize=14,
+    figsize=(10, 5),
+    display=True,
+    save=False,
+    fileName="RegressionResults.pdf",
+    dpi=720,
+    returnFig=False,
 ):
   r'''
   Plot regression results: predicted vs. true values and residuals.
@@ -458,22 +489,22 @@ def PlotRegressionResults(
 
 
 def PlotROCAUCCurve(
-  yTrue,  # True labels (one-hot or binary).
-  yPred,  # Predicted labels (one-hot or binary).
-  classes,  # List of class names.
-  areProbabilities=False,  # Whether yPred are probabilities.
-  title="ROC Curve & AUC",  # Plot title.
-  figSize=(5, 5),  # Figure size.
-  cmap=None,  # Colormap for ROC curves.
-  display=True,  # Display the plot.
-  save=False,  # Save the plot.
-  fileName="ROC_AUC.pdf",  # File name.
-  fontSize=15,  # Font size.
-  plotDiagonal=True,  # Plot diagonal reference line.
-  annotateAUC=True,  # Annotate AUC value on plot.
-  showLegend=True,  # Show legend.
-  returnFig=False,  # Return figure object.
-  dpi=720,  # DPI for saving the figure.
+    yTrue,  # True labels (one-hot or binary).
+    yPred,  # Predicted labels (one-hot or binary).
+    classes,  # List of class names.
+    areProbabilities=False,  # Whether yPred are probabilities.
+    title="ROC Curve & AUC",  # Plot title.
+    figSize=(5, 5),  # Figure size.
+    cmap=None,  # Colormap for ROC curves.
+    display=True,  # Display the plot.
+    save=False,  # Save the plot.
+    fileName="ROC_AUC.pdf",  # File name.
+    fontSize=15,  # Font size.
+    plotDiagonal=True,  # Plot diagonal reference line.
+    annotateAUC=True,  # Annotate AUC value on plot.
+    showLegend=True,  # Show legend.
+    returnFig=False,  # Return figure object.
+    dpi=720,  # DPI for saving the figure.
 ):
   r'''
   Plot ROC curves and calculate AUC for each class, with options for annotation, saving, and display.
@@ -638,21 +669,21 @@ def PlotROCAUCCurve(
 
 
 def PlotPRCCurve(
-  yTrue,  # True labels (one-hot or binary).
-  yPred,  # Predicted labels (one-hot or binary).
-  classes,  # List of class names.
-  areProbabilities=False,  # Whether yPred are probabilities.
-  title="PRC Curve",  # Plot title.
-  figSize=(5, 5),  # Figure size.
-  cmap=None,  # Colormap for PRC curves.
-  display=True,  # Display the plot.
-  save=False,  # Save the plot.
-  fileName="PRC.pdf",  # File name.
-  fontSize=15,  # Font size.
-  annotateAvg=True,  # Annotate average precision value on plot.
-  showLegend=True,  # Show legend.
-  returnFig=False,  # Return figure object.
-  dpi=720,  # DPI for saving the figure.
+    yTrue,  # True labels (one-hot or binary).
+    yPred,  # Predicted labels (one-hot or binary).
+    classes,  # List of class names.
+    areProbabilities=False,  # Whether yPred are probabilities.
+    title="PRC Curve",  # Plot title.
+    figSize=(5, 5),  # Figure size.
+    cmap=None,  # Colormap for PRC curves.
+    display=True,  # Display the plot.
+    save=False,  # Save the plot.
+    fileName="PRC.pdf",  # File name.
+    fontSize=15,  # Font size.
+    annotateAvg=True,  # Annotate average precision value on plot.
+    showLegend=True,  # Show legend.
+    returnFig=False,  # Return figure object.
+    dpi=720,  # DPI for saving the figure.
 ):
   r'''
   Plot Precision-Recall curves (PRC) and calculate average precision for each class, with options for annotation, saving, and display.
@@ -816,23 +847,23 @@ def PlotPRCCurve(
 
 
 def PlotMultiTrialROCAUC(
-  allYTrue,  # List of true labels arrays from all trials (list of arrays).
-  allYPred,  # List of predicted probabilities from all trials (list of arrays).
-  classes,  # List of class names.
-  confidenceLevel=0.95,  # Confidence level for CI (default 95%).
-  which="CI",  # Method for confidence intervals: "CI" for confidence intervals, "SD" for standard deviation.
-  title="Multi-Trial ROC Curve with Confidence Intervals",  # Plot title.
-  figSize=(8, 8),  # Figure size.
-  cmap=None,  # Colormap for ROC curves.
-  display=True,  # Display the plot.
-  save=False,  # Save the plot.
-  fileName="MultiTrial_ROC_AUC.pdf",  # File name.
-  fontSize=15,  # Font size.
-  plotDiagonal=True,  # Plot diagonal reference line.
-  showLegend=True,  # Show legend.
-  returnFig=False,  # Return figure object.
-  dpi=720,  # DPI for saving the figure.
-  addZoomedInset=True,  # Whether to add a zoomed inset for the top-left corner.
+    allYTrue,  # List of true labels arrays from all trials (list of arrays).
+    allYPred,  # List of predicted probabilities from all trials (list of arrays).
+    classes,  # List of class names.
+    confidenceLevel=0.95,  # Confidence level for CI (default 95%).
+    which="CI",  # Method for confidence intervals: "CI" for confidence intervals, "SD" for standard deviation.
+    title="Multi-Trial ROC Curve with Confidence Intervals",  # Plot title.
+    figSize=(8, 8),  # Figure size.
+    cmap=None,  # Colormap for ROC curves.
+    display=True,  # Display the plot.
+    save=False,  # Save the plot.
+    fileName="MultiTrial_ROC_AUC.pdf",  # File name.
+    fontSize=15,  # Font size.
+    plotDiagonal=True,  # Plot diagonal reference line.
+    showLegend=True,  # Show legend.
+    returnFig=False,  # Return figure object.
+    dpi=720,  # DPI for saving the figure.
+    addZoomedInset=True,  # Whether to add a zoomed inset for the top-left corner.
 ):
   '''
   Plot averaged ROC curves across multiple trials with confidence intervals.
@@ -1140,22 +1171,22 @@ def PlotMultiTrialROCAUC(
 
 
 def PlotMultiTrialPRCurve(
-  allYTrue,  # List of true labels arrays from all trials.
-  allYPred,  # List of predicted probabilities from all trials.
-  classes,  # List of class names.
-  confidenceLevel=0.95,  # Confidence level for CI.
-  which="CI",  # Method for confidence intervals: "CI" for confidence intervals, "SD" for standard deviation.
-  title="Multi-Trial Precision-Recall Curve with Confidence Intervals",
-  figSize=(8, 8),  # Figure size in inches.
-  cmap=None,  # Colormap for different classes.
-  display=True,  # Whether to display the plot.
-  save=False,  # Whether to save the plot.
-  fileName="MultiTrial_PRC.pdf",  # File name for saving.
-  fontSize=15,  # Font size for labels and annotations.
-  showLegend=True,  # Whether to show legend.
-  returnFig=False,  # Whether to return the matplotlib figure object.
-  dpi=720,  # DPI for saving the figure.
-  addZoomedInset=True,  # Whether to add a zoomed inset for the top-right corner of the PRC plot.
+    allYTrue,  # List of true labels arrays from all trials.
+    allYPred,  # List of predicted probabilities from all trials.
+    classes,  # List of class names.
+    confidenceLevel=0.95,  # Confidence level for CI.
+    which="CI",  # Method for confidence intervals: "CI" for confidence intervals, "SD" for standard deviation.
+    title="Multi-Trial Precision-Recall Curve with Confidence Intervals",
+    figSize=(8, 8),  # Figure size in inches.
+    cmap=None,  # Colormap for different classes.
+    display=True,  # Whether to display the plot.
+    save=False,  # Whether to save the plot.
+    fileName="MultiTrial_PRC.pdf",  # File name for saving.
+    fontSize=15,  # Font size for labels and annotations.
+    showLegend=True,  # Whether to show legend.
+    returnFig=False,  # Whether to return the matplotlib figure object.
+    dpi=720,  # DPI for saving the figure.
+    addZoomedInset=True,  # Whether to add a zoomed inset for the top-right corner of the PRC plot.
 ):
   '''
   Plot averaged Precision-Recall curves across multiple trials with confidence intervals.
@@ -1455,19 +1486,19 @@ def PlotMultiTrialPRCurve(
 
 
 def PlotCounterfactualOutcomes(
-  X,
-  classifier,
-  treatmentCol=None,
-  lowVal=None,
-  highVal=None,
-  classNames=None,
-  title="Counterfactual Outcome Distributions",
-  save=False,
-  fileName="CounterfactualOutcomePlot.pdf",
-  display=True,
-  returnPreds=False,
-  fontSize=12,
-  dpi=720,
+    X,
+    classifier,
+    treatmentCol=None,
+    lowVal=None,
+    highVal=None,
+    classNames=None,
+    title="Counterfactual Outcome Distributions",
+    save=False,
+    fileName="CounterfactualOutcomePlot.pdf",
+    display=True,
+    returnPreds=False,
+    fontSize=12,
+    dpi=720,
 ):
   r'''
   Plot counterfactual outcome distributions for two treatment scenarios using a histogram.
@@ -1640,19 +1671,19 @@ def PlotCounterfactualOutcomes(
 
 
 def PlotInteractionEffect(
-  X,
-  classifier,
-  feature1,
-  feature2,
-  gridSize=30,
-  title="Interaction Effect Plot",
-  save=False,
-  fileName="InteractionEffectPlot.pdf",
-  display=True,
-  fontSize=12,
-  plotType="surface",  # or "contour"
-  backend="matplotlib",  # or "plotly"
-  dpi=720,
+    X,
+    classifier,
+    feature1,
+    feature2,
+    gridSize=30,
+    title="Interaction Effect Plot",
+    save=False,
+    fileName="InteractionEffectPlot.pdf",
+    display=True,
+    fontSize=12,
+    plotType="surface",  # or "contour"
+    backend="matplotlib",  # or "plotly"
+    dpi=720,
 ):
   r'''
   Plot the interaction effect between two features on the predicted outcome using a 3D surface or contour plot.
@@ -1869,21 +1900,21 @@ def PlotInteractionEffect(
 
 
 def PlotCalibrationCurveFromModel(
-  classifier,
-  X,
-  y,
-  classNames=None,
-  nBins=10,
-  strategy="uniform",
-  title="Calibration Curve",
-  save=False,
-  fileName="CalibrationCurve.pdf",
-  display=True,
-  fontSize=12,
-  plotHistogram=False,
-  returnFig=False,
-  cmap=None,
-  dpi=720,
+    classifier,
+    X,
+    y,
+    classNames=None,
+    nBins=10,
+    strategy="uniform",
+    title="Calibration Curve",
+    save=False,
+    fileName="CalibrationCurve.pdf",
+    display=True,
+    fontSize=12,
+    plotHistogram=False,
+    returnFig=False,
+    cmap=None,
+    dpi=720,
 ):
   r'''
   Plot calibration curves to evaluate how well predicted probabilities align with observed outcomes.
@@ -2069,18 +2100,18 @@ def PlotCalibrationCurveFromModel(
 
 
 def PlotCalibrationCurve(
-  probs,
-  labels,
-  nBins=10,
-  title="Calibration Curve",
-  fontSize=14,
-  figSize=(6, 6),
-  display=True,
-  save=False,
-  fileName="CalibrationCurve.pdf",
-  dpi=720,
-  returnFig=False,
-  color="blue",
+    probs,
+    labels,
+    nBins=10,
+    title="Calibration Curve",
+    fontSize=14,
+    figSize=(6, 6),
+    display=True,
+    save=False,
+    fileName="CalibrationCurve.pdf",
+    dpi=720,
+    returnFig=False,
+    color="blue",
 ):
   r'''
   Plot calibration curve given predicted probabilities and true labels.
@@ -2197,18 +2228,18 @@ def PlotCalibrationCurve(
 
 
 def PlotTopKAccuracyCurve(
-  probs,
-  labels,
-  maxK=10,
-  title="Top-k Accuracy Curve",
-  figSize=(6, 6),
-  save=False,
-  fileName="TopKAccuracyCurve.pdf",
-  display=True,
-  fontSize=12,
-  returnFig=False,
-  dpi=720,
-  color="blue",
+    probs,
+    labels,
+    maxK=10,
+    title="Top-k Accuracy Curve",
+    figSize=(6, 6),
+    save=False,
+    fileName="TopKAccuracyCurve.pdf",
+    display=True,
+    fontSize=12,
+    returnFig=False,
+    dpi=720,
+    color="blue",
 ):
   r'''
   Plot Top-k accuracy curve given predicted probabilities and true labels.
@@ -2304,21 +2335,21 @@ def PlotTopKAccuracyCurve(
 
 
 def HistoryPlotter(
-  history,  # Dictionary containing training history.
-  title,  # Title of the plot.
-  metrics=("loss",),  # Tuple or list of metrics to plot.
-  xLabel="Epochs",  # Label for x-axis.
-  fontSize=14,  # Font size for labels and title.
-  save=False,  # Whether to save the plot.
-  savePath=None,  # Path to save the plot.
-  dpi=720,  # DPI for saving the figure.
-  colors=None,  # Optional dict of colors for each metric.
-  labels=None,  # Optional dict of labels for each metric.
-  display=True,  # Whether to display the plot.
-  figSize=(10, 5),  # Figure size.
-  returnFig=False,  # Whether to return the figure object.
-  smooth=True,  # Whether to apply smoothing to the curves.
-  smoothFactor=0.6,  # Smoothing factor for curves (0 to 1).
+    history,  # Dictionary containing training history.
+    title,  # Title of the plot.
+    metrics=("loss",),  # Tuple or list of metrics to plot.
+    xLabel="Epochs",  # Label for x-axis.
+    fontSize=14,  # Font size for labels and title.
+    save=False,  # Whether to save the plot.
+    savePath=None,  # Path to save the plot.
+    dpi=720,  # DPI for saving the figure.
+    colors=None,  # Optional dict of colors for each metric.
+    labels=None,  # Optional dict of labels for each metric.
+    display=True,  # Whether to display the plot.
+    figSize=(10, 5),  # Figure size.
+    returnFig=False,  # Whether to return the figure object.
+    smooth=True,  # Whether to apply smoothing to the curves.
+    smoothFactor=0.6,  # Smoothing factor for curves (0 to 1).
 ):
   r'''
   Plot training history metrics (e.g., loss, accuracy) for train and validation sets.
@@ -2478,22 +2509,22 @@ def HistoryPlotter(
 
 
 def PlotMetricCurve(
-  dataToPlot,  # Data to plot.
-  xData=None,  # X-axis data.
-  title="Metric Curve",  # Title of the plot.
-  xLabel="X",  # X-axis label.
-  yLabel="Y",  # Y-axis label.
-  fontSize=15,  # Font size.
-  xTicks=None,  # X-axis ticks.
-  yTicks=None,  # Y-axis ticks.
-  xTicksRotation=0,  # X-axis ticks rotation.
-  yTicksRotation=0,  # Y-axis ticks rotation.
-  save=False,  # Whether to save the plot.
-  savePath=None,  # Path to save the plot.
-  dpi=720,  # DPI for saving the figure.
-  display=True,  # Whether to display the plot.
-  figSize=(5, 5),  # Figure size.
-  returnFig=False,  # Whether to return the figure object.
+    dataToPlot,  # Data to plot.
+    xData=None,  # X-axis data.
+    title="Metric Curve",  # Title of the plot.
+    xLabel="X",  # X-axis label.
+    yLabel="Y",  # Y-axis label.
+    fontSize=15,  # Font size.
+    xTicks=None,  # X-axis ticks.
+    yTicks=None,  # Y-axis ticks.
+    xTicksRotation=0,  # X-axis ticks rotation.
+    yTicksRotation=0,  # Y-axis ticks rotation.
+    save=False,  # Whether to save the plot.
+    savePath=None,  # Path to save the plot.
+    dpi=720,  # DPI for saving the figure.
+    display=True,  # Whether to display the plot.
+    figSize=(5, 5),  # Figure size.
+    returnFig=False,  # Whether to return the figure object.
 ):
   r'''
   Plot a metric curve given data and optional x-axis values.
@@ -2577,18 +2608,18 @@ def PlotMetricCurve(
 
 
 def PlotCumulativeGainLiftChart(
-  yTrue,
-  yScores,
-  posLabel=1,
-  title="Cumulative Gain & Lift Chart",
-  classNames=None,
-  figsize=(10, 5),
-  fontSize=14,
-  display=True,
-  save=False,
-  fileName="CumulativeGainLiftChart.pdf",
-  dpi=720,
-  returnFig=False,
+    yTrue,
+    yScores,
+    posLabel=1,
+    title="Cumulative Gain & Lift Chart",
+    classNames=None,
+    figsize=(10, 5),
+    fontSize=14,
+    display=True,
+    save=False,
+    fileName="CumulativeGainLiftChart.pdf",
+    dpi=720,
+    returnFig=False,
 ):
   r'''
   Plot Cumulative Gain and Lift charts to visualize model effectiveness for ranking tasks.
@@ -2714,18 +2745,18 @@ def PlotCumulativeGainLiftChart(
 
 
 def PlotErrorAnalysis(
-  yTrue,
-  yPred,
-  X=None,
-  classNames=None,
-  maxExamples=5,
-  fontSize=12,
-  figsize=(12, 8),
-  display=True,
-  save=False,
-  fileName="ErrorAnalysis.pdf",
-  dpi=720,
-  returnFig=False,
+    yTrue,
+    yPred,
+    X=None,
+    classNames=None,
+    maxExamples=5,
+    fontSize=12,
+    figsize=(12, 8),
+    display=True,
+    save=False,
+    fileName="ErrorAnalysis.pdf",
+    dpi=720,
+    returnFig=False,
 ):
   r'''
   Plot error analysis showing examples of false positives, false negatives, true positives, and true negatives.
@@ -2882,16 +2913,16 @@ def PlotErrorAnalysis(
 
 
 def PlotClasswisePRFBar(
-  cm,
-  classNames=None,
-  title="Classwise Performance Metrics",
-  fontSize=14,
-  figsize=(8, 5),
-  display=True,
-  save=False,
-  fileName="ClasswisePRFBar.pdf",
-  dpi=720,
-  returnFig=False,
+    cm,
+    classNames=None,
+    title="Classwise Performance Metrics",
+    fontSize=14,
+    figsize=(8, 5),
+    display=True,
+    save=False,
+    fileName="ClasswisePRFBar.pdf",
+    dpi=720,
+    returnFig=False,
 ):
   '''
   Plot classwise Precision, Recall, and F1-score as a grouped bar chart.
@@ -3006,15 +3037,15 @@ def PlotClasswisePRFBar(
 
 
 def PlotErrorMatrix(
-  cm,
-  classNames=None,
-  fontSize=14,
-  figsize=(7, 6),
-  display=True,
-  save=False,
-  fileName="ErrorMatrix.pdf",
-  dpi=720,
-  returnFig=False,
+    cm,
+    classNames=None,
+    fontSize=14,
+    figsize=(7, 6),
+    display=True,
+    save=False,
+    fileName="ErrorMatrix.pdf",
+    dpi=720,
+    returnFig=False,
 ):
   r'''
   Plot confusion matrix (error matrix) with highlighted most common errors.
@@ -3098,17 +3129,17 @@ def PlotErrorMatrix(
 
 
 def PlotMisclassificationExamples(
-  yTrue,
-  yPred,
-  X=None,
-  maxExamples=5,
-  fontSize=12,
-  figsize=(10, 5),
-  display=True,
-  save=False,
-  fileName="MisclassificationExamples.pdf",
-  dpi=720,
-  returnFig=False,
+    yTrue,
+    yPred,
+    X=None,
+    maxExamples=5,
+    fontSize=12,
+    figsize=(10, 5),
+    display=True,
+    save=False,
+    fileName="MisclassificationExamples.pdf",
+    dpi=720,
+    returnFig=False,
 ):
   r'''
   Plot most frequent misclassifications with example indices and optional sample data.
@@ -3196,16 +3227,16 @@ def PlotMisclassificationExamples(
 
 
 def PlotPredictionConfidenceHistogram(
-  yPredProba,
-  yPred=None,
-  fontSize=14,
-  figsize=(8, 5),
-  bins=20,
-  display=True,
-  save=False,
-  fileName="PredictionConfidenceHistogram.pdf",
-  dpi=720,
-  returnFig=False,
+    yPredProba,
+    yPred=None,
+    fontSize=14,
+    figsize=(8, 5),
+    bins=20,
+    display=True,
+    save=False,
+    fileName="PredictionConfidenceHistogram.pdf",
+    dpi=720,
+    returnFig=False,
 ):
   r'''
   Plot histogram of prediction confidences (predicted probabilities).
@@ -3280,15 +3311,15 @@ def PlotPredictionConfidenceHistogram(
 
 
 def PlotClassificationResiduals(
-  yTrue,
-  yPred,
-  fontSize=14,
-  figsize=(8, 5),
-  display=True,
-  save=False,
-  fileName="ClassificationResiduals.pdf",
-  dpi=720,
-  returnFig=False,
+    yTrue,
+    yPred,
+    fontSize=14,
+    figsize=(8, 5),
+    display=True,
+    save=False,
+    fileName="ClassificationResiduals.pdf",
+    dpi=720,
+    returnFig=False,
 ):
   r'''
   Plot residuals for classification tasks (true - predicted).
@@ -3405,17 +3436,17 @@ def PlotClassificationResiduals(
 
 
 def PlotFeatureImportance(
-  model,
-  featureNames,
-  title="Feature Importance",
-  fontSize=14,
-  figsize=(8, 5),
-  display=True,
-  save=False,
-  fileName="FeatureImportance.pdf",
-  dpi=720,
-  returnFig=False,
-  topN=None,
+    model,
+    featureNames,
+    title="Feature Importance",
+    fontSize=14,
+    figsize=(8, 5),
+    display=True,
+    save=False,
+    fileName="FeatureImportance.pdf",
+    dpi=720,
+    returnFig=False,
+    topN=None,
 ):
   r'''
   Plot feature importance from a trained model.
@@ -3711,20 +3742,20 @@ def ComputeECE(probabilities, labels, binCount: int = 15, nBins: int | None = No
 
 
 def ComputeECEPlotReliability(
-  confidences,
-  predictions,
-  labels,
-  nBins=15,
-  title="Expected Calibration Error (ECE)",
-  fontSize=14,
-  figSize=(6, 6),
-  display=True,
-  save=False,
-  fileName="ECE.pdf",
-  dpi=720,
-  returnFig=False,
-  cmap="Blues",
-  applyXYLimits=True,
+    confidences,
+    predictions,
+    labels,
+    nBins=15,
+    title="Expected Calibration Error (ECE)",
+    fontSize=14,
+    figSize=(6, 6),
+    display=True,
+    save=False,
+    fileName="ECE.pdf",
+    dpi=720,
+    returnFig=False,
+    cmap="Blues",
+    applyXYLimits=True,
 ):
   r'''
   Compute Expected Calibration Error (ECE) and plot reliability diagram.
@@ -3938,17 +3969,17 @@ def ComputeECEPlotReliability(
 
 # Plot risk-coverage curve and compute AUC for selective prediction.
 def RiskCoverageCurve(
-  confidences,
-  correctness,
-  title="Risk-Coverage (Accuracy vs Coverage)",
-  fontSize=14,
-  figSize=(6, 6),
-  display=True,
-  save=False,
-  fileName="RiskCoverage.pdf",
-  dpi=720,
-  returnFig=False,
-  color="blue",
+    confidences,
+    correctness,
+    title="Risk-Coverage (Accuracy vs Coverage)",
+    fontSize=14,
+    figSize=(6, 6),
+    display=True,
+    save=False,
+    fileName="RiskCoverage.pdf",
+    dpi=720,
+    returnFig=False,
+    color="blue",
 ):
   '''
   Compute and plot risk (error) vs coverage curve sorted by confidence. The risk-coverage
