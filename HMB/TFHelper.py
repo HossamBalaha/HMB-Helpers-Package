@@ -338,7 +338,7 @@ def CreateFitPretrainedAttentionModel(
     inputShape (tuple): Input shape for the model.
     numClasses (int): Number of output classes.
     callbacks (list): List of Keras callbacks for training.
-    modelCheckpointPath (str or None): Optional path to save the best model; if None, defaults to "BestModel_{baseModelString}_{attentionBlockStr}.keras".
+    modelCheckpointPath (str or None): Optional path to save the best model; if None, defaults to "BestModel.keras".
     initialEpochs (int): Number of initial training epochs.
     fineTuneEpochs (int): Number of fine-tuning epochs.
     fineTuneAt (int): Layer index to start fine-tuning from (default: 100).
@@ -409,12 +409,12 @@ def CreateFitPretrainedAttentionModel(
   )
 
   # Load the best model weights after training.
-  # model.load_weights(f"BestModel_{baseModelString}_{attentionBlockStr}.weights.h5") --- IGNORE ---
+  # model.load_weights(f"BestModel.weights.h5") --- IGNORE ---
   if (modelCheckpointPath is None):
-    modelCheckpointPath = os.path.join(storageDir, f"BestModel_{baseModelString}_{attentionBlockStr}.keras")
+    modelCheckpointPath = os.path.join(storageDir, f"BestModel.keras")
   model = tf.keras.models.load_model(modelCheckpointPath)  # Load the best saved model.
   # Store the best model after fine-tuning as pickle file.
-  picklePath = os.path.join(storageDir, f"TrainedModel_{baseModelString}_{attentionBlockStr}.pkl")
+  picklePath = os.path.join(storageDir, f"TrainedModel.pkl")
   with open(picklePath) as f:
     pickle.dump(model, f)
 
@@ -590,7 +590,7 @@ def TrainPretrainedAttentionModelFromDataFrame(
   # Count classes from generator mapping.
   numClasses = len(trainGenNew.class_indices)
 
-  modelCheckpointPath = os.path.join(storageDir, f"BestModel_{baseModelString}_{attentionBlockStr}.keras")
+  modelCheckpointPath = os.path.join(storageDir, f"BestModel.keras")
   callbacks = [
     ModelCheckpoint(
       modelCheckpointPath,  # File name for best model.
@@ -694,15 +694,17 @@ def TrainPretrainedAttentionModelFromDataFrame(
   yPred = np.array(yPred)
 
   # Get class label names.
-  classLabels = list(trainGenNew.class_indices.keys())
+  if (labelEncoder is not None):
+    classLabels = labelEncoder.classes_.tolist()
+  else:
+    classLabels = list(trainGenNew.class_indices.keys())
 
   # Compute confusion matrix.
   cm = confusion_matrix(yTrue, yPred)
-  classes = classLabels
   fileName = os.path.join(storageDir, "ConfusionMatrix.pdf")
   PlotConfusionMatrix(
     cm,  # Confusion matrix (2D list or numpy array).
-    classes,  # List of class labels.
+    classLabels,  # List of class labels.
     normalize=False,  # Whether to normalize the confusion matrix.
     roundDigits=3,  # Number of decimal places to round normalized values.
     title="Confusion Matrix",  # Title of the plot.
@@ -786,12 +788,17 @@ def TrainPretrainedAttentionModelFromDataFrame(
     smoothFactor=0.6,  # Smoothing factor for curves (0 to 1).
   )
 
+  # Store the last model.
+  lastModelPath = os.path.join(storageDir, "LastModel.keras")
+  model.save(lastModelPath)  # Save the last model after training.
+
   configs.update({
     "testGenSize"        : len(testGenNew.filenames),
     "trainGenSize"       : len(trainGenNew.filenames),
     "validGenSize"       : len(validGenNew.filenames),
     "historyFilePath"    : historyFilePath,
     "trainingHistoryPlot": savePath,
+    "lastModelPath"      : lastModelPath,
   })
 
   # Store the final results and configurations in a JSON file.
@@ -832,17 +839,21 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
   if (not requiredColumns.issubset(dataFrame.columns)):
     raise ValueError(f"DataFrame must contain columns: {requiredColumns}")
 
+  if (not os.path.isfile(modelPath) or not os.path.exists(modelPath)):
+    raise ValueError(f"Model file not found at path: {modelPath}")
+
   import os
   import numpy as np
   import pandas as pd
-  import matplotlib.pyplot as plt
   from sklearn.metrics import confusion_matrix, classification_report
   from tensorflow.keras.preprocessing.image import ImageDataGenerator
-  from HMB.Utils import DumpJsonFile
   from HMB.Initializations import (
     DoRandomSeeding, EnsureCUDAAvailable, ClearTensorFlowSession, UpdateMatplotlibSettings
   )
-  from HMB.PerformanceMetrics import PlotConfusionMatrix, CalculatePerformanceMetrics
+  from HMB.PerformanceMetrics import (
+    PlotConfusionMatrix, CalculatePerformanceMetrics,
+    PlotROCAUCCurve, PlotPRCCurve, PlotClasswisePRFBar
+  )
 
   ClearTensorFlowSession()
   DoRandomSeeding()
@@ -850,24 +861,6 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
 
   if (ensureCUDA):
     EnsureCUDAAvailable("tensorflow")
-
-  # Define generator for evaluation without augmentation.
-  tsGen = ImageDataGenerator(rescale=1.0 / 255)
-  # Create data generator for the test set.
-  splitCol = columnsMap["split"]
-  testDfNew = dataFrame[dataFrame[splitCol] == "test"].copy()
-  xCol = columnsMap["imagePath"]
-  yCol = columnsMap["categoryEncoded"]
-  testGenNew = tsGen.flow_from_dataframe(
-    testDfNew,
-    x_col=xCol,
-    y_col=yCol,
-    target_size=imgShape[:2],
-    class_mode="sparse",
-    color_mode="rgb",
-    shuffle=False,
-    batch_size=batchSize,
-  )
 
   customObjects = {
     "CBAMBlock": None,
@@ -899,133 +892,159 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
 
   # Load the trained model.
   model = tf.keras.models.load_model(modelPath, custom_objects=customObjects)
-  # Evaluate on test set.
-  testLoss, testAccuracy = model.evaluate(testGenNew, verbose=verbose)
-  print(f"Test Accuracy: {testAccuracy:.4f}, Test Loss: {testLoss:.4f}")
 
-  # Compute predictions for confusion matrix and classification report.
-  testGenNew.reset()
-  yTrue = []
-  yPred = []
-  yPredProb = []
-  yPredConfidences = []
-  for i in range(len(testGenNew)):
-    images, labelsBatch = next(testGenNew)
-    preds = model.predict(images, verbose=verbose)
-    yTrue.extend(labelsBatch)
-    yPred.extend(np.argmax(preds, axis=1))
-    yPredProb.extend(preds)
-    yPredConfidences.extend(np.max(preds, axis=1))
+  for subsetKey in ["train", "val", "test"]:
+    keyword = subsetKey.capitalize()  # Capitalize the subset key for display and file naming.
+    print(f"\nEvaluating on {keyword} set:")
 
-  yTrue = np.array(yTrue)
-  yPred = np.array(yPred)
-  yPredProb = np.array(yPredProb)
-  yPredConfidences = np.array(predConfidences)
+    # Define generator for evaluation without augmentation.
+    generator = ImageDataGenerator(rescale=1.0 / 255)
+    # Create data generator for the test set.
+    splitCol = columnsMap["split"]
+    dfNew = dataFrame[dataFrame[splitCol] == subsetKey].copy()
+    xCol = columnsMap["imagePath"]
+    yCol = columnsMap["categoryEncoded"]
+    genObj = generator.flow_from_dataframe(
+      dfNew,
+      x_col=xCol,
+      y_col=yCol,
+      target_size=imgShape[:2],
+      class_mode="sparse",
+      color_mode="rgb",
+      shuffle=False,
+      batch_size=batchSize,
+    )
 
-  if (labelEncoder is not None):
-    yTrueLabels = labelEncoder.inverse_transform(yTrue)
-    yPredLabels = labelEncoder.inverse_transform(yPred)
-  else:
-    yTrueLabels = yTrue
-    yPredLabels = yPred
+    # Evaluate on test set.
+    testLoss, testAccuracy = model.evaluate(genObj, verbose=verbose)
+    print(f"{keyword} Accuracy: {testAccuracy:.4f}, {keyword} Loss: {testLoss:.4f}")
 
-  # Store evaluation results as DataFrame and save to CSV.
-  evalResults = {
-    "yTrue"           : yTrue.tolist(),
-    "yPred"           : yPred.tolist(),
-    "yPredProb"       : yPredProb.tolist(),
-    "yPredConfidences": yPredConfidences.tolist(),
-    "yTrueLabels"     : yTrueLabels.tolist(),
-    "yPredLabels"     : yPredLabels.tolist(),
-  }
-  evalResultsDf = pd.DataFrame(evalResults)
-  evalResultsFilePath = os.path.join(storageDir, "TestResults.csv")
-  evalResultsDf.to_csv(evalResultsFilePath, index=False)
+    # Compute predictions for confusion matrix and classification report.
+    genObj.reset()
+    yTrue = []
+    yPred = []
+    yPredProb = []
+    yPredConfidences = []
+    for i in range(len(genObj)):
+      images, labelsBatch = next(genObj)
+      preds = model.predict(images, verbose=verbose)
+      yTrue.extend(labelsBatch)
+      yPred.extend(np.argmax(preds, axis=1))
+      yPredProb.extend(preds)
+      yPredConfidences.extend(np.max(preds, axis=1))
 
-  # Get class label names from the generator's class indices.
-  classLabels = list(testGenNew.class_indices.keys())
-  cm = confusion_matrix(yTrue, yPred)
-  cmPath = os.path.join(storageDir, "TestConfusionMatrix.pdf")
-  PlotConfusionMatrix(
-    cm,  # Confusion matrix (2D list or numpy array).
-    classLabels,  # List of class labels.
-    normalize=False,  # Whether to normalize the confusion matrix.
-    roundDigits=3,  # Number of decimal places to round normalized values.
-    title="Confusion Matrix",  # Title of the plot.
-    cmap="Blues",  # Colormap for the heatmap.
-    display=False,  # Whether to display the plot.
-    save=True,  # Whether to save the plot.
-    fileName=cmPath,  # File name to save the plot.
-    fontSize=15,  # Font size for labels and annotations.
-    annotate=True,  # Whether to annotate cells with values.
-    figSize=(8, 8),  # Figure size in inches.
-    colorbar=True,  # Whether to show colorbar.
-    returnFig=False,  # Whether to return the figure object.
-    dpi=dpi,  # DPI for saving the figure.
-  )
-  print("\nClassification Report:")
-  print(classification_report(yTrue, yPred, target_names=classLabels))
+    yTrue = np.array(yTrue)
+    yPred = np.array(yPred)
+    yPredProb = np.array(yPredProb)
+    yPredConfidences = np.array(predConfidences)
 
-  pm = CalculatePerformanceMetrics(
-    confMatrix=cm,
-    eps=1e-10,  # Small value to avoid division by zero.
-    addWeightedAverage=True,  # Whether to include weighted averages in the output.
-    addPerClass=True,  # Whether to include per-class metrics in the output.
-  )
-  pmDf = pd.DataFrame(pm)
-  pmFilePath = os.path.join(storageDir, "TestPerformanceMetrics.csv")
-  pmDf.to_csv(pmFilePath, index=False)
-  for key, value in pm.items():
-    print(f"{key}: {value}")
+    if (labelEncoder is not None):
+      yTrueLabels = labelEncoder.inverse_transform(yTrue)
+      yPredLabels = labelEncoder.inverse_transform(yPred)
+    else:
+      yTrueLabels = yTrue
+      yPredLabels = yPred
 
-  rocPath = os.path.join(storageDir, "TestROCCurve.pdf")
-  PlotROCAUCCurve(
-    yTrue,  # True labels (one-hot or binary).
-    yPredProb,  # Predicted labels (one-hot or binary).
-    classLabels,  # List of class names.
-    areProbabilities=True,  # Whether yPred are probabilities.
-    title="ROC Curve & AUC",  # Plot title.
-    figSize=(5, 5),  # Figure size.
-    cmap=None,  # Colormap for ROC curves.
-    display=False,  # Display the plot.
-    save=True,  # Save the plot.
-    fileName=rocPath,  # File name.
-    fontSize=16,  # Font size.
-    plotDiagonal=True,  # Plot diagonal reference line.
-    annotateAUC=True,  # Annotate AUC value on plot.
-    showLegend=True,  # Show legend.
-    returnFig=False,  # Return figure object.
-    dpi=720,  # DPI for saving the figure.
-  )
+    # Store evaluation results as DataFrame and save to CSV.
+    evalResults = {
+      "yTrue"           : yTrue.tolist(),
+      "yPred"           : yPred.tolist(),
+      "yPredProb"       : yPredProb.tolist(),
+      "yPredConfidences": yPredConfidences.tolist(),
+      "yTrueLabels"     : yTrueLabels.tolist(),
+      "yPredLabels"     : yPredLabels.tolist(),
+    }
+    evalResultsDf = pd.DataFrame(evalResults)
+    evalResultsFilePath = os.path.join(storageDir, f"{keyword}Results.csv")
+    evalResultsDf.to_csv(evalResultsFilePath, index=False)
 
-  prcPath = os.path.join(storageDir, "TestPRCCurve.pdf")
-  PlotPRCCurve(
-    yTrue,  # True labels (one-hot or binary).
-    yPredProb,  # Predicted labels (one-hot or binary).
-    classLabels,  # List of class names.
-    areProbabilities=True,  # Whether yPred are probabilities.
-    title="PRC Curve",  # Plot title.
-    figSize=(5, 5),  # Figure size.
-    cmap=None,  # Colormap for PRC curves.
-    display=False,  # Display the plot.
-    save=True,  # Save the plot.
-    fileName=prcPath,  # File name.
-    fontSize=16,  # Font size.
-    annotateAvg=True,  # Annotate average precision value on plot.
-    showLegend=True,  # Show legend.
-    returnFig=False,  # Return figure object.
-    dpi=720,  # DPI for saving the figure.
-  )
+    # Get class label names from the generator's class indices.
+    if (labelEncoder is not None):
+      classLabels = labelEncoder.classes_.tolist()
+    else:
+      classLabels = list(genObj.class_indices.keys())
+    cm = confusion_matrix(yTrue, yPred)
+    cmPath = os.path.join(storageDir, f"{keyword}ConfusionMatrix.pdf")
+    PlotConfusionMatrix(
+      cm,  # Confusion matrix (2D list or numpy array).
+      classLabels,  # List of class labels.
+      normalize=False,  # Whether to normalize the confusion matrix.
+      roundDigits=3,  # Number of decimal places to round normalized values.
+      title="Confusion Matrix",  # Title of the plot.
+      cmap="Blues",  # Colormap for the heatmap.
+      display=False,  # Whether to display the plot.
+      save=True,  # Whether to save the plot.
+      fileName=cmPath,  # File name to save the plot.
+      fontSize=15,  # Font size for labels and annotations.
+      annotate=True,  # Whether to annotate cells with values.
+      figSize=(8, 8),  # Figure size in inches.
+      colorbar=True,  # Whether to show colorbar.
+      returnFig=False,  # Whether to return the figure object.
+      dpi=dpi,  # DPI for saving the figure.
+    )
+    print("\nClassification Report:")
+    print(classification_report(yTrue, yPred, target_names=classLabels))
 
-  clsWisePRFPath = os.path.join(storageDir, "TestClasswisePRFBarPlot.pdf")
-  PlotClasswisePRFBar(
-    cm,
-    classNames=classLabels,
-    fontSize=14,
-    figsize=(8, 5),
-    display=False,
-    save=True,
-    fileName=clsWisePRFPath,
-    dpi=720,
-    returnFig=False,
-  )
+    pm = CalculatePerformanceMetrics(
+      confMatrix=cm,
+      eps=1e-10,  # Small value to avoid division by zero.
+      addWeightedAverage=True,  # Whether to include weighted averages in the output.
+      addPerClass=True,  # Whether to include per-class metrics in the output.
+    )
+    pmDf = pd.DataFrame(pm)
+    pmFilePath = os.path.join(storageDir, f"{keyword}PerformanceMetrics.csv")
+    pmDf.to_csv(pmFilePath, index=False)
+    for key, value in pm.items():
+      print(f"{key}: {value}")
+
+    rocPath = os.path.join(storageDir, f"{keyword}ROCCurve.pdf")
+    PlotROCAUCCurve(
+      yTrue,  # True labels (one-hot or binary).
+      yPredProb,  # Predicted labels (one-hot or binary).
+      classLabels,  # List of class names.
+      areProbabilities=True,  # Whether yPred are probabilities.
+      title="ROC Curve & AUC",  # Plot title.
+      figSize=(5, 5),  # Figure size.
+      cmap=None,  # Colormap for ROC curves.
+      display=False,  # Display the plot.
+      save=True,  # Save the plot.
+      fileName=rocPath,  # File name.
+      fontSize=16,  # Font size.
+      plotDiagonal=True,  # Plot diagonal reference line.
+      annotateAUC=True,  # Annotate AUC value on plot.
+      showLegend=True,  # Show legend.
+      returnFig=False,  # Return figure object.
+      dpi=dpi,  # DPI for saving the figure.
+    )
+
+    prcPath = os.path.join(storageDir, f"{keyword}PRCCurve.pdf")
+    PlotPRCCurve(
+      yTrue,  # True labels (one-hot or binary).
+      yPredProb,  # Predicted labels (one-hot or binary).
+      classLabels,  # List of class names.
+      areProbabilities=True,  # Whether yPred are probabilities.
+      title="PRC Curve",  # Plot title.
+      figSize=(5, 5),  # Figure size.
+      cmap=None,  # Colormap for PRC curves.
+      display=False,  # Display the plot.
+      save=True,  # Save the plot.
+      fileName=prcPath,  # File name.
+      fontSize=16,  # Font size.
+      annotateAvg=True,  # Annotate average precision value on plot.
+      showLegend=True,  # Show legend.
+      returnFig=False,  # Return figure object.
+      dpi=dpi,  # DPI for saving the figure.
+    )
+
+    clsWisePRFPath = os.path.join(storageDir, f"{keyword}ClasswisePRFBarPlot.pdf")
+    PlotClasswisePRFBar(
+      cm,
+      classNames=classLabels,
+      fontSize=14,
+      figsize=(8, 5),
+      display=False,
+      save=True,
+      fileName=clsWisePRFPath,
+      dpi=dpi,
+      returnFig=False,
+    )

@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
-from HMB.TFHelper import TrainPretrainedAttentionModelFromDataFrame
+from HMB.TFHelper import TrainPretrainedAttentionModelFromDataFrame, EvaluatePretrainedAttentionModelFromDataFrame
 
 if (__name__ == "__main__"):
   # Define the dataset base paths using camelCase naming for clarity.
@@ -71,10 +71,14 @@ if (__name__ == "__main__"):
   baseModelString = "Xception"
   attentionBlockStr = "CBAM"
   expDir = os.path.join(baseStorageDir, f"{baseModelString}_{attentionBlockStr}")
+  modelPath = os.path.join(expDir, "BestModel.h5")
+
+  columnsMap = {"imagePath": "image_path", "categoryEncoded": "category_encoded", "split": "split"}
 
   TrainPretrainedAttentionModelFromDataFrame(
     dataFrame,
-    columnsMap={"imagePath": "image_path", "categoryEncoded": "category_encoded", "split": "split"},
+    columnsMap=columnsMap,
+    labelEncoder=labelEncoder,
     imgShape=imgShape,
     batchSize=batchSize,
     baseModelString=baseModelString,
@@ -88,4 +92,17 @@ if (__name__ == "__main__"):
     storageDir=expDir,
     dpi=720,
     verbose=2,
+  )
+
+  EvaluatePretrainedAttentionModelFromDataFrame(
+    dataFrame,
+    modelPath,
+    columnsMap=columnsMap,
+    labelEncoder=labelEncoder,
+    imgShape=imgShape,
+    batchSize=batchSize,
+    storageDir=expDir,
+    dpi=720,
+    verbose=2,
+    ensureCUDA=True,
   )
