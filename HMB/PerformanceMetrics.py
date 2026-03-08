@@ -2751,7 +2751,7 @@ def PlotErrorAnalysis(
     classNames=None,
     maxExamples=5,
     fontSize=12,
-    figsize=(12, 8),
+    figsize=(14, 10),
     display=True,
     save=False,
     fileName="ErrorAnalysis.pdf",
@@ -2768,7 +2768,7 @@ def PlotErrorAnalysis(
     classNames (list or None): Optional class names for display. Default is None.
     maxExamples (int): Max examples per error type to show. Default is 5.
     fontSize (int): Font size for text. Default is 12.
-    figsize (tuple): Figure size. Default is (12, 8).
+    figsize (tuple): Figure size. Default is (14, 10).
     display (bool): Whether to display the plot. Default is True.
     save (bool): Whether to save the plot. Default is False.
     fileName (str): File name to save the plot. Default is "ErrorAnalysis.pdf".
@@ -2779,7 +2779,8 @@ def PlotErrorAnalysis(
     matplotlib.figure.Figure or None: The matplotlib figure object if returnFig is True, otherwise None.
 
   Notes:
-    - Shows up to maxExamples for each of FP, FN, TP, TN, with sample indices and optionally sample data.
+    - Shows up to `maxExamples` for each of FP, FN, TP, TN, with sample indices and optionally sample data.
+    - Column widths are dynamically calculated based on actual content (class names, indices, samples).
     - Useful for qualitative error analysis and debugging.
     - Saving and displaying the plot are optional and controlled by parameters.
 
@@ -2799,8 +2800,15 @@ def PlotErrorAnalysis(
     )
   '''
 
+  # Import required modules.
+  import numpy as np
+  import matplotlib.pyplot as plt
+  from matplotlib.patches import Rectangle
+
+  # Convert inputs to numpy arrays.
   yTrue = np.array(yTrue)
   yPred = np.array(yPred)
+  # Set default class names for binary classification.
   if (classNames is None and len(np.unique(yTrue)) == 2):
     classNames = ["Negative", "Positive"]
   elif (classNames is None):
@@ -2812,25 +2820,50 @@ def PlotErrorAnalysis(
   TPIdx = np.where((yTrue == 1) & (yPred == 1))[0]
   TNIdx = np.where((yTrue == 0) & (yPred == 0))[0]
 
+  # Define error types with labels, indices, and background colors.
   types = [
     ("False Positives", FPIdx, "#FFCCCC"),
     ("False Negatives", FNIdx, "#FFE5B4"),
     ("True Positives", TPIdx, "#CCFFCC"),
     ("True Negatives", TNIdx, "#CCE5FF"),
   ]
+  # Count errors for each type.
   errorCounts = [len(FPIdx), len(FNIdx), len(TPIdx), len(TNIdx)]
+  # Define error labels for bar chart.
   errorLabels = ["FP", "FN", "TP", "TN"]
+  # Define error colors for bar chart.
   errorColors = ["#FF6666", "#FFB266", "#66FF66", "#66B2FF"]
+  # Define border colors for each block.
+  borderColors = ["#CC0000", "#CC6600", "#00CC00", "#0066CC"]
 
+  # Calculate dynamic column widths based on actual content.
+  # Idx column width based on maximum index number.
+  allIdxs = np.concatenate([FPIdx, FNIdx, TPIdx, TNIdx]) if (
+      len(FPIdx) + len(FNIdx) + len(TPIdx) + len(TNIdx) > 0) else np.array([0])
+  colWidthIdx = max(len(str(max(allIdxs))), 3) + 2
+  # True/Pred column width based on maximum class name length.
+  if (classNames is not None):
+    maxClassNameLen = max(len(str(name)) for name in classNames)
+    colWidthClass = maxClassNameLen * 0.9
+  else:
+    colWidthClass = 10
+  # Sample column width if X is provided.
+  colWidthSample = 40 if (X is not None) else 0
+
+  # Create figure if saving, displaying, or returning.
   if (save or display or returnFig):
+    # Create figure with specified size.
     fig = plt.figure(figsize=figsize)
-    gs = fig.add_gridspec(3, 2, height_ratios=[0.7, 1, 1])
+    # Create grid specification with 3 rows and 2 columns.
+    gs = fig.add_gridspec(3, 2, height_ratios=[0.6, 1.1, 1.1], hspace=0.35, wspace=0.25)
 
     # Top: summary bar chart.
-    ax_bar = fig.add_subplot(gs[0, :])
-    ax_bar.bar(errorLabels, errorCounts, color=errorColors, edgecolor="black")
+    axBar = fig.add_subplot(gs[0, :])
+    # Create bar chart with error counts.
+    bars = axBar.bar(errorLabels, errorCounts, color=errorColors, edgecolor="black", linewidth=1.5)
+    # Add count labels on top of each bar.
     for i, count in enumerate(errorCounts):
-      ax_bar.text(
+      axBar.text(
         i, count + max(errorCounts) * 0.02,
         str(count),
         ha="center",
@@ -2838,13 +2871,19 @@ def PlotErrorAnalysis(
         fontsize=fontSize + 2,
         fontweight="bold"
       )
-    ax_bar.set_ylabel("Count", fontsize=fontSize)
-    ax_bar.set_title("Error Type Counts", fontsize=fontSize + 4)
-    ax_bar.spines["top"].set_visible(False)
-    ax_bar.spines["right"].set_visible(False)
-    ax_bar.grid(axis="y", alpha=0.2)
+    # Set y-axis label.
+    axBar.set_ylabel("Count", fontsize=fontSize, fontweight="bold")
+    # Set title for bar chart.
+    axBar.set_title("Error Type Counts", fontsize=fontSize + 4, fontweight="bold", pad=10)
+    # Hide top and right spines.
+    axBar.spines["top"].set_visible(False)
+    axBar.spines["right"].set_visible(False)
+    # Add grid lines for y-axis.
+    axBar.grid(axis="y", alpha=0.3, linestyle="--", linewidth=0.5)
+    # Set y-axis limit for better spacing.
+    axBar.set_ylim(0, max(errorCounts) * 1.15 if max(errorCounts) > 0 else 1)
 
-    # 2x2 grid for error examples
+    # 2x2 grid for error examples.
     axes = [
       fig.add_subplot(gs[1, 0]),
       fig.add_subplot(gs[1, 1]),
@@ -2852,60 +2891,137 @@ def PlotErrorAnalysis(
       fig.add_subplot(gs[2, 1]),
     ]
 
+    # Iterate over each error type.
     for i, (label, idxs, color) in enumerate(types):
       ax = axes[i]
+      # Limit examples to maxExamples.
       n = min(maxExamples, len(idxs))
-      ax.set_title(f"{label} (n={len(idxs)})", fontsize=fontSize + 1, backgroundcolor=color, pad=8)
+      # Get short label for title.
+      shortLabel = errorLabels[i]
+      # Set title with centered text and background color.
+      ax.set_title(
+        f"{shortLabel}: {label} (n={len(idxs)})",
+        fontsize=fontSize + 2,
+        fontweight="bold",
+        backgroundcolor=color,
+        pad=12,
+        loc="center"
+      )
+      # Turn off axis.
       ax.axis("off")
+      # Set background color for the block.
+      ax.set_facecolor(color)
 
+      # Add rectangle border around each block.
+      rect = Rectangle(
+        # (x, y) position of the rectangle in axes coordinates (0 to 1).
+        (0.02, 0.02), 0.98, 0.98,
+        fill=False,
+        edgecolor=borderColors[i],
+        linewidth=2,
+        transform=ax.transAxes,
+        clip_on=False
+      )
+      ax.add_patch(rect)
+
+      # Handle case with no examples.
       if (n == 0):
-        ax.text(0.5, 0.5, "None", ha="center", va="center", fontsize=fontSize, color="gray")
+        ax.text(0.5, 0.5, "None", ha="center", va="center", fontsize=fontSize, color="gray", fontweight="bold")
         continue
 
-      # Table header.
-      header = "Idx | True | Pred" + (" | Sample" if X is not None else "")
-      ax.text(0, 1, header, fontsize=fontSize, fontweight="bold", va="top", family="monospace")
-
+      # Calculate max class name length for this specific error type for row alignment.
+      maxTrueLen = colWidthClass
+      maxPredLen = colWidthClass
       for j in range(n):
         idx = idxs[j]
         tval = yTrue[idx]
         pval = yPred[idx]
-        row = f"{idx:<3} | {tval:<4} | {pval:<4}"
+        if (classNames is not None and len(classNames) > max(tval, pval)):
+          maxTrueLen = max(maxTrueLen, len(str(classNames[tval])))
+          maxPredLen = max(maxPredLen, len(str(classNames[pval])))
 
+      # Build table header with dynamic column alignment.
+      header = f"{'Idx':^{colWidthIdx}} | {'True':^{maxTrueLen}} | {'Pred':^{maxPredLen}}"
+      if (X is not None):
+        header += f" | {'Sample':<{colWidthSample}}"
+
+      # Draw header background box.
+      ax.text(
+        0.03, 0.97, header,
+        fontsize=fontSize * 0.90,
+        fontweight="bold",
+        va="top",
+        family="monospace",
+      )
+
+      # Add each example row.
+      for j in range(n):
+        idx = idxs[j]
+        tval = yTrue[idx]
+        pval = yPred[idx]
+
+        # Convert to class names if available.
+        if (classNames is not None and len(classNames) > max(tval, pval)):
+          tvalStr = str(classNames[tval])
+          pvalStr = str(classNames[pval])
+        else:
+          tvalStr = str(tval)
+          pvalStr = str(pval)
+
+        # Format row text with dynamic column alignment based on content.
+        row = f"{idx:^{colWidthIdx}} | {tvalStr:^{maxTrueLen}} | {pvalStr:^{maxPredLen}}"
+        # Add sample data if X is provided.
         if (X is not None):
           sample = X.iloc[idx] if (hasattr(X, "iloc")) else X[idx]
           sampleStr = str(sample)
 
           # Limit sample string length for readability.
-          if (len(sampleStr) > 60):
-            sampleStr = sampleStr[:57] + "..."
-          row += f" | {sampleStr}"
+          if (len(sampleStr) > colWidthSample - 3):
+            sampleStr = sampleStr[:colWidthSample - 6] + "..."
+          row += f" | {sampleStr:<{colWidthSample}}"
+
+        # Calculate row y-position.
+        rowY = 0.88 - j * 0.10
+
+        # Add row text with subtle background.
         ax.text(
-          0, 1 - (j + 1) * 0.13, row,
-          fontsize=fontSize * 0.95,
+          0.03, rowY, row,
+          fontsize=fontSize * 0.90,
           va="top",
           family="monospace",
-          bbox=dict(facecolor=color, edgecolor="none", alpha=0.25)
         )
 
-    plt.suptitle("Error Analysis: FP, FN, TP, TN", fontsize=fontSize + 6, fontweight="bold")
+    # Add main title.
+    fig.suptitle("Error Analysis: FP, FN, TP, TN", fontsize=fontSize + 8, fontweight="bold", y=0.98)
+
+    # Adjust layout.
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
     # Save the plot if requested.
-    if (save):  # Save the plot.
+    if (save):
+      # Get file extension.
       ext = fileName.split(".")[-1]
+      # Save as PDF if extension is pdf.
       if (ext.lower() == "pdf"):
         try:
-          fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+          fig.savefig(fileName, dpi=dpi, bbox_inches="tight", facecolor="white", edgecolor="none")
         except Exception as e:
           print(f"Error saving plot: {e}")
-      fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+      # Also save as PNG.
+      fig.savefig(
+        fileName.replace(f".{ext}", ".png"),
+        dpi=dpi, bbox_inches="tight",
+        facecolor="white", edgecolor="none"
+      )
 
+    # Display the plot if requested.
     if (display):
       plt.show()
 
+    # Close the figure.
     plt.close(fig)
 
+    # Return figure if requested.
     if (returnFig):
       return fig
 
@@ -3109,7 +3225,7 @@ def PlotErrorMatrix(
   # Highlight most common errors (off-diagonal max per row).
   for i in range(numClasses):
     for j in range(numClasses):
-      color = "red" if (i != j and cm[i, j] == np.max(np.delete(cm[i], i))) else "black"
+      color = "red" if (i != j and cm[i, j] == np.max(np.delete(cm[i], i))) else "white"
       ax.text(j, i, str(cm[i, j]), ha="center", va="center", color=color, fontsize=fontSize * 0.9)
 
   plt.colorbar(im, ax=ax)

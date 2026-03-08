@@ -2549,152 +2549,453 @@ class OptunaTuningClassification(object):
     return self.study
 
 
-def MachineLearningClassificationInference(
-    X,
-    objects=None,
-    storageFolderPath=None,
-    objectFilenames=None,
-    returnProba=False,
+def OptunaTuningClassificationTesting(
+    datasetFilePath,
+    experimentPath,
+    dpi=720,
+    T=500,
 ):
   r'''
   Run inference using a saved preprocessing + model objects bundle.
 
   Parameters:
-    X: numpy array, list, or pandas.DataFrame containing one or more samples (rows).
-    objects: dict (optional). If provided, should contain keys used below.
-    storageFolderPath: str (optional). If provided and objects is None, function will try to load a pickled objects dict from disk.
-    objectFilenames: list (optional). Filenames to try (pickle). Defaults to common names.
-    returnProba: bool (optional). If True and model supports predict_proba, returns probabilities alongside predictions.
-
-  Returns:
-    predictions: array-like of predicted labels (decoded with labelEncoder if available).
-    proba (optional): probability array if returnProba and supported.
+    datasetFilePath (str): Path to the dataset file for inference.
+    experimentPath (str): Path to the experiment folder containing the saved model and preprocessing objects.
+    dpi (int, optional): DPI for saving the performance plots. Default is 720.
+    T (int, optional): Number of Monte Carlo samples for uncertainty estimation (if applicable). Default is 500.
   '''
 
-  # Try loading objects from folder if not provided.
-  if (objects is None) and storageFolderPath is not None:
-    if objectFilenames is None:
-      objectFilenames = [
-        "ML_Objects.p",
-        "Objects.p",
-        "Saved Objects.p",
-        "BestModel.p",
-        "Model.p",
-        "Objects.pkl",
-        "model_objects.p",
-      ]
-    loaded = False
-    for fn in objectFilenames:
-      fp = os.path.join(storageFolderPath, fn)
-      if os.path.exists(fp):
-        with open(fp, "rb") as f:
-          try:
-            objects = pickle.load(f)
-            loaded = True
-            break
-          except Exception:
-            # ignore and try next
-            continue
-    if not loaded and objects is None:
-      raise FileNotFoundError("No pickled objects found in storageFolderPath and no `objects` provided.")
+  from sklearn.metrics import confusion_matrix, classification_report
+  from HMB.Utils import ReadPickleFile
+  from HMB.PerformanceMetrics import (
+    PlotConfusionMatrix, CalculatePerformanceMetrics, PlotErrorAnalysis,
+    PlotROCAUCCurve, PlotPRCCurve, PlotClasswisePRFBar, PlotErrorMatrix,
+    PlotPredictionConfidenceHistogram, ComputeECEPlotReliability,
+    PlotClassificationResiduals, PlotFeatureImportance, RiskCoverageCurve,
+    SampleMonteCarloDirichletFromProbs, ComputeMonteCarloUncertaintyMeasures,
+    PlotCalibrationCurve, PlotTopKAccuracyCurve, PlotCounterfactualOutcomes,
+  )
+  from HMB.Initializations import UpdateMatplotlibSettings
 
-  if objects is None:
-    raise ValueError("`objects` must be provided or `storageFolderPath` must contain a pickled objects bundle.")
+  UpdateMatplotlibSettings()
 
-  # Normalize X to DataFrame
-  if isinstance(X, (list, tuple)):
-    X = np.asarray(X)
-  if isinstance(X, np.ndarray):
-    if X.ndim == 1:
-      X = X.reshape(1, -1)
-    # If selectedColumns known, use them as columns; otherwise create numeric columns
-    if "selectedColumns" in objects and objects["selectedColumns"] is not None:
-      cols = list(objects["selectedColumns"])
-      if X.shape[1] != len(cols):
-        # if mismatch, try to proceed but warn by raising error
-        raise ValueError("Input has different number of features than the saved `selectedColumns`.")
-      xdf = pd.DataFrame(X, columns=cols)
-    else:
-      cols = [f"f{i}" for i in range(X.shape[1])]
-      xdf = pd.DataFrame(X, columns=cols)
-  elif isinstance(X, pd.DataFrame):
-    xdf = X.copy()
+  # Load the best parameters from a previous training run for the current file.
+  bestParamsPath = os.path.join(experimentPath, "Optuna Best Params.csv")
+  if (os.path.exists(bestParamsPath)):
+    bestParams = pd.read_csv(bestParamsPath)
+    bestParams.fillna("None", inplace=True)
   else:
-    raise ValueError("Unsupported X type. Provide numpy array, list, or pandas DataFrame.")
+    raise FileNotFoundError(f"Best parameters file not found for {file} at path: {bestParamsPath}")
 
-  # If objects include featuresEncoders: apply them column-wise
-  featuresEncoders = objects.get("featuresEncoders", None)
-  if featuresEncoders:
-    for col, enc in featuresEncoders.items():
-      if col in xdf.columns:
-        # encoder expected to have transform method
-        try:
-          xdf[col] = enc.transform(
-            xdf[[col]].values.ravel() if hasattr(enc, "transform") and xdf[[col]].shape[1] == 1 else xdf[[col]])
-        except Exception:
-          # fallback: try reshaping
-          xdf[col] = enc.transform(xdf[[col]].values)
-      # else: ignore missing encoder column
+  firstRow = bestParams.iloc[0]
+  scalerName = firstRow["Scaler"]
+  modelName = firstRow["Model"]
+  fsTechName = firstRow["FS Tech"]
+  fsRatioName = firstRow["FS Ratio"] if (fsTechName != "None") else "None"
+  dbTechName = firstRow["DB Tech"]
+  outliersTechName = firstRow["Outliers Tech"]
 
-  # If a scaler exists, apply it
-  scaler = objects.get("scaler", None)
-  if scaler is not None:
-    try:
-      x_scaled = scaler.transform(xdf)
-      # scaler.transform returns ndarray. Convert back to DataFrame with same columns
-      xdf = pd.DataFrame(x_scaled, columns=xdf.columns, index=xdf.index)
-    except Exception as ex:
-      raise RuntimeError(f"Scaler transform failed: {ex}")
+  print("Testing with the best parameters...")
+  print(
+    f"Scaler: {scalerName}, Model: {modelName}, FS Tech: {fsTechName}, FS Ratio: {fsRatioName}, "
+    f"DB Tech: {dbTechName}, Outliers Tech: {outliersTechName}"
+  )
+  pickleFileName = f"{modelName}_{scalerName}_{fsTechName}_{fsRatioName}_{dbTechName}_{outliersTechName}.p"
+  pickleFilePath = os.path.join(experimentPath, pickleFileName)
+  if (not os.path.exists(pickleFilePath)):
+    raise FileNotFoundError(f"Pickle file not found for the best model at path: {pickleFilePath}")
 
-  # If a feature selector / dimensionality reducer exists, apply it.
-  fs = objects.get("fs", None)
-  if fs is not None:
-    try:
-      X_trans = fs.transform(xdf)
-      # After transform, column names may be lost; keep as ndarray for model
-      X_model = np.asarray(X_trans)
-    except Exception as ex:
-      raise RuntimeError(f"Feature selector transform failed: {ex}")
-  else:
-    # If selectedColumns are present and xdf has extra columns, reduce to those
-    sel_cols = objects.get("selectedColumns", None)
-    if sel_cols is not None:
-      sel_cols = [c for c in sel_cols if c in xdf.columns]
-      X_model = xdf[sel_cols].values
+  # Load the best model from the pickle file.
+  pickleData = ReadPickleFile(pickleFilePath)
+  print(f"Loaded from pickle file: {pickleFilePath}")
+  print(f"Pickle keys:")
+  for key in pickleData.keys():
+    print(f"  - {key}")
+
+  model = pickleData.get("Model", None)
+  if (model is None):
+    raise KeyError(f"'Model' key not found in the pickle file: {pickleFilePath}")
+  selectedFeatures = pickleData.get("SelectedFeatures", None)
+  if (selectedFeatures is None):
+    raise KeyError(f"'SelectedFeatures' key not found in the pickle file: {pickleFilePath}")
+  labelEncoder = pickleData.get("LabelEncoder", None)
+  if (labelEncoder is None):
+    raise KeyError(f"'LabelEncoder' key not found in the pickle file: {pickleFilePath}")
+  featuresEncoders = pickleData.get("FeaturesEncoders", None)
+  if (featuresEncoders is None):
+    raise KeyError(f"'FeaturesEncoders' key not found in the pickle file: {pickleFilePath}")
+  scaler = pickleData.get("Scaler", None)
+  if (scaler is None and not scalerName in ["None", None]):
+    raise KeyError(f"'Scaler' key not found in the pickle file: {pickleFilePath}")
+  configurations = pickleData.get("Configurations", None)
+  if (configurations is None):
+    raise KeyError(f"'Configurations' key not found in the pickle file: {pickleFilePath}")
+  currentColumns = pickleData.get("CurrentColumns", None)
+  if (currentColumns is None):
+    raise KeyError(f"'CurrentColumns' key not found in the pickle file: {pickleFilePath}")
+  featureSelector = pickleData.get("FeatureSelector", None)
+  if (featureSelector is None and not fsTechName in ["None", None] and not fsRatioName in ["None", None, 100]):
+    raise KeyError(f"'FeatureSelector' key not found in the pickle file: {pickleFilePath}")
+
+  dropFirstColumn = configurations.get("dropFirstColumn", None)
+  if (dropFirstColumn is None):
+    raise KeyError(f"'dropFirstColumn' key not found in the configurations in the pickle file: {pickleFilePath}")
+  targetColumn = configurations.get("targetColumn", None)
+  if (targetColumn is None):
+    raise KeyError(f"'targetColumn' key not found in the configurations in the pickle file: {pickleFilePath}")
+  dropNAColumns = configurations.get("dropNAColumns", None)
+  if (dropNAColumns is None):
+    raise KeyError(f"'dropNAColumns' key not found in the configurations in the pickle file: {pickleFilePath}")
+
+  # Load the dataset.
+  if (not os.path.exists(datasetFilePath)):
+    raise FileNotFoundError(f"Dataset file not found at path: {datasetFilePath}")
+  # Read the CSV file into a pandas DataFrame.
+  data = pd.read_csv(datasetFilePath)
+
+  # Check if dropFirstColumn is True, then drop the first column.
+  if (dropFirstColumn):
+    # Drop the first column if it is not the target column.
+    if (data.columns[0] != targetColumn):
+      data = data.drop(data.columns[0], axis=1)
+
+  # Drop columns with any null values if dropNAColumns is True.
+  if (dropNAColumns):
+    # Drop empty columns from the DataFrame.
+    # Updated from "all" to "any" to drop columns with any null values.
+    # axis=1: means columns, how="any" means drop if any value is null.
+    data = data.dropna(axis=1, how="any")
+
+    # Drop rows with null or empty values from the DataFrame.
+    # axis=0: means rows, how="any" means drop if any value is null.
+    data = data.dropna(axis=0, how="any")
+
+  # Features (X) are all columns except the "Class" column.
+  X = data.drop(targetColumn, axis=1)
+
+  # Target (y) is the "Class" column.
+  y = data[targetColumn]
+
+  # Encode the target labels using the loaded label encoder.
+  y = labelEncoder.transform(y)
+
+  # Encode the features using the loaded features encoders if they exist.
+  if (featuresEncoders is not None):
+    categoricalCols = X.select_dtypes(include=["object", "category"]).columns
+    for col in categoricalCols:
+      if (col in featuresEncoders):
+        encoder = featuresEncoders[col]
+        X[col] = encoder.transform(X[col])
+      else:
+        raise KeyError(f"Encoder for feature column '{col}' not found in the loaded features encoders.")
+
+  dataDf = pd.DataFrame(data, columns=currentColumns)
+  if (scaler is not None):
+    # Transform the data using the fitted scaler.
+    dataDf = scaler.transform(dataDf)
+    dataDf = pd.DataFrame(dataDf, columns=currentColumns)
+
+  if (featureSelector is not None):
+    if (not hasattr(featureSelector, "transform")):
+      # Use the selected features list to select the features from the dataset.
+      missingFeatures = [feat for feat in selectedFeatures if feat not in dataDf.columns]
+      if (missingFeatures):
+        raise ValueError(f"The following selected features are missing from the dataset: {missingFeatures}")
+      dataDf = dataDf[selectedFeatures]
     else:
-      X_model = xdf.values
+      # Select features using the fitted feature selector.
+      dataDf = featureSelector.transform(dataDf)
+    dataDf = pd.DataFrame(dataDf, columns=selectedFeatures)
 
-  # Load model
-  model = objects.get("model", None)
-  if model is None:
-    # try common pickle names inside objects dict
-    raise ValueError("No `model` found in `objects`.")
+  # Ensure that the selected features are in the same order as the selectedFeatures list if it exists.
+  if (selectedFeatures is not None):
+    missingFeatures = [feat for feat in selectedFeatures if feat not in dataDf.columns]
+    if (missingFeatures):
+      raise ValueError(f"The following selected features are missing from the dataset: {missingFeatures}")
+    dataDf = dataDf[selectedFeatures]
 
-  # Predict
-  try:
-    if returnProba and hasattr(model, "predict_proba"):
-      proba = model.predict_proba(X_model)
-      preds = model.predict(X_model)
-    else:
-      preds = model.predict(X_model)
-      proba = None
-  except Exception as ex:
-    raise RuntimeError(f"Model prediction failed: {ex}")
-
-  # If label encoder for target exists, inverse transform predictions
-  le = objects.get("labelEncoder", None)
-  if (le is not None) and hasattr(le, "inverse_transform"):
-    try:
-      preds_out = le.inverse_transform(preds)
-    except Exception:
-      # If inverse_transform fails (e.g., classes mismatch), return raw preds
-      preds_out = preds
+  # Apply the loaded model to the processed dataset and evaluate the performance.
+  yTrue = y
+  yPred = model.predict(dataDf)
+  yPredProb = model.predict_proba(dataDf) if (hasattr(model, "predict_proba")) else None
+  yPredConfidences = np.max(yPredProb, axis=1) if (yPredProb is not None) else None
+  if (labelEncoder is not None):
+    yTrueLabels = labelEncoder.inverse_transform(yTrue)
+    yPredLabels = labelEncoder.inverse_transform(yPred)
+    classLabels = labelEncoder.classes_.tolist()
+    classIndices = labelEncoder.transform(classLabels)
   else:
-    preds_out = preds
+    yTrueLabels = yTrue
+    yPredLabels = yPred
+    classLabels = np.unique(yTrue).tolist()
+    classIndices = classLabels
 
-  if return_proba:
-    return preds_out, proba
-  return preds_out
+  storageDir = os.path.join(experimentPath, "Testing Results")
+  os.makedirs(storageDir, exist_ok=True)
+
+  # Store evaluation results as DataFrame and save to CSV.
+  evalResults = {
+    "yTrue"           : yTrue.tolist(),
+    "yPred"           : yPred.tolist(),
+    "yPredProb"       : yPredProb.tolist(),
+    "yPredConfidences": yPredConfidences.tolist(),
+    "yTrueLabels"     : yTrueLabels.tolist(),
+    "yPredLabels"     : yPredLabels.tolist(),
+  }
+  evalResultsDf = pd.DataFrame(evalResults)
+  evalResultsFilePath = os.path.join(storageDir, f"EvaluationResults.csv")
+  evalResultsDf.to_csv(evalResultsFilePath, index=False)
+
+  cm = confusion_matrix(yTrue, yPred)
+  cmPath = os.path.join(storageDir, f"ConfusionMatrix.pdf")
+  PlotConfusionMatrix(
+    cm,  # Confusion matrix (2D list or numpy array).
+    classLabels,  # List of class labels.
+    normalize=False,  # Whether to normalize the confusion matrix.
+    roundDigits=3,  # Number of decimal places to round normalized values.
+    title="Confusion Matrix",  # Title of the plot.
+    cmap="Blues",  # Colormap for the heatmap.
+    display=False,  # Whether to display the plot.
+    save=True,  # Whether to save the plot.
+    fileName=cmPath,  # File name to save the plot.
+    fontSize=15,  # Font size for labels and annotations.
+    annotate=True,  # Whether to annotate cells with values.
+    figSize=(8, 8),  # Figure size in inches.
+    colorbar=True,  # Whether to show colorbar.
+    returnFig=False,  # Whether to return the figure object.
+    dpi=dpi,  # DPI for saving the figure.
+  )
+  print("\nClassification Report:")
+  print(classification_report(yTrue, yPred, target_names=classLabels))
+
+  pm = CalculatePerformanceMetrics(
+    confMatrix=cm,
+    eps=1e-10,  # Small value to avoid division by zero.
+    addWeightedAverage=True,  # Whether to include weighted averages in the output.
+    addPerClass=True,  # Whether to include per-class metrics in the output.
+  )
+  pmDf = pd.DataFrame(pm)
+  pmFilePath = os.path.join(storageDir, f"PerformanceMetrics.csv")
+  pmDf.to_csv(pmFilePath, index=False)
+  for key, value in pm.items():
+    print(f"{key}: {value}")
+
+  rocPath = os.path.join(storageDir, f"ROCCurve.pdf")
+  PlotROCAUCCurve(
+    yTrue,  # True labels (one-hot or binary).
+    yPredProb,  # Predicted labels (one-hot or binary).
+    classLabels,  # List of class names.
+    areProbabilities=True,  # Whether yPred are probabilities.
+    title="ROC Curve & AUC",  # Plot title.
+    figSize=(5, 5),  # Figure size.
+    cmap=None,  # Colormap for ROC curves.
+    display=False,  # Display the plot.
+    save=True,  # Save the plot.
+    fileName=rocPath,  # File name.
+    fontSize=16,  # Font size.
+    plotDiagonal=True,  # Plot diagonal reference line.
+    annotateAUC=True,  # Annotate AUC value on plot.
+    showLegend=True,  # Show legend.
+    returnFig=False,  # Return figure object.
+    dpi=dpi,  # DPI for saving the figure.
+  )
+
+  prcPath = os.path.join(storageDir, f"PRCCurve.pdf")
+  PlotPRCCurve(
+    yTrue,  # True labels (one-hot or binary).
+    yPredProb,  # Predicted labels (one-hot or binary).
+    classLabels,  # List of class names.
+    areProbabilities=True,  # Whether yPred are probabilities.
+    title="PRC Curve",  # Plot title.
+    figSize=(5, 5),  # Figure size.
+    cmap=None,  # Colormap for PRC curves.
+    display=False,  # Display the plot.
+    save=True,  # Save the plot.
+    fileName=prcPath,  # File name.
+    fontSize=16,  # Font size.
+    annotateAvg=True,  # Annotate average precision value on plot.
+    showLegend=True,  # Show legend.
+    returnFig=False,  # Return figure object.
+    dpi=dpi,  # DPI for saving the figure.
+  )
+
+  clsWisePRFPath = os.path.join(storageDir, f"ClasswisePRFBarPlot.pdf")
+  PlotClasswisePRFBar(
+    cm,
+    classNames=classLabels,
+    fontSize=15,
+    figsize=(8, 5),
+    display=False,
+    save=True,
+    fileName=clsWisePRFPath,
+    dpi=dpi,
+    returnFig=False,
+  )
+
+  errorAnalysisPath = os.path.join(storageDir, f"ErrorAnalysis.pdf")
+  PlotErrorAnalysis(
+    yTrue,
+    yPred,
+    X=None,
+    classNames=classLabels,
+    maxExamples=5,
+    fontSize=15,
+    figsize=(12, 10),
+    display=False,
+    save=True,
+    fileName=errorAnalysisPath,
+    dpi=dpi,
+    returnFig=False,
+  )
+
+  errorMatrixPath = os.path.join(storageDir, f"ErrorMatrix.pdf")
+  PlotErrorMatrix(
+    cm,
+    classNames=classLabels,
+    fontSize=15,
+    figsize=(7, 6),
+    display=False,
+    save=True,
+    fileName=errorMatrixPath,
+    dpi=dpi,
+    returnFig=False,
+  )
+
+  predConfHistPath = os.path.join(storageDir, f"PredictionConfidenceHistogram.pdf")
+  PlotPredictionConfidenceHistogram(
+    yPredProb,
+    yPred=yPred,
+    fontSize=15,
+    figsize=(8, 5),
+    bins=20,
+    display=False,
+    save=True,
+    fileName=predConfHistPath,
+    dpi=dpi,
+    returnFig=False,
+  )
+
+  clsResidualsPath = os.path.join(storageDir, f"ClassificationResiduals.pdf")
+  PlotClassificationResiduals(
+    yTrue,
+    yPred,
+    fontSize=15,
+    figsize=(8, 5),
+    display=False,
+    save=True,
+    fileName=clsResidualsPath,
+    dpi=dpi,
+    returnFig=False,
+  )
+
+  featureImportancePath = os.path.join(storageDir, f"FeatureImportance.pdf")
+  PlotFeatureImportance(
+    model,
+    featureNames=selectedFeatures,
+    title="Feature Importance",
+    fontSize=14,
+    figsize=(8, 5),
+    display=False,
+    save=True,
+    fileName=featureImportancePath,
+    dpi=dpi,
+    returnFig=False,
+    topN=10,
+  )
+
+  probsMC = SampleMonteCarloDirichletFromProbs(yPredProb, T=T, concentration=30.0)
+  uncertaintyMeasures = ComputeMonteCarloUncertaintyMeasures(probsMC)
+  confidences = uncertaintyMeasures["predictedConfidence"]
+  predictions = uncertaintyMeasures["predictedIdx"]
+  ecePath = os.path.join(storageDir, f"ECEReliabilityPlot.pdf")
+  ece, binAcc, binConf, binCounts = ComputeECEPlotReliability(
+    confidences,
+    predictions,
+    labels=yPred,
+    nBins=5,
+    title="ECE Example",
+    fontSize=15,
+    figSize=(6, 6),
+    display=False,
+    save=True,
+    fileName=ecePath,
+    dpi=dpi,
+    returnFig=False,
+    cmap="Blues",
+    applyXYLimits=True,
+  )
+  print(f"ECE: {ece}")
+  print(f"Bin Accuracies: {binAcc}")
+  print(f"Bin Confidences: {binConf}")
+  print(f"Bin Counts: {binCounts}")
+
+  riskCoveragePath = os.path.join(storageDir, f"RiskCoverageCurve.pdf")
+  correctness = (predictions == yPred).astype(int)
+  RiskCoverageCurve(
+    confidences,
+    correctness,
+    title="Risk-Coverage (Accuracy vs Coverage)",
+    fontSize=15,
+    figSize=(6, 6),
+    display=False,
+    save=True,
+    fileName=riskCoveragePath,
+    dpi=dpi,
+    returnFig=False,
+    color="blue",
+  )
+
+  topKAccPath = os.path.join(storageDir, f"TopKAccuracyCurve.pdf")
+  PlotTopKAccuracyCurve(
+    yPredProb,
+    yPred,
+    maxK=10,
+    title="Top-k Accuracy Curve",
+    figSize=(6, 6),
+    save=True,
+    fileName=topKAccPath,
+    display=False,
+    fontSize=15,
+    returnFig=False,
+    dpi=dpi,
+    color="blue",
+  )
+
+  calibCurvePath = os.path.join(storageDir, f"CalibrationCurve.pdf")
+  PlotCalibrationCurve(
+    yPredProb,
+    yPred,
+    nBins=10,
+    title="Calibration Curve",
+    fontSize=15,
+    figSize=(6, 6),
+    display=False,
+    save=True,
+    fileName=calibCurvePath,
+    dpi=dpi,
+    returnFig=False,
+    color="blue",
+  )
+
+  counterFolder = os.path.join(storageDir, "Counterfactual Outcomes")
+  os.makedirs(counterFolder, exist_ok=True)
+  for col in selectedFeatures:
+    counterfactualOutcomesPath = os.path.join(counterFolder, f"{col}.pdf")
+    PlotCounterfactualOutcomes(
+      dataDf,
+      model,
+      treatmentCol=col,
+      lowVal=None,
+      highVal=None,
+      classNames=classLabels,
+      title="Counterfactual Outcome Distributions",
+      save=True,
+      fileName=counterfactualOutcomesPath,
+      display=False,
+      returnPreds=False,
+      fontSize=15,
+      dpi=720,
+    )
 
 
 if __name__ == "__main__":
@@ -2753,5 +3054,3 @@ if __name__ == "__main__":
   print(f"Outlier Detection Technique: {rndOutlierTech}", flush=True)
   print(f"xTrain shape after outlier detection: {xTrain.shape}", flush=True)
   print(f"yTrain distribution after outlier detection: {np.bincount(yTrain)}", flush=True)
-
-

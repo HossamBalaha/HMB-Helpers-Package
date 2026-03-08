@@ -37,6 +37,8 @@ def UpdateMatplotlibSettings():
 
   import matplotlib.pyplot as plt
 
+  fontSerif = ["Times New Roman", "Georgia", "Garamond", "Palatino", "Bookman", "New Century Schoolbook"]
+
   # Update Matplotlib settings for better visualization.
   params = {
     "figure.dpi"        : 720,  # Set figure DPI for better resolution.
@@ -47,7 +49,7 @@ def UpdateMatplotlibSettings():
     "savefig.pad_inches": 0.05,  # Set padding around saved figures.
 
     "font.family"       : "serif",  # Use serif font family.
-    "font.serif"        : ["Times New Roman"],  # Specify serif font.
+    "font.serif"        : fontSerif,  # Specify serif font.
     "font.size"         : 12,  # Set default font size.
 
     "axes.titlesize"    : 16,  # Set title font size.

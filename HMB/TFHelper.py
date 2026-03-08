@@ -168,6 +168,242 @@ def SaveGradCamsForSamples(
     overlay.save(outPath)
 
 
+def MCDropoutPredictions(model, genObj, steps, T=30):
+  r'''
+  Run T stochastic forward passes with dropout enabled (model called with training=True).
+  Returns a numpy array of shape (noSamples, noClasses, T).
+
+  Parameters:
+    model (tensorflow.keras.Model): Trained model with Dropout layers.
+    genObj (tensorflow.keras.utils.Sequence): Data generator.
+    steps (int): Number of steps to cover the subset.
+    T (int): Number of stochastic forward passes.
+
+  Returns:
+    numpy.ndarray: Array of shape (noSamples, noClasses, T) with all predictions.
+  '''
+
+  # Validate T is at least 1.
+  assert T >= 1, "MCDropoutPredictions: T must be at least 1."
+  # Validate steps is at least 1.
+  assert steps >= 1, "MCDropoutPredictions: steps must be at least 1."
+  # Get number of samples from generator.
+  noSamples = genObj.samples
+  # Reset generator to start from beginning.
+  genObj.reset()
+  # Get one batch to determine number of classes.
+  x0, _ = next(genObj)
+  preds0 = model(x0, training=True).numpy()
+  noClasses = preds0.shape[1]
+  # Allocate array to store all predictions.
+  predsAll = np.zeros((noSamples, noClasses, T), dtype=np.float32)
+  # Iterate over T Monte Carlo dropout passes.
+  for t in range(T):
+    # Reset generator for each pass.
+    genObj.reset()
+    idx = 0
+    # Iterate over batches in this pass.
+    for s in range(steps):
+      try:
+        batchX, _ = next(genObj)
+      except StopIteration:
+        break
+      # Call model with training=True to activate dropout.
+      predsBatch = model(batchX, training=True).numpy()
+      batchSize = predsBatch.shape[0]
+      # Ensure we do not exceed noSamples boundary.
+      endIdx = min(idx + batchSize, noSamples)
+      actualBatchSize = endIdx - idx
+      predsAll[idx:endIdx, :, t] = predsBatch[:actualBatchSize]
+      idx += batchSize
+      # Break if all samples are processed.
+      if (idx >= noSamples):
+        break
+  return predsAll
+
+
+def ComputeUncertaintyStats(predsAll, eps=1e-12):
+  r'''
+  Given predsAll of shape (noSamples, noClasses, T), compute uncertainty metrics.
+
+  Parameters:
+    predsAll (numpy.ndarray): Array of shape (noSamples, noClasses, T).
+    eps (float): Small value to avoid log(0).
+
+  Returns:
+    dict: Dictionary with computed statistics including entropy and mutual information.
+  '''
+  # Compute mean probability across T draws.
+  meanProbs = np.mean(predsAll, axis=2)
+  # Compute standard deviation across T draws.
+  stdProbs = np.std(predsAll, axis=2)
+  # Predicted label from mean probability.
+  predLabels = np.argmax(meanProbs, axis=1)
+  # Mean confidence is max of mean probabilities.
+  meanConfidence = np.max(meanProbs, axis=1)
+  # Compute confidence per sample per T (max per sample per T).
+  maxPerT = np.max(predsAll, axis=1)
+  # Standard deviation of confidence across T draws.
+  stdConfidence = np.std(maxPerT, axis=1)
+  # Predictive entropy: H[ E_t p ].
+  predictiveEntropy = -np.sum(meanProbs * np.log(meanProbs + eps), axis=1)
+  # Expected entropy: E_t [ H[ p_t ] ].
+  entPerT = -np.sum(predsAll * np.log(predsAll + eps), axis=1)
+  expectedEntropy = np.mean(entPerT, axis=1)
+  # Mutual information (BALD): predictiveEntropy - expectedEntropy.
+  mutualInfo = predictiveEntropy - expectedEntropy
+  return {
+    "meanProbs"        : meanProbs,
+    "stdProbs"         : stdProbs,
+    "predLabels"       : predLabels,
+    "meanConfidence"   : meanConfidence,
+    "stdConfidence"    : stdConfidence,
+    "predictiveEntropy": predictiveEntropy,
+    "expectedEntropy"  : expectedEntropy,
+    "mutualInfo"       : mutualInfo,
+  }
+
+
+def SaveTopUncertainImages(
+    testDf,
+    meanProbs,
+    mutualInfo,
+    storePath,
+    labelEncoder,
+    topN=16,
+    imgSize=(128, 128),
+    dpi=720,
+):
+  r'''
+  Save a grid of the top-N images ranked by mutual information for inspection.
+
+  Parameters:
+    testDf (pandas.DataFrame): DataFrame with test image paths and labels.
+    meanProbs (numpy.ndarray): Array of shape (noSamples, noClasses) with mean probabilities.
+    mutualInfo (numpy.ndarray): Array of shape (noSamples,) with mutual information values.
+    storePath (str): File path to save the resulting figure (e.g., "TopUncertainImages.pdf").
+    labelEncoder (sklearn.preprocessing.LabelEncoder): Fitted label encoder.
+    topN (int): Number of top uncertain images to save.
+    imgSize (tuple): (height, width) for resizing images.
+    dpi (int): Dots per inch for saved figure.
+  '''
+
+  import matplotlib.pyplot as plt
+
+  # Reset test DataFrame index so integer positions match 0..N-1.
+  df = testDf.reset_index(drop=True).copy()
+  noDf = len(df)
+  # Ensure mutualInfo is a numpy 1D array.
+  mutualInfo = np.asarray(mutualInfo).reshape(-1)
+  # Validate mutualInfo length matches DataFrame length.
+  if (mutualInfo.size != noDf):
+    raise ValueError(f"SaveTopUncertainImages: mutualInfo size ({mutualInfo.size}) != DataFrame length ({noDf})")
+  # Validate DataFrame is not empty.
+  if (noDf == 0):
+    return
+  # Rank by descending mutual information and select top entries.
+  ranks = np.argsort(-mutualInfo)
+  selCount = min(topN, len(ranks))
+  sel = ranks[:selCount]
+  # Compute grid size from actual selection count.
+  cols = int(np.ceil(np.sqrt(selCount))) if (selCount > 0) else 1
+  rows = int(np.ceil(selCount / cols)) if (selCount > 0) else 1
+  # Create figure with subplots.
+  fig, axes = plt.subplots(rows, cols, figsize=(cols * 3, rows * 3))
+  # Ensure axes is a flat array for easy indexing.
+  axes = np.array(axes).reshape(-1)
+  # Iterate over selected uncertain samples.
+  for i, idx in enumerate(sel):
+    # Get image path from DataFrame.
+    try:
+      imgPath = df.iloc[int(idx)]["image_path"]
+    except Exception:
+      imgPath = None
+    # Load image or create placeholder.
+    if (imgPath is None):
+      im = Image.new("RGB", imgSize, (255, 255, 255))
+    else:
+      try:
+        im = Image.open(imgPath).convert("RGB")
+        im = im.resize(imgSize)
+      except Exception:
+        im = Image.new("RGB", imgSize, (255, 255, 255))
+    # Display image on subplot.
+    axes[i].imshow(im)
+    # Get true label from DataFrame.
+    trueLabel = df.iloc[int(idx)]["label"] if ("label" in df.columns) else ""
+    # Get predicted label from meanProbs (not category_encoded).
+    predLabelIdx = np.argmax(meanProbs[int(idx)])
+    try:
+      predLabel = labelEncoder.inverse_transform([predLabelIdx])[0]
+    except Exception:
+      predLabel = str(predLabelIdx)
+    # Set subplot title with uncertainty and labels.
+    axes[i].set_title(
+      f"U: {float(mutualInfo[int(idx)]):.3f}\nTrue: {trueLabel}\nPred: {predLabel}",
+      fontsize=10,
+    )
+    axes[i].axis("off")
+  # Turn off any leftover axes.
+  for j in range(selCount, len(axes)):
+    axes[j].axis("off")
+  # Apply tight layout once.
+  plt.tight_layout()
+  # Save figure to PDF.
+  plt.savefig(storePath, dpi=dpi)
+  plt.close()
+
+
+def AggregateClasswiseUncertainty(exportDf, meanProbs, mutualInfo):
+  r'''
+  Return a DataFrame with class-wise mean mutual information and mean confidence.
+
+  Parameters:
+    exportDf (pandas.DataFrame): DataFrame with per-image predictions and uncertainties.
+    meanProbs (numpy.ndarray): Array of shape (noSamples, noClasses) with mean probabilities.
+    mutualInfo (numpy.ndarray): Array of shape (noSamples,) with mutual information values.
+
+  Returns:
+    pandas.DataFrame: DataFrame with class-wise aggregated uncertainty metrics.
+  '''
+
+  # Create copy of export DataFrame.
+  df = exportDf.copy()
+  # Add mutual information column.
+  df["mutualInfo"] = mutualInfo
+  # Compute mean confidence from meanProbs.
+  df["meanConfidence"] = np.max(meanProbs, axis=1)
+  # Validate required columns exist.
+  if ("label" not in df.columns):
+    raise ValueError("AggregateClasswiseUncertainty: 'label' column not found in `exportDf`.")
+  # Group by label and aggregate metrics.
+  grouped = df.groupby("label").agg(
+    n_samples=("image_path", "count"),
+    mean_mutual_info=("mutualInfo", "mean"),
+    median_mutual_info=("mutualInfo", "median"),
+    mean_confidence=("meanConfidence", "mean"),
+  ).reset_index()
+  return grouped
+
+
+def ComputeEnergyScore(logits):
+  r'''
+  Compute energy score = -logsumexp(logits) per sample for OOD detection.
+
+  Parameters:
+    logits (numpy.ndarray): Shape (N, C) logits from model.
+
+  Returns:
+    numpy.ndarray: Shape (N,) energy scores (lower = more in-distribution).
+  '''
+
+  # Use numerically stable logsumexp.
+  a = np.max(logits, axis=1, keepdims=True)
+  lse = a + np.log(np.sum(np.exp(logits - a), axis=1, keepdims=True))
+  # Return negative log-sum-exp as energy score.
+  return -np.squeeze(lse)
+
+
 def BuildPretrainedAttentionModel(
     baseModelString,
     attentionBlockStr,
@@ -353,6 +589,8 @@ def CreateFitPretrainedAttentionModel(
     configs (dict): Dictionary of training configurations and parameters.
   '''
 
+  from tensorflow.keras.losses import SparseCategoricalCrossentropy
+
   model = BuildPretrainedAttentionModel(
     baseModelString=baseModelString,
     attentionBlockStr=attentionBlockStr,
@@ -373,8 +611,8 @@ def CreateFitPretrainedAttentionModel(
 
   # Step 2: Fine-tuning.
   # Unfreeze part of the base model for fine-tuning.
-  baseModel.trainable = True  # Set base model trainable.
-  for layer in baseModel.layers[:fineTuneAt]:
+  model.trainable = True  # Set base model trainable.
+  for layer in model.layers[:fineTuneAt]:
     layer.trainable = False  # Keep earlier layers frozen.
 
   if (optimizer is None):
@@ -482,7 +720,6 @@ def TrainPretrainedAttentionModelFromDataFrame(
   if (not requiredColumns.issubset(dataFrame.columns)):
     raise ValueError(f"DataFrame must contain columns: {requiredColumns}")
 
-  import os
   import matplotlib.pyplot as plt
   from sklearn.metrics import confusion_matrix, classification_report
   from tensorflow.keras.preprocessing.image import ImageDataGenerator
@@ -818,6 +1055,7 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
     dpi=720,
     verbose=1,
     ensureCUDA=True,
+    T=50  # Number of stochastic forward passes for MC-dropout.
 ):
   r'''
   Evaluate a trained model on the test set and save results.
@@ -832,6 +1070,8 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
     storageDir (str): Directory where evaluation results will be saved.
     dpi (int): Dots per inch for saving figures.
     verbose (int): Verbosity level for evaluation (0 = silent, 1 = progress bar, 2 = one line per epoch).
+    ensureCUDA (bool): Whether to check for CUDA availability and raise an error if not found.
+    T (int): Number of stochastic forward passes for MC-dropout uncertainty estimation (if applicable).
   '''
 
   # Verify that the dataFrame contains the required columns.
@@ -842,17 +1082,22 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
   if (not os.path.isfile(modelPath) or not os.path.exists(modelPath)):
     raise ValueError(f"Model file not found at path: {modelPath}")
 
-  import os
   import numpy as np
   import pandas as pd
   from sklearn.metrics import confusion_matrix, classification_report
   from tensorflow.keras.preprocessing.image import ImageDataGenerator
   from HMB.Initializations import (
-    DoRandomSeeding, EnsureCUDAAvailable, ClearTensorFlowSession, UpdateMatplotlibSettings
+    DoRandomSeeding, EnsureCUDAAvailable, ClearTensorFlowSession,
+    UpdateMatplotlibSettings
   )
   from HMB.PerformanceMetrics import (
     PlotConfusionMatrix, CalculatePerformanceMetrics,
-    PlotROCAUCCurve, PlotPRCCurve, PlotClasswisePRFBar
+    PlotROCAUCCurve, PlotPRCCurve, PlotClasswisePRFBar,
+    ComputeECEPlotReliability, RiskCoverageCurve,
+    PlotErrorAnalysis, PlotErrorMatrix, PlotPredictionConfidenceHistogram,
+    PlotClassificationResiduals, ComputeMonteCarloUncertaintyMeasures,
+    SampleMonteCarloDirichletFromProbs, PlotTopKAccuracyCurve,
+    PlotCalibrationCurve,
   )
 
   ClearTensorFlowSession()
@@ -896,6 +1141,8 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
   for subsetKey in ["train", "val", "test"]:
     keyword = subsetKey.capitalize()  # Capitalize the subset key for display and file naming.
     print(f"\nEvaluating on {keyword} set:")
+    subsetStorageDir = os.path.join(storageDir, keyword)
+    os.makedirs(subsetStorageDir, exist_ok=True)  # Create directory for this subset's results.
 
     # Define generator for evaluation without augmentation.
     generator = ImageDataGenerator(rescale=1.0 / 255)
@@ -936,11 +1183,11 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
     yTrue = np.array(yTrue)
     yPred = np.array(yPred)
     yPredProb = np.array(yPredProb)
-    yPredConfidences = np.array(predConfidences)
+    yPredConfidences = np.array(yPredConfidences)
 
     if (labelEncoder is not None):
-      yTrueLabels = labelEncoder.inverse_transform(yTrue)
-      yPredLabels = labelEncoder.inverse_transform(yPred)
+      yTrueLabels = labelEncoder.inverse_transform(yTrue.astype(int))
+      yPredLabels = labelEncoder.inverse_transform(yPred.astype(int))
     else:
       yTrueLabels = yTrue
       yPredLabels = yPred
@@ -955,7 +1202,7 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
       "yPredLabels"     : yPredLabels.tolist(),
     }
     evalResultsDf = pd.DataFrame(evalResults)
-    evalResultsFilePath = os.path.join(storageDir, f"{keyword}Results.csv")
+    evalResultsFilePath = os.path.join(subsetStorageDir, f"{keyword}Results.csv")
     evalResultsDf.to_csv(evalResultsFilePath, index=False)
 
     # Get class label names from the generator's class indices.
@@ -964,7 +1211,7 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
     else:
       classLabels = list(genObj.class_indices.keys())
     cm = confusion_matrix(yTrue, yPred)
-    cmPath = os.path.join(storageDir, f"{keyword}ConfusionMatrix.pdf")
+    cmPath = os.path.join(subsetStorageDir, f"{keyword}ConfusionMatrix.pdf")
     PlotConfusionMatrix(
       cm,  # Confusion matrix (2D list or numpy array).
       classLabels,  # List of class labels.
@@ -992,12 +1239,12 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
       addPerClass=True,  # Whether to include per-class metrics in the output.
     )
     pmDf = pd.DataFrame(pm)
-    pmFilePath = os.path.join(storageDir, f"{keyword}PerformanceMetrics.csv")
+    pmFilePath = os.path.join(subsetStorageDir, f"{keyword}PerformanceMetrics.csv")
     pmDf.to_csv(pmFilePath, index=False)
     for key, value in pm.items():
       print(f"{key}: {value}")
 
-    rocPath = os.path.join(storageDir, f"{keyword}ROCCurve.pdf")
+    rocPath = os.path.join(subsetStorageDir, f"{keyword}ROCCurve.pdf")
     PlotROCAUCCurve(
       yTrue,  # True labels (one-hot or binary).
       yPredProb,  # Predicted labels (one-hot or binary).
@@ -1017,7 +1264,7 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
       dpi=dpi,  # DPI for saving the figure.
     )
 
-    prcPath = os.path.join(storageDir, f"{keyword}PRCCurve.pdf")
+    prcPath = os.path.join(subsetStorageDir, f"{keyword}PRCCurve.pdf")
     PlotPRCCurve(
       yTrue,  # True labels (one-hot or binary).
       yPredProb,  # Predicted labels (one-hot or binary).
@@ -1036,11 +1283,11 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
       dpi=dpi,  # DPI for saving the figure.
     )
 
-    clsWisePRFPath = os.path.join(storageDir, f"{keyword}ClasswisePRFBarPlot.pdf")
+    clsWisePRFPath = os.path.join(subsetStorageDir, f"{keyword}ClasswisePRFBarPlot.pdf")
     PlotClasswisePRFBar(
       cm,
       classNames=classLabels,
-      fontSize=14,
+      fontSize=15,
       figsize=(8, 5),
       display=False,
       save=True,
@@ -1048,3 +1295,319 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
       dpi=dpi,
       returnFig=False,
     )
+
+    # Check presence of dropout layers.
+    hasDropout = any([isinstance(layer, tf.keras.layers.Dropout) for layer in model.layers])
+    if (not hasDropout):
+      print("[WARN] Model contains no Dropout layers; MC-dropout will not produce stochasticity.\n")
+    else:
+      print("[INFO] Model contains Dropout layers; proceeding with MC-dropout inference.\n")
+
+    # Run MC-dropout predictions.
+    steps = int(np.ceil(genObj.samples / genObj.batch_size))
+    print(f"[MC] Running T={T} stochastic forward passes (steps={steps})...")
+    mcPreds = MCDropoutPredictions(
+      model=model,
+      genObj=genObj,
+      steps=steps,
+      T=T,  # Number of stochastic forward passes.
+    )
+    print(f"[MC] Completed: Shape = {mcPreds.shape}.\n")
+
+    # Compute uncertainty statistics.
+    print("[STATS] Computing uncertainty statistics...")
+    stats = ComputeUncertaintyStats(mcPreds)
+    for key, value in stats.items():
+      print(f"{key}: {value}")
+    meanProbs = stats["meanProbs"]
+    stdProbs = stats["stdProbs"]
+    predLabels = stats["predLabels"]
+    print("[STATS] Completed uncertainty statistics computation.\n")
+
+    # Build export DataFrame aligned with the DataFrame order.
+    exportDf = dfNew.reset_index(drop=True).copy()
+    exportDf["predEncoded"] = predLabels
+    exportDf["predLabel"] = labelEncoder.inverse_transform(predLabels)
+    exportDf["predConfidenceMean"] = stats["meanConfidence"]
+    exportDf["predConfidenceStd"] = stats["stdConfidence"]
+    exportDf["predictiveEntropy"] = stats["predictiveEntropy"]
+    exportDf["expectedEntropy"] = stats["expectedEntropy"]
+    exportDf["mutualInfo"] = stats["mutualInfo"]
+
+    # Optionally store a few summary columns for class probabilities (first K classes).
+    noClasses = meanProbs.shape[1]
+    K = min(5, noClasses)
+    for k in range(K):
+      exportDf[f"class{k}_mean_prob"] = meanProbs[:, k]
+      exportDf[f"class{k}_std_prob"] = stdProbs[:, k]
+
+    exportFilePath = os.path.join(subsetStorageDir, f"{keyword}MCUncertaintyResults.csv")
+    exportDf.to_csv(exportFilePath, index=False)
+    print(f"[EXPORT] Exported MC-dropout uncertainty results to: {exportFilePath}\n")
+
+    # Compute and save reliability diagram (ECE) using encoded predicted labels.
+    print("[EVAL] Computing Expected Calibration Error (ECE) and plotting reliability diagram...")
+    eceOutPath = os.path.join(subsetStorageDir, f"{keyword}ReliabilityDiagram.pdf")
+    ece, binAcc, binConf, binCounts = ComputeECEPlotReliability(
+      exportDf["predConfidenceMean"].values,
+      exportDf["predEncoded"].values,
+      exportDf["category_encoded"].astype(int).values,
+      nBins=15,
+      title="Expected Calibration Error (ECE) - MC Dropout",
+      fontSize=15,
+      figSize=(6, 6),
+      display=False,
+      save=True,
+      fileName=eceOutPath,
+      dpi=dpi,
+      returnFig=False,
+    )
+    print(f"[EVAL] ECE = {ece:.4f}")
+    print(f"[EVAL] Saved reliability diagram to {eceOutPath}.\n")
+    # Store the ECE and bin details in a CSV for further analysis.
+    eceDetailsDf = pd.DataFrame({
+      "binLowerBound": binConf - (1.0 / 15),  # Assuming equal-width bins.
+      "binUpperBound": binConf,
+      "binAccuracy"  : binAcc,
+      "binConfidence": binConf,
+      "binCount"     : binCounts,
+    })
+    eceDetailsPath = os.path.join(subsetStorageDir, f"{keyword}ECEDetailsInitial.csv")
+    eceDetailsDf.to_csv(eceDetailsPath, index=False)
+    print(f"[EVAL] Saved ECE bin details to {eceDetailsPath}.\n")
+
+    # Save top-N uncertain images.
+    print("[EXPORT] Saving top-N uncertain images grid...")
+    storePath = os.path.join(subsetStorageDir, f"{keyword}TopUncertainImages.pdf")
+    SaveTopUncertainImages(
+      dfNew,
+      meanProbs,
+      exportDf["mutualInfo"],
+      storePath,
+      labelEncoder,
+      topN=16,
+      imgSize=(128, 128),
+    )
+    print(f"[EXPORT] Saved top-N uncertain images to {storePath}.\n")
+
+    # Aggregate and save class-wise uncertainty metrics.
+    print("[EXPORT] Computing and saving class-wise uncertainty metrics...")
+    classwiseStats = AggregateClasswiseUncertainty(exportDf, meanProbs, exportDf["mutualInfo"])
+    classwiseStatsPath = os.path.join(subsetStorageDir, f"{keyword}ClasswiseUncertaintyMetrics.csv")
+    classwiseStats.to_csv(classwiseStatsPath, index=False)
+    print(f"[EXPORT] Saved class-wise uncertainty metrics to {classwiseStatsPath}.\n")
+
+    # Compute energy score from pseudo-logits (log probs) as an interpretability metric.
+    print("[EVAL] Computing energy scores for interpretability...")
+    energyScores = ComputeEnergyScore(meanProbs)
+    exportDf["energyScore"] = energyScores
+    energyScoresPath = os.path.join(subsetStorageDir, f"{keyword}EnergyScores.csv")
+    exportDf[["image_path", "category_encoded", "predEncoded", "energyScore"]].to_csv(energyScoresPath, index=False)
+    print(f"[EVAL] Computed energy scores and saved to {energyScoresPath}.\n")
+
+    # Save updated exportDf (with energyScore maybe added).
+    finalExportPath = os.path.join(subsetStorageDir, f"{keyword}FinalMCUncertaintyResults.csv")
+    exportDf.to_csv(finalExportPath, index=False)
+    print(f"[EXPORT] Saved final MC uncertainty results with energy scores to {finalExportPath}.\n")
+
+    # Risk-Coverage curve.
+    confidences = exportDf["predConfidenceMean"].values
+    correctness = (exportDf["predEncoded"].values == exportDf["category_encoded"].astype(int).values)
+    riskCovPath = os.path.join(subsetStorageDir, f"{keyword}RiskCoverageCurve.pdf")
+    coverage, accuracy, aucVal = RiskCoverageCurve(
+      confidences,
+      correctness,
+      title="Risk-Coverage (Accuracy vs Coverage)",
+      fontSize=15,
+      figSize=(6, 6),
+      display=False,
+      save=True,
+      fileName=riskCovPath,
+      dpi=dpi,
+      returnFig=False,
+    )
+    print(f"[INTERP] Saved risk-coverage plot to {riskCovPath} (AUC={aucVal:.3f}).\n")
+
+    errorAnalysisPath = os.path.join(subsetStorageDir, f"{keyword}ErrorAnalysis.pdf")
+    PlotErrorAnalysis(
+      yTrue,
+      yPred,
+      X=None,
+      classNames=classLabels,
+      maxExamples=5,
+      fontSize=15,
+      figsize=(12, 10),
+      display=False,
+      save=True,
+      fileName=errorAnalysisPath,
+      dpi=dpi,
+      returnFig=False,
+    )
+    print(f"[EVAL] Saved error analysis plot to {errorAnalysisPath}.\n")
+
+    errorMatrixPath = os.path.join(subsetStorageDir, f"{keyword}ErrorMatrix.pdf")
+    PlotErrorMatrix(
+      cm,
+      classNames=classLabels,
+      fontSize=15,
+      figsize=(7, 6),
+      display=False,
+      save=True,
+      fileName=errorMatrixPath,
+      dpi=dpi,
+      returnFig=False,
+    )
+    print(f"[EVAL] Saved error matrix plot to {errorMatrixPath}.\n")
+
+    predConfHistPath = os.path.join(subsetStorageDir, f"{keyword}PredictionConfidenceHistogram.pdf")
+    PlotPredictionConfidenceHistogram(
+      yPredProb,
+      yPred=yPred,
+      fontSize=15,
+      figsize=(8, 5),
+      bins=20,
+      display=False,
+      save=True,
+      fileName=predConfHistPath,
+      dpi=dpi,
+      returnFig=False,
+    )
+    print(f"[EVAL] Saved prediction confidence histogram to {predConfHistPath}.\n")
+
+    clsResidualsPath = os.path.join(subsetStorageDir, f"{keyword}ClassificationResiduals.pdf")
+    PlotClassificationResiduals(
+      yTrue,
+      yPred,
+      fontSize=15,
+      figsize=(8, 5),
+      display=False,
+      save=True,
+      fileName=clsResidualsPath,
+      dpi=dpi,
+      returnFig=False,
+    )
+    print(f"[EVAL] Saved classification residuals plot to {clsResidualsPath}.\n")
+
+    probsMC = SampleMonteCarloDirichletFromProbs(yPredProb, T=T, concentration=30.0)
+    uncertaintyMeasures = ComputeMonteCarloUncertaintyMeasures(probsMC)
+    confidences = uncertaintyMeasures["predictedConfidence"]
+    predictions = uncertaintyMeasures["predictedIdx"]
+    ecePath = os.path.join(subsetStorageDir, f"{keyword}ECEReliabilityPlot.pdf")
+    ece, binAcc, binConf, binCounts = ComputeECEPlotReliability(
+      confidences,
+      predictions,
+      labels=yPred,
+      nBins=5,
+      title="ECE Example",
+      fontSize=15,
+      figSize=(6, 6),
+      display=False,
+      save=True,
+      fileName=ecePath,
+      dpi=dpi,
+      returnFig=False,
+      cmap="Blues",
+      applyXYLimits=True,
+    )
+    print(f"ECE: {ece}")
+    print(f"Bin Accuracies: {binAcc}")
+    print(f"Bin Confidences: {binConf}")
+    print(f"Bin Counts: {binCounts}")
+    # Store ECE details in a CSV for further analysis.
+    eceDetailsDf = pd.DataFrame({
+      "binLowerBound": binConf - (1.0 / 5),  # Assuming equal-width bins.
+      "binUpperBound": binConf,
+      "binAccuracy"  : binAcc,
+      "binConfidence": binConf,
+      "binCount"     : binCounts,
+    })
+    eceDetailsPath = os.path.join(subsetStorageDir, f"{keyword}ECEDetails.csv")
+    eceDetailsDf.to_csv(eceDetailsPath, index=False)
+    print(f"Saved ECE bin details to {eceDetailsPath}.\n")
+
+    riskCoveragePath = os.path.join(subsetStorageDir, f"{keyword}RiskCoverageCurve.pdf")
+    correctness = (predictions == yPred).astype(int)
+    RiskCoverageCurve(
+      confidences,
+      correctness,
+      title="Risk-Coverage (Accuracy vs Coverage)",
+      fontSize=15,
+      figSize=(6, 6),
+      display=False,
+      save=True,
+      fileName=riskCoveragePath,
+      dpi=dpi,
+      returnFig=False,
+      color="blue",
+    )
+    print(f"Saved risk-coverage curve to {riskCoveragePath}.\n")
+
+    topKAccPath = os.path.join(subsetStorageDir, f"{keyword}TopKAccuracyCurve.pdf")
+    PlotTopKAccuracyCurve(
+      yPredProb,
+      yPred,
+      maxK=10,
+      title="Top-k Accuracy Curve",
+      figSize=(6, 6),
+      save=True,
+      fileName=topKAccPath,
+      display=False,
+      fontSize=15,
+      returnFig=False,
+      dpi=dpi,
+      color="blue",
+    )
+    print(f"Saved top-k accuracy curve to {topKAccPath}.\n")
+
+    calibCurvePath = os.path.join(subsetStorageDir, f"{keyword}CalibrationCurve.pdf")
+    PlotCalibrationCurve(
+      yPredProb,
+      yPred,
+      nBins=10,
+      title="Calibration Curve",
+      fontSize=15,
+      figSize=(6, 6),
+      display=False,
+      save=True,
+      fileName=calibCurvePath,
+      dpi=dpi,
+      returnFig=False,
+      color="blue",
+    )
+    print(f"Saved calibration curve to {calibCurvePath}.\n")
+
+
+# NOT USED.
+def PlotPredictionDistribution(sampleIdx, predsAll, outPath, classes=None, dpi=720):
+  r'''
+  Plot histogram/violin of probability draws for classes of interest for one sample.
+
+  Parameters:
+    sampleIdx (int): Sample index into predsAll.
+    predsAll (numpy.ndarray): Shape (N, C, T) probability draws.
+    outPath (str): Where to save the plot PNG.
+    classes (list|None): Class indices to plot; if None use top-2 by mean.
+    dpi (int): Dots per inch for saved figure.
+  '''
+
+  import matplotlib.pyplot as plt
+
+  # Get probabilities for the specified sample.
+  probs = predsAll[int(sampleIdx), :, :]
+  # Compute mean probability across T draws.
+  meanProb = probs.mean(axis=1)
+  # Select classes to plot.
+  if (classes is None):
+    top = np.argsort(-meanProb)[:2]
+    classes = top.tolist()
+  # Create figure for distribution plot.
+  plt.figure(figsize=(4, 3))
+  # Plot violin per class.
+  parts = plt.violinplot([probs[c, :] for c in classes], showmeans=True)
+  plt.xticks(np.arange(1, len(classes) + 1), [str(c) for c in classes])
+  plt.xlabel("Class index")
+  plt.ylabel("Probability")
+  plt.title(f"Predictive distribution sample {sampleIdx}")
+  plt.tight_layout()
+  plt.savefig(outPath, dpi=dpi)
+  plt.close()

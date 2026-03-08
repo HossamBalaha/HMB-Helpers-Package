@@ -44,7 +44,7 @@ if (__name__ == "__main__"):
           # Append split (train/val/test) to list.
           splits.append(splitName)
 
-          # Create a DataFrame containing image paths, labels and split information.
+  # Create a DataFrame containing image paths, labels and split information.
   dataFrame = pd.DataFrame({
     "image_path": imagePaths,
     "label"     : labels,
@@ -60,49 +60,51 @@ if (__name__ == "__main__"):
   dataFrame["category_encoded"] = dataFrame["category_encoded"].astype(str)
 
   # Training parameters and image shapes.
-  initialEpochs = 20  # Number of initial epochs.
-  fineTuneEpochs = 20  # Number of fine-tune epochs.
+  initialEpochs = 25  # Number of initial epochs.
+  fineTuneEpochs = 25  # Number of fine-tune epochs.
   batchSize = 32  # Set batch size.
   channels = 3  # Number of channels.
   imgSize = (512, 512)  # Define target image size.
   imgShape = (imgSize[0], imgSize[1], channels)  # Define input shape.
+  columnsMap = {"imagePath": "image_path", "categoryEncoded": "category_encoded", "split": "split"}
 
   # Define experiment directory.
   baseModelString = "Xception"
   attentionBlockStr = "CBAM"
-  expDir = os.path.join(baseStorageDir, f"{baseModelString}_{attentionBlockStr}")
-  modelPath = os.path.join(expDir, "BestModel.h5")
+  for trial in range(1, 11):
+    print(f"Starting trial {trial} with model {baseModelString} and attention block {attentionBlockStr}...")
+    expDir = os.path.join(baseStorageDir, f"{baseModelString}_{attentionBlockStr}_T{trial}")
+    os.makedirs(expDir, exist_ok=True)
+    modelPath = os.path.join(expDir, "BestModel.keras")
 
-  columnsMap = {"imagePath": "image_path", "categoryEncoded": "category_encoded", "split": "split"}
+    TrainPretrainedAttentionModelFromDataFrame(
+      dataFrame,
+      columnsMap=columnsMap,
+      labelEncoder=labelEncoder,
+      imgShape=imgShape,
+      batchSize=batchSize,
+      baseModelString=baseModelString,
+      attentionBlockStr=attentionBlockStr,
+      initialEpochs=initialEpochs,
+      fineTuneEpochs=fineTuneEpochs,
+      augmentationConfigs=None,
+      monitor="val_loss",
+      earlyStoppingPatience=10,
+      ensureCUDA=True,
+      storageDir=expDir,
+      dpi=720,
+      verbose=2,
+    )
 
-  TrainPretrainedAttentionModelFromDataFrame(
-    dataFrame,
-    columnsMap=columnsMap,
-    labelEncoder=labelEncoder,
-    imgShape=imgShape,
-    batchSize=batchSize,
-    baseModelString=baseModelString,
-    attentionBlockStr=attentionBlockStr,
-    initialEpochs=initialEpochs,
-    fineTuneEpochs=fineTuneEpochs,
-    augmentationConfigs=None,
-    monitor="val_loss",
-    earlyStoppingPatience=10,
-    ensureCUDA=True,
-    storageDir=expDir,
-    dpi=720,
-    verbose=2,
-  )
-
-  EvaluatePretrainedAttentionModelFromDataFrame(
-    dataFrame,
-    modelPath,
-    columnsMap=columnsMap,
-    labelEncoder=labelEncoder,
-    imgShape=imgShape,
-    batchSize=batchSize,
-    storageDir=expDir,
-    dpi=720,
-    verbose=2,
-    ensureCUDA=True,
-  )
+    EvaluatePretrainedAttentionModelFromDataFrame(
+      dataFrame,
+      modelPath,
+      columnsMap=columnsMap,
+      labelEncoder=labelEncoder,
+      imgShape=imgShape,
+      batchSize=batchSize,
+      storageDir=expDir,
+      dpi=720,
+      verbose=2,
+      ensureCUDA=True,
+    )
