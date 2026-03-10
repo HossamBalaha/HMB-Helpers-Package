@@ -1,5 +1,7 @@
 import os
+import pickle
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 from PIL import Image
 
@@ -651,22 +653,22 @@ def CreateFitPretrainedAttentionModel(
   if (modelCheckpointPath is None):
     modelCheckpointPath = os.path.join(storageDir, f"BestModel.keras")
   model = tf.keras.models.load_model(modelCheckpointPath)  # Load the best saved model.
-  # Store the best model after fine-tuning as pickle file.
-  picklePath = os.path.join(storageDir, f"TrainedModel.pkl")
-  with open(picklePath) as f:
-    pickle.dump(model, f)
+  # # Store the best model after fine-tuning as pickle file.
+  # picklePath = os.path.join(storageDir, f"BestModel.pkl")
+  # with open(picklePath) as f:
+  #   pickle.dump(model, f)
 
   configs = {
-    "baseModelString"    : baseModelString,
-    "attentionBlockStr"  : attentionBlockStr,
+    "baseModelString"    : str(baseModelString),
+    "attentionBlockStr"  : str(attentionBlockStr),
     "inputShape"         : inputShape,
-    "numClasses"         : numClasses,
-    "initialEpochs"      : initialEpochs,
-    "fineTuneEpochs"     : fineTuneEpochs,
-    "fineTuneAt"         : fineTuneAt,
+    "numClasses"         : int(numClasses),
+    "initialEpochs"      : int(initialEpochs),
+    "fineTuneEpochs"     : int(fineTuneEpochs),
+    "fineTuneAt"         : int(fineTuneAt),
     "optimizer"          : str(optimizer),
-    "modelCheckpointPath": modelCheckpointPath,
-    "storageDir"         : storageDir,
+    "modelCheckpointPath": str(modelCheckpointPath),
+    "storageDir"         : str(storageDir),
   }
   # Return the trained model and histories.
   return model, history, historyFine, configs
@@ -724,7 +726,7 @@ def TrainPretrainedAttentionModelFromDataFrame(
   from sklearn.metrics import confusion_matrix, classification_report
   from tensorflow.keras.preprocessing.image import ImageDataGenerator
   from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
-  from HMB.Utils import DumpJsonFile
+  from HMB.Utils import WritePickleFile
   from HMB.Initializations import (
     DoRandomSeeding, EnsureCUDAAvailable, ClearTensorFlowSession, UpdateMatplotlibSettings
   )
@@ -872,31 +874,32 @@ def TrainPretrainedAttentionModelFromDataFrame(
     fineTuneEpochs=fineTuneEpochs,
     modelCheckpointPath=modelCheckpointPath,
     verbose=verbose,
+    storageDir=storageDir,
   )
 
   configs.update({
-    "trainSamples"         : len(trainGenNew.filenames),
-    "validSamples"         : len(validGenNew.filenames),
-    "testSamples"          : len(testGenNew.filenames),
-    "trainBatchSize"       : batchSize,
-    "trainStepsPerEpoch"   : len(trainGenNew) // batchSize,
-    "validStepsPerEpoch"   : len(validGenNew) // batchSize,
-    "testSteps"            : len(testGenNew) // batchSize,
+    "trainSamples"         : int(len(trainGenNew.filenames)),
+    "validSamples"         : int(len(validGenNew.filenames)),
+    "testSamples"          : int(len(testGenNew.filenames)),
+    "trainBatchSize"       : int(batchSize),
+    "trainStepsPerEpoch"   : int(len(trainGenNew) // batchSize),
+    "validStepsPerEpoch"   : int(len(validGenNew) // batchSize),
+    "testSteps"            : int(len(testGenNew) // batchSize),
     "augmentationConfigs"  : augmentationConfigs,
-    "monitor"              : monitor,
-    "earlyStoppingPatience": earlyStoppingPatience,
-    "ensureCUDA"           : ensureCUDA,
-    "storageDir"           : storageDir,
-    "dpi"                  : dpi,
-    "modelCheckpointPath"  : modelCheckpointPath,
-    "initialEpochs"        : initialEpochs,
-    "fineTuneEpochs"       : fineTuneEpochs,
+    "monitor"              : str(monitor),
+    "earlyStoppingPatience": int(earlyStoppingPatience),
+    "ensureCUDA"           : bool(ensureCUDA),
+    "storageDir"           : str(storageDir),
+    "dpi"                  : int(dpi),
+    "modelCheckpointPath"  : str(modelCheckpointPath),
+    "initialEpochs"        : int(initialEpochs),
+    "fineTuneEpochs"       : int(fineTuneEpochs),
     "imgSize"              : imgSize,
     "imgShape"             : imgShape,
-    "baseModelString"      : baseModelString,
-    "attentionBlockStr"    : attentionBlockStr,
-    "numClasses"           : numClasses,
-    "batchSize"            : batchSize,
+    "baseModelString"      : str(baseModelString),
+    "attentionBlockStr"    : str(attentionBlockStr),
+    "numClasses"           : int(numClasses),
+    "batchSize"            : int(batchSize),
   })
 
   if (labelEncoder is not None):
@@ -979,10 +982,10 @@ def TrainPretrainedAttentionModelFromDataFrame(
     print(f"{key}: {value}")
 
   configs.update({
-    "testAccuracy"          : testAccuracy,
-    "testLoss"              : testLoss,
+    "testAccuracy"          : float(testAccuracy),
+    "testLoss"              : float(testLoss),
     "performanceMetrics"    : pm,
-    "performanceMetricsFile": pmFilePath,
+    "performanceMetricsFile": str(pmFilePath),
   })
 
   # Combine training accuracy across phases.
@@ -1030,18 +1033,17 @@ def TrainPretrainedAttentionModelFromDataFrame(
   model.save(lastModelPath)  # Save the last model after training.
 
   configs.update({
-    "testGenSize"        : len(testGenNew.filenames),
-    "trainGenSize"       : len(trainGenNew.filenames),
-    "validGenSize"       : len(validGenNew.filenames),
-    "historyFilePath"    : historyFilePath,
-    "trainingHistoryPlot": savePath,
-    "lastModelPath"      : lastModelPath,
+    "testGenSize"        : int(len(testGenNew.filenames)),
+    "trainGenSize"       : int(len(trainGenNew.filenames)),
+    "validGenSize"       : int(len(validGenNew.filenames)),
+    "historyFilePath"    : str(historyFilePath),
+    "trainingHistoryPlot": str(savePath),
+    "lastModelPath"      : str(lastModelPath),
   })
 
   # Store the final results and configurations in a JSON file.
   resultsFilePath = os.path.join(storageDir, "FinalResults.json")
-  # Save final results and configs to JSON.
-  DumpJsonFile(resultsFilePath, configs)
+  WritePickleFile(resultsFilePath, configs)
 
 
 def EvaluatePretrainedAttentionModelFromDataFrame(
@@ -1210,6 +1212,8 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
       classLabels = labelEncoder.classes_.tolist()
     else:
       classLabels = list(genObj.class_indices.keys())
+    classLabels = [str(label) for label in classLabels]  # Ensure labels are strings.
+
     cm = confusion_matrix(yTrue, yPred)
     cmPath = os.path.join(subsetStorageDir, f"{keyword}ConfusionMatrix.pdf")
     PlotConfusionMatrix(
@@ -1366,7 +1370,6 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
     print(f"[EVAL] Saved reliability diagram to {eceOutPath}.\n")
     # Store the ECE and bin details in a CSV for further analysis.
     eceDetailsDf = pd.DataFrame({
-      "binLowerBound": binConf - (1.0 / 15),  # Assuming equal-width bins.
       "binUpperBound": binConf,
       "binAccuracy"  : binAcc,
       "binConfidence": binConf,
@@ -1430,8 +1433,8 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
 
     errorAnalysisPath = os.path.join(subsetStorageDir, f"{keyword}ErrorAnalysis.pdf")
     PlotErrorAnalysis(
-      yTrue,
-      yPred,
+      yTrue.astype(int),
+      yPred.astype(int),
       X=None,
       classNames=classLabels,
       maxExamples=5,
@@ -1515,7 +1518,6 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
     print(f"Bin Counts: {binCounts}")
     # Store ECE details in a CSV for further analysis.
     eceDetailsDf = pd.DataFrame({
-      "binLowerBound": binConf - (1.0 / 5),  # Assuming equal-width bins.
       "binUpperBound": binConf,
       "binAccuracy"  : binAcc,
       "binConfidence": binConf,

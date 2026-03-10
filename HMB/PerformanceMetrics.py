@@ -1008,8 +1008,11 @@ def PlotMultiTrialROCAUC(
         # One-hot encoded.
         yTrueBinary = yTrue[:, classIdx]
 
-      # Get predictions for this class.
-      yPredClass = yPred[:, classIdx]
+      # Check if the predictions are probabilities or binary, and if binary, convert to probabilities (0 or 1).
+      if (yPred.ndim == 1 or yPred.shape[1] == 1):
+        yPredClass = (yPred == classIdx).astype(float)
+      else:
+        yPredClass = yPred[:, classIdx]  # Get predictions for this class.
 
       # Calculate ROC curve.
       fpr, tpr, _ = roc_curve(yTrueBinary, yPredClass)
@@ -1326,8 +1329,11 @@ def PlotMultiTrialPRCurve(
       else:
         yTrueBinary = yTrue[:, classIdx]
 
-      # Get predictions for this class.
-      yPredClass = yPred[:, classIdx]
+      # Check if the predictions are probabilities or binary, and if binary, convert to probabilities (0 or 1).
+      if (yPred.ndim == 1 or yPred.shape[1] == 1):
+        yPredClass = (yPred == classIdx).astype(float)
+      else:
+        yPredClass = yPred[:, classIdx]  # Get predictions for this class.
 
       # Calculate PR curve.
       precision, recall, _ = precision_recall_curve(yTrueBinary, yPredClass)
@@ -1548,7 +1554,7 @@ def PlotCounterfactualOutcomes(
     )
   '''
 
-  def _PreviewColumnsAndValues(xdf, maxUnique=10):
+  def _PreviewColumnsAndValues(xdf, maxUnique=3):
     # Print available columns and their unique values for user guidance.
     print("Available columns:")
     for col in xdf.columns:
@@ -1666,7 +1672,7 @@ def PlotCounterfactualOutcomes(
   if (returnPreds):
     return yPredLow, yPredHigh  # Optionally return predictions.
 
-  print(f"[Counterfactual Plot] Unique values in '{treatmentCol}': {uniqueVals}")
+  # print(f"[Counterfactual Plot] Unique values in '{treatmentCol}': {uniqueVals}")
   return None
 
 
@@ -3625,42 +3631,46 @@ def PlotFeatureImportance(
   else:
     raise ValueError("Model does not have feature_importances_ or coef_ attribute.")
 
-  indices = np.argsort(importances)[::-1]
-  if (topN is not None):
-    indices = indices[:topN]
+  try:
+    indices = np.argsort(importances)[::-1]
+    if (topN is not None):
+      indices = indices[:topN]
 
-  fig, ax = plt.subplots(figsize=figsize)
-  ax.bar(range(len(indices)), importances[indices], color="royalblue")
-  ax.set_xticks(range(len(indices)))
-  ax.set_xticklabels(
-    np.array(featureNames)[indices],
-    rotation=45,
-    ha="right",
-    fontsize=fontSize * 0.8,
-  )
-  ax.set_ylabel("Importance", fontsize=fontSize)
-  ax.set_title(title, fontsize=fontSize + 2)
-  plt.tight_layout()
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.bar(range(len(indices)), importances[indices], color="royalblue")
+    ax.set_xticks(range(len(indices)))
+    ax.set_xticklabels(
+      np.array(featureNames)[indices],
+      rotation=45,
+      ha="right",
+      fontsize=fontSize * 0.8,
+    )
+    ax.set_ylabel("Importance", fontsize=fontSize)
+    ax.set_title(title, fontsize=fontSize + 2)
+    plt.tight_layout()
 
-  # Save the plot if requested.
-  if (save):  # Save the plot.
-    ext = fileName.split(".")[-1]
-    if (ext.lower() == "pdf"):
-      try:
-        fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
-      except Exception as e:
-        print(f"Error saving plot: {e}")
-    fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+    # Save the plot if requested.
+    if (save):  # Save the plot.
+      ext = fileName.split(".")[-1]
+      if (ext.lower() == "pdf"):
+        try:
+          fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
+        except Exception as e:
+          print(f"Error saving plot: {e}")
+      fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
 
-  if (display):
-    plt.show()
+    if (display):
+      plt.show()
 
-  plt.close(fig)
+    plt.close(fig)
 
-  if (returnFig):
-    return fig
+    if (returnFig):
+      return fig
 
-  return None
+    return None
+  except Exception as e:
+    print(f"Error plotting feature importance: {e}")
+    return None
 
 
 def SampleMonteCarloDirichletFromProbs(probs, T=100, concentration=50.0, rng=None):

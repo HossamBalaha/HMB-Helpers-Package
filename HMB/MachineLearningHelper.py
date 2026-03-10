@@ -1,4 +1,4 @@
-import os, optuna, pickle
+import os, optuna, pickle, shutil
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -2552,8 +2552,12 @@ class OptunaTuningClassification(object):
 def OptunaTuningClassificationTesting(
     datasetFilePath,
     experimentPath,
+    storageDir,
     dpi=720,
     T=500,
+    plotCounterfactualOutcomes=False,
+    numberOfTopExperiments=1,
+    sortByMetric="Weighted Average",
 ):
   r'''
   Run inference using a saved preprocessing + model objects bundle.
@@ -2561,8 +2565,12 @@ def OptunaTuningClassificationTesting(
   Parameters:
     datasetFilePath (str): Path to the dataset file for inference.
     experimentPath (str): Path to the experiment folder containing the saved model and preprocessing objects.
+    storageDir (str): Directory where the performance plots and results will be saved.
     dpi (int, optional): DPI for saving the performance plots. Default is 720.
     T (int, optional): Number of Monte Carlo samples for uncertainty estimation (if applicable). Default is 500.
+    plotCounterfactualOutcomes (bool, optional): Whether to plot counterfactual outcomes (if applicable). Default is False.
+    numberOfTopExperiments (int, optional): Number of top experiments to test based on the best parameters. Default is 1.
+    sortByMetric (str, optional): The metric by which to sort the experiments when selecting the top experiments. Default is "Weighted Average".
   '''
 
   from sklearn.metrics import confusion_matrix, classification_report
@@ -2580,422 +2588,1310 @@ def OptunaTuningClassificationTesting(
   UpdateMatplotlibSettings()
 
   # Load the best parameters from a previous training run for the current file.
-  bestParamsPath = os.path.join(experimentPath, "Optuna Best Params.csv")
+  bestParamsPath = os.path.join(experimentPath, "Metrics History.csv")
   if (os.path.exists(bestParamsPath)):
     bestParams = pd.read_csv(bestParamsPath)
     bestParams.fillna("None", inplace=True)
+    if (numberOfTopExperiments > 1):
+      bestParams = bestParams.sort_values(by=sortByMetric, ascending=False)
+      # Group by the model column and find the top-1 in each group, then reset the index for the resultant DataFrame.
+      bestParams = bestParams.groupby("Model").head(1).reset_index(drop=True)
+      # Truncate the DataFrame to the specified number of top experiments if needed.
+      if (numberOfTopExperiments > 0 and len(bestParams) > numberOfTopExperiments):
+        bestParams = bestParams.head(numberOfTopExperiments)
+      print(f"Top {numberOfTopExperiments} experiments based on {sortByMetric} for each model:")
+      print(bestParams)
+      # Store the resultant DF in a CSV file for reference.
+      bestParams.to_csv(
+        storageDir + f"/Top_{numberOfTopExperiments}_Experiments_Based_on_{sortByMetric}.csv",
+        index=False
+      )
+      print(
+        f"Top {numberOfTopExperiments} experiments saved to: "
+        f"{storageDir}/Top_{numberOfTopExperiments}_Experiments_Based_on_{sortByMetric}.csv"
+      )
   else:
-    raise FileNotFoundError(f"Best parameters file not found for {file} at path: {bestParamsPath}")
+    raise FileNotFoundError(f"Best parameters file not found at path: {bestParamsPath}")
 
-  firstRow = bestParams.iloc[0]
-  scalerName = firstRow["Scaler"]
-  modelName = firstRow["Model"]
-  fsTechName = firstRow["FS Tech"]
-  fsRatioName = firstRow["FS Ratio"] if (fsTechName != "None") else "None"
-  dbTechName = firstRow["DB Tech"]
-  outliersTechName = firstRow["Outliers Tech"]
+  finalHistory = []
+  for i in range(len(bestParams)):
+    record = bestParams.iloc[i]
+    scalerName = record["Scaler"]
+    modelName = record["Model"]
+    fsTechName = record["Feature Selection Technique"]
+    fsRatioName = int(record["Feature Selection Ratio"]) if (fsTechName != "None") else "None"
+    dbTechName = record["Data Balancing Technique"]
+    outliersTechName = record["Outlier Detection Technique"]
 
-  print("Testing with the best parameters...")
-  print(
-    f"Scaler: {scalerName}, Model: {modelName}, FS Tech: {fsTechName}, FS Ratio: {fsRatioName}, "
-    f"DB Tech: {dbTechName}, Outliers Tech: {outliersTechName}"
-  )
-  pickleFileName = f"{modelName}_{scalerName}_{fsTechName}_{fsRatioName}_{dbTechName}_{outliersTechName}.p"
-  pickleFilePath = os.path.join(experimentPath, pickleFileName)
-  if (not os.path.exists(pickleFilePath)):
-    raise FileNotFoundError(f"Pickle file not found for the best model at path: {pickleFilePath}")
+    newStorageDir = os.path.join(storageDir, modelName)
+    os.makedirs(newStorageDir, exist_ok=True)
 
-  # Load the best model from the pickle file.
-  pickleData = ReadPickleFile(pickleFilePath)
-  print(f"Loaded from pickle file: {pickleFilePath}")
-  print(f"Pickle keys:")
-  for key in pickleData.keys():
-    print(f"  - {key}")
+    print("Testing the best model with the following parameters:")
+    print(
+      f"Scaler: {scalerName}, Model: {modelName}, FS Tech: {fsTechName}, FS Ratio: {fsRatioName}, "
+      f"DB Tech: {dbTechName}, Outliers Tech: {outliersTechName}"
+    )
+    pickleFileName = f"{modelName}_{scalerName}_{fsTechName}_{fsRatioName}_{dbTechName}_{outliersTechName}.p"
+    pickleFilePath = os.path.join(experimentPath, pickleFileName)
+    if (not os.path.exists(pickleFilePath)):
+      raise FileNotFoundError(f"Pickle file not found for the best model at path: {pickleFilePath}")
+    # Copy the pickle file to the new storage directory for reference.
+    newPickleFilePath = os.path.join(newStorageDir, pickleFileName)
+    if (pickleFilePath != newPickleFilePath):
+      shutil.copy(pickleFilePath, newPickleFilePath)
+      print(f"Copied pickle file to: {newPickleFilePath}")
 
-  model = pickleData.get("Model", None)
-  if (model is None):
-    raise KeyError(f"'Model' key not found in the pickle file: {pickleFilePath}")
-  selectedFeatures = pickleData.get("SelectedFeatures", None)
-  if (selectedFeatures is None):
-    raise KeyError(f"'SelectedFeatures' key not found in the pickle file: {pickleFilePath}")
-  labelEncoder = pickleData.get("LabelEncoder", None)
-  if (labelEncoder is None):
-    raise KeyError(f"'LabelEncoder' key not found in the pickle file: {pickleFilePath}")
-  featuresEncoders = pickleData.get("FeaturesEncoders", None)
-  if (featuresEncoders is None):
-    raise KeyError(f"'FeaturesEncoders' key not found in the pickle file: {pickleFilePath}")
-  scaler = pickleData.get("Scaler", None)
-  if (scaler is None and not scalerName in ["None", None]):
-    raise KeyError(f"'Scaler' key not found in the pickle file: {pickleFilePath}")
-  configurations = pickleData.get("Configurations", None)
-  if (configurations is None):
-    raise KeyError(f"'Configurations' key not found in the pickle file: {pickleFilePath}")
-  currentColumns = pickleData.get("CurrentColumns", None)
-  if (currentColumns is None):
-    raise KeyError(f"'CurrentColumns' key not found in the pickle file: {pickleFilePath}")
-  featureSelector = pickleData.get("FeatureSelector", None)
-  if (featureSelector is None and not fsTechName in ["None", None] and not fsRatioName in ["None", None, 100]):
-    raise KeyError(f"'FeatureSelector' key not found in the pickle file: {pickleFilePath}")
+    # Load the best model from the pickle file.
+    pickleData = ReadPickleFile(pickleFilePath)
+    print(f"Loaded from pickle file: {pickleFilePath}")
+    print(f"Pickle keys:")
+    for key in pickleData.keys():
+      print(f"  - {key}")
 
-  dropFirstColumn = configurations.get("dropFirstColumn", None)
-  if (dropFirstColumn is None):
-    raise KeyError(f"'dropFirstColumn' key not found in the configurations in the pickle file: {pickleFilePath}")
-  targetColumn = configurations.get("targetColumn", None)
-  if (targetColumn is None):
-    raise KeyError(f"'targetColumn' key not found in the configurations in the pickle file: {pickleFilePath}")
-  dropNAColumns = configurations.get("dropNAColumns", None)
-  if (dropNAColumns is None):
-    raise KeyError(f"'dropNAColumns' key not found in the configurations in the pickle file: {pickleFilePath}")
+    model = pickleData.get("Model", None)
+    if (model is None):
+      raise KeyError(f"'Model' key not found in the pickle file: {pickleFilePath}")
+    selectedFeatures = pickleData.get("SelectedFeatures", None)
+    if (selectedFeatures is None):
+      raise KeyError(f"'SelectedFeatures' key not found in the pickle file: {pickleFilePath}")
+    labelEncoder = pickleData.get("LabelEncoder", None)
+    if (labelEncoder is None):
+      raise KeyError(f"'LabelEncoder' key not found in the pickle file: {pickleFilePath}")
+    featuresEncoders = pickleData.get("FeaturesEncoders", None)
+    if (featuresEncoders is None):
+      raise KeyError(f"'FeaturesEncoders' key not found in the pickle file: {pickleFilePath}")
+    scaler = pickleData.get("Scaler", None)
+    if (scaler is None and not scalerName in ["None", None]):
+      raise KeyError(f"'Scaler' key not found in the pickle file: {pickleFilePath}")
+    configurations = pickleData.get("Configurations", None)
+    if (configurations is None):
+      raise KeyError(f"'Configurations' key not found in the pickle file: {pickleFilePath}")
+    currentColumns = pickleData.get("CurrentColumns", None)
+    if (currentColumns is None):
+      raise KeyError(f"'CurrentColumns' key not found in the pickle file: {pickleFilePath}")
+    featureSelector = pickleData.get("FeatureSelector", None)
+    if (featureSelector is None and not fsTechName in ["None", None] and not fsRatioName in ["None", None, 100]):
+      raise KeyError(f"'FeatureSelector' key not found in the pickle file: {pickleFilePath}")
 
-  # Load the dataset.
-  if (not os.path.exists(datasetFilePath)):
-    raise FileNotFoundError(f"Dataset file not found at path: {datasetFilePath}")
-  # Read the CSV file into a pandas DataFrame.
-  data = pd.read_csv(datasetFilePath)
+    dropFirstColumn = configurations.get("dropFirstColumn", None)
+    if (dropFirstColumn is None):
+      raise KeyError(f"'dropFirstColumn' key not found in the configurations in the pickle file: {pickleFilePath}")
+    targetColumn = configurations.get("targetColumn", None)
+    if (targetColumn is None):
+      raise KeyError(f"'targetColumn' key not found in the configurations in the pickle file: {pickleFilePath}")
+    dropNAColumns = configurations.get("dropNAColumns", None)
+    if (dropNAColumns is None):
+      raise KeyError(f"'dropNAColumns' key not found in the configurations in the pickle file: {pickleFilePath}")
 
-  # Check if dropFirstColumn is True, then drop the first column.
-  if (dropFirstColumn):
-    # Drop the first column if it is not the target column.
-    if (data.columns[0] != targetColumn):
-      data = data.drop(data.columns[0], axis=1)
+    # Load the dataset.
+    if (not os.path.exists(datasetFilePath)):
+      raise FileNotFoundError(f"Dataset file not found at path: {datasetFilePath}")
+    # Read the CSV file into a pandas DataFrame.
+    data = pd.read_csv(datasetFilePath)
 
-  # Drop columns with any null values if dropNAColumns is True.
-  if (dropNAColumns):
-    # Drop empty columns from the DataFrame.
-    # Updated from "all" to "any" to drop columns with any null values.
-    # axis=1: means columns, how="any" means drop if any value is null.
-    data = data.dropna(axis=1, how="any")
+    # Check if dropFirstColumn is True, then drop the first column.
+    if (dropFirstColumn):
+      # Drop the first column if it is not the target column.
+      if (data.columns[0] != targetColumn):
+        data = data.drop(data.columns[0], axis=1)
 
-    # Drop rows with null or empty values from the DataFrame.
-    # axis=0: means rows, how="any" means drop if any value is null.
-    data = data.dropna(axis=0, how="any")
+    # Drop columns with any null values if dropNAColumns is True.
+    if (dropNAColumns):
+      # Drop empty columns from the DataFrame.
+      # Updated from "all" to "any" to drop columns with any null values.
+      # axis=1: means columns, how="any" means drop if any value is null.
+      data = data.dropna(axis=1, how="any")
 
-  # Features (X) are all columns except the "Class" column.
-  X = data.drop(targetColumn, axis=1)
+      # Drop rows with null or empty values from the DataFrame.
+      # axis=0: means rows, how="any" means drop if any value is null.
+      data = data.dropna(axis=0, how="any")
 
-  # Target (y) is the "Class" column.
-  y = data[targetColumn]
+    # Features (X) are all columns except the "Class" column.
+    X = data.drop(targetColumn, axis=1)
 
-  # Encode the target labels using the loaded label encoder.
-  y = labelEncoder.transform(y)
+    # Target (y) is the "Class" column.
+    y = data[targetColumn]
 
-  # Encode the features using the loaded features encoders if they exist.
-  if (featuresEncoders is not None):
-    categoricalCols = X.select_dtypes(include=["object", "category"]).columns
-    for col in categoricalCols:
-      if (col in featuresEncoders):
-        encoder = featuresEncoders[col]
-        X[col] = encoder.transform(X[col])
+    # Encode the target labels using the loaded label encoder.
+    y = labelEncoder.transform(y)
+
+    # Encode the features using the loaded features encoders if they exist.
+    if (featuresEncoders is not None):
+      categoricalCols = X.select_dtypes(include=["object", "category"]).columns
+      for col in categoricalCols:
+        if (col in featuresEncoders):
+          encoder = featuresEncoders[col]
+          X[col] = encoder.transform(X[col])
+        else:
+          raise KeyError(f"Encoder for feature column '{col}' not found in the loaded features encoders.")
+
+    dataDf = pd.DataFrame(data, columns=currentColumns)
+    if (scaler is not None):
+      # Transform the data using the fitted scaler.
+      dataDf = scaler.transform(dataDf)
+      dataDf = pd.DataFrame(dataDf, columns=currentColumns)
+
+    if (featureSelector is not None):
+      if (not hasattr(featureSelector, "transform")):
+        # Use the selected features list to select the features from the dataset.
+        missingFeatures = [feat for feat in selectedFeatures if feat not in dataDf.columns]
+        if (missingFeatures):
+          raise ValueError(f"The following selected features are missing from the dataset: {missingFeatures}")
+        dataDf = dataDf[selectedFeatures]
       else:
-        raise KeyError(f"Encoder for feature column '{col}' not found in the loaded features encoders.")
+        # Select features using the fitted feature selector.
+        dataDf = featureSelector.transform(dataDf)
+      dataDf = pd.DataFrame(dataDf, columns=selectedFeatures)
 
-  dataDf = pd.DataFrame(data, columns=currentColumns)
-  if (scaler is not None):
-    # Transform the data using the fitted scaler.
-    dataDf = scaler.transform(dataDf)
-    dataDf = pd.DataFrame(dataDf, columns=currentColumns)
-
-  if (featureSelector is not None):
-    if (not hasattr(featureSelector, "transform")):
-      # Use the selected features list to select the features from the dataset.
+    # Ensure that the selected features are in the same order as the selectedFeatures list if it exists.
+    if (selectedFeatures is not None):
       missingFeatures = [feat for feat in selectedFeatures if feat not in dataDf.columns]
       if (missingFeatures):
         raise ValueError(f"The following selected features are missing from the dataset: {missingFeatures}")
       dataDf = dataDf[selectedFeatures]
+
+    # Apply the loaded model to the processed dataset and evaluate the performance.
+    yTrue = y
+    yPred = model.predict(dataDf)
+    yPredProb = model.predict_proba(dataDf) if (hasattr(model, "predict_proba")) else None
+    yPredConfidences = np.max(yPredProb, axis=1) if (yPredProb is not None) else None
+    if (labelEncoder is not None):
+      yTrueLabels = labelEncoder.inverse_transform(yTrue)
+      yPredLabels = labelEncoder.inverse_transform(yPred)
+      classLabels = labelEncoder.classes_.tolist()
     else:
-      # Select features using the fitted feature selector.
-      dataDf = featureSelector.transform(dataDf)
-    dataDf = pd.DataFrame(dataDf, columns=selectedFeatures)
+      yTrueLabels = yTrue
+      yPredLabels = yPred
+      classLabels = np.unique(yTrue).tolist()
 
-  # Ensure that the selected features are in the same order as the selectedFeatures list if it exists.
-  if (selectedFeatures is not None):
-    missingFeatures = [feat for feat in selectedFeatures if feat not in dataDf.columns]
-    if (missingFeatures):
-      raise ValueError(f"The following selected features are missing from the dataset: {missingFeatures}")
-    dataDf = dataDf[selectedFeatures]
+    # Store evaluation results as DataFrame and save to CSV.
+    evalResults = {
+      "yTrue"           : yTrue.tolist(),
+      "yPred"           : yPred.tolist(),
+      "yPredProb"       : yPredProb.tolist() if (yPredProb is not None) else None,
+      "yPredConfidences": yPredConfidences.tolist() if (yPredConfidences is not None) else None,
+      "yTrueLabels"     : yTrueLabels.tolist(),
+      "yPredLabels"     : yPredLabels.tolist(),
+    }
+    evalResultsDf = pd.DataFrame(evalResults)
+    evalResultsFilePath = os.path.join(newStorageDir, f"EvaluationResults.csv")
+    evalResultsDf.to_csv(evalResultsFilePath, index=False)
 
-  # Apply the loaded model to the processed dataset and evaluate the performance.
-  yTrue = y
-  yPred = model.predict(dataDf)
-  yPredProb = model.predict_proba(dataDf) if (hasattr(model, "predict_proba")) else None
-  yPredConfidences = np.max(yPredProb, axis=1) if (yPredProb is not None) else None
-  if (labelEncoder is not None):
-    yTrueLabels = labelEncoder.inverse_transform(yTrue)
-    yPredLabels = labelEncoder.inverse_transform(yPred)
-    classLabels = labelEncoder.classes_.tolist()
-    classIndices = labelEncoder.transform(classLabels)
-  else:
-    yTrueLabels = yTrue
-    yPredLabels = yPred
-    classLabels = np.unique(yTrue).tolist()
-    classIndices = classLabels
-
-  storageDir = os.path.join(experimentPath, "Testing Results")
-  os.makedirs(storageDir, exist_ok=True)
-
-  # Store evaluation results as DataFrame and save to CSV.
-  evalResults = {
-    "yTrue"           : yTrue.tolist(),
-    "yPred"           : yPred.tolist(),
-    "yPredProb"       : yPredProb.tolist(),
-    "yPredConfidences": yPredConfidences.tolist(),
-    "yTrueLabels"     : yTrueLabels.tolist(),
-    "yPredLabels"     : yPredLabels.tolist(),
-  }
-  evalResultsDf = pd.DataFrame(evalResults)
-  evalResultsFilePath = os.path.join(storageDir, f"EvaluationResults.csv")
-  evalResultsDf.to_csv(evalResultsFilePath, index=False)
-
-  cm = confusion_matrix(yTrue, yPred)
-  cmPath = os.path.join(storageDir, f"ConfusionMatrix.pdf")
-  PlotConfusionMatrix(
-    cm,  # Confusion matrix (2D list or numpy array).
-    classLabels,  # List of class labels.
-    normalize=False,  # Whether to normalize the confusion matrix.
-    roundDigits=3,  # Number of decimal places to round normalized values.
-    title="Confusion Matrix",  # Title of the plot.
-    cmap="Blues",  # Colormap for the heatmap.
-    display=False,  # Whether to display the plot.
-    save=True,  # Whether to save the plot.
-    fileName=cmPath,  # File name to save the plot.
-    fontSize=15,  # Font size for labels and annotations.
-    annotate=True,  # Whether to annotate cells with values.
-    figSize=(8, 8),  # Figure size in inches.
-    colorbar=True,  # Whether to show colorbar.
-    returnFig=False,  # Whether to return the figure object.
-    dpi=dpi,  # DPI for saving the figure.
-  )
-  print("\nClassification Report:")
-  print(classification_report(yTrue, yPred, target_names=classLabels))
-
-  pm = CalculatePerformanceMetrics(
-    confMatrix=cm,
-    eps=1e-10,  # Small value to avoid division by zero.
-    addWeightedAverage=True,  # Whether to include weighted averages in the output.
-    addPerClass=True,  # Whether to include per-class metrics in the output.
-  )
-  pmDf = pd.DataFrame(pm)
-  pmFilePath = os.path.join(storageDir, f"PerformanceMetrics.csv")
-  pmDf.to_csv(pmFilePath, index=False)
-  for key, value in pm.items():
-    print(f"{key}: {value}")
-
-  rocPath = os.path.join(storageDir, f"ROCCurve.pdf")
-  PlotROCAUCCurve(
-    yTrue,  # True labels (one-hot or binary).
-    yPredProb,  # Predicted labels (one-hot or binary).
-    classLabels,  # List of class names.
-    areProbabilities=True,  # Whether yPred are probabilities.
-    title="ROC Curve & AUC",  # Plot title.
-    figSize=(5, 5),  # Figure size.
-    cmap=None,  # Colormap for ROC curves.
-    display=False,  # Display the plot.
-    save=True,  # Save the plot.
-    fileName=rocPath,  # File name.
-    fontSize=16,  # Font size.
-    plotDiagonal=True,  # Plot diagonal reference line.
-    annotateAUC=True,  # Annotate AUC value on plot.
-    showLegend=True,  # Show legend.
-    returnFig=False,  # Return figure object.
-    dpi=dpi,  # DPI for saving the figure.
-  )
-
-  prcPath = os.path.join(storageDir, f"PRCCurve.pdf")
-  PlotPRCCurve(
-    yTrue,  # True labels (one-hot or binary).
-    yPredProb,  # Predicted labels (one-hot or binary).
-    classLabels,  # List of class names.
-    areProbabilities=True,  # Whether yPred are probabilities.
-    title="PRC Curve",  # Plot title.
-    figSize=(5, 5),  # Figure size.
-    cmap=None,  # Colormap for PRC curves.
-    display=False,  # Display the plot.
-    save=True,  # Save the plot.
-    fileName=prcPath,  # File name.
-    fontSize=16,  # Font size.
-    annotateAvg=True,  # Annotate average precision value on plot.
-    showLegend=True,  # Show legend.
-    returnFig=False,  # Return figure object.
-    dpi=dpi,  # DPI for saving the figure.
-  )
-
-  clsWisePRFPath = os.path.join(storageDir, f"ClasswisePRFBarPlot.pdf")
-  PlotClasswisePRFBar(
-    cm,
-    classNames=classLabels,
-    fontSize=15,
-    figsize=(8, 5),
-    display=False,
-    save=True,
-    fileName=clsWisePRFPath,
-    dpi=dpi,
-    returnFig=False,
-  )
-
-  errorAnalysisPath = os.path.join(storageDir, f"ErrorAnalysis.pdf")
-  PlotErrorAnalysis(
-    yTrue,
-    yPred,
-    X=None,
-    classNames=classLabels,
-    maxExamples=5,
-    fontSize=15,
-    figsize=(12, 10),
-    display=False,
-    save=True,
-    fileName=errorAnalysisPath,
-    dpi=dpi,
-    returnFig=False,
-  )
-
-  errorMatrixPath = os.path.join(storageDir, f"ErrorMatrix.pdf")
-  PlotErrorMatrix(
-    cm,
-    classNames=classLabels,
-    fontSize=15,
-    figsize=(7, 6),
-    display=False,
-    save=True,
-    fileName=errorMatrixPath,
-    dpi=dpi,
-    returnFig=False,
-  )
-
-  predConfHistPath = os.path.join(storageDir, f"PredictionConfidenceHistogram.pdf")
-  PlotPredictionConfidenceHistogram(
-    yPredProb,
-    yPred=yPred,
-    fontSize=15,
-    figsize=(8, 5),
-    bins=20,
-    display=False,
-    save=True,
-    fileName=predConfHistPath,
-    dpi=dpi,
-    returnFig=False,
-  )
-
-  clsResidualsPath = os.path.join(storageDir, f"ClassificationResiduals.pdf")
-  PlotClassificationResiduals(
-    yTrue,
-    yPred,
-    fontSize=15,
-    figsize=(8, 5),
-    display=False,
-    save=True,
-    fileName=clsResidualsPath,
-    dpi=dpi,
-    returnFig=False,
-  )
-
-  featureImportancePath = os.path.join(storageDir, f"FeatureImportance.pdf")
-  PlotFeatureImportance(
-    model,
-    featureNames=selectedFeatures,
-    title="Feature Importance",
-    fontSize=14,
-    figsize=(8, 5),
-    display=False,
-    save=True,
-    fileName=featureImportancePath,
-    dpi=dpi,
-    returnFig=False,
-    topN=10,
-  )
-
-  probsMC = SampleMonteCarloDirichletFromProbs(yPredProb, T=T, concentration=30.0)
-  uncertaintyMeasures = ComputeMonteCarloUncertaintyMeasures(probsMC)
-  confidences = uncertaintyMeasures["predictedConfidence"]
-  predictions = uncertaintyMeasures["predictedIdx"]
-  ecePath = os.path.join(storageDir, f"ECEReliabilityPlot.pdf")
-  ece, binAcc, binConf, binCounts = ComputeECEPlotReliability(
-    confidences,
-    predictions,
-    labels=yPred,
-    nBins=5,
-    title="ECE Example",
-    fontSize=15,
-    figSize=(6, 6),
-    display=False,
-    save=True,
-    fileName=ecePath,
-    dpi=dpi,
-    returnFig=False,
-    cmap="Blues",
-    applyXYLimits=True,
-  )
-  print(f"ECE: {ece}")
-  print(f"Bin Accuracies: {binAcc}")
-  print(f"Bin Confidences: {binConf}")
-  print(f"Bin Counts: {binCounts}")
-
-  riskCoveragePath = os.path.join(storageDir, f"RiskCoverageCurve.pdf")
-  correctness = (predictions == yPred).astype(int)
-  RiskCoverageCurve(
-    confidences,
-    correctness,
-    title="Risk-Coverage (Accuracy vs Coverage)",
-    fontSize=15,
-    figSize=(6, 6),
-    display=False,
-    save=True,
-    fileName=riskCoveragePath,
-    dpi=dpi,
-    returnFig=False,
-    color="blue",
-  )
-
-  topKAccPath = os.path.join(storageDir, f"TopKAccuracyCurve.pdf")
-  PlotTopKAccuracyCurve(
-    yPredProb,
-    yPred,
-    maxK=10,
-    title="Top-k Accuracy Curve",
-    figSize=(6, 6),
-    save=True,
-    fileName=topKAccPath,
-    display=False,
-    fontSize=15,
-    returnFig=False,
-    dpi=dpi,
-    color="blue",
-  )
-
-  calibCurvePath = os.path.join(storageDir, f"CalibrationCurve.pdf")
-  PlotCalibrationCurve(
-    yPredProb,
-    yPred,
-    nBins=10,
-    title="Calibration Curve",
-    fontSize=15,
-    figSize=(6, 6),
-    display=False,
-    save=True,
-    fileName=calibCurvePath,
-    dpi=dpi,
-    returnFig=False,
-    color="blue",
-  )
-
-  counterFolder = os.path.join(storageDir, "Counterfactual Outcomes")
-  os.makedirs(counterFolder, exist_ok=True)
-  for col in selectedFeatures:
-    counterfactualOutcomesPath = os.path.join(counterFolder, f"{col}.pdf")
-    PlotCounterfactualOutcomes(
-      dataDf,
-      model,
-      treatmentCol=col,
-      lowVal=None,
-      highVal=None,
-      classNames=classLabels,
-      title="Counterfactual Outcome Distributions",
-      save=True,
-      fileName=counterfactualOutcomesPath,
-      display=False,
-      returnPreds=False,
-      fontSize=15,
-      dpi=720,
+    cm = confusion_matrix(yTrue, yPred)
+    cmPath = os.path.join(newStorageDir, f"ConfusionMatrix.pdf")
+    PlotConfusionMatrix(
+      cm,  # Confusion matrix (2D list or numpy array).
+      classLabels,  # List of class labels.
+      normalize=False,  # Whether to normalize the confusion matrix.
+      roundDigits=3,  # Number of decimal places to round normalized values.
+      title="Confusion Matrix",  # Title of the plot.
+      cmap="Blues",  # Colormap for the heatmap.
+      display=False,  # Whether to display the plot.
+      save=True,  # Whether to save the plot.
+      fileName=cmPath,  # File name to save the plot.
+      fontSize=15,  # Font size for labels and annotations.
+      annotate=True,  # Whether to annotate cells with values.
+      figSize=(8, 8),  # Figure size in inches.
+      colorbar=True,  # Whether to show colorbar.
+      returnFig=False,  # Whether to return the figure object.
+      dpi=dpi,  # DPI for saving the figure.
     )
+    print("\nClassification Report:")
+    print(classification_report(yTrue, yPred, target_names=classLabels))
+
+    pm = CalculatePerformanceMetrics(
+      confMatrix=cm,
+      eps=1e-10,  # Small value to avoid division by zero.
+      addWeightedAverage=True,  # Whether to include weighted averages in the output.
+      addPerClass=True,  # Whether to include per-class metrics in the output.
+    )
+    for k in pm.keys():
+      # If a list of values is present for a metric,
+      # convert it to a string for better display in the CSV file.
+      if (
+          isinstance(pm[k], list) or
+          # isinstance(pm[k], np.ndarray) or
+          # isinstance(pm[k], pd.Series) or
+          isinstance(pm[k], dict) or
+          isinstance(pm[k], tuple)
+      ):
+        pm[k] = str(pm[k])
+    pmDf = pd.DataFrame(pm)
+    pmFilePath = os.path.join(newStorageDir, f"PerformanceMetrics.csv")
+    pmDf.to_csv(pmFilePath, index=False)
+    for key, value in pm.items():
+      print(f"{key}: {value}")
+
+    # Append the performance metrics to the final history list for all top experiments.
+    finalHistory.append(
+      {
+        "Model"                      : modelName,
+        "Scaler"                     : scalerName,
+        "Feature Selection Technique": fsTechName,
+        "Feature Selection Ratio"    : fsRatioName,
+        "Data Balancing Technique"   : dbTechName,
+        "Outlier Detection Technique": outliersTechName,
+        **pm,
+      }
+    )
+
+    rocPath = os.path.join(newStorageDir, f"ROCCurve.pdf")
+    PlotROCAUCCurve(
+      yTrue,  # True labels (one-hot or binary).
+      yPredProb if (yPredProb is not None) else yPred,  # Predicted probabilities or labels.
+      classLabels,  # List of class names.
+      areProbabilities=True if (yPredProb is not None) else False,  # Whether yPred are probabilities.
+      title="ROC Curve & AUC",  # Plot title.
+      figSize=(5, 5),  # Figure size.
+      cmap=None,  # Colormap for ROC curves.
+      display=False,  # Display the plot.
+      save=True,  # Save the plot.
+      fileName=rocPath,  # File name.
+      fontSize=16,  # Font size.
+      plotDiagonal=True,  # Plot diagonal reference line.
+      annotateAUC=True,  # Annotate AUC value on plot.
+      showLegend=True,  # Show legend.
+      returnFig=False,  # Return figure object.
+      dpi=dpi,  # DPI for saving the figure.
+    )
+
+    prcPath = os.path.join(newStorageDir, f"PRCCurve.pdf")
+    PlotPRCCurve(
+      yTrue,  # True labels (one-hot or binary).
+      yPredProb if (yPredProb is not None) else yPred,  # Predicted probabilities or labels.
+      classLabels,  # List of class names.
+      areProbabilities=True if (yPredProb is not None) else False,  # Whether yPred are probabilities.
+      title="PRC Curve",  # Plot title.
+      figSize=(5, 5),  # Figure size.
+      cmap=None,  # Colormap for PRC curves.
+      display=False,  # Display the plot.
+      save=True,  # Save the plot.
+      fileName=prcPath,  # File name.
+      fontSize=16,  # Font size.
+      annotateAvg=True,  # Annotate average precision value on plot.
+      showLegend=True,  # Show legend.
+      returnFig=False,  # Return figure object.
+      dpi=dpi,  # DPI for saving the figure.
+    )
+
+    clsWisePRFPath = os.path.join(newStorageDir, f"ClasswisePRFBarPlot.pdf")
+    PlotClasswisePRFBar(
+      cm,
+      classNames=classLabels,
+      fontSize=15,
+      figsize=(8, 5),
+      display=False,
+      save=True,
+      fileName=clsWisePRFPath,
+      dpi=dpi,
+      returnFig=False,
+    )
+
+    errorAnalysisPath = os.path.join(newStorageDir, f"ErrorAnalysis.pdf")
+    PlotErrorAnalysis(
+      yTrue,
+      yPred,
+      X=None,
+      classNames=classLabels,
+      maxExamples=5,
+      fontSize=15,
+      figsize=(12, 10),
+      display=False,
+      save=True,
+      fileName=errorAnalysisPath,
+      dpi=dpi,
+      returnFig=False,
+    )
+
+    errorMatrixPath = os.path.join(newStorageDir, f"ErrorMatrix.pdf")
+    PlotErrorMatrix(
+      cm,
+      classNames=classLabels,
+      fontSize=15,
+      figsize=(7, 6),
+      display=False,
+      save=True,
+      fileName=errorMatrixPath,
+      dpi=dpi,
+      returnFig=False,
+    )
+
+    if (yPredProb is not None):
+      predConfHistPath = os.path.join(newStorageDir, f"PredictionConfidenceHistogram.pdf")
+      PlotPredictionConfidenceHistogram(
+        yPredProb,
+        yPred=yPred,
+        fontSize=15,
+        figsize=(8, 5),
+        bins=20,
+        display=False,
+        save=True,
+        fileName=predConfHistPath,
+        dpi=dpi,
+        returnFig=False,
+      )
+
+    clsResidualsPath = os.path.join(newStorageDir, f"ClassificationResiduals.pdf")
+    PlotClassificationResiduals(
+      yTrue,
+      yPred,
+      fontSize=15,
+      figsize=(8, 5),
+      display=False,
+      save=True,
+      fileName=clsResidualsPath,
+      dpi=dpi,
+      returnFig=False,
+    )
+
+    if (hasattr(model, "feature_importances_") or hasattr(model, "coef_")):
+      featureImportancePath = os.path.join(newStorageDir, f"FeatureImportance.pdf")
+      PlotFeatureImportance(
+        model,
+        featureNames=selectedFeatures,
+        title="Feature Importance",
+        fontSize=14,
+        figsize=(8, 5),
+        display=False,
+        save=True,
+        fileName=featureImportancePath,
+        dpi=dpi,
+        returnFig=False,
+        topN=10,
+      )
+
+    if (yPredProb is not None):
+      probsMC = SampleMonteCarloDirichletFromProbs(
+        yPredProb,
+        T=T,
+        concentration=30.0
+      )
+      uncertaintyMeasures = ComputeMonteCarloUncertaintyMeasures(probsMC)
+      confidences = uncertaintyMeasures["predictedConfidence"]
+      predictions = uncertaintyMeasures["predictedIdx"]
+      ecePath = os.path.join(newStorageDir, f"ECEReliabilityPlot.pdf")
+      ece, binAcc, binConf, binCounts = ComputeECEPlotReliability(
+        confidences,
+        predictions,
+        labels=yPred,
+        nBins=5,
+        title="ECE Example",
+        fontSize=15,
+        figSize=(6, 6),
+        display=False,
+        save=True,
+        fileName=ecePath,
+        dpi=dpi,
+        returnFig=False,
+        cmap="Blues",
+        applyXYLimits=True,
+      )
+      print(f"ECE: {ece}")
+      print(f"Bin Accuracies: {binAcc}")
+      print(f"Bin Confidences: {binConf}")
+      print(f"Bin Counts: {binCounts}")
+
+      riskCoveragePath = os.path.join(newStorageDir, f"RiskCoverageCurve.pdf")
+      correctness = (predictions == yPred).astype(int)
+      RiskCoverageCurve(
+        confidences,
+        correctness,
+        title="Risk-Coverage (Accuracy vs Coverage)",
+        fontSize=15,
+        figSize=(6, 6),
+        display=False,
+        save=True,
+        fileName=riskCoveragePath,
+        dpi=dpi,
+        returnFig=False,
+        color="blue",
+      )
+
+      topKAccPath = os.path.join(newStorageDir, f"TopKAccuracyCurve.pdf")
+      PlotTopKAccuracyCurve(
+        yPredProb,
+        yPred,
+        maxK=10,
+        title="Top-k Accuracy Curve",
+        figSize=(6, 6),
+        save=True,
+        fileName=topKAccPath,
+        display=False,
+        fontSize=15,
+        returnFig=False,
+        dpi=dpi,
+        color="blue",
+      )
+
+      calibCurvePath = os.path.join(newStorageDir, f"CalibrationCurve.pdf")
+      PlotCalibrationCurve(
+        yPredProb,
+        yPred,
+        nBins=10,
+        title="Calibration Curve",
+        fontSize=15,
+        figSize=(6, 6),
+        display=False,
+        save=True,
+        fileName=calibCurvePath,
+        dpi=dpi,
+        returnFig=False,
+        color="blue",
+      )
+
+    if (plotCounterfactualOutcomes):
+      counterFolder = os.path.join(newStorageDir, "Counterfactual Outcomes")
+      os.makedirs(counterFolder, exist_ok=True)
+      for col in selectedFeatures:
+        counterfactualOutcomesPath = os.path.join(counterFolder, f"{col}.pdf")
+        PlotCounterfactualOutcomes(
+          dataDf,
+          model,
+          treatmentCol=col,
+          lowVal=None,
+          highVal=None,
+          classNames=classLabels,
+          title="Counterfactual Outcome Distributions",
+          save=True,
+          fileName=counterfactualOutcomesPath,
+          display=False,
+          returnPreds=False,
+          fontSize=15,
+          dpi=dpi,
+        )
+
+  # Store the final history of all top experiments in a CSV file.
+  finalHistoryDf = pd.DataFrame(finalHistory)
+  finalHistoryFilePath = os.path.join(storageDir, f"FinalHistoryOfTop_{numberOfTopExperiments}_Experiments.csv")
+  finalHistoryDf.to_csv(finalHistoryFilePath, index=False)
+  print(f"\nFinal history of top {numberOfTopExperiments} experiments saved to: {finalHistoryFilePath}")
+
+  # Store as latex table as well for easy inclusion in reports.
+  finalHistoryLatexPath = os.path.join(storageDir, f"FinalHistoryOfTop_{numberOfTopExperiments}_Experiments.tex")
+  with open(finalHistoryLatexPath, "w") as f:
+    f.write(finalHistoryDf.to_latex(index=False))
+  print(f"Final history of top {numberOfTopExperiments} experiments saved to: {finalHistoryLatexPath}")
+
+  # Initialize variable that will hold the path to the found FinalHistory CSV (if any).
+  # Find the CSV file that starts with "FinalHistory" in the "Testing Results" folder.
+  finalHistoryFile = None
+  # Search the testing results directory for a file that looks like FinalHistory*.csv.
+  for el in os.listdir(storageDir):
+    # Check each filename to see if it matches the expected prefix/suffix.
+    if (el.startswith("FinalHistory") and el.endswith(".csv")):
+      # If found, build the absolute path and stop searching.
+      finalHistoryFile = os.path.join(storageDir, el)
+      # Break out of the search loop once a matching file is found.
+      break
+
+  # If a FinalHistory CSV was found, load and sanitize it for the merged report.
+  if (finalHistoryFile):
+    # Load the CSV into a pandas DataFrame for processing.
+    finalHistoryDf = pd.read_csv(finalHistoryFile)
+    # Confirm successful load to the user via a printed message.
+    print(f"\u2713 Loaded final history from: {finalHistoryFile}")
+
+    # Replace any NaN values with empty strings to improve readability in the report.
+    # Replace NaN values with empty strings for better display.
+    finalHistoryDf.fillna("", inplace=True)
+
+    # Identify metric columns to convert to percentages and round them.
+    # Round numeric values to 4 decimal places for better readability.
+    # This should be done only for columns with prefix "Weighted" in their names,
+    # as they represent the main performance metrics;
+    # other columns may contain non-numeric values or values that should not be rounded.
+    numericCols = [col for col in finalHistoryDf.columns if col.startswith("Weighted")]
+
+    # Convert weighted metrics to percentages and round to two decimal places.
+    finalHistoryDf[numericCols] = (finalHistoryDf[numericCols] * 100).round(2)
+
+    # Sort rows so the best-performing models (by Weighted Average) appear first.
+    # Sort each group (based on the model) by the "Weighted Average" metric in descending order to
+    # have the best-performing models at the top of the report.
+    finalHistoryDf.sort_values(by="Weighted Average", ascending=False, inplace=True)
+
+    # Narrow down columns to keep only relevant performance metrics (exclude many specifics).
+    # Keep only the metrics with the "Weighted" prefix in their names for a more concise report.
+    # To keep the initial columns, we can do this by removing the columns with the prefix "Macro",
+    # "Class", and "Micro" while keeping the rest.
+    columnsToKeep = [
+      col
+      for col in finalHistoryDf.columns
+      if (
+        not (
+            col.startswith("Macro") or  # Exclude columns that start with "Macro".
+            "Class" in col or  # Exclude columns that contain "Class".
+            col.startswith("Micro") or  # Exclude columns that start with "Micro".
+            col.startswith("Weights") or  # Exclude columns that start with "Weights".
+            "Average" in col  # Exclude columns that contain "Average".
+        )
+      )
+    ]
+
+    # Apply the column filtering to keep only the selected columns.
+    finalHistoryDf = finalHistoryDf[columnsToKeep]
+    # Rename columns to remove the verbose "Weighted " prefix for clarity.
+    # Remove the prefix "Weighted " from the column names for better readability.
+    finalHistoryDf.columns = [col.replace("Weighted ", "") for col in finalHistoryDf.columns]
+    # Drop confusion-matrix counts to focus the report on metrics of interest.
+    # Drop the TP, TN, FP, FN columns to focus on the main performance metrics.
+    columnsToDrop = [col for col in finalHistoryDf.columns if (col in ["TP", "TN", "FP", "FN"])]
+    finalHistoryDf.drop(columns=columnsToDrop, inplace=True)
+
+    # Store the cleaned final history DataFrame in a CSV file for reference.
+    cleanedFinalHistoryFilePath = os.path.join(
+      storageDir,
+      f"Cleaned_Summary_of_Top_{numberOfTopExperiments}_Experiments.csv"
+    )
+    finalHistoryDf.to_csv(cleanedFinalHistoryFilePath, index=False)
+    print(f"\u2713 Cleaned summary of top {numberOfTopExperiments} experiments saved to: {cleanedFinalHistoryFilePath}")
+  else:
+    # Inform the user if no final history file was found for a given system.
+    print(f"\u2717 Final history file not found in: {testingResultsPath}")
+
+
+def OptunaTuningClassificationTrials(
+    datasetFilePath,
+    experimentPath,
+    storageDir,
+    noOfTrials=10,
+    dpi=720,
+    T=500,
+    plotCounterfactualOutcomes=False,
+    numberOfTopExperiments=1,
+    sortByMetric="Weighted Average",
+):
+  r'''
+  Run multiple trials of inference using a saved preprocessing + model objects bundle with the best parameters
+  from a previous tuning run.
+
+  Parameters:
+    datasetFilePath (str): Path to the dataset file for inference.
+    experimentPath (str): Path to the experiment folder containing the saved model and preprocessing objects.
+    storageDir (str): Directory where the performance plots and results will be saved.
+    noOfTrials (int, optional): Number of trials to run. Default is 10.
+    dpi (int, optional): DPI for saving the performance plots. Default is 720.
+    T (int, optional): Number of Monte Carlo samples for uncertainty estimation (if applicable). Default is 500.
+    plotCounterfactualOutcomes (bool, optional): Whether to plot counterfactual outcomes (if applicable). Default is False.
+    numberOfTopExperiments (int, optional): Number of top experiments to test based on the best parameters. Default is 1.
+    sortByMetric (str, optional): The metric to sort the experiments by when selecting the top experiments. Default is "Weighted Average".
+  '''
+
+  from HMB.Utils import ReadPickleFile
+  from HMB.Initializations import DoRandomSeeding
+
+  # Load the best parameters from a previous training run for the current file.
+  bestParamsPath = os.path.join(experimentPath, "Metrics History.csv")
+  if (os.path.exists(bestParamsPath)):
+    bestParams = pd.read_csv(bestParamsPath)
+    bestParams.fillna("None", inplace=True)
+    if (numberOfTopExperiments > 1):
+      bestParams = bestParams.sort_values(by=sortByMetric, ascending=False)
+      # Group by the model column and find the top-1 in each group, then reset the index for the resultant DataFrame.
+      bestParams = bestParams.groupby("Model").head(1).reset_index(drop=True)
+      # Truncate the DataFrame to the specified number of top experiments if needed.
+      if (numberOfTopExperiments > 0 and len(bestParams) > numberOfTopExperiments):
+        bestParams = bestParams.head(numberOfTopExperiments)
+      print(f"Top {numberOfTopExperiments} experiments based on {sortByMetric} for each model:")
+      print(bestParams)
+      # Store the resultant DF in a CSV file for reference.
+      bestParams.to_csv(
+        storageDir + f"/Top_{numberOfTopExperiments}_Experiments_Based_on_{sortByMetric}.csv",
+        index=False
+      )
+      print(
+        f"Top {numberOfTopExperiments} experiments saved to: "
+        f"{storageDir}/Top_{numberOfTopExperiments}_Experiments_Based_on_{sortByMetric}.csv"
+      )
+  else:
+    raise FileNotFoundError(f"Best parameters file not found at path: {bestParamsPath}")
+
+  for i in range(len(bestParams)):
+    record = bestParams.iloc[i]
+    scalerName = record["Scaler"]
+    modelName = record["Model"]
+    fsTechName = record["Feature Selection Technique"]
+    fsRatioName = int(record["Feature Selection Ratio"]) if (fsTechName != "None") else "None"
+    dbTechName = record["Data Balancing Technique"]
+    outliersTechName = record["Outlier Detection Technique"]
+
+    newStorageDir = os.path.join(storageDir, modelName)
+    os.makedirs(newStorageDir, exist_ok=True)
+
+    print("Testing the best model with the following parameters:")
+
+    print("Running trials with the best parameters...")
+    print(
+      f"Scaler: {scalerName}, Model: {modelName}, FS Tech: {fsTechName}, FS Ratio: {fsRatioName}, "
+      f"DB Tech: {dbTechName}, Outliers Tech: {outliersTechName}"
+    )
+    pickleFileName = f"{modelName}_{scalerName}_{fsTechName}_{fsRatioName}_{dbTechName}_{outliersTechName}.p"
+    pickleFilePath = os.path.join(experimentPath, pickleFileName)
+    if (not os.path.exists(pickleFilePath)):
+      raise FileNotFoundError(f"Pickle file not found for the best model at path: {pickleFilePath}")
+
+    # Load the best model from the pickle file.
+    pickleData = ReadPickleFile(pickleFilePath)
+    print(f"Loaded from pickle file: {pickleFilePath}")
+
+    print(f"\nPickle keys:")
+    for key in pickleData.keys():
+      print(f"  - {key}")
+
+    configurations = pickleData.get("Configurations", None)
+    if (configurations is None):
+      raise KeyError(f"'Configurations' key not found in the pickle file: {pickleFilePath}")
+    print("\nConfigurations in the pickle file:")
+    for key in configurations.keys():
+      print(f"  - {key}: {configurations[key]}")
+
+    dropFirstColumn = configurations.get("dropFirstColumn", None)
+    if (dropFirstColumn is None):
+      raise KeyError(f"'dropFirstColumn' key not found in the configurations in the pickle file: {pickleFilePath}")
+    targetColumn = configurations.get("targetColumn", None)
+    if (targetColumn is None):
+      raise KeyError(f"'targetColumn' key not found in the configurations in the pickle file: {pickleFilePath}")
+    dropNAColumns = configurations.get("dropNAColumns", None)
+    if (dropNAColumns is None):
+      raise KeyError(f"'dropNAColumns' key not found in the configurations in the pickle file: {pickleFilePath}")
+    encodeCategorical = configurations.get("encodeCategorical", None)
+    if (encodeCategorical is None):
+      raise KeyError(f"'encodeCategorical' key not found in the configurations in the pickle file: {pickleFilePath}")
+    testRatio = configurations.get("testRatio", None)
+    if (testRatio is None):
+      raise KeyError(f"'testRatio' key not found in the configurations in the pickle file: {pickleFilePath}")
+    eps = configurations.get("eps", None)
+    if (eps is None):
+      raise KeyError(f"'eps' key not found in the configurations in the pickle file: {pickleFilePath}")
+    testFilePath = configurations.get("testFilePath", None)
+    contamination = configurations.get("contamination", None)
+    if (contamination is None):
+      raise KeyError(f"'contamination' key not found in the configurations in the pickle file: {pickleFilePath}")
+
+    for trial in range(noOfTrials):
+      DoRandomSeeding()
+
+      print(f"\nTrial {trial + 1}/{noOfTrials}", flush=True)
+      trialStorageDir = os.path.join(newStorageDir, f"Trial_{trial + 1}")
+      os.makedirs(trialStorageDir, exist_ok=True)
+
+      # Copy the best parameters file to the trial storage directory for reference.
+      trialBestParamsPath = os.path.join(trialStorageDir, "Optuna Best Params.csv")
+      pd.DataFrame([record]).to_csv(trialBestParamsPath, index=False)
+
+      # Run a new experiment with the best parameters for the current file and
+      # save the results in a separate folder for each trial.
+      # Call the function to perform machine learning classification.
+      metrics, pltObject, objects = MachineLearningClassification(
+        datasetFilePath,
+        scalerName if (scalerName != "None") else None,
+        modelName,
+        fsTechName if (fsTechName != "None") else None,
+        fsTechRatio=fsRatioName if (fsTechName != "None") else None,
+        dataBalanceTech=dbTechName if (dbTechName != "None") else None,
+        outlierTech=outliersTechName if (outliersTechName != "None") else None,
+        contamination=contamination,
+        testRatio=testRatio,
+        testFilePath=testFilePath if (testFilePath is not None and os.path.exists(testFilePath)) else None,
+        targetColumn=targetColumn,
+        dropFirstColumn=dropFirstColumn,
+        dropNAColumns=dropNAColumns,
+        encodeCategorical=encodeCategorical,
+        eps=eps,
+      )
+
+      # Create a pattern for the filename based on model name, scaler name, feature selection technique, and ratio.
+      pattern = (
+        f"{modelName}_{scalerName}_{fsTechName}_"
+        f"{fsRatioName if (fsTechName is not None) else None}_{dbTechName}_"
+        f"{outliersTechName if (outliersTechName is not None) else None}"
+      )
+
+      # Added to check if the plot object is not None before saving.
+      if (pltObject is not None):
+        # Save the confusion matrix plot with a specific filename as a PNG image.
+        pltObject.figure.savefig(
+          os.path.join(trialStorageDir, f"{pattern}_CM.png"),
+          bbox_inches="tight",  # Adjust the bounding box to fit the plot.
+          dpi=dpi,  # Set the DPI for the saved image.
+        )
+
+        # pltObject.figure.show()  # Display the confusion matrix plot.
+        # pltObject.figure.clf()  # Clear the figure to free up memory.
+        plt.close(pltObject.figure)  # Close the plot to free up memory.
+
+      # Added to check if the objects are not None before saving.
+      if (objects is not None):
+        # Save the trained model and scaler objects using pickle.
+        with open(
+            os.path.join(trialStorageDir, f"{pattern}.p"),
+            "wb",  # Open the file in write-binary mode.
+        ) as f:
+          pickle.dump(objects, f)  # Save the model and scaler objects.
+
+      record = {
+        "Model"                      : modelName,  # Name of the machine learning model.
+        "Scaler"                     : scalerName,  # Name of the scaler used for preprocessing.
+        "Feature Selection Technique": fsTechName,  # Feature selection technique used.
+        # Ratio of features selected, or "N/A" if no feature selection was applied.
+        "Feature Selection Ratio"    : fsRatioName if (fsTechName is not None) else None,
+        "Data Balancing Technique"   : dbTechName,  # Data balancing technique used.
+        "Outlier Detection Technique": outliersTechName if (outliersTechName is not None) else None,
+        **metrics,
+      }
+      # Store the record as a CSV file for the current trial.
+      recordDf = pd.DataFrame([record])  # Create a DataFrame from the record dictionary.
+      recordFilePath = os.path.join(trialStorageDir, f"{pattern}_Metrics.csv")
+      recordDf.to_csv(recordFilePath, index=False)  # Save the record as a CSV file.
+
+      recordFilePath = os.path.join(trialStorageDir, f"Metrics History.csv")
+      recordDf.to_csv(recordFilePath, index=False)  # Save the record as a CSV file.
+
+      print(
+        f"Trial {trial}: Model={modelName}, Scaler={scalerName}, "
+        f"FS Tech={fsTechName}, FS Ratio={fsRatioName if (fsTechName is not None) else None}, "
+        f"DB Tech={dbTechName}, Outliers Tech={outliersTechName if (outliersTechName is not None) else None} "
+        f"=> Weighted Average={metrics['Weighted Average']}",
+        flush=True
+      )
+
+      # Apply testing with the best parameters for the current file and save the results in a separate folder for each trial.
+      testStorageDir = os.path.join(trialStorageDir, "Testing")
+      os.makedirs(testStorageDir, exist_ok=True)
+      OptunaTuningClassificationTesting(
+        datasetFilePath=testFilePath if (
+            testFilePath is not None and os.path.exists(testFilePath)
+        ) else datasetFilePath,
+        experimentPath=trialStorageDir,
+        storageDir=testStorageDir,
+        dpi=dpi,
+        T=T,
+        plotCounterfactualOutcomes=plotCounterfactualOutcomes,
+        numberOfTopExperiments=1,
+        sortByMetric=sortByMetric,
+      )
+
+  # Find subdirectories (per-model) inside the trial results path.
+  foundModels = [
+    el
+    for el in os.listdir(storageDir)
+    if (os.path.isdir(os.path.join(storageDir, el)))
+  ]
+
+  # Print which models were discovered with trial results.
+  print(f"\u2713 Found the following models with trial results: {foundModels}")
+  # Prepare a container to collect per-model trial histories.
+  fileHistory = {}
+  # Iterate each model folder to extract per-trial first-row summaries.
+  for model in foundModels:
+    # Print progress for the model being processed.
+    print(f"\u2713 Processing trial results for model: {model}")
+    # Path to the model's trial results directory.
+    modelTrialResultsPath = os.path.join(storageDir, model)
+    # List all trial subfolders/files present for this model.
+    modelTrials = [el for el in os.listdir(modelTrialResultsPath)]
+    # Report which trial result entries were found for this model.
+    print(f"\u2713 Found the following trial result files for model {model}: {modelTrials}")
+    # Container for the first-row summary of each trial.
+    modelHistory = []
+    # For each trial folder, load the benchmark FinalHistoryOfTop_1_Experiments.csv.
+    for trialFile in modelTrials:
+      # Path to the CSV file expected inside each trial's Testing folder.
+      csvFile = os.path.join(modelTrialResultsPath, trialFile, "Testing", "FinalHistoryOfTop_1_Experiments.csv")
+      if (not os.path.exists(csvFile)):
+        print(f"\u2717 Expected trial history file not found: {csvFile}")
+        continue  # Skip to the next trial if the expected file is missing.
+      # Read the CSV into a DataFrame and take the first row as the trial summary.
+      df = pd.read_csv(csvFile)
+      firstRow = df.iloc[0]
+      modelHistory.append(firstRow)
+    # Indicate completion of extraction for the current model.
+    print(f"\u2713 Extracted the first row of metrics history from each trial for model {model}.")
+    # Store the per-model trial histories into the fileHistory mapping.
+    fileHistory[model] = modelHistory
+  # Prepare an empty DataFrame to accumulate all models' trial summaries.
+  historyDf = pd.DataFrame()
+  # Convert each model's list of first-row summaries into a DataFrame and concatenate.
+  for model, history in fileHistory.items():
+    modelDf = pd.DataFrame(history)
+    modelDf["Model"] = model  # Add a column for the model name.
+    # Concatenate the DataFrames for all models.
+    historyDf = pd.concat([historyDf, modelDf], ignore_index=True)
+  # Reorder columns so "Model" appears first for readability.
+  # Reorder the columns to have "Model" as the first column.
+  cols = historyDf.columns.tolist()
+  cols = ["Model"] + [col for col in cols if (col != "Model")]
+  historyDf = historyDf[cols]
+  # Identify metric columns to convert to percentages and round them.
+  # Round numeric values to 4 decimal places for better readability.
+  # This should be done only for columns with prefix "Weighted" in their names,
+  # as they represent the main performance metrics;
+  # other columns may contain non-numeric values or values that should not be rounded.
+  numericCols = [col for col in historyDf.columns if col.startswith("Weighted")]
+  historyDf[numericCols] = (historyDf[numericCols] * 100).round(2)
+  # Sort rows so the best-performing models (by Weighted Average) appear first.
+  # Sort the DataFrame by the "Model" metric in descending order to have the best-performing models at the top of the report.
+  historyDf.sort_values(by="Model", ascending=False, inplace=True)
+  # Keep only the metrics with the "Weighted" prefix in their names for a more concise report.
+  # To keep the initial columns, we can do this by removing the columns with the prefix "Macro", "Class", and "Micro" while keeping the rest.
+  columnsToKeep = [
+    col
+    for col in historyDf.columns
+    if (
+      not (
+          col.startswith("Macro") or  # Exclude columns that start with "Macro".
+          "Class" in col or  # Exclude columns that contain "Class".
+          col.startswith("Micro") or  # Exclude columns that start with "Micro".
+          col.startswith("Weights") or  # Exclude columns that start with "Weights".
+          "Average" in col  # Exclude columns that contain "Average".
+      )
+    )
+  ]
+  # Apply the column filtering to keep only the selected columns.
+  historyDf = historyDf[columnsToKeep]
+  # Drop the TP, TN, FP, FN columns to focus on the main performance metrics.
+  columnsToDrop = [col for col in historyDf.columns if (col in ["TP", "TN", "FP", "FN"])]
+  historyDf.drop(columns=columnsToDrop, inplace=True)
+  # Identify non-numeric columns to exclude from rounding and percentage conversion; typically,
+  # these would be the "Model" column and any other categorical identifiers.
+  nonNumericCols = [col for col in historyDf.columns if (not col.startswith("Weighted") and col != "Model")]
+  # Remove the prefix "Weighted " from the column names for better readability.
+  historyDf.columns = [col.replace("Weighted ", "") for col in historyDf.columns]
+  # Save the aggregated trial history for this file to CSV for downstream inspection.
+  # Save the history DataFrame to a CSV file for comparison.
+  historyReportFile = os.path.join(storageDir, "Merged_Summary.csv")
+  historyDf.to_csv(historyReportFile, index=False)
+  print(f"\u2713 Merged trials history summary saved to: {historyReportFile}")
+  # Also write a LaTeX table version of the merged trials history.
+  # Save as Latex table for better presentation in reports or papers.
+  historyLatexFile = os.path.join(storageDir, "Merged_Summary.tex")
+  # Number should be formatted to 4 decimal places in the LaTeX table for better readability.
+  with open(historyLatexFile, "w") as f:
+    # Write the history DataFrame to LaTeX with consistent numeric formatting.
+    f.write(historyDf.to_latex(index=False, float_format="%.2f"))
+  print(f"\u2713 Merged trials history summary saved as LaTeX table to: {historyLatexFile}")
+  # print(f"\u2713 Merged Trials History Summary for file {file}:\n{historyDf}")
+  # Get the mean and standard deviation of the performance metrics for each model and save to a summary CSV.
+  # Drop non-numeric columns before aggregation; keeping only the "Model" column and the metric columns for mean/std calculation.
+  historyDf = historyDf.drop(columns=nonNumericCols)  # Drop non-numeric columns before aggregation.
+  # Store the history DataFrame to a CSV file for comparison.
+  historyReportFile = os.path.join(storageDir, "Refined_Summary.csv")
+  historyDf.to_csv(historyReportFile, index=False)
+  print(f"\u2713 Merged trials history summary saved to: {historyReportFile}")
+  summaryDf = historyDf.groupby("Model").agg(["mean", "std"])
+  summaryReportFile = os.path.join(storageDir, "Statistics_Summary.csv")
+  summaryDf.to_csv(summaryReportFile)
+  print(f"\u2713 Trials history summary statistics saved to: {summaryReportFile}")
+  # Also write a LaTeX table version of the summary statistics.
+  summaryLatexFile = os.path.join(storageDir, "Statistics_Summary.tex")
+  with open(summaryLatexFile, "w") as f:
+    f.write(summaryDf.to_latex(float_format="%.2f"))
+  print(f"\u2713 Trials history summary statistics saved as LaTeX table to: {summaryLatexFile}")
+
+
+def OptunaTuningClassificationTrialsStatistics(
+    trialResultsPath,
+    statisticsStoragePath,
+    dpi=720,
+    plotMetricsIndividual=False,
+    plotMetricsOverall=False,
+):
+  r'''
+  Analyze the results from multiple trials of inference using a saved preprocessing + model objects bundle
+  with the best parameters from a previous tuning run.
+
+  Parameters:
+    trialResultsPath (str): Path to the directory containing the results of multiple trials.
+    statisticsStoragePath (str): Directory where the aggregated performance plots and statistics will be saved.
+    dpi (int, optional): DPI for saving the performance plots. Default is 720.
+    plotMetricsIndividual (bool, optional): Whether to plot performance metrics for individual trials. Default is False.
+    plotMetricsOverall (bool, optional): Whether to plot aggregated performance metrics across all trials. Default is False.
+
+  Returns:
+    dict: A dictionary containing the aggregated performance metrics and results from all trials.
+  '''
+
+  from sklearn.metrics import confusion_matrix
+  from HMB.PerformanceMetrics import CalculatePerformanceMetrics, PlotMultiTrialROCAUC, PlotMultiTrialPRCurve
+  from HMB.StatisticalAnalysisHelper import ExtractDataFromSummaryFile, PlotMetrics, StatisticalAnalysis
+
+  # Check first if the folder contains multiple trial result folders with the expected structure or just a single
+  # trial result folder.
+  # Determine if there are any CSVs beginning with "Top" indicating trial outputs.
+  # Check if there is a CSV file that starts with the prefix "Top".
+  isFound = len([
+    el for el in os.listdir(trialResultsPath)
+    if (el.startswith("Top") and el.endswith(".csv"))
+  ]) > 0
+  filesToProcess = {}
+  if (isFound):
+    # Inform the user that trial result files were found in the directory.
+    print("\u2713 Found multiple models trial results file in:", trialResultsPath)
+    # Find subdirectories (per-model) inside the trial results' path.
+    foundModels = [
+      el
+      for el in os.listdir(trialResultsPath)
+      if (os.path.isdir(os.path.join(trialResultsPath, el)))
+    ]
+    # Print which models were discovered with trial results.
+    print(f"\u2713 Found the following models with trial results: {foundModels}")
+    for record in foundModels:
+      recordPath = os.path.join(trialResultsPath, record)
+      if (os.path.isdir(recordPath)):
+        trialFiles = [
+          el
+          for el in os.listdir(recordPath)
+          if (el.startswith("Trial_") and os.path.isdir(os.path.join(recordPath, el)))
+        ]
+        filesToProcess[record] = trialFiles
+      else:
+        print(f"\u26A0 Found unexpected file in trial results directory (skipping): {recordPath}")
+  else:
+    trialFiles = [
+      el
+      for el in os.listdir(trialResultsPath)
+      if (el.startswith("Trial_") and os.path.isdir(os.path.join(trialResultsPath, el)))
+    ]
+    filesToProcess["Current"] = trialFiles
+  print(f"\u2713 Found the following trial files to process: {list(filesToProcess.keys())}")
+
+  allHistory = {}
+  for k, trialFiles in filesToProcess.items():
+    print(f"\nProcessing trial results for: {k}")
+    if (k == "Current"):
+      newStorageDir = statisticsStoragePath
+    else:
+      newStorageDir = os.path.join(statisticsStoragePath, k)
+    os.makedirs(newStorageDir, exist_ok=True)
+
+    allYTrue = []
+    allYPred = []
+    classes = []
+    kHistory = {}
+
+    for trialFile in trialFiles:
+      if (k == "Current"):
+        csvPath = os.path.join(trialResultsPath, trialFile, "Testing", "EvaluationResults.csv")
+      else:
+        csvPath = os.path.join(trialResultsPath, k, trialFile, "Testing", "EvaluationResults.csv")
+
+      if (not os.path.isfile(csvPath)):
+        raise FileNotFoundError(
+          f"Expected file not found: {csvPath}. Please ensure that the trial results are "
+          f"generated correctly and the file structure is as expected."
+        )
+
+      # yTrue	yPred	yPredProb	yPredConfidences	yTrueLabels	yPredLabels.
+      df = pd.read_csv(csvPath)
+      yTrue = df["yTrue"].values
+      yPred = df["yPred"].values
+      try:
+        yPredProb = df["yPredProb"].values
+        # Parse the yPredProb column from string representation of list to actual list of floats.
+        yPredProb = np.array([np.fromstring(probStr.strip("[]"), sep=",") for probStr in yPredProb])
+      except:
+        yPredProb = None
+
+      yPredConfidences = df["yPredConfidences"].values
+      yTrueLabels = df["yTrueLabels"].values
+      yPredLabels = df["yPredLabels"].values
+      classes = np.unique(yTrueLabels)
+      cm = confusion_matrix(yTrue, yPred)
+      metrics = CalculatePerformanceMetrics(cm, addWeightedAverage=True, eps=1e-8)
+      kHistory[trialFile] = {
+        "yTrue"           : yTrue,
+        "yPred"           : yPred,
+        "yPredProb"       : yPredProb,
+        "yPredConfidences": yPredConfidences,
+        "yTrueLabels"     : yTrueLabels,
+        "yPredLabels"     : yPredLabels,
+        "confusionMatrix" : cm,
+        "metrics"         : metrics,
+      }
+      allYTrue = yTrue
+      allYPred.append(np.array(yPredProb) if (yPredProb is not None) else np.array(yPred))
+
+    print(f"Total samples across all trials: {len(allYTrue)}")
+    print(f"Unique classes: {classes}")
+
+    for which in ["CI", "SD"]:
+      fileName = os.path.join(newStorageDir, f"{which}_MultiTrial_PRC_Curve.pdf")
+      PlotMultiTrialPRCurve(
+        allYTrue,  # List of true labels arrays from all trials.
+        allYPred,  # List of predicted probabilities from all trials.
+        classes,  # List of class names.
+        confidenceLevel=0.95,  # Confidence level for CI.
+        which=which,  # Method for confidence intervals: "CI" for confidence intervals, "SD" for standard deviation.
+        title="Multi-Trial Precision-Recall Curve",
+        figSize=(8, 8),  # Figure size in inches.
+        cmap=None,  # Colormap for different classes.
+        display=False,  # Whether to display the plot.
+        save=True,  # Whether to save the plot.
+        fileName=fileName,  # File name for saving.
+        fontSize=15,  # Font size for labels and annotations.
+        showLegend=True,  # Whether to show legend.
+        returnFig=False,  # Whether to return the matplotlib figure object.
+        dpi=dpi,  # DPI for saving the figure.
+        addZoomedInset=True,  # Whether to add a zoomed inset for the top-right corner of the PRC plot.
+      )
+
+      fileName = os.path.join(newStorageDir, f"{which}_MultiTrial_ROC_AUC.pdf")
+      PlotMultiTrialROCAUC(
+        allYTrue,  # List of true labels arrays from all trials.
+        allYPred,  # List of predicted probabilities from all trials.
+        classes,  # List of class names.
+        confidenceLevel=0.95,  # Confidence level for CI (default 95%).
+        which=which,  # Method for confidence intervals: "CI" for confidence intervals, "SD" for standard deviation.
+        title="Multi-Trial ROC Curve",  # Plot title.
+        figSize=(8, 8),  # Figure size.
+        cmap=None,  # Colormap for ROC curves.
+        display=False,  # Display the plot.
+        save=True,  # Save the plot.
+        fileName=fileName,  # File name.
+        fontSize=15,  # Font size.
+        plotDiagonal=True,  # Plot diagonal reference line.
+        showLegend=True,  # Show legend.
+        returnFig=False,  # Return figure object.
+        dpi=dpi,  # DPI for saving the figure.
+        addZoomedInset=True,  # Whether to add a zoomed inset for the top-left corner.
+      )
+
+    # Save the calculated metrics for each trial to a CSV file for comparison.
+    # Example of the file structure (if you have a single system):
+    #     Precision, Recall, F1, Accuracy, Specificity, Average
+    #     Metric, Metric, Metric, Metric, Metric, Metric
+    #     0.5556, 0.5556, 0.5556, 0.6667, 0.7333, 0.6133,
+    #     0.7692, 0.5556, 0.6452, 0.7708, 0.9000, 0.7282,
+    #     0.8333, 0.2778, 0.4167, 0.7083, 0.9667, 0.6406,
+    #     0.5882, 0.5556, 0.5714, 0.6875, 0.7667, 0.6339,
+    #     0.8000, 0.6667, 0.7273, 0.8125, 0.9000, 0.7813,
+    firstRow = [
+      " ".join(el.split(" ")[1:])  # Remove the "Weighted " prefix from the metric names for cleaner column headers.
+      for el in kHistory[trialFiles[0]]["metrics"].keys()
+      if ("Weighted" in el)
+    ]
+    secondRow = ["Metric"] * len(firstRow)
+    metricValues = [
+      [kHistory[trial]["metrics"][f"Weighted {metric}"] for metric in firstRow]
+      for trial in trialFiles
+    ]
+    # Create a DataFrame to store the metrics for each trial, with the first row containing metric names and the
+    # second row containing the keyword "Metric".
+    dfMetrics = pd.DataFrame(
+      data=metricValues,
+      columns=firstRow,
+    )
+    # Insert the secondRow as the second row in the DataFrame at index 0 (after the header); pushes the metric values down by one row.
+    dfMetrics.loc[-1] = secondRow  # Add the second row with "Metric" values.
+    dfMetrics.index = dfMetrics.index + 1  # Shift the index to accommodate the new row.
+    # Sort the index to maintain the correct order (header, "Metric" row, then metric values).
+    dfMetrics.sort_index(inplace=True)
+    # Save the DataFrame to a CSV file for comparison.
+    trialMetricsComparisonFile = os.path.join(newStorageDir, "Trial_Metrics_Comparison.csv")
+    dfMetrics.to_csv(trialMetricsComparisonFile, index=False)
+    print(f"Trial metrics comparison saved to: {trialMetricsComparisonFile}")
+    print(f"Trial Metrics Comparison:\n{dfMetrics}")
+
+    history, names, metrics = ExtractDataFromSummaryFile(trialMetricsComparisonFile)
+
+    newFolderName = ""
+    if (plotMetricsIndividual):
+      newFolderName = os.path.join(newStorageDir, "PerformanceMetricsPlots")
+      os.makedirs(newFolderName, exist_ok=True)  # Create the folder if it doesn't exist.
+
+      PlotMetrics(
+        history, names, metrics,
+        factor=5,  # Factor to multiply the default figure size.
+        keyword="AllMetrics",  # Keyword to append to the filenames of the saved plots.
+        dpi=dpi,  # Dots per inch (resolution) of the saved plots.
+        xTicksRotation=45,  # Rotation angle for x-axis tick labels.
+        whichToPlot=[],  # List of plot types to generate.
+        fontSize=14,  # Font size for the plots.
+        showFigures=False,  # Whether to display the plots or not.
+        storeInsideNewFolder=True,  # Whether to store the plots inside a new folder.
+        newFolderName=newFolderName,  # Name of the folder to store the plots.
+        noOfPlotsPerRow=3,  # Number of plots per row in the subplot grid.
+        cmap="viridis",  # Color map for the plots.
+        differentColors=True,  # Whether to use different colors for different plots.
+        fixedTicksColors=True,  # Whether to use fixed ticks colors for consistency across plots.
+        fixedTicksColor="black",  # Color to use for fixed ticks if `fixedTicksColors` is True.
+        extension=".pdf",  # File extension for saved plots.
+      )
+
+    print("\u2713 Performance plots generated.")
+    print("\nGenerating statistical analysis report...")
+    overallReport = []
+    for metric in metrics:
+      for index, data in enumerate(history):
+        report = StatisticalAnalysis(
+          data[metric]["Trials"],
+          hypothesizedMean=data[metric]["Mean"],
+          secondMetricList=None,
+        )
+        report["Type"] = names[index]
+        report["Metric"] = metric
+        overallReport.append(report)
+    reportDF = pd.DataFrame(overallReport)
+    reportCsvPath = os.path.join(newStorageDir, "Statistical_Analysis_Report.csv")
+    reportDF.to_csv(reportCsvPath, index=False)
+    print(f"\u2713 Statistical analysis report saved: {reportCsvPath}")
+
+    kHistory.update({
+      "allYTrue"                  : allYTrue,
+      "allYPred"                  : allYPred,
+      "classes"                   : classes,
+      "reportDF"                  : reportDF,
+      "dfMetrics"                 : dfMetrics,
+      "averageMetrics"            : {
+        # Calculate the average of the metric values across all trials, skipping the first two rows (header and "Metric" row).
+        metric: dfMetrics[metric][1:].mean()
+        for metric in firstRow
+      },
+      "overallReport"             : overallReport,
+      "trialMetricsComparisonFile": trialMetricsComparisonFile,
+      "statisticsStoragePath"     : newStorageDir,
+      "performancePlotsFolder"    : newFolderName,
+    })
+
+    allHistory[k] = kHistory
+
+  noOfSystems = len(allHistory.keys())
+  print(
+    f"\n\u2713 Completed processing all trials for {noOfSystems} systems. "
+    f"Aggregated history and results are stored in the `allHistory` dictionary."
+  )
+  if (noOfSystems > 1):
+    print(
+      f"\n\u2713 Note: Since multiple top experiments were processed, the `allHistory` dictionary contains "
+      f"separate entries for each model with their respective trial results and analyses."
+    )
+
+    # Now we need to report the statistics summary across the different top experiments (if there are multiple)
+    # for easier comparison.
+    for k in allHistory.keys():
+      # Example of the file structure (if you have multiple systems):
+      #     System A, , , , , , System B, , , , ,
+      #     Precision, Recall, F1, Accuracy, Specificity, Average, Precision, Recall, F1, Accuracy, Specificity, Average
+      #     0.5556, 0.5556, 0.5556, 0.6667, 0.7333, 0.6133, 0.5556, 0.5556, 0.5556, 0.6667, 0.7333, 0.6133
+      #     0.7692, 0.5556, 0.6452, 0.7708, 0.9000, 0.7282, 0.7692, 0.5556, 0.6452, 0.7708, 0.9000, 0.7282
+      #     0.8333, 0.2778, 0.4167, 0.7083, 0.9667, 0.6406, 0.8333, 0.2778, 0.4167, 0.7083, 0.9667, 0.6406
+      #     0.5882, 0.5556, 0.5714, 0.6875, 0.7667, 0.6339, 0.5882, 0.5556, 0.5714, 0.6875, 0.7667, 0.6339
+      #     0.8000, 0.6667, 0.7273, 0.8125, 0.9000, 0.7813, 0.8000, 0.6667, 0.7273, 0.8125, 0.9000, 0.7813
+      systems = list(allHistory.keys())
+      metricsNames = allHistory[systems[0]]["dfMetrics"].columns.tolist()
+      print("Systems:", systems)
+      print("Metrics Names:", metricsNames)
+
+      systemsRow = []
+      for system in systems:
+        systemsRow.extend([system] + [""] * (len(metricsNames) - 1))
+      metricsRow = []
+      for system in systems:
+        metricsRow.extend(metricsNames)
+      dataRows = []
+      dfMetrics = allHistory[k]["dfMetrics"]
+      # Start from 1 to skip the "Metric" row.
+      for i in range(1, len(dfMetrics)):
+        row = []
+        for system in systems:
+          row.extend(dfMetrics.iloc[i].values.tolist())
+        dataRows.append(row)
+      finalDf = pd.DataFrame(
+        dataRows,
+        columns=systemsRow,
+      )
+      # Insert the metricsRowNames as the first row in the DataFrame at index 0 (after the header); pushes the
+      # metric values down by one row.
+      finalDf.loc[-1] = metricsRow  # Add the first row with system names.
+      finalDf.index = finalDf.index + 1  # Shift the index to accommodate the new row.
+
+      # Sort the index to maintain the correct order (header, system names row, then metric values).
+      finalDf.sort_index(inplace=True)
+      print(finalDf.head())
+
+      # Save the DataFrame to a CSV file for comparison.
+      newFolderName = os.path.join(statisticsStoragePath, "Statistics Summary")
+      os.makedirs(newFolderName, exist_ok=True)  # Create the folder if it doesn't exist.
+      allSystemsMetricsComparisonFile = os.path.join(newFolderName, "All_Systems_Metrics_Comparison.csv")
+      finalDf.to_csv(allSystemsMetricsComparisonFile, index=False)
+      # Store as Latex table as well for easier inclusion in reports and papers.
+      allSystemsMetricsComparisonLatexFile = os.path.join(newFolderName, "All_Systems_Metrics_Comparison.tex")
+      with open(allSystemsMetricsComparisonLatexFile, "w") as f:
+        f.write(finalDf.to_latex(index=False))
+      print(f"All systems metrics comparison saved to: {allSystemsMetricsComparisonFile}")
+
+      # Generate performance metric plots for all systems combined.
+      hist, names, metrics = ExtractDataFromSummaryFile(allSystemsMetricsComparisonFile)
+
+      if (plotMetricsOverall):
+        PlotMetrics(
+          hist, names, metrics,
+          factor=5,  # Factor to multiply the default figure size.
+          keyword="AllSystems_AllMetrics",  # Keyword to append to the filenames of the saved plots.
+          dpi=dpi,  # Dots per inch (resolution) of the saved plots.
+          xTicksRotation=45,  # Rotation angle for x-axis tick labels.
+          whichToPlot=[],  # List of plot types to generate.
+          fontSize=14,  # Font size for the plots.
+          showFigures=False,  # Whether to display the plots or not.
+          storeInsideNewFolder=True,  # Whether to store the plots inside a new folder.
+          newFolderName=newFolderName,  # Name of the folder to store the plots.
+          noOfPlotsPerRow=3,  # Number of plots per row in the subplot grid.
+          cmap="viridis",  # Color map for the plots.
+          differentColors=True,  # Whether to use different colors for different plots.
+          fixedTicksColors=True,  # Whether to use fixed ticks colors for consistency across plots.
+          fixedTicksColor="black",  # Color to use for fixed ticks if `fixedTicksColors` is True.
+          extension=".pdf",  # File extension for saved plots.
+        )
+
+      print("\u2713 Performance plots generated.")
+      print("\nGenerating statistical analysis report...")
+      overallReport = []
+      for metric in metrics:
+        for index, data in enumerate(hist):
+          report = StatisticalAnalysis(
+            data[metric]["Trials"],
+            hypothesizedMean=data[metric]["Mean"],
+            secondMetricList=None,
+          )
+          report["Type"] = names[index]
+          report["Metric"] = metric
+          overallReport.append(report)
+      reportDF = pd.DataFrame(overallReport)
+      reportCsvPath = os.path.join(newFolderName, "All_Systems_Statistical_Analysis_Report.csv")
+      reportDF.to_csv(reportCsvPath, index=False)
+      # Save the report as Latex table as well for easier inclusion in reports and papers.
+      reportLatexPath = os.path.join(newFolderName, "All_Systems_Statistical_Analysis_Report.tex")
+      with open(reportLatexPath, "w") as f:
+        f.write(reportDF.to_latex(index=False))
+      print(f"\u2713 Statistical analysis report saved: {reportCsvPath}")
+      print(f"Generated combined performance metric plots for {k} and saved to: {newFolderName}")
+
+  if (noOfSystems > 1):
+    print(
+      f"\n\u2713 Since multiple top experiments were processed, the `allHistory` dictionary contains "
+      f"separate entries for each model with their respective trial results and analyses. "
+      f"The statistics summary across the different top experiments has been generated and saved in the "
+      f"`Statistics Summary` folder inside the `statisticsStoragePath` directory for easier comparison."
+    )
+    # Return the top-1 experiment history for each model in the `allHistory` dictionary for further analysis and comparison.
+    topSystemDict = {}
+    topValue = -1
+    for k in allHistory.keys():
+      averageMetrics = allHistory[k]["averageMetrics"]
+      avg = averageMetrics["Average"]
+      if (avg > topValue):
+        topValue = avg
+        topSystemDict = {
+          k: allHistory[k],
+        }
+    allHistory = topSystemDict
+  else:
+    print(
+      f"\n\u2713 Since there is only one top experiment, the `allHistory` dictionary "
+      f"contains the history and results for that single experiment."
+    )
+
+  return allHistory
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 import argparse, os, timm, torch, json
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix
 from HMB.Initializations import IgnoreWarnings, DoRandomSeeding
 from HMB.PerformanceMetrics import (
@@ -712,7 +713,11 @@ def Main():
     #     0.5882, 0.5556, 0.5714, 0.6875, 0.7667, 0.6339,
     #     0.8000, 0.6667, 0.7273, 0.8125, 0.9000, 0.7813,
 
-    firstRow = [el.split(" ")[1] for el in metrics[trials[0]].keys() if ("Weighted" in el)]
+    firstRow = [
+      " ".join(el.split(" ")[1:])  # Remove the "Weighted " prefix from the metric names for cleaner column headers.
+      for el in metrics[trials[0]].keys()
+      if ("Weighted" in el)
+    ]
     secondRow = ["Metric"] * len(firstRow)
     metricValues = [
       [metrics[trial][f"Weighted {metric}"] for metric in firstRow]
@@ -733,7 +738,7 @@ def Main():
     trialMetricsComparisonFile = os.path.join(baseOutputDir, "Trial_Metrics_Comparison.csv")
     dfMetrics.to_csv(trialMetricsComparisonFile, index=False)
     if (verbose):
-      print(f"Trial metrics comparison saved to: {os.path.join(baseOutputDir, 'Trial_Metrics_Comparison.csv')}")
+      print(f"Trial metrics comparison saved to: {trialMetricsComparisonFile}")
       print(f"Trial Metrics Comparison:\n{dfMetrics}")
 
     newFolderName = os.path.join(baseOutputDir, "PerformanceMetricsPlots")
@@ -757,6 +762,8 @@ def Main():
       fixedTicksColor="black",  # Color to use for fixed ticks if `fixedTicksColors` is True.
       extension=".pdf",  # File extension for saved plots.
     )
+    # Clear figures to free up memory after processing each file.
+    plt.close("all")
 
     print("\u2713 Performance plots generated.")
     print("\nGenerating statistical analysis report...")
@@ -909,7 +916,7 @@ def Main():
   allSystemsMetricsComparisonFile = os.path.join(baseExpDir, "All_Systems_Metrics_Comparison.csv")
   dfAllMetrics.to_csv(allSystemsMetricsComparisonFile, index=False)
   if (verbose):
-    print(f"All systems metrics comparison saved to: {os.path.join(baseExpDir, 'All_Systems_Metrics_Comparison.csv')}")
+    print(f"All systems metrics comparison saved to: {allSystemsMetricsComparisonFile}")
     print(f"All Systems Metrics Comparison:\n{dfAllMetrics}")
 
   # Generate performance metric plots for all systems combined.
@@ -934,6 +941,8 @@ def Main():
     fixedTicksColor="black",  # Color to use for fixed ticks if `fixedTicksColors` is True.
     extension=".pdf",  # File extension for saved plots.
   )
+  # Clear figures to free up memory after processing each file.
+  plt.close("all")
 
   print("\u2713 Performance plots generated.")
   print("\nGenerating statistical analysis report...")

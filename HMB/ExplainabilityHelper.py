@@ -124,7 +124,7 @@ class SHAPExplainer(object):
     # Construct the full path for the storage directory.
     self.storagePath = os.path.join(self.baseDir, self.experimentFolderName, self.shapStorageKeyword)
     # Create the storage directory if it does not exist.
-    if not os.path.exists(self.storagePath):
+    if (not os.path.exists(self.storagePath)):
       os.makedirs(self.storagePath)
 
   def LoadModelAndData(self, maxNoRecords=10):
@@ -174,7 +174,7 @@ class SHAPExplainer(object):
       fsRatio = optunaBestParams["FS Ratio"] if (optunaBestParams["FS Ratio"] != "None") else None
       dataBalanceTech = optunaBestParams["DB Tech"] if (optunaBestParams["DB Tech"] != "None") else None
       outliersTech = optunaBestParams["Outliers Tech"] if (optunaBestParams["Outliers Tech"] != "None") else None
-      pattern = f"{modelName}{scalerName}{fsTech}{fsRatio}{dataBalanceTech}_{outliersTech}.p"
+      pattern = f"{modelName}_{scalerName}_{fsTech}_{fsRatio}_{dataBalanceTech}_{outliersTech}.p"
     else:
       pattern = self.pickleFilePath
 
@@ -224,6 +224,24 @@ class SHAPExplainer(object):
         # Ensure target variable matches the sampled features.
         self.yTest = self.yTest.loc[self.XTest.index]
 
+    # Define category labels and colors
+    self.categories = list(self.yTest.unique())
+    self.colors = [
+      "#2E86AB", "#A23B72", "#F18F01", "#C73E1D", "#6A0572",
+      "#AB83A1", "#F2545B", "#FBC687", "#4B3832", "#3A86FF",
+      "#FF006E", "#8338EC", "#3A0CA3", "#4361EE", "#F72585",
+      "#720026", "#EBEBD3", "#FF7F11", "#FF9F1C", "#2EC4B6"
+    ]
+    if (len(self.categories) > len(self.colors)):
+      print("Warning: More categories than colors. Some categories will share colors.")
+      self.colors = self.colors * (len(self.categories) // len(self.colors) + 1)
+    # Define category labels and colors using CamelCase for fixed text keys.
+    self.categoryMap = {}
+    self.categoryColors = {}
+    for i, (cat, color) in enumerate(zip(self.categories, self.colors)):
+      self.categoryMap[i] = cat
+      self.categoryColors[cat] = color
+
   def ComputeShapValues(self, maxEvals=None):
     r'''
     Initialize the SHAP explainer and compute SHAP values for the test set.
@@ -272,6 +290,329 @@ class SHAPExplainer(object):
     # Decode the predicted labels back to their original form using the stored label encoder.
     self.yPredDecoded = self.objects["LabelEncoder"].inverse_transform(self.yPred)
 
+  def VisualizeComparativeFeatureImportance(self, noOfFeatures=10):
+    r'''
+    Generate a comparative bar plot showing SHAP feature importance across AMD categories.
+
+    This method computes mean absolute SHAP values per feature for each diagnostic category
+    and visualizes them in a grouped bar chart for direct comparison.
+
+    Parameters:
+      noOfFeatures (int, optional): Number of top features to display (default: 10).
+    '''
+
+    # Get unique categories present in test data with CamelCase mapping.
+    categories = sorted([self.categoryMap.get(c, f"Class: {c}") for c in self.yTest.unique()])
+
+    # Initialize dictionary to store feature importance per category.
+    featureImportance = {}
+    # Extract feature names from test data columns.
+    featureNames = self.XTest.columns.tolist()
+
+    # Iterate through unique category labels and their mapped names.
+    for catLabel, catName in zip(
+        self.yTest.unique(),
+        [self.categoryMap.get(c, f"Class: {c}") for c in self.yTest.unique()]
+    ):
+      # Create boolean mask for current category samples.
+      mask = self.yTest == catLabel
+      # Skip categories with insufficient sample size for statistical reliability.
+      if (mask.sum() < 5):
+        continue
+      # Compute mean absolute SHAP value for each feature within current category.
+      catShap = np.abs(self.shapValues.values[mask]).mean(axis=0)
+      # Store computed importance values in dictionary with CamelCase key.
+      featureImportance[catName] = catShap
+
+    # Convert feature importance dictionary to DataFrame for easier manipulation.
+    dfImportance = pd.DataFrame(featureImportance, index=featureNames)
+
+    # Add overall mean column to rank features by aggregate importance.
+    dfImportance["OverallMean"] = dfImportance.mean(axis=1)
+    # Select top features by overall mean importance value.
+    topFeatures = dfImportance.nlargest(noOfFeatures, "OverallMean").index.tolist()
+    # Create plotting DataFrame excluding the helper column.
+    dfPlot = dfImportance.loc[topFeatures].drop(columns=["OverallMean"])
+
+    # --- Grouped Bar Plot (Recommended for clarity) ---
+    # Generate x-axis positions for feature bars.
+    x = np.arange(len(topFeatures))
+    # Calculate bar width based on number of categories for proper spacing.
+    width = 0.8 / len(categories)
+
+    # Create matplotlib figure and axis with specified size.
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    # Iterate through categories to plot grouped bars.
+    for idx, catName in enumerate(categories):
+      # Skip categories not present in plotting DataFrame.
+      if (catName not in dfPlot.columns):
+        continue
+      # Extract SHAP values for current category.
+      values = dfPlot[catName].values
+      # Plot bar with offset position, color, and styling.
+      ax.bar(
+        x + idx * width - (len(categories) - 1) * width / 2,
+        values,
+        width,
+        label=catName,
+        color=self.categoryColors.get(catName, None),
+        edgecolor="black",
+        linewidth=0.5
+      )
+
+    # Set x-axis label with descriptive text.
+    ax.set_xlabel("Feature", fontsize=11)
+    # Set y-axis label indicating metric displayed.
+    ax.set_ylabel("Mean |SHAP Value|", fontsize=11)
+    # Set plot title with bold formatting for emphasis.
+    ax.set_title("Comparative SHAP Feature Importance Across Categories", fontsize=13, fontweight="bold")
+    # Configure x-axis tick positions.
+    ax.set_xticks(x)
+    # Configure x-axis tick labels with rotation for readability.
+    ax.set_xticklabels(
+      [feat.replace("_", " ") for feat in topFeatures],
+      rotation=45, ha="right", fontsize=9
+    )
+    # Add legend with title and font sizing.
+    ax.legend(title="Category", fontsize=10, title_fontsize=11)
+    # Add horizontal grid lines for visual reference.
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    # Place grid lines behind plot elements.
+    ax.set_axisbelow(True)
+
+    # Add values on the top of each bar segment for clarity.
+    for idx, catName in enumerate(categories):
+      if (catName not in dfPlot.columns):
+        continue
+      values = dfPlot[catName].values
+      for i, value in enumerate(values):
+        if (value > 0):  # Only annotate bars with positive values.
+          ax.text(
+            x[i] + idx * width - (len(categories) - 1) * width / 2,
+            value + 0.01,  # Position text slightly above the bar.
+            f"{value:.2f}",  # Format value to two decimal places.
+            ha="center", va="bottom", fontsize=10, color="black"
+          )
+
+    # Adjust layout to prevent label clipping.
+    plt.tight_layout()
+    # Save grouped bar plot as high-resolution PNG file.
+    plt.savefig(f"{self.storagePath}/SHAP_Comparative_Bar_Grouped.png", dpi=self.dpi, bbox_inches="tight")
+    # Save grouped bar plot as vector PDF file.
+    plt.savefig(f"{self.storagePath}/SHAP_Comparative_Bar_Grouped.pdf", dpi=self.dpi, bbox_inches="tight")
+    # Close figure to free memory resources.
+    plt.close()
+
+    # --- Optional: Stacked Bar Plot (Alternative view) ---
+    # Create new figure and axis for stacked visualization.
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    # Initialize bottom array for cumulative stacking.
+    bottom = np.zeros(len(topFeatures))
+    # Iterate through categories to stack bars.
+    for catName in categories:
+      # Skip categories not present in plotting DataFrame.
+      if (catName not in dfPlot.columns):
+        continue
+      # Extract SHAP values for current category.
+      values = dfPlot[catName].values
+      # Plot stacked bar with cumulative bottom positioning.
+      ax.bar(
+        topFeatures,
+        values,
+        bottom=bottom,
+        label=catName,
+        color=self.categoryColors.get(catName, None),
+        edgecolor="black",
+        linewidth=0.3
+      )
+      # Update bottom array for next category stacking.
+      bottom += values
+
+    # Set x-axis label for stacked plot.
+    ax.set_xlabel("Feature", fontsize=11)
+    # Set y-axis label for stacked plot.
+    ax.set_ylabel("Mean |SHAP Value|", fontsize=11)
+    # Set title for stacked plot with bold formatting.
+    ax.set_title("Stacked SHAP Feature Importance Across Categories", fontsize=13, fontweight="bold")
+    # Configure x-axis tick labels with rotation.
+    ax.set_xticklabels(
+      [feat.replace("_", " ") for feat in topFeatures],
+      rotation=45, ha="right", fontsize=9
+    )
+    # Add legend with title for stacked plot.
+    ax.legend(title="Category", fontsize=10, title_fontsize=11)
+    # Add horizontal grid lines for stacked plot.
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    # Place grid lines behind elements in stacked plot.
+    ax.set_axisbelow(True)
+
+    # Adjust layout for stacked plot.
+    plt.tight_layout()
+    # Save stacked bar plot as PNG.
+    plt.savefig(f"{self.storagePath}/SHAP_Comparative_Bar_Stacked.png", dpi=self.dpi, bbox_inches="tight")
+    # Save stacked bar plot as PDF.
+    plt.savefig(f"{self.storagePath}/SHAP_Comparative_Bar_Stacked.pdf", dpi=self.dpi, bbox_inches="tight")
+    # Close stacked plot figure.
+    plt.close()
+
+    # Print confirmation message with storage path.
+    print(f"Comparative SHAP bar plots saved to {self.storagePath}")
+
+  def VisualizeDependenceWithAnnotations(self, topFeatures=None):
+    r'''
+    Generate SHAP dependence plots for specified top features with automatic interaction detection.
+    
+    Parameters:
+      topFeatures (list of str, optional): List of feature names to generate dependence plots for. 
+        If None, the top 4 features by mean absolute SHAP value will be selected automatically.
+    '''
+
+    if (topFeatures is None):
+      # Auto-select by mean |SHAP|.
+      meanAbs = np.abs(self.shapValues.values).mean(0)
+      topIdx = np.argsort(meanAbs)[-4:]
+      topFeatures = [self.XTest.columns[i] for i in topIdx]
+
+    for feat in topFeatures:
+      featIdx = list(self.XTest.columns).index(feat)
+      shap.dependence_plot(
+        featIdx,
+        self.shapValues.values,
+        self.XTest,
+        interaction_index="auto",
+        show=False,
+      )
+      plt.tight_layout()
+      plt.savefig(f"{self.storagePath}/SHAP_Dependence_{feat}.pdf", dpi=self.dpi, bbox_inches="tight")
+      plt.savefig(f"{self.storagePath}/SHAP_Dependence_{feat}.png", dpi=self.dpi, bbox_inches="tight")
+      plt.close()
+
+  def VisualizeClassStratifiedBeeswarm(self, noOfFeatures=15):
+    r'''
+    Generate class-stratified SHAP beeswarm plots for the top features.
+    This method creates separate SHAP beeswarm plots for each diagnostic category in the test set,
+    allowing for visual comparison of feature importance distributions across classes.
+
+    Parameters:
+      noOfFeatures (int, optional): Number of top features to display in the beeswarm plot (default: 15).
+    '''
+
+    # Generate beeswarm plot for each diagnostic category.
+    for catLabel, catName in self.categoryMap.items():
+      mask = self.yTest == catLabel
+      if (mask.sum() < 10):  # Skip categories with insufficient samples.
+        continue
+
+      tempShap = copy.copy(self.shapValues)
+      tempShap.values = tempShap.values[mask]
+      tempShap.data = tempShap.data[mask]
+
+      shap.plots.beeswarm(tempShap[:200, :noOfFeatures], show=False, max_display=noOfFeatures)
+      plt.title(f"SHAP Beeswarm: {catName} Cases (n={mask.sum()})")
+      plt.tight_layout()
+      plt.savefig(f"{self.storagePath}/SHAP_Beeswarm{catName}.png", dpi=self.dpi, bbox_inches="tight")
+      plt.savefig(f"{self.storagePath}/SHAP_Beeswarm{catName}.pdf", dpi=self.dpi, bbox_inches="tight")
+      plt.close()
+
+  def VisualizeErrorAnalysis(self, maxErrors=5):
+    r'''
+    Generate SHAP waterfall plots for misclassified instances in the test set.
+    This method identifies misclassified samples based on the model's predictions and the true labels,
+    then generates SHAP waterfall plots for a specified number of these error cases, providing insights into the
+    feature contributions that led to the misclassification.
+
+    Parameters:
+      maxErrors (int, optional): Maximum number of misclassified instances to visualize (default: 5).
+    '''
+
+    # Identify misclassified samples.
+    errors = (self.yPred != self.yTest)
+    errorIndices = np.where(errors)[0][:maxErrors]
+
+    # Plot SHAP waterfall for each error case.
+    for idx in errorIndices:
+      shap.plots.waterfall(self.shapValues[idx, :10], show=False)
+      plt.title(f"Error Analysis: Instance {idx}\nTrue: {self.yTest.iloc[idx]}, Pred: {self.yPredDecoded[idx]}")
+      plt.tight_layout()
+      plt.savefig(f"{self.storagePath}/SHAP_Error{idx}.png", dpi=self.dpi, bbox_inches="tight")
+      plt.savefig(f"{self.storagePath}/SHAP_Error{idx}.pdf", dpi=self.dpi, bbox_inches="tight")
+      plt.close()
+
+  def VisualizeDecisionPlot(self, noOfInstances=500, noOfFeatures=20, classLabel=None):
+    r'''
+    Generate a SHAP decision plot showing cumulative feature contributions across multiple instances.
+
+    This method creates a decision plot where each line represents one test sample, showing how
+    SHAP values for top features accumulate to produce the final model output. Color-coding by
+    class label enables visual assessment of class separation.
+
+    Parameters:
+      noOfInstances (int, optional): Number of instances to display (default: 500).
+      noOfFeatures (int, optional): Number of top features to include (default: 20).
+      classLabel (int | str | None, optional): Specific class to filter; None shows all classes.
+    '''
+
+    # Select subset of instances for visualization to maintain readability.
+    if (noOfInstances > self.shapValues.shape[0]):
+      noOfInstances = self.shapValues.shape[0]
+
+    # Determine indices to plot; optionally filter by class label.
+    if (classLabel is None):
+      plotIndices = np.arange(noOfInstances)
+    else:
+      mask = self.yTest == classLabel
+      availableIndices = np.where(mask)[0]
+      if (len(availableIndices) < noOfInstances):
+        noOfInstances = len(availableIndices)
+      plotIndices = np.random.choice(availableIndices, size=noOfInstances, replace=False)
+
+    # Extract SHAP values and feature data for selected instances.
+    shapSubset = self.shapValues[plotIndices, :noOfFeatures]
+    featureSubset = self.XTest.iloc[plotIndices, :noOfFeatures]
+
+    # Generate feature names with readable formatting.
+    featureNames = [feat.replace("_", " ") for feat in self.XTest.columns[:noOfFeatures]]
+
+    # Create decision plot with color-coding by predicted class.
+    try:
+      shap.decision_plot(
+        base_value=self.explainer.expected_value,
+        shap_values=shapSubset.values,
+        features=featureSubset,
+        feature_names=featureNames,
+        highlight=0,  # Highlight first instance for reference.
+        show=False,
+      )
+    except AttributeError:
+      # Fallback for older SHAP versions where `expected_value` might not be directly accessible.
+      shap.decision_plot(
+        # Use mean SHAP value as baseline if expected_value is unavailable.
+        base_value=np.mean(self.shapValues.values, axis=0)[0],
+        shap_values=shapSubset.values,
+        features=featureSubset,
+        feature_names=featureNames,
+        highlight=0,
+        show=False,
+      )
+
+    # Add informative title with sample and feature counts.
+    plt.title(f"SHAP Decision Plot: {noOfInstances} Instances, Top {noOfFeatures} Features")
+
+    # Add legend for class colors if applicable.
+    if (classLabel is None):
+      handles = []
+      for catLabel, catName in self.categoryMap.items():
+        handles.append(plt.Line2D([0], [0], color=self.categoryColors.get(catName, None), lw=4, label=catName))
+      plt.legend(handles=handles, title="Predicted Class", bbox_to_anchor=(1.05, 1), loc="upper left")
+
+    # Adjust layout and save with high resolution.
+    plt.tight_layout()
+    plt.savefig(f"{self.storagePath}/SHAP_Decision_Plot.png", dpi=self.dpi, bbox_inches="tight")
+    plt.savefig(f"{self.storagePath}/SHAP_Decision_Plot.pdf", dpi=self.dpi, bbox_inches="tight")
+    plt.close()
+
   def VisualizeExplanations(
       self,
       instanceIndex=None,
@@ -310,7 +651,8 @@ class SHAPExplainer(object):
     # reproducible behavior is required.
     rng = np.random.default_rng()
     if (instanceIndex is None):
-      instanceIndex = int(rng.integers(0, self.XTest.shape[0]))  # Choose a random instance index using local RNG.
+      # Choose a random instance index using local RNG.
+      instanceIndex = int(rng.integers(0, self.XTest.shape[0]))
 
     # --- Waterfall Plot ---
     # Visualize the waterfall plot for a specific instance's prediction.
@@ -328,8 +670,8 @@ class SHAPExplainer(object):
       f"Predicted Label: {self.yPredDecoded[instanceIndex]}"
     )
     plt.tight_layout()  # Adjust layout to eliminate wasted space.
-    plt.savefig(f"{self.storagePath}/SHAPWaterfallPlot_{instanceIndex}.png", dpi=self.dpi)  # Save the plot as an image.
-    plt.savefig(f"{self.storagePath}/SHAPWaterfallPlot_{instanceIndex}.pdf", dpi=self.dpi)  # Save the plot as an image.
+    plt.savefig(f"{self.storagePath}/SHAPWaterfallPlot_{instanceIndex}.png", dpi=self.dpi, bbox_inches="tight")
+    plt.savefig(f"{self.storagePath}/SHAPWaterfallPlot_{instanceIndex}.pdf", dpi=self.dpi, bbox_inches="tight")
     plt.close()  # Close the plot to free up memory.
 
     # --- Force Plot ---
@@ -348,8 +690,8 @@ class SHAPExplainer(object):
       f"Predicted Label: {self.yPredDecoded[instanceIndex]}"
     )
     plt.tight_layout()  # Adjust layout.
-    plt.savefig(f"{self.storagePath}/SHAP_Force_Plot_{instanceIndex}.png", dpi=self.dpi)  # Save the plot.
-    plt.savefig(f"{self.storagePath}/SHAP_Force_Plot_{instanceIndex}.pdf", dpi=self.dpi)  # Save the plot.
+    plt.savefig(f"{self.storagePath}/SHAP_Force_Plot_{instanceIndex}.png", dpi=self.dpi, bbox_inches="tight")
+    plt.savefig(f"{self.storagePath}/SHAP_Force_Plot_{instanceIndex}.pdf", dpi=self.dpi, bbox_inches="tight")
     plt.close()  # Close the plot.
 
     # --- Bar Plot (Global Feature Importance) ---
@@ -365,11 +707,17 @@ class SHAPExplainer(object):
     # Adjust layout.
     plt.tight_layout()
     # Save the bar plot as a PNG image.
-    plt.savefig(f"{self.storagePath}/SHAP_Bar_Plot_Global.png", dpi=self.dpi)
+    plt.savefig(f"{self.storagePath}/SHAP_Bar_Plot_Global.png", dpi=self.dpi, bbox_inches="tight")
     # Save the bar plot as a PDF document.
-    plt.savefig(f"{self.storagePath}/SHAP_Bar_Plot_Global.pdf", dpi=self.dpi)
+    plt.savefig(f"{self.storagePath}/SHAP_Bar_Plot_Global.pdf", dpi=self.dpi, bbox_inches="tight")
     # Close the plot.
     plt.close()
+
+    self.VisualizeComparativeFeatureImportance(noOfFeatures=noOfFeatures)
+    self.VisualizeDependenceWithAnnotations()
+    self.VisualizeClassStratifiedBeeswarm(noOfFeatures=noOfFeatures)
+    self.VisualizeErrorAnalysis(maxErrors=5)
+    self.VisualizeDecisionPlot(noOfInstances=noOfRecords, noOfFeatures=noOfFeatures)
 
     # --- Beeswarm Plot (Global Feature Importance) ---
     # Visualize the global feature importance using a beeswarm plot.
@@ -384,9 +732,9 @@ class SHAPExplainer(object):
     # Adjust layout.
     plt.tight_layout()
     # Save the beeswarm plot as a PNG image.
-    plt.savefig(f"{self.storagePath}/SHAP_Beeswarm_Plot_Global.png", dpi=self.dpi)
+    plt.savefig(f"{self.storagePath}/SHAP_Beeswarm_Plot_Global.png", dpi=self.dpi, bbox_inches="tight")
     # Save the beeswarm plot as a PDF document.
-    plt.savefig(f"{self.storagePath}/SHAP_Beeswarm_Plot_Global.pdf", dpi=self.dpi)
+    plt.savefig(f"{self.storagePath}/SHAP_Beeswarm_Plot_Global.pdf", dpi=self.dpi, bbox_inches="tight")
     # Close the plot.
     plt.close()
 
@@ -439,8 +787,8 @@ class SHAPExplainer(object):
         f"Reference Class {cat}"
       )
       plt.tight_layout()  # Adjust layout.
-      plt.savefig(f"{self.storagePath}/SHAP_Scatter_Plot_{cat}.png", dpi=self.dpi)  # Save the plot.
-      plt.savefig(f"{self.storagePath}/SHAP_Scatter_Plot_{cat}.pdf", dpi=self.dpi)  # Save the plot.
+      plt.savefig(f"{self.storagePath}/SHAP_Scatter_Plot_{cat}.png", dpi=self.dpi, bbox_inches="tight")
+      plt.savefig(f"{self.storagePath}/SHAP_Scatter_Plot_{cat}.pdf", dpi=self.dpi, bbox_inches="tight")
       plt.close()  # Close the plot.
 
       # --- Summary Plot ---
@@ -466,8 +814,8 @@ class SHAPExplainer(object):
         f"Reference Class {cat}"
       )
       plt.tight_layout()  # Adjust layout.
-      plt.savefig(f"{self.storagePath}/SHAP_Summary_Plot_{cat}.png", dpi=self.dpi)  # Save the plot.
-      plt.savefig(f"{self.storagePath}/SHAP_Summary_Plot_{cat}.pdf", dpi=self.dpi)  # Save the plot.
+      plt.savefig(f"{self.storagePath}/SHAP_Summary_Plot_{cat}.png", dpi=self.dpi, bbox_inches="tight")
+      plt.savefig(f"{self.storagePath}/SHAP_Summary_Plot_{cat}.pdf", dpi=self.dpi, bbox_inches="tight")
       plt.close()  # Close the plot.
 
     print(f"SHAP visualizations saved to the {self.storagePath} directory.")
@@ -3438,9 +3786,11 @@ class CAMExplainerTensorFlow(object):
           traceback.print_exc()
     return results
 
-  def CreateAnnotatedVisualization(self, imageRgb, heatmap, overlayImage, className, predictedClassName, trueClassName,
-                                   alpha, confidence, methodName="GradCam", figureSize=(12, 12), dpiValue=300,
-                                   fontSize=14):
+  def CreateAnnotatedVisualization(
+      self, imageRgb, heatmap, overlayImage, className, predictedClassName, trueClassName,
+      alpha, confidence, methodName="GradCam", figureSize=(12, 12), dpiValue=300,
+      fontSize=14
+  ):
     r'''
     Build a 2x2 annotated saliency figure with colorbars.
 

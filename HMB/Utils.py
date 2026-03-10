@@ -96,7 +96,7 @@ def IsPointInsideContour(point, contour):
     cnt = cnt.reshape((-1, 1, 2))
   # If 'point' is actually a polygon, compute convex intersection area>0 with contour
   if isinstance(point, (list, tuple, np.ndarray)) and not (
-    len(point) == 2 and not isinstance(point[0], (list, tuple, np.ndarray))):
+      len(point) == 2 and not isinstance(point[0], (list, tuple, np.ndarray))):
     poly = np.array(point, dtype=np.float32)
     if poly.ndim == 2 and poly.shape[1] == 2:
       poly = poly.reshape((-1, 1, 2)).astype(np.float32)
@@ -197,6 +197,207 @@ def WriteTextFile(filePath, text):
   with open(filePath, "w") as f:
     # Write the text to the file.
     f.write(text)
+
+
+def ConvertToJsonSerializable(obj):
+  r'''
+  Convert an object to a JSON-serializable format.
+  This function attempts to convert various types of objects into formats that can be serialized to JSON.
+  It handles common data types such as NumPy arrays, PyTorch tensors, TensorFlow tensors, bytes, and objects
+  with __dict__ attributes. If an object cannot be converted to a JSON-serializable format, it falls back to
+  using the string representation of the object. The function is designed to be robust and handle exceptions
+  gracefully, ensuring that it can process a wide range of input types without crashing. It also includes
+  structured representations for tensors to preserve data and metadata when possible, while providing fallback
+  options when conversions fail. This makes it suitable for use in scenarios where you need to serialize complex
+  objects to JSON, such as logging, configuration saving, or data interchange between systems that may include
+  machine learning models and their parameters.
+
+  Parameters:
+    obj (any): The object to be converted to a JSON-serializable format.
+
+  Returns:
+    A JSON-serializable representation of the input object. The return type can vary depending on the input:
+      - For NumPy arrays, it returns a dictionary containing the data as a list, shape, and data type.
+      - For PyTorch tensors, it returns a dictionary with similar structure to preserve tensor information.
+      - For TensorFlow tensors, it also returns a structured dictionary with data, shape, and data type.
+      - For bytes and bytearrays, it attempts to decode them as UTF-8 strings, and if that fails, it returns their hexadecimal representation.
+      - For objects with a __dict__ attribute, it returns a dictionary of their attributes, attempting to serialize each attribute directly or converting it to a string if it is not JSON-serializable.
+      - For all other types of objects, it returns their string representation as a last resort. If the string conversion also fails, it returns None.
+  '''
+
+  # Initialize the numpy module variable.
+  numpyModule = None
+  # Initialize the torch module variable.
+  torchModule = None
+  # Initialize the tensorflow module variable.
+  tensorflowModule = None
+  # Attempt to import numpy.
+  try:
+    # Import numpy as numpyModule.
+    import numpy as numpyModule
+  except Exception:
+    # Set numpyModule to None if import fails.
+    numpyModule = None
+  # Attempt to import torch.
+  try:
+    # Import torch as torchModule.
+    import torch as torchModule
+  except Exception:
+    # Set torchModule to None if import fails.
+    torchModule = None
+  # Attempt to import tensorflow.
+  try:
+    # Import tensorflow as tensorflowModule.
+    import tensorflow as tensorflowModule
+  except Exception:
+    # Set tensorflowModule to None if import fails.
+    tensorflowModule = None
+  # Handle torch device and dtype objects.
+  try:
+    # Check if torchModule is available.
+    if (torchModule is not None):
+      # Check if obj is a torch device or dtype.
+      if (
+          isinstance(obj, torchModule.device) or
+          isinstance(obj, torchModule.dtype)
+      ):
+        # Return the string representation of the object.
+        return str(obj)
+  except Exception:
+    # Pass silently if torch checks fail.
+    pass
+  # Handle torch Size and Python sets.
+  try:
+    # Check if torchModule is available.
+    if (torchModule is not None):
+      # Check if obj is a torch Size or a set.
+      if (
+          isinstance(obj, torchModule.Size) or
+          isinstance(obj, set)
+      ):
+        # Return the list representation of the object.
+        return list(obj)
+  except Exception:
+    # Pass silently if torch checks fail.
+    pass
+  # Handle torch Tensor objects.
+  try:
+    # Check if torchModule is available.
+    if (torchModule is not None):
+      # Check if obj is a torch Tensor.
+      if (isinstance(obj, torchModule.Tensor)):
+        # Move tensor to CPU and detach to avoid GPU issues.
+        try:
+          # Detach and move tensorObj to CPU.
+          tensorObj = obj.detach().cpu()
+        except Exception:
+          # Assign obj to tensorObj if detach fails.
+          tensorObj = obj
+        # Attempt to convert tensor to list for data preservation.
+        try:
+          # Convert tensorObj to list format.
+          dataList = tensorObj.tolist()
+          # Return structured dict for reconstruction capability.
+          return {"__Tensor__": True, "Data": dataList, "Shape": list(tensorObj.shape), "Dtype": str(tensorObj.dtype)}
+        except Exception:
+          # Return string representation if list conversion fails.
+          return str(tensorObj)
+  except Exception:
+    # Pass silently if torch tensor checks fail.
+    pass
+  # Handle TensorFlow Tensor and Variable objects.
+  try:
+    # Check if tensorflowModule is available.
+    if (tensorflowModule is not None):
+      # Check if obj is a TensorFlow Tensor or Variable.
+      if (
+          isinstance(obj, tensorflowModule.Tensor) or
+          isinstance(obj, tensorflowModule.Variable)
+      ):
+        # Attempt to convert to numpy array.
+        try:
+          # Convert tensorflow object to numpy array.
+          numpyArray = obj.numpy()
+          # Convert numpy array to list format.
+          dataList = numpyArray.tolist()
+          # Return structured dict for reconstruction capability.
+          return {"__TensorFlowTensor__": True, "Data": dataList, "Shape": list(numpyArray.shape),
+                  "Dtype"               : str(numpyArray.dtype)}
+        except Exception:
+          # Return a summary dict if numpy conversion fails.
+          return {"__TensorFlowTensor__": True, "Shape": str(obj.shape), "Dtype": str(obj.dtype)}
+  except Exception:
+    # Pass silently if tensorflow checks fail.
+    pass
+  # Handle NumPy scalar types and arrays.
+  if (numpyModule is not None):
+    try:
+      # Check if obj is a numpy integer or floating point scalar.
+      if (isinstance(obj, (numpyModule.integer, numpyModule.floating))):
+        # Return the Python scalar value.
+        return obj.item()
+      # Check if obj is a numpy ndarray.
+      if (isinstance(obj, numpyModule.ndarray)):
+        # Convert array to list format for data preservation.
+        try:
+          # Convert numpyArray to list format.
+          dataList = obj.tolist()
+          # Return structured dict for reconstruction capability.
+          return {"__NdArray__": True, "Data": dataList, "Shape": list(obj.shape), "Dtype": str(obj.dtype)}
+        except Exception:
+          # Return string representation if conversion fails.
+          return str(obj)
+    except Exception:
+      # Pass silently if numpy checks fail.
+      pass
+  # Handle bytes and bytearray objects.
+  try:
+    # Check if obj is bytes or bytearray.
+    if (isinstance(obj, (bytes, bytearray))):
+      # Attempt to decode as utf-8.
+      try:
+        # Return the decoded string.
+        return obj.decode("utf-8")
+      except Exception:
+        # Return the hex representation if decode fails.
+        return obj.hex()
+  except Exception:
+    # Pass silently if bytes checks fail.
+    pass
+  # Fallback to object dictionary representation.
+  try:
+    # Check if obj has a __dict__ attribute.
+    if (hasattr(obj, "__dict__")):
+      # Initialize the result dictionary.
+      resultDict = {}
+      # Iterate over items in the __dict__ attribute.
+      for key, value in obj.__dict__.items():
+        # Attempt to serialize the value directly.
+        try:
+          # Validate value with json.dumps.
+          json.dumps(value)
+          # Assign value to resultDict with key.
+          resultDict[key] = value
+        except TypeError:
+          # Attempt to convert value to string.
+          try:
+            # Assign string representation to resultDict.
+            resultDict[key] = str(value)
+          except Exception:
+            # Assign None if string conversion fails.
+            resultDict[key] = None
+      # Return the constructed result dictionary.
+      return resultDict
+  except Exception:
+    # Pass silently if __dict__ checks fail.
+    pass
+  # Last-resort conversion to string.
+  try:
+    # Return the string representation of obj.
+    return str(obj)
+  except Exception:
+    # Return None if string conversion fails.
+    return None
 
 
 def DumpJsonFile(filePath, data, indent=2, ensureAscii=False):
@@ -351,10 +552,10 @@ def Hex2RGB(hexColor, isRGBA=False):
 
 
 def AppendOrCreateNewCSV(
-  fileName,  # Path to the CSV file.
-  data,  # Data to append or create.
-  header=None,  # Header for the CSV file.
-  mode="a",  # Mode to open the file (default is append).
+    fileName,  # Path to the CSV file.
+    data,  # Data to append or create.
+    header=None,  # Header for the CSV file.
+    mode="a",  # Mode to open the file (default is append).
 ):
   r'''
   Append data to a CSV file or create a new one if it doesn't exist.
@@ -399,9 +600,9 @@ def AppendOrCreateNewCSV(
 
 # Define the AppendOrCreateNewDataFrameCSV function to append or create a CSV from list or DataFrame.
 def AppendOrCreateNewDataFrameCSV(
-  fileName,  # Path to the CSV file.
-  data,  # Data to append or create; can be a list (of lists/dicts) or a pandas DataFrame.
-  header=None,  # Header for the CSV file; required if creating a new file and data is not a DataFrame with columns.
+    fileName,  # Path to the CSV file.
+    data,  # Data to append or create; can be a list (of lists/dicts) or a pandas DataFrame.
+    header=None,  # Header for the CSV file; required if creating a new file and data is not a DataFrame with columns.
 ):
   r'''
   Append data to a CSV file or create a new one if it doesn't exist.
