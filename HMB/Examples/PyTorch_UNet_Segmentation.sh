@@ -25,6 +25,7 @@ WeightDecay=1e-6
 Device="cuda"
 NumWorkers=4
 NumClasses=1
+DPI=720
 # Resume checkpoint path (leave empty to disable)
 ResumeCheckpoint=""
 # Use automatic mixed precision (set to 1 to enable)
@@ -51,6 +52,7 @@ for TRIAL in "${TRIALS[@]}"; do
       --Device "$Device"
       --NumWorkers "$NumWorkers"
       --NumClasses "$NumClasses"
+      --DPI "$DPI"
     )
 
     # Conditionally append optional args

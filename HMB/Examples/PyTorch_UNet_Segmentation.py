@@ -5,7 +5,7 @@ if __name__ == "__main__":
 
 # ------------------------------------------------------------------------- #
 
-import os, torch, json, cv2, math, csv, argparse
+import os, torch, cv2, math, csv, argparse
 import numpy as np
 from tqdm import tqdm
 from typing import List, Dict, Tuple
@@ -19,6 +19,7 @@ from HMB import ImageSegmentationMetrics as ISM
 from HMB.DatasetsHelper import CreateSegmentationDataLoaders
 from HMB.Initializations import IgnoreWarnings, DoRandomSeeding
 from HMB.UNetHelper import PreparePredTensorToNumpy, GetUNetModel
+from HMB.Utils import DumpJsonFile, ReadJsonFile
 
 # Define default hyperparameters dictionary with CamelCase keys.
 # This dictionary uses camelCase variable name to follow project conventions.
@@ -61,6 +62,8 @@ defaultHparams = {
   "UseWandB"        : False,
   # Maximum number of checkpoints to keep.
   "MaxCheckpoints"  : 5,
+  # DPI for saving evaluation figures.
+  "DPI"             : 720,
 }
 
 
@@ -147,6 +150,7 @@ def ParseArgs():
     help="Path to checkpoint to resume from."
   )
   parser.add_argument("--UseAMP", action="store_true", help="Use automatic mixed precision for training.")
+  parser.add_argument("--DPI", type=int, default=defaultHparams["DPI"], help="DPI for saving evaluation figures.")
   # Parse the known args from the command line.
   args = parser.parse_args()
   # Merge parsed args into a CamelCase hparams dict.
@@ -165,6 +169,7 @@ def ParseArgs():
     "NumClasses"      : args.NumClasses,
     "ResumeCheckpoint": args.ResumeCheckpoint,
     "UseAMP"          : args.UseAMP,
+    "DPI"             : args.DPI,
   }
   # Ensure output directory exists and return the hparams dictionary.
   os.makedirs(hparams.get("OutputDir", "Output"), exist_ok=True)
@@ -184,22 +189,26 @@ def SaveHparams(hparams: dict, outputDir: str, outputFileName: str = "ExpConfig.
   # Compose the full path for the config file.
   filePath = os.path.join(outputDir, outputFileName)
   # Write the hparams dictionary to disk as JSON.
-  with open(filePath, "w", encoding="utf-8") as file:
-    json.dump(hparams, file, indent=2)
+  # with open(filePath, "w", encoding="utf-8") as file:
+  #   json.dump(hparams, file, indent=2)
+  DumpJsonFile(filePath, hparams)
 
 
-class Trainer:
+class PyTorchUNetSegmentation:
   # Initialize the trainer with model, dataloaders, optimizer, scheduler, and hparams.
   def __init__(
       self,
       model: nn.Module,
       trainLoader,
       valLoader,
+      allLoader,
       optimizer: optim.Optimizer,
       scheduler,
       lossFn,
-      hparams: Dict,
-      device: str = "cuda"
+      learningRate=1e-4,
+      device: str = "cuda",
+      outputDir: str = "Output",
+      dpi: int = 720,
   ):
     # Store references to the model and device.
     self.model = model
@@ -207,23 +216,60 @@ class Trainer:
     # Store dataloaders.
     self.trainLoader = trainLoader
     self.valLoader = valLoader
+    self.allLoader = allLoader
     # Store optimizer, scheduler, and loss function.
     self.optimizer = optimizer
     self.scheduler = scheduler
     self.lossFn = lossFn
-    # Store the hyperparameters' dictionary.
-    self.hparams = hparams
+    self.outputDir = outputDir
+    self.learningRate = learningRate
+    self.dpi = dpi
     # Initialize TensorBoard writer in the output directory.
-    self.writer = SummaryWriter(
-      log_dir=os.path.join(hparams.get("OutputDir", "Output"), "Logs"),
-    )
+    self.writer = SummaryWriter(log_dir=os.path.join(self.outputDir, "Logs"))
     # Prepare the model on the target device.
     self.model.to(self.device)
     # Initialize the best metric for checkpointing.
     self.bestMetric = -1.0
     # Prepare checkpoint directory.
-    self.checkpointDir = os.path.join(hparams.get("OutputDir", "Output"), "Checkpoints")
+    self.checkpointDir = os.path.join(self.outputDir, "Checkpoints")
     os.makedirs(self.checkpointDir, exist_ok=True)
+    # Compute the output directory path for saving combined PNG files.
+    self.trainSamplesDir = os.path.join(self.outputDir, "TrainSamples")
+    # Ensure the output directory exists on disk.
+    os.makedirs(self.trainSamplesDir, exist_ok=True)
+    # Prepare collectors for metrics computation.
+    self.metricsDir = os.path.join(self.outputDir, "Metrics")
+    # Ensure the metrics directory exists.
+    os.makedirs(self.metricsDir, exist_ok=True)
+    # Prepare and save overlay images showing Original | PredOverlay (red) | TargetOverlay (green).
+    # Build overlays output directory inside the experiment output dir.
+    self.overlaysDir = os.path.join(self.outputDir, "Overlays")
+    # Ensure the overlays directory exists.
+    os.makedirs(self.overlaysDir, exist_ok=True)
+    # Create predictions output directory inside the output directory.
+    self.predsDir = os.path.join(self.outputDir, "Preds")
+    self.actualDir = os.path.join(self.outputDir, "Actuals")
+    # Ensure the predictions directory exists.
+    os.makedirs(self.predsDir, exist_ok=True)
+    os.makedirs(self.actualDir, exist_ok=True)
+
+    # Map metric display names to functions in HMB.ImageSegmentationMetrics.
+    self.metricsFns = {
+      "IoU"          : ISM.ComputeIoU,
+      "Dice"         : ISM.ComputeDice,
+      "PixelAccuracy": ISM.ComputePixelAccuracy,
+      "Precision"    : ISM.ComputePrecision,
+      "Recall"       : ISM.ComputeRecall,
+      "Specificity"  : ISM.ComputeSpecificity,
+      "FPR"          : ISM.ComputeFPR,
+      "FNR"          : ISM.ComputeFNR,
+      "F1Score"      : ISM.ComputeF1Score,
+      "mAP"          : ISM.ComputeMeanAveragePrecision,
+      "Hausdorff"    : ISM.ComputeHausdorffDistance,
+      "BoundaryF1"   : ISM.ComputeBoundaryF1Score,
+      "MCC"          : ISM.ComputeMatthewsCorrelationCoefficient,
+      "CohensKappa"  : ISM.ComputeCohensKappa,
+    }
 
   # Save a checkpoint to disk with a given tag.
   def SaveCheckpoint(self, epoch: int, tag: str = "latest"):
@@ -237,7 +283,7 @@ class Trainer:
       filePath,
       self.model,
       self.optimizer,
-      lr=self.hparams.get("LearningRate", 1e-4),
+      lr=self.learningRate,
       device=self.device,
       strict=strict
     )
@@ -277,6 +323,138 @@ class Trainer:
         f"Val IoU: {valMetrics.get('MeanIoU', 0.0):.4f} - "
         f"Val Pixel Acc: {valMetrics.get('PixelAccuracy', 0.0):.4f}"
       )
+
+  def _VisualizeImage(
+      self,
+      image,
+      mask,
+      pred,
+      logits,
+      probPath,
+      combinedPath,
+  ):
+    # Prepare image, mask and prediction numpy arrays for plotting.
+    # images: [B, C, H, W] or [B, H, W].
+    imgTensor = image.detach().cpu()
+    # Handle both [C,H,W] and [H,W] image tensors.
+    try:
+      imgNp = imgTensor.numpy()
+    except Exception:
+      imgNp = np.array(imgTensor)
+
+    if (imgNp.ndim == 3):
+      # Convert from [C, H, W] to [H, W, C].
+      imgVis = np.transpose(imgNp, (1, 2, 0))
+      # If single-channel, squeeze to [H, W].
+      if (imgVis.shape[2] == 1):
+        imgVis = imgVis.squeeze(2)
+    elif (imgNp.ndim == 2):
+      imgVis = imgNp
+    else:
+      # Fallback: try to squeeze to 2D.
+      imgVis = np.squeeze(imgNp)
+
+    # Normalize image for display (if values appear in 0-255 range).
+    try:
+      if ((imgVis.dtype == np.uint8) or (imgVis.max() > 1.0)):
+        imgVis = imgVis.astype(np.float32) / 255.0
+    except Exception:
+      pass
+
+    # Prepare mask numpy.
+    maskTensor = mask.detach().cpu()
+    try:
+      maskNp = maskTensor.numpy()
+    except Exception:
+      maskNp = np.array(maskTensor)
+    # If mask has channel dim [1, H, W], squeeze it.
+    if (maskNp.ndim == 3 and maskNp.shape[0] == 1):
+      maskNp = maskNp.squeeze(0)
+    # If mask is [H, W, 1], squeeze last dim.
+    if (maskNp.ndim == 3 and maskNp.shape[-1] == 1):
+      maskNp = maskNp.squeeze(-1)
+
+    # Prepare prediction numpy.
+    try:
+      predTensor = pred.detach().cpu()
+      predNp = predTensor.numpy()
+    except Exception:
+      predNp = np.array(preds[i].cpu())
+
+    # Ensure prediction is 2D.
+    if (predNp.ndim == 3 and predNp.shape[0] == 1):
+      predNp = predNp.squeeze(0)
+
+    # If logits are binary, save the probability map for inspection.
+    if (logits.shape[1] == 1):
+      # Convert the per-sample probability map to numpy.
+      probNp = probs[i].cpu().numpy()
+      # Squeeze a leading channel dimension if present.
+      if (probNp.ndim == 3 and probNp.shape[0] == 1):
+        probNp = probNp.squeeze(0)
+      # Create a small figure and save the probability heatmap.
+      figProb, axProb = plt.subplots(1, 1, figsize=(4, 4))
+      # Display the probability map with a perceptually-uniform colormap.
+      axProb.imshow(probNp, cmap="viridis", vmin=0.0, vmax=1.0)
+      # Turn off axis decorations.
+      axProb.axis("off")
+      # Save the probability map to disk.
+      figProb.savefig(probPath, dpi=self.dpi, bbox_inches="tight")
+      # Close the small figure to free memory.
+      plt.close(figProb)
+
+    # Create a matplotlib figure with three horizontal subplots.
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+    # Display the input image on the first axis.
+    if (imgVis.ndim == 2):
+      axes[0].imshow(imgVis, cmap="gray")
+    # Display the RGB image when it has multiple channels.
+    else:
+      axes[0].imshow(np.clip(imgVis, 0, 1))
+    # Set the title for the input image subplot.
+    axes[0].set_title("Image")
+    # Turn off axis ticks and labels for the image subplot.
+    axes[0].axis("off")
+    # Display the mask on the second axis using a grayscale colormap.
+    try:
+      axes[1].imshow(maskNp, cmap="gray")
+    except Exception:
+      axes[1].imshow(np.squeeze(maskNp), cmap="gray")
+    # Set the title for the mask subplot.
+    axes[1].set_title("Mask")
+    # Turn off axis ticks and labels for the mask subplot.
+    axes[1].axis("off")
+    # Display the prediction on the third axis using a grayscale colormap.
+    axes[2].imshow(predNp, cmap="gray")
+    # Set the title for the prediction subplot.
+    axes[2].set_title("Pred")
+    # Turn off axis ticks and labels for the prediction subplot.
+    axes[2].axis("off")
+    # Adjust subplot spacing to prevent overlap.
+    plt.tight_layout()
+    # Save the figure to disk as a PNG file with a moderate DPI.
+    fig.savefig(combinedPath, dpi=self.dpi, bbox_inches="tight")
+    # Close the figure to release memory resources.
+    plt.close(fig)
+
+  def PredictImage(self, image: torch.Tensor) -> torch.Tensor:
+    # Set model to evaluation mode.
+    self.model.eval()
+    # Disable gradient calculation for inference.
+    with torch.no_grad():
+      # Move the input image to the configured device.
+      image = image.to(self.device)
+      # Forward pass through the model to obtain logits.
+      logits = self.model(image.unsqueeze(0))  # Add batch dimension.
+      # Check if the model outputs binary or multi-class logits and convert to predictions.
+      if (logits.shape[1] == 1):
+        # Binary case: apply sigmoid and threshold at 0.5.
+        probs = torch.sigmoid(logits)
+        preds = (probs > 0.5).long().squeeze(0).squeeze(0)  # Remove batch and channel dims.
+      else:
+        # Multi-class case: take argmax along channel dimension.
+        preds = torch.argmax(logits, dim=1).squeeze(0)  # Remove batch dim.
+    return preds
 
   # Run a single training epoch and return average loss.
   def TrainEpoch(self, epoch: int) -> float:
@@ -323,121 +501,23 @@ class Trainer:
           if (logits.shape[1] != 1):
             # Compute argmax across the channel dimension for multi-class predictions.
             preds = torch.argmax(logits, dim=1)
+
           # Loop over up to two samples in the current batch for visualization.
           for i in range(min(2, int(images.size(0)))):
-            # Compute the output directory path for saving combined PNG files.
-            outputDir = os.path.join(self.hparams.get("OutputDir", "Output"), "TrainSamples")
-            # Ensure the output directory exists on disk.
-            os.makedirs(outputDir, exist_ok=True)
-
             # Compose the filename for the saved combined image.
-            combinedPath = os.path.join(outputDir, f"Epoch{epoch}_Batch{batchIdx}_Sample{i}.png")
+            combinedPath = os.path.join(self.trainSamplesDir, f"Epoch{epoch}_Batch{batchIdx}_Sample{i}.png")
+            # Build a filename for the probability map image.
+            probPath = os.path.join(self.trainSamplesDir, f"Epoch{epoch}_Batch{batchIdx}_Sample{i}_Prob.png")
+            # Call the visualization function to save the combined image and probability map.
+            self._VisualizeImage(
+              image=images[i],
+              mask=masks[i],
+              pred=preds[i],
+              logits=logits[i],
+              probPath=probPath,
+              combinedPath=combinedPath,
+            )
 
-            # Prepare image, mask and prediction numpy arrays for plotting.
-            # images: [B, C, H, W] or [B, H, W].
-            imgTensor = images[i].detach().cpu()
-            # Handle both [C,H,W] and [H,W] image tensors.
-            try:
-              imgNp = imgTensor.numpy()
-            except Exception:
-              imgNp = np.array(imgTensor)
-
-            if (imgNp.ndim == 3):
-              # Convert from [C, H, W] to [H, W, C].
-              imgVis = np.transpose(imgNp, (1, 2, 0))
-              # If single-channel, squeeze to [H, W].
-              if (imgVis.shape[2] == 1):
-                imgVis = imgVis.squeeze(2)
-            elif (imgNp.ndim == 2):
-              imgVis = imgNp
-            else:
-              # Fallback: try to squeeze to 2D.
-              imgVis = np.squeeze(imgNp)
-
-            # Normalize image for display (if values appear in 0-255 range).
-            try:
-              if ((imgVis.dtype == np.uint8) or (imgVis.max() > 1.0)):
-                imgVis = imgVis.astype(np.float32) / 255.0
-            except Exception:
-              pass
-
-            # Prepare mask numpy.
-            maskTensor = masks[i].detach().cpu()
-            try:
-              maskNp = maskTensor.numpy()
-            except Exception:
-              maskNp = np.array(maskTensor)
-            # If mask has channel dim [1, H, W], squeeze it.
-            if (maskNp.ndim == 3 and maskNp.shape[0] == 1):
-              maskNp = maskNp.squeeze(0)
-            # If mask is [H, W, 1], squeeze last dim.
-            if (maskNp.ndim == 3 and maskNp.shape[-1] == 1):
-              maskNp = maskNp.squeeze(-1)
-
-            # Prepare prediction numpy.
-            try:
-              predTensor = preds[i].detach().cpu()
-              predNp = predTensor.numpy()
-            except Exception:
-              predNp = np.array(preds[i].cpu())
-
-            # Ensure prediction is 2D.
-            if (predNp.ndim == 3 and predNp.shape[0] == 1):
-              predNp = predNp.squeeze(0)
-
-            # If logits are binary, save the probability map for inspection.
-            if (logits.shape[1] == 1):
-              # Convert the per-sample probability map to numpy.
-              probNp = probs[i].cpu().numpy()
-              # Squeeze a leading channel dimension if present.
-              if (probNp.ndim == 3 and probNp.shape[0] == 1):
-                probNp = probNp.squeeze(0)
-              # Build a filename for the probability map image.
-              probPath = os.path.join(outputDir, f"Epoch{epoch}_Batch{batchIdx}_Sample{i}_Prob.png")
-              # Create a small figure and save the probability heatmap.
-              figProb, axProb = plt.subplots(1, 1, figsize=(4, 4))
-              # Display the probability map with a perceptually-uniform colormap.
-              axProb.imshow(probNp, cmap="viridis", vmin=0.0, vmax=1.0)
-              # Turn off axis decorations.
-              axProb.axis("off")
-              # Save the probability map to disk.
-              figProb.savefig(probPath, dpi=720, bbox_inches="tight")
-              # Close the small figure to free memory.
-              plt.close(figProb)
-
-            # Create a matplotlib figure with three horizontal subplots.
-            fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-            # Display the input image on the first axis.
-            if (imgVis.ndim == 2):
-              axes[0].imshow(imgVis, cmap="gray")
-            # Display the RGB image when it has multiple channels.
-            else:
-              axes[0].imshow(np.clip(imgVis, 0, 1))
-            # Set the title for the input image subplot.
-            axes[0].set_title("Image")
-            # Turn off axis ticks and labels for the image subplot.
-            axes[0].axis("off")
-            # Display the mask on the second axis using a grayscale colormap.
-            try:
-              axes[1].imshow(maskNp, cmap="gray")
-            except Exception:
-              axes[1].imshow(np.squeeze(maskNp), cmap="gray")
-            # Set the title for the mask subplot.
-            axes[1].set_title("Mask")
-            # Turn off axis ticks and labels for the mask subplot.
-            axes[1].axis("off")
-            # Display the prediction on the third axis using a grayscale colormap.
-            axes[2].imshow(predNp, cmap="gray")
-            # Set the title for the prediction subplot.
-            axes[2].set_title("Pred")
-            # Turn off axis ticks and labels for the prediction subplot.
-            axes[2].axis("off")
-            # Adjust subplot spacing to prevent overlap.
-            plt.tight_layout()
-            # Save the figure to disk as a PNG file with a moderate DPI.
-            fig.savefig(combinedPath, dpi=150)
-            # Close the figure to release memory resources.
-            plt.close(fig)
     # Return average training loss for the epoch.
     return runningLoss / float(max(1, count))
 
@@ -445,12 +525,14 @@ class Trainer:
   def Validate(self, epoch: int) -> Dict:
     # Set model to evaluation mode.
     self.model.eval()
+
     # Initialize accumulators for loss and metrics.
     runningLoss = 0.0
     count = 0
     diceScores = []
     iouScores = []
     pixelAccs = []
+
     # Disable gradient computation during validation.
     with torch.no_grad():
       # Iterate over validation batches.
@@ -478,9 +560,9 @@ class Trainer:
           pred = preds[i].float().cpu().numpy()
           tgt = masks[i].float().cpu().numpy()
           # Compute Dice, IoU, and pixel accuracy for the instance.
-          diceScores.append(ISM.ComputeDice(pred, tgt))
-          iouScores.append(ISM.ComputeIoU(pred, tgt))
-          pixelAccs.append(ISM.ComputePixelAccuracy(pred, tgt))
+          diceScores.append(self.metricsFns["Dice"](pred, tgt))
+          iouScores.append(self.metricsFns["IoU"](pred, tgt))
+          pixelAccs.append(self.metricsFns["PixelAccuracy"](pred, tgt))
         # Accumulate loss and increment count.
         runningLoss += loss.item()
         count += 1
@@ -493,170 +575,11 @@ class Trainer:
     # Return a dictionary containing computed metrics and average loss.
     return {"Loss": avgLoss, "MeanDice": meanDice, "MeanIoU": meanIoU, "PixelAccuracy": meanAcc}
 
-
-# Define the main Run function which executes training or inference phases.
-def Run():
-  # Parse command-line arguments into a hyperparameters dictionary.
-  hparams = ParseArgs()
-  # Create predictions output directory inside the output directory.
-  predsDir = os.path.join(hparams.get("OutputDir", "Output"), "Preds")
-  actualDir = os.path.join(hparams.get("OutputDir", "Output"), "Actuals")
-  # Ensure the predictions directory exists.
-  os.makedirs(predsDir, exist_ok=True)
-  os.makedirs(actualDir, exist_ok=True)
-
-  # Decide which device to use for inference based on availability and hparams.
-  if (torch.cuda.is_available() and (hparams.get("Device", "cuda").startswith("cuda"))):
-    # Select the requested CUDA device.
-    device = torch.device(hparams.get("Device", "cuda"))
-  else:
-    # Fall back to CPU device when CUDA is not available or not requested.
-    device = torch.device("cpu")
-  # Print which device will be used.
-  print(f"Using device: {device}")
-
-  # Create or obtain training, validation and combined loaders as before.
-  trainLoader, valLoader, allLoader = CreateSegmentationDataLoaders(
-    hparams.get("DataDir", "Data"),
-    imageSize=hparams.get("ImageSize", 256),
-    batchSize=hparams.get("BatchSize", 8) if (hparams.get("Phase", "Train") == "Train") else 1,
-    numWorkers=hparams.get("NumWorkers", 4),
-    numClasses=hparams.get("NumClasses", 1)
-  )
-  # Print counts for sanity.
-  print(f"Training samples: {len(trainLoader.dataset)}, Validation samples: {len(valLoader.dataset)}")
-
-  # Validate created dataloaders.
-  if ((trainLoader is None) or (valLoader is None)):
-    # Raise error when loaders failed to create.
-    raise RuntimeError("Failed to create dataloaders for inference.")
-  elif (len(valLoader.dataset) == 0 or len(trainLoader.dataset) == 0):
-    # Raise error when datasets are empty.
-    raise RuntimeError("No samples found for inference in the specified DataDir.")
-
-  # Get the min, max, and mean pixel values from the training dataset.
-  # pixelStats = trainLoader.dataset.GetPixelStats()
-  # for statName, statValue in pixelStats.items():
-  #   print(f"{statName}: {statValue}")
-
-  # Instantiate the requested model via the factory.
-  model = GetUNetModel(
-    hparams.get("ModelName", "UNet"),
-    inputChannels=3,
-    numClasses=hparams.get("NumClasses", 1)
-  )
-  # Print which model was instantiated.
-  print(f"Model {hparams.get('ModelName', 'UNet')} instantiated.")
-  # Move the model to the selected device.
-  model.to(device)
-
-  # If the requested phase is Train, run training and return.
-  if (hparams.get("Phase", "Infer") == "Train"):
-    # Save hyperparameters to the output directory.
-    SaveHparams(hparams, hparams.get("OutputDir", "Output"))
-
-    # Create optimizer using helper function.
-    optimizer = GetOptimizer(
-      model,
-      optimizerType=hparams.get("Optimizer", "adamw"),
-      learningRate=hparams.get("LearningRate", 1e-4),
-      weightDecay=hparams.get("WeightDecay", 1e-6)
-    )
-    # Print which optimizer was created.
-    print(f"Optimizer {hparams.get('Optimizer', 'Adam')} created.")
-
-    # Create a scheduler; use ReduceLROnPlateau by default.
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
-    # Print scheduler creation message.
-    print("Scheduler ReduceLROnPlateau created.")
-
-    # Select an appropriate loss function depending on number of classes.
-    if (hparams.get("NumClasses", 1) == 1):
-      # Use binary loss for single-class segmentation.
-      lossFn = nn.BCEWithLogitsLoss()
-    else:
-      # Use cross-entropy for multi-class segmentation.
-      lossFn = nn.CrossEntropyLoss()
-    # Print loss function creation message.
-    print("Loss function created.")
-
-    # Create Trainer instance to run training.
-    trainer = Trainer(
-      model,
-      trainLoader,
-      valLoader,
-      optimizer,
-      scheduler,
-      lossFn,
-      hparams,
-      device=device,
-    )
-    # Print training start message.
-    print("Starting training...")
-
-    # If resume checkpoint is provided, load it and resume.
-    if (hparams.get("ResumeCheckpoint", "") != ""):
-      # Load checkpoint into trainer if requested.
-      trainer.LoadCheckpoint(hparams.get("ResumeCheckpoint"))
-      # Print checkpoint resume message.
-      print("Resumed from checkpoint:", hparams.get("ResumeCheckpoint"))
-
-    # Run training for the specified number of epochs.
-    trainer.Train(hparams.get("NumEpochs", 50))
-    # Print training completion message.
-    print("Training completed.")
-    # Return after training phase completes.
-    return
-
-  else:
-    # If a checkpoint path was provided, load the model weights.
-    if (hparams.get("ResumeCheckpoint", "") != ""):
-      # Load the checkpoint onto the selected device and print keys for debugging.
-      ckpt = torch.load(hparams.get("ResumeCheckpoint"), map_location=device)
-      # Extract state dict from common key names.
-      if (isinstance(ckpt, dict)):
-        # Use nested key "model_state" when present.
-        if ("model_state" in ckpt):
-          stateDict = ckpt["model_state"]
-        # Use nested key "state_dict" when present.
-        elif ("state_dict" in ckpt):
-          stateDict = ckpt["state_dict"]
-        else:
-          # Assume the dict itself is the state dict.
-          stateDict = ckpt
-      else:
-        # If checkpoint is not a dict, try to use it directly.
-        stateDict = ckpt
-      # Load the state dictionary into the model.
-      model.load_state_dict(stateDict)
-
+  def Inference(self):
     # Set the model to evaluation mode to disable training-specific layers.
-    model.eval()
+    self.model.eval()
     # Initialize a global counter for saved prediction files.
     globalIdx = 0
-
-    # Prepare collectors for metrics computation.
-    metricsDir = os.path.join(hparams.get("OutputDir", "Output"), "Metrics")
-    # Ensure the metrics directory exists.
-    os.makedirs(metricsDir, exist_ok=True)
-
-    # Map metric display names to functions in HMB.ImageSegmentationMetrics.
-    metricsFns = {
-      "IoU"          : ISM.ComputeIoU,
-      "Dice"         : ISM.ComputeDice,
-      "PixelAccuracy": ISM.ComputePixelAccuracy,
-      "Precision"    : ISM.ComputePrecision,
-      "Recall"       : ISM.ComputeRecall,
-      "Specificity"  : ISM.ComputeSpecificity,
-      "FPR"          : ISM.ComputeFPR,
-      "FNR"          : ISM.ComputeFNR,
-      "F1Score"      : ISM.ComputeF1Score,
-      "mAP"          : ISM.ComputeMeanAveragePrecision,
-      "Hausdorff"    : ISM.ComputeHausdorffDistance,
-      "BoundaryF1"   : ISM.ComputeBoundaryF1Score,
-      "MCC"          : ISM.ComputeMatthewsCorrelationCoefficient,
-      "CohensKappa"  : ISM.ComputeCohensKappa,
-    }
 
     # Initialize a list to store per-image metrics.
     perImageMetrics = []
@@ -665,11 +588,11 @@ def Run():
     # Disable gradient computation for inference to save memory and compute.
     with torch.inference_mode():
       # Iterate over the validation dataloader batches.
-      for batchIdx, (images, masks) in enumerate(allLoader):
+      for batchIdx, (images, masks) in enumerate(self.allLoader):
         # Move images to the selected device.
-        images = images.to(device)
+        images = images.to(self.device)
         # Forward pass through the model to obtain logits.
-        logits = model(images)
+        logits = self.model(images)
 
         # Check whether the logits have a single channel indicating binary segmentation.
         if (logits.shape[1] == 1):
@@ -678,7 +601,7 @@ def Run():
           # Threshold probabilities at 0.5 to obtain binary predictions.
           preds = (probs > 0.5).long().squeeze(1)
         # Handle the multi-class logits case when channels > 1.
-        if (logits.shape[1] != 1):
+        else:
           # Compute argmax across the channel dimension for multi-class predictions.
           preds = torch.argmax(logits, dim=1)
 
@@ -690,18 +613,18 @@ def Run():
 
           # Compute the absolute sample index within the dataset.
           sampleIdx = batchIdx * (
-            allLoader.batch_size
-            if ((hasattr(allLoader, "batch_size") and allLoader.batch_size is not None)) else 1
+            self.allLoader.batch_size
+            if ((hasattr(self.allLoader, "batch_size") and self.allLoader.batch_size is not None)) else 1
           )
           # Add the intra-batch index to obtain the final sample index.
           sampleIdx += i
-          origImagePath = allLoader.dataset.imagePaths[sampleIdx]
+          origImagePath = self.allLoader.dataset.imagePaths[sampleIdx]
           # Extract the basename of the original image to use as the output filename.
           origBaseName = os.path.basename(origImagePath)
 
           # Build the output path using the original filename.
-          predOutputPath = os.path.join(predsDir, origBaseName)
-          actualOutputPath = os.path.join(actualDir, origBaseName)
+          predOutputPath = os.path.join(self.predsDir, origBaseName)
+          actualOutputPath = os.path.join(self.actualDir, origBaseName)
           # Write the mask image to disk using OpenCV at the built path.
           cv2.imwrite(predOutputPath, predMask)
           cv2.imwrite(actualOutputPath, targetMask)
@@ -719,7 +642,7 @@ def Run():
               # Resize prediction using nearest neighbor interpolation.
               resized = cv2.resize(_pm, (targetW, targetH), interpolation=cv2.INTER_NEAREST)
               # Convert resized prediction back to integer labels.
-              predMask = resized.astype(np.int64)
+              predMask = resized.astype(np.uint8)
             except Exception as e:
               # Record a failure when resize fails.
               failedImages.append({"image": origBaseName, "reason": f"shape mismatch and resize failed: {e}"})
@@ -728,10 +651,10 @@ def Run():
 
           # Now call each metric function with (preds, targets). Wrap in try/except per metric.
           row = {"image": origBaseName}
-          for mname, mfn in metricsFns.items():
+          for mname, mfn in self.metricsFns.items():
             try:
               # Call the metric function with the prediction and target masks.
-              val = mfn(predMask, targetMask)
+              val = mfn(predMask / 255.0, targetMask / 255.0)
               # If the metric returns a tensor, convert to a Python scalar.
               if (hasattr(val, "item")):
                 val = val.item()
@@ -749,12 +672,6 @@ def Run():
 
           # Append the per-image metric row to the list.
           perImageMetrics.append(row)
-
-          # Prepare and save overlay images showing Original | PredOverlay (red) | TargetOverlay (green).
-          # Build overlays output directory inside the experiment output dir.
-          overlaysDir = os.path.join(hparams.get("OutputDir", "Output"), "Overlays")
-          # Ensure the overlays directory exists.
-          os.makedirs(overlaysDir, exist_ok=True)
 
           # Attempt to create an overlay for this sample; wrap in try/except to avoid breaking the loop on failure.
           try:
@@ -808,15 +725,17 @@ def Run():
             if (predMaskBin.shape != baseUint8.shape[:2]):
               try:
                 predMaskBin = cv2.resize(
-                  predMaskBin.astype(np.uint8), (baseUint8.shape[1], baseUint8.shape[0]),
-                  interpolation=cv2.INTER_NEAREST
+                  predMaskBin.astype(np.uint8),
+                  (baseUint8.shape[1], baseUint8.shape[0]),
+                  interpolation=cv2.INTER_NEAREST,
                 )
               except Exception:
                 predMaskBin = np.zeros(baseUint8.shape[:2], dtype=np.uint8)
             if (targetMaskBin.shape != baseUint8.shape[:2]):
               try:
                 targetMaskBin = cv2.resize(
-                  targetMaskBin.astype(np.uint8), (baseUint8.shape[1], baseUint8.shape[0]),
+                  targetMaskBin.astype(np.uint8),
+                  (baseUint8.shape[1], baseUint8.shape[0]),
                   interpolation=cv2.INTER_NEAREST
                 )
               except Exception:
@@ -830,13 +749,16 @@ def Run():
             redColor = np.array([255, 0, 0], dtype=np.uint8)
             pmIdx = predMaskBin.astype(bool)
             predOverlay[pmIdx] = (
-                0.65 * predOverlay[pmIdx].astype(np.float32) + 0.35 * redColor.astype(np.float32)).astype(np.uint8)
+                0.65 * predOverlay[pmIdx].astype(np.float32) +
+                0.35 * redColor.astype(np.float32)
+            ).astype(np.uint8)
 
             # Apply green tint where target mask is present.
             greenColor = np.array([0, 255, 0], dtype=np.uint8)
             tmIdx = targetMaskBin.astype(bool)
             targetOverlay[tmIdx] = (
-                0.65 * targetOverlay[tmIdx].astype(np.float32) + 0.35 * greenColor.astype(np.float32)
+                0.65 * targetOverlay[tmIdx].astype(np.float32) +
+                0.35 * greenColor.astype(np.float32)
             ).astype(np.uint8)
 
             # Concatenate original, predOverlay, and targetOverlay horizontally.
@@ -846,11 +768,13 @@ def Run():
               merged = baseUint8.copy()
               # Apply green tint for target mask locations with 50% blending.
               merged[tmIdx] = (
-                  0.65 * merged[tmIdx].astype(np.float32) + 0.35 * greenColor.astype(np.float32)
+                  0.65 * merged[tmIdx].astype(np.float32) +
+                  0.35 * greenColor.astype(np.float32)
               ).astype(np.uint8)
               # Apply red tint for prediction mask locations with 50% blending.
               merged[pmIdx] = (
-                  0.65 * merged[pmIdx].astype(np.float32) + 0.35 * redColor.astype(np.float32)
+                  0.65 * merged[pmIdx].astype(np.float32) +
+                  0.35 * redColor.astype(np.float32)
               ).astype(np.uint8)
               # Use merged as the single output image.
               combined = merged
@@ -863,25 +787,22 @@ def Run():
 
             # Build an output filename for the overlay and write the image to disk.
             overlayName = f"{os.path.splitext(origBaseName)[0]}_Overlay_S{sampleIdx}.png"
-            overlayPath = os.path.join(overlaysDir, overlayName)
+            overlayPath = os.path.join(self.overlaysDir, overlayName)
             try:
               Image.fromarray(combined).save(overlayPath)
             except Exception:
-              try:
-                cv2.imwrite(overlayPath, cv2.cvtColor(combined, cv2.COLOR_RGB2BGR))
-              except Exception:
-                pass
+              cv2.imwrite(overlayPath, cv2.cvtColor(combined, cv2.COLOR_RGB2BGR))
           except Exception:
             # Ignore overlay generation failures and continue the loop.
             pass
 
     # Build paths for primary and additional metrics files.
-    metricsCsvPath = os.path.join(metricsDir, "PerImageMetrics.csv")
-    metricsSummaryPath = os.path.join(metricsDir, "MetricsSummary.json")
-    top75CsvPath = os.path.join(metricsDir, "Top75PercentMetrics.csv")
-    top75SummaryPath = os.path.join(metricsDir, "Top75PercentSummary.json")
-    worst10CsvPath = os.path.join(metricsDir, "Worst10PercentMetrics.csv")
-    worst10SummaryPath = os.path.join(metricsDir, "Worst10PercentSummary.json")
+    metricsCsvPath = os.path.join(self.metricsDir, "PerImageMetrics.csv")
+    metricsSummaryPath = os.path.join(self.metricsDir, "MetricsSummary.json")
+    top75CsvPath = os.path.join(self.metricsDir, "Top75PercentMetrics.csv")
+    top75SummaryPath = os.path.join(self.metricsDir, "Top75PercentSummary.json")
+    worst10CsvPath = os.path.join(self.metricsDir, "Worst10PercentMetrics.csv")
+    worst10SummaryPath = os.path.join(self.metricsDir, "Worst10PercentSummary.json")
 
     # Define helper to map raw metric values into a 0-1 higher-is-better score.
     def MetricToScore(metricName, value):
@@ -927,7 +848,7 @@ def Run():
     for r in perImageMetrics:
       # Collect per-metric transformed scores.
       scores = []
-      for mname in metricsFns.keys():
+      for mname in self.metricsFns.keys():
         s = MetricToScore(mname, r.get(mname))
         if (s is not None):
           scores.append(s)
@@ -960,7 +881,7 @@ def Run():
     # Save the primary per-image CSV using CamelCase Image column.
     if (len(perImageMetrics) > 0):
       # CSV fieldnames include Image and metric names plus AggregateScore.
-      fieldnames = ["Image"] + [k for k in metricsFns.keys()] + ["AggregateScore"]
+      fieldnames = ["Image"] + [k for k in self.metricsFns.keys()] + ["AggregateScore"]
       try:
         with open(metricsCsvPath, "w", newline="") as csvfile:
           writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -968,7 +889,7 @@ def Run():
           for r in perImageMetrics:
             # Map existing row keys to CamelCase Image key for output.
             outRow = {"Image": r.get("image")}
-            for k in metricsFns.keys():
+            for k in self.metricsFns.keys():
               outRow[k] = r.get(k)
             outRow["AggregateScore"] = r.get("AggregateScore")
             writer.writerow(outRow)
@@ -977,10 +898,12 @@ def Run():
 
     # Compute the overall summary statistics for all images.
     overallSummary = {"NImages": len(perImageMetrics), "NFailed": len(failedImages), "Mean": {}, "Std": {}}
-    for mname in metricsFns.keys():
+    for mname in self.metricsFns.keys():
       vals = [r.get(mname) for r in perImageMetrics if (r.get(mname) is not None)]
       if (len(vals) > 0):
         arr = np.array(vals, dtype=float)
+        print(f"Metric {mname} - Mean: {np.nanmean(arr):.4f}, Std: {np.nanstd(arr):.4f}")
+        print(np.mean(arr), np.std(arr))
         overallSummary["Mean"][mname] = float(np.nanmean(arr))
         overallSummary["Std"][mname] = float(np.nanstd(arr))
       else:
@@ -989,23 +912,19 @@ def Run():
     overallSummary["FailedImages"] = failedImages
 
     # Write the overall summary JSON.
-    try:
-      with open(metricsSummaryPath, "w") as jf:
-        json.dump(overallSummary, jf, indent=2)
-    except Exception as e:
-      print(f"Failed to write metrics summary JSON: {e}")
+    DumpJsonFile(metricsSummaryPath, overallSummary)
 
     # Helper to write a subset CSV and compute its aggregated metrics.
     def WriteSubsetFiles(rows, csvPath, summaryPath, subsetName):
       # Write CSV for selected rows.
       try:
         with open(csvPath, "w", newline="") as csvfile:
-          fieldnames = ["Image"] + [k for k in metricsFns.keys()] + ["AggregateScore"]
+          fieldnames = ["Image"] + [k for k in self.metricsFns.keys()] + ["AggregateScore"]
           writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
           writer.writeheader()
           for r in rows:
             outRow = {"Image": r.get("image")}
-            for k in metricsFns.keys():
+            for k in self.metricsFns.keys():
               outRow[k] = r.get(k)
             outRow["AggregateScore"] = r.get("AggregateScore")
             writer.writerow(outRow)
@@ -1014,7 +933,7 @@ def Run():
 
       # Compute summary averages for this subset.
       subsetSummary = {"NImages": len(rows), "Mean": {}, "Std": {}}
-      for mname in metricsFns.keys():
+      for mname in self.metricsFns.keys():
         vals = [r.get(mname) for r in rows if (r.get(mname) is not None)]
         if (len(vals) > 0):
           arr = np.array(vals, dtype=float)
@@ -1027,11 +946,7 @@ def Run():
       subsetSummary["Images"] = [r.get("image") for r in rows]
 
       # Write JSON summary for the subset.
-      try:
-        with open(summaryPath, "w") as jf:
-          json.dump(subsetSummary, jf, indent=2)
-      except Exception as e:
-        print(f"Failed to write {subsetName} summary JSON: {e}")
+      DumpJsonFile(summaryPath, subsetSummary)
 
     # Write top 75% files when available.
     if (len(top75Rows) > 0):
@@ -1042,11 +957,140 @@ def Run():
       WriteSubsetFiles(worst10Rows, worst10CsvPath, worst10SummaryPath, "Worst10Percent")
 
     # Print final status messages about saved files.
-    print(f"Saved {globalIdx} predicted masks to: {predsDir}.")
+    print(f"Saved {globalIdx} predicted masks to: {self.predsDir}.")
     print(f"Per-image metrics: {metricsCsvPath}")
     print(f"Metrics summary: {metricsSummaryPath}")
     print(f"Top 75% metrics: {top75CsvPath} and {top75SummaryPath}")
     print(f"Worst 10% metrics: {worst10CsvPath} and {worst10SummaryPath}")
+
+
+# Define the main Run function which executes training or inference phases.
+def Run():
+  # Parse command-line arguments into a hyperparameters dictionary.
+  hparams = ParseArgs()
+
+  # Decide which device to use for inference based on availability and hparams.
+  if (torch.cuda.is_available() and (hparams.get("Device", "cuda").startswith("cuda"))):
+    # Select the requested CUDA device.
+    device = torch.device(hparams.get("Device", "cuda"))
+  else:
+    # Fall back to CPU device when CUDA is not available or not requested.
+    device = torch.device("cpu")
+  # Print which device will be used.
+  print(f"Using device: {device}")
+
+  # Create or obtain training, validation and combined loaders as before.
+  trainLoader, valLoader, allLoader = CreateSegmentationDataLoaders(
+    hparams.get("DataDir", "Data"),
+    imageSize=hparams.get("ImageSize", 256),
+    batchSize=hparams.get("BatchSize", 8) if (hparams.get("Phase", "Train") == "Train") else 1,
+    numWorkers=hparams.get("NumWorkers", 4),
+    numClasses=hparams.get("NumClasses", 1)
+  )
+  # Print counts for sanity.
+  print(f"Training samples: {len(trainLoader.dataset)}, Validation samples: {len(valLoader.dataset)}")
+
+  # Validate created dataloaders.
+  if ((trainLoader is None) or (valLoader is None)):
+    # Raise error when loaders failed to create.
+    raise RuntimeError("Failed to create dataloaders for inference.")
+  elif (len(valLoader.dataset) == 0 or len(trainLoader.dataset) == 0):
+    # Raise error when datasets are empty.
+    raise RuntimeError("No samples found for inference in the specified DataDir.")
+
+  # Get the min, max, and mean pixel values from the training dataset.
+  # pixelStats = trainLoader.dataset.GetPixelStats()
+  # for statName, statValue in pixelStats.items():
+  #   print(f"{statName}: {statValue}")
+
+  # Instantiate the requested model via the factory.
+  model = GetUNetModel(
+    hparams.get("ModelName", "UNet"),
+    inputChannels=3,
+    numClasses=hparams.get("NumClasses", 1)
+  )
+  # Print which model was instantiated.
+  print(f"Model {hparams.get('ModelName', 'UNet')} instantiated.")
+  # Move the model to the selected device.
+  model.to(device)
+
+  # Save hyperparameters to the output directory.
+  SaveHparams(hparams, hparams.get("OutputDir", "Output"))
+
+  # Create optimizer using helper function.
+  optimizer = GetOptimizer(
+    model,
+    optimizerType=hparams.get("Optimizer", "adamw"),
+    learningRate=hparams.get("LearningRate", 1e-4),
+    weightDecay=hparams.get("WeightDecay", 1e-6)
+  )
+  # Print which optimizer was created.
+  print(f"Optimizer {hparams.get('Optimizer', 'Adam')} created.")
+
+  # Create a scheduler; use ReduceLROnPlateau by default.
+  scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
+  # Print scheduler creation message.
+  print("Scheduler ReduceLROnPlateau created.")
+
+  # Select an appropriate loss function depending on number of classes.
+  if (hparams.get("NumClasses", 1) == 1):
+    # Use binary loss for single-class segmentation.
+    lossFn = nn.BCEWithLogitsLoss()
+  else:
+    # Use cross-entropy for multi-class segmentation.
+    lossFn = nn.CrossEntropyLoss()
+  # Print loss function creation message.
+  print("Loss function created.")
+
+  # Create Trainer instance to run training.
+  segObj = PyTorchUNetSegmentation(
+    model,
+    trainLoader,
+    valLoader,
+    allLoader,
+    optimizer,
+    scheduler,
+    lossFn,
+    device=device,
+    outputDir=hparams.get("OutputDir", "Output"),
+    dpi=hparams.get("DPI", 720)
+  )
+
+  # If resume checkpoint is provided, load it and resume.
+  if (hparams.get("ResumeCheckpoint", "") != ""):
+    # Load checkpoint into trainer if requested.
+    segObj.LoadCheckpoint(hparams.get("ResumeCheckpoint"))
+    # Print checkpoint resume message.
+    print("Resumed from checkpoint:", hparams.get("ResumeCheckpoint"))
+
+  # Check if the output directory already exists and contains checkpoints.
+  if (os.path.exists(segObj.checkpointDir) and os.path.isdir(segObj.checkpointDir)):
+    requiredFile = "CheckpointBest.pth"
+    checkpointFiles = os.listdir(segObj.checkpointDir)
+    if (requiredFile in checkpointFiles):
+      print(f"Warning: Checkpoint directory {segObj.checkpointDir} already contains {requiredFile}.")
+      # Load the existing checkpoint to avoid overwriting and to continue training or inference.
+      existingCheckpointPath = os.path.join(segObj.checkpointDir, requiredFile)
+      segObj.LoadCheckpoint(existingCheckpointPath)
+      print(f"Loaded existing checkpoint from {existingCheckpointPath} to continue training/inference.")
+    else:
+      print(f"No existing checkpoint found in {segObj.checkpointDir}. Starting fresh.")
+  else:
+    print(f"Checkpoint directory {segObj.checkpointDir} does not exist. Starting fresh.")
+
+  # Check if the requested phase is Train or Infer and execute accordingly.
+  # If the requested phase is Train, run training and return.
+  if (hparams.get("Phase", "Infer") == "Train"):
+    print("Starting training...")
+    # Run training for the specified number of epochs.
+    segObj.Train(hparams.get("NumEpochs", 50))
+    print("Training completed.")
+
+  elif (hparams.get("Phase", "Infer") == "Infer"):
+    print("Starting inference...")
+    # Run inference to save predicted masks and compute metrics.
+    segObj.Inference()
+    print("Inference completed.")
 
 
 # Execute the inference runner when this script is run directly.
@@ -1078,3 +1122,5 @@ if (__name__ == "__main__"):
   # python Main.py --DataDir "Data-Tooth" --ModelName "BoundaryAwareUNet" --OutputDir "Test-BoundaryAwareUNet" --Phase "Infer" --ResumeCheckpoint "Test-BoundaryAwareUNet\\Checkpoints\\checkpoint_best.pth".
   # python Main.py --DataDir "Data-Pulp" --ModelName "BoundaryAwareUNet" --OutputDir "Pulp-BoundaryAwareUNet" --Phase "Infer" --ResumeCheckpoint "Pulp-BoundaryAwareUNet\\Checkpoints\\checkpoint_best.pth".
   # python Main.py --DataDir "Data-Bone" --ModelName "BoundaryAwareUNet" --OutputDir "Bone-BoundaryAwareUNet" --Phase "Infer" --ResumeCheckpoint "Bone-BoundaryAwareUNet\\Checkpoints\\checkpoint_best.pth".
+
+  # python PyTorch_UNet_Segmentation.py --DataDir "D:\Book Chapter\Second Book Chapter\Brain Tumor Segmentation" --ModelName "CBAMUNet" --OutputDir "D:\Book Chapter\Second Book Chapter\CBAMUNet_1_T1" --Phase "Infer" --ResumeCheckpoint "D:\Book Chapter\Second Book Chapter\CBAMUNet_1_T1\Checkpoints\\CheckpointBest.pth"

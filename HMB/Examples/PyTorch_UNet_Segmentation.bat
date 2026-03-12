@@ -23,6 +23,7 @@ set "NumClasses=1"
 set "ResumeCheckpoint="
 set "USE_AMP=0"
 set "TRIALS=1"
+set "DPI=720"
 
 n:: Iterate trials and batch sizes
 for %%T in (%TRIALS%) do (
@@ -41,6 +42,7 @@ for %%T in (%TRIALS%) do (
       )
     )
     if "%USE_AMP%"=="1" set "CMD=!CMD! --UseAMP"
+    set "CMD=!CMD! --DPI %DPI%"
 
     echo Running: !CMD!
     cmd /C "!CMD!"

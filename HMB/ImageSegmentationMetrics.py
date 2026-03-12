@@ -1,4 +1,5 @@
 import numpy as np
+from HMB.ImagesHelper import MinMaxNormalization
 
 
 def ComputeIoU(preds, targets, smooth=1.0, iouType="binary", weight=None):
@@ -50,6 +51,10 @@ def ComputeIoU(preds, targets, smooth=1.0, iouType="binary", weight=None):
     iouWeighted = ism.ComputeIoU(preds, targets, iouType="weighted", weight=weight)
     print(f"Weighted IoU: {iouWeighted}")
   '''
+
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
 
   if (iouType == "binary"):
     # Threshold predictions at 0.5 to obtain binary mask.
@@ -111,6 +116,10 @@ def ComputeDice(preds, targets, smooth=1.0):
     print(f"Dice: {dice}")
   '''
 
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
+
   # Threshold predictions at 0.5 to obtain binary mask.
   # Convert logits to binary predictions.
   preds = np.float32(preds > 0.5)
@@ -118,8 +127,8 @@ def ComputeDice(preds, targets, smooth=1.0):
   intersection = (preds * targets).sum()
   # Calculate the Dice coefficient using the formula.
   dice = (
-    (2.0 * intersection + smooth) /
-    (preds.sum() + targets.sum() + smooth)
+      (2.0 * intersection + smooth) /
+      (preds.sum() + targets.sum() + smooth)
   )
   # Return the computed Dice coefficient.
   return dice
@@ -155,6 +164,10 @@ def ComputePixelAccuracy(preds, targets):
     acc = ism.ComputePixelAccuracy(preds, targets)
     print(f"Pixel Accuracy: {acc}")
   '''
+
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
 
   # Convert logits to binary predictions.
   preds = np.float32(preds > 0.5)
@@ -197,6 +210,10 @@ def ComputePrecision(preds, targets):
     precision = ism.ComputePrecision(preds, targets)
     print(f"Precision: {precision}")
   '''
+
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
 
   # Convert logits to binary predictions.
   preds = np.float32(preds > 0.5)
@@ -241,6 +258,10 @@ def ComputeRecall(preds, targets):
     print(f"Recall: {recall}")
   '''
 
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
+
   # Convert logits to binary predictions.
   preds = np.float32(preds > 0.5)
   # Calculate the number of true positives.
@@ -283,6 +304,10 @@ def ComputeSpecificity(preds, targets):
     specificity = ism.ComputeSpecificity(preds, targets)
     print(f"Specificity: {specificity}")
   '''
+
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
 
   # Convert logits to binary predictions.
   preds = np.float32(preds > 0.5)
@@ -327,6 +352,10 @@ def ComputeFPR(preds, targets):
     print(f"FPR: {fpr}")
   '''
 
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
+
   # Convert logits to binary predictions.
   preds = np.float32(preds > 0.5)
   # Calculate the number of false positives.
@@ -369,6 +398,10 @@ def ComputeFNR(preds, targets):
     fnr = ism.ComputeFNR(preds, targets)
     print(f"FNR: {fnr}")
   '''
+
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
 
   # Convert logits to binary predictions.
   preds = np.float32(preds > 0.5)
@@ -413,6 +446,10 @@ def ComputeF1Score(preds, targets):
     print(f"F1 Score: {f1}")
   '''
 
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
+
   # Calculate precision and recall.
   precision = ComputePrecision(preds, targets)
   recall = ComputeRecall(preds, targets)
@@ -456,6 +493,10 @@ def ComputeMeanAveragePrecision(preds, targets):
     mapScore = ism.ComputeMeanAveragePrecision(preds, targets)
     print(f"mAP: {mapScore}")
   '''
+
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
 
   # Convert logits to binary predictions.
   preds = np.float32(preds > 0.5)
@@ -505,6 +546,10 @@ def ComputeHausdorffDistance(preds, targets):
   '''
 
   from scipy.spatial.distance import directed_hausdorff
+
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
 
   # Convert logits to binary predictions.
   preds = np.float32(preds > 0.5)
@@ -561,6 +606,10 @@ def ComputeBoundaryF1Score(preds, targets, dilationRatio=0.02, eps=1e-7):
 
   from scipy.ndimage import binary_dilation, binary_erosion
 
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
+
   preds = np.float32(preds > 0.5)
   targets = np.float32(targets > 0.5)
 
@@ -579,12 +628,12 @@ def ComputeBoundaryF1Score(preds, targets, dilationRatio=0.02, eps=1e-7):
   targetDil = binary_dilation(targetBoundary, iterations=1)
   # Precision and recall for boundaries.
   precision = (
-    (predBoundary * targetDil).sum() /
-    (predBoundary.sum() + eps)
+      (predBoundary * targetDil).sum() /
+      (predBoundary.sum() + eps)
   )
   recall = (
-    (targetBoundary * predDil).sum() /
-    (targetBoundary.sum() + eps)
+      (targetBoundary * predDil).sum() /
+      (targetBoundary.sum() + eps)
   )
   bfScore = 2.0 * precision * recall / (precision + recall + eps)
   return bfScore
@@ -622,6 +671,10 @@ def ComputeMatthewsCorrelationCoefficient(preds, targets):
     mcc = ism.ComputeMatthewsCorrelationCoefficient(preds, targets)
     print(f"Matthews Correlation Coefficient: {mcc}")
   '''
+
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
 
   # Convert logits to binary predictions.
   preds = np.float32(preds > 0.5)
@@ -675,6 +728,10 @@ def ComputeCohensKappa(preds, targets):
     print(f"Cohen's Kappa: {kappa}")
   '''
 
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
+
   # Convert logits to binary predictions.
   preds = np.float32(preds > 0.5)
   # Calculate the number of true positives.
@@ -693,9 +750,9 @@ def ComputeCohensKappa(preds, targets):
   Po = (TP + TN) / total
   # Calculate expected accuracy.
   Pe = (
-    ((TP + FP) * (TP + FN) +
-     (FN + TN) * (FP + TN)) /
-    (total * total)
+      ((TP + FP) * (TP + FN) +
+       (FN + TN) * (FP + TN)) /
+      (total * total)
   )
   if ((1.0 - Pe) == 0):
     return 0.0
@@ -733,6 +790,10 @@ def ComputeBalancedAccuracy(preds, targets):
     balancedAcc = ism.ComputeBalancedAccuracy(preds, targets)
     print(f"Balanced Accuracy: {balancedAcc}")
   '''
+
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
 
   # Calculate recall.
   recall = ComputeRecall(preds, targets)
@@ -775,6 +836,10 @@ def ComputeMeanSurfaceDistance(preds, targets):
   '''
 
   from scipy.ndimage import distance_transform_edt
+
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
 
   # Convert logits to binary predictions.
   preds = np.float32(preds > 0.5)
@@ -827,6 +892,10 @@ def ComputeAverageSymmetricSurfaceDistance(preds, targets):
     print(f"Average Symmetric Surface Distance: {assd}")
   '''
 
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
+
   # Calculate MSD from prediction to target.
   msd1 = ComputeMeanSurfaceDistance(preds, targets)
   # Calculate MSD from target to prediction.
@@ -866,6 +935,10 @@ def ComputeVolumetricOverlapError(preds, targets, smooth=1.0):
     print(f"Volumetric Overlap Error: {voe}")
   '''
 
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
+
   # Calculate IoU value.
   iou = ComputeIoU(preds, targets, smooth=smooth, iouType="binary")
   # Return VOE value.
@@ -903,6 +976,10 @@ def ComputeGlobalConsistencyError(preds, targets):
     gce = ism.ComputeGlobalConsistencyError(preds, targets)
     print(f"Global Consistency Error: {gce}")
   '''
+
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
 
   # Convert logits to binary predictions.
   preds = np.float32(preds > 0.5)
@@ -951,6 +1028,10 @@ def ComputeTversky(preds, targets, alpha=0.5):
     print(f"Tversky Index: {tversky}")
   '''
 
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
+
   # Convert logits to binary predictions.
   preds = np.float32(preds > 0.5)
   # Calculate the number of true positives.
@@ -998,6 +1079,10 @@ def ComputeFocalTverskyLoss(preds, targets, alpha=0.5, gamma=np.round(4 / 3.0, 5
     print(f"Focal Tversky Index: {focalTversky}")
   '''
 
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
+
   # Calculate the Tversky index.
   tversky = ComputeTversky(preds, targets, alpha)
   # Return the Focal Tversky value.
@@ -1041,14 +1126,18 @@ def ComputeFocalLoss(preds, targets, beta=0.5, gamma=2.0, eps=1e-7):
     print(f"Focal Loss: {loss}")
   '''
 
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
+
   # Clip predictions to avoid log(0) error.
   preds = np.clip(preds, eps, 1.0 - eps)
   # Calculate the focal loss.
   loss = (
-    beta * np.power((1.0 - preds), gamma) *
-    targets * np.log(preds)
-    + (1.0 - beta) * np.power(preds, gamma) *
-    (1.0 - targets) * np.log(1.0 - preds)
+      beta * np.power((1.0 - preds), gamma) *
+      targets * np.log(preds)
+      + (1.0 - beta) * np.power(preds, gamma) *
+      (1.0 - targets) * np.log(1.0 - preds)
   )
   # Return the mean focal loss value.
   return -np.mean(loss)
@@ -1090,6 +1179,10 @@ def ComputeComboLoss(preds, targets, alpha=0.5, beta=0.5, smooth=1.0, eps=1e-7):
     loss = ism.ComputeComboLoss(preds, targets)
     print(f"Combo Loss: {loss}")
   '''
+
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
 
   # Calculate the Dice coefficient.
   dice = float(ComputeDice(preds, targets, smooth))
@@ -1136,14 +1229,18 @@ def ComputeTanimotoLoss(preds, targets):
     print(f"Tanimoto Loss: {loss}")
   '''
 
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
+
   # Convert logits to binary predictions.
   preds = np.float32(preds > 0.5)
   # Calculate the numerator and denominator for Tanimoto loss.
   num = (preds * targets).sum()
   den = (
-    (preds ** 2).sum() +
-    (targets ** 2).sum() -
-    (preds * targets).sum()
+      (preds ** 2).sum() +
+      (targets ** 2).sum() -
+      (preds * targets).sum()
   )
   # Return the Tanimoto loss value.
   return 1.0 - num / den
@@ -1180,6 +1277,10 @@ def ComputeMSELoss(preds, targets):
     loss = ism.ComputeMSELoss(preds, targets)
     print(f"MSE Loss: {loss}")
   '''
+
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
 
   # Calculate the Mean Squared Error (MSE) loss.
   return np.mean((preds - targets) ** 2)
@@ -1218,6 +1319,10 @@ def ComputeBCELoss(preds, targets, smooth=1e-7):
     loss = ism.ComputeBCELoss(preds, targets)
     print(f"BCE Loss: {loss}")
   '''
+
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
 
   # Clip predictions to avoid log(0) error.
   preds = np.clip(preds, smooth, 1.0 - smooth)
@@ -1276,6 +1381,10 @@ def ComputeHMBLoss(preds, targets):
 
   '''
 
+  # Normalize predictions and targets to [0, 1] range if they are not already.
+  preds = MinMaxNormalization(preds, mapToUint8=False)  # Normalize predictions to [0, 1].
+  targets = MinMaxNormalization(targets, mapToUint8=False)  # Normalize targets to [0, 1].
+
   # Calculate individual loss components.
   mseLoss = ComputeMSELoss(preds, targets)  # Distance-based.
   diceLoss = 1.0 - ComputeDice(preds, targets)  # Region-based.
@@ -1301,12 +1410,12 @@ def ComputeHMBLoss(preds, targets):
 
   # Calculate the weighted average loss.
   avgLoss = (
-    weights[0] * mseLoss
-    + weights[1] * diceLoss
-    + weights[2] * iouLoss
-    + weights[3] * tverskyLoss
-    + weights[4] * bceLoss
-    + weights[5] * tanimotoLoss
+      weights[0] * mseLoss
+      + weights[1] * diceLoss
+      + weights[2] * iouLoss
+      + weights[3] * tverskyLoss
+      + weights[4] * bceLoss
+      + weights[5] * tanimotoLoss
   )
 
   return avgLoss
