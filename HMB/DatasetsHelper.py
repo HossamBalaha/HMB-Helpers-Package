@@ -26,24 +26,79 @@ class RawImageFolder(object):
     - The __getitem__ method returns the file path and label index for a given sample index, allowing for lazy loading of images.
   '''
 
-  def __init__(self, root):
+  def __init__(self, root, rootType="str", categories=None):
     r'''
-    Initialize the RawImageFolder by scanning the root directory for class subfolders and image files.
+    Initialize the `RawImageFolder` by scanning the root directory for class subfolders and image files.
 
     Parameters:
-      root (str): Path to the root directory containing class subfolders with images.
+      root (str|dict): If `rootType` is "str", this should be a string path to the dataset root directory containing class subfolders. If `rootType` is "dict", this should be a dictionary mapping split names ("train", "val", "test") to their respective root directories.
+      rootType (str): Type of the root parameter, either "str" for a single directory or "dict" for split-based directories. Default is "str".
+      categories (list|None): Optional list of category names to include. If None, all subdirectories in the root will be considered as classes.
     '''
 
-    self.samples = []  # list of (path, label)
+    from sklearn.preprocessing import LabelEncoder
+
     self.classToIdx = {}
-    self.classes = sorted(entry.name for entry in os.scandir(root) if (entry.is_dir()))
-    self.classToIdx = {clsName: idx for idx, clsName in enumerate(self.classes)}
-    for targetClass in self.classes:
-      classDir = os.path.join(root, targetClass)
-      for fname in sorted(os.listdir(classDir)):
-        if (fname.lower().endswith(tuple(IMAGE_SUFFIXES))):
-          path = os.path.join(classDir, fname)
-          self.samples.append((path, self.classToIdx[targetClass]))
+    self.splits = []
+    self.labels = []
+    self.paths = []
+    self.labelEncoder = LabelEncoder()
+    self.encodedLabels = []
+
+    if (rootType == "str"):
+      if (not os.path.exists(root)):
+        raise ValueError(f"Root directory not found: {root}")
+
+      if (categories is not None):
+        self.classes = sorted(
+          entry.name for entry in os.scandir(root) if (entry.is_dir())
+        )
+      else:
+        self.classes = sorted(categories)
+
+      self.classToIdx = {clsName: idx for idx, clsName in enumerate(self.classes)}
+
+      for targetClass in self.classes:
+        classDir = os.path.join(root, targetClass)
+        for fname in sorted(os.listdir(classDir)):
+          if (fname.lower().endswith(tuple(IMAGE_SUFFIXES))):
+            path = os.path.join(classDir, fname)
+            # self.samples.append((path, self.classToIdx[targetClass]))
+            self.paths.append(path)
+            self.labels.append(self.classToIdx[targetClass])
+
+      self.encodedLabels = self.labelEncoder.fit_transform(self.labels)
+
+    elif (rootType == "dict"):
+      if (not isinstance(root, dict)):
+        raise ValueError("Expected root to be a dict mapping splits to container paths.")
+
+      # Ensure that the keys are "train", "val", and "test".
+      expectedSplits = {"train", "val", "test"}
+      if (not expectedSplits.issubset(root.keys())):
+        raise ValueError(f"Expected root dict to contain keys: {expectedSplits}")
+
+      # Walk the dataset folders and collect all image paths with labels and split info.
+      for splitName, basePath in root.items():
+        for category in categories:
+          # Build category directory path.
+          categoryPath = os.path.join(basePath, category)
+          # Check whether the category path exists before listing files.
+          if (os.path.exists(categoryPath)):
+            for imageName in os.listdir(categoryPath):
+              # Build full image path.
+              imagePath = os.path.join(categoryPath, imageName)
+              # Append image path to list.
+              self.paths.append(imagePath)
+              # Append label to list.
+              self.labels.append(category)
+              # Append split (train/val/test) to list.
+              self.splits.append(splitName)
+
+      self.encodedLabels = self.labelEncoder.fit_transform(self.labels)
+
+    else:
+      raise ValueError(f"Unsupported rootType: {rootType}. Expected 'str' or 'dict'.")
 
   def __len__(self):
     r'''
@@ -53,7 +108,7 @@ class RawImageFolder(object):
       int: Total number of samples (images) in the dataset.
     '''
 
-    return len(self.samples)
+    return len(self.paths)
 
   def __getitem__(self, idx):
     r'''
@@ -66,8 +121,69 @@ class RawImageFolder(object):
       tuple: A tuple containing the image file path (str) and the corresponding label index (int).
     '''
 
-    path, label = self.samples[idx]
-    return path, label  # Return path, not image tensor.
+    return (self.paths[idx], self.labels[idx])
+
+  def ToDataFrame(self):
+    r'''
+    Convert the dataset samples into a pandas DataFrame for easier manipulation.
+
+    Returns:
+      pandas.DataFrame: A DataFrame with columns "image_path", "label", and "split" (if available).
+    '''
+
+    import pandas as pd
+
+    data = {
+      "image_path"      : self.paths,
+      "label"           : self.labels,
+      "category_encoded": self.encodedLabels.tolist(),
+    }
+    if (self.splits):
+      data["split"] = self.splits
+
+    df = pd.DataFrame(data)
+
+    # Ensure that the DataFrame labels columns are strings.
+    df["label"] = df["label"].astype(str)
+    df["category_encoded"] = df["category_encoded"].astype(str)
+
+    return df
+
+  def GetLabelEncoder(self):
+    r'''
+    Get the fitted LabelEncoder instance for encoding and decoding labels.
+
+    Returns:
+      sklearn.preprocessing.LabelEncoder: The fitted LabelEncoder instance.
+    '''
+
+    return self.labelEncoder
+
+  def EncodeLabel(self, label):
+    r'''
+    Encode a string label into its corresponding integer index using the fitted LabelEncoder.
+
+    Parameters:
+      label (str): The string label to encode.
+
+    Returns:
+      int: The integer index corresponding to the provided string label.
+    '''
+
+    return self.labelEncoder.transform([label])[0]
+
+  def DecodeLabel(self, index):
+    r'''
+    Decode an integer label index back into its corresponding string label using the fitted LabelEncoder.
+
+    Parameters:
+      index (int): The integer index to decode.
+
+    Returns:
+      str: The string label corresponding to the provided integer index.
+    '''
+
+    return self.labelEncoder.inverse_transform([index])[0]
 
 
 class GenericImagesDatasetHandler(object):

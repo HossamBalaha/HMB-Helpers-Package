@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from typing import List
 from collections import Counter
-from HMB.PlotsHelper import GetCmapColors
+from HMB.PlotsHelper import GetCmapColors, GetRandomCMAPalette
 
 
 def CalculatePerformanceMetrics(
@@ -332,8 +332,11 @@ def PlotConfusionMatrix(
     # Normalize the confusion matrix by row sums.
     cm = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]
 
+  # Get colors from the specified colormap.
   if (cmap is None):
-    cmap = plt.cm.Blues  # Default colormap.
+    cmap = "Blues"
+  elif (cmap.lower() == "random"):
+    cmap = GetRandomCMAPalette()
 
   if (save or display or returnFig):
     # Create a new figure with the specified size.
@@ -973,10 +976,13 @@ def PlotMultiTrialROCAUC(
   numClasses = len(classes)
   numTrials = len(allYTrue)
 
-  # Get colors for each class.
+  # Get colors from the specified colormap.
   if (cmap is None):
-    cmap = plt.cm.get_cmap("tab10")
-  colors = [cmap(i / numClasses) for i in range(numClasses)]
+    cmap = "Blues"
+  elif (cmap.lower() == "random"):
+    cmap = GetRandomCMAPalette()
+  # colors = [cmap(i / numClasses) for i in range(numClasses)]
+  colors = GetCmapColors(cmap, numClasses)
 
   # Create figure.
   fig = plt.figure(figsize=figSize)
@@ -1296,10 +1302,13 @@ def PlotMultiTrialPRCurve(
   numClasses = len(classes)
   numTrials = len(allYTrue)
 
-  # Get colors for each class.
+  # Get colors from the specified colormap.
   if (cmap is None):
-    cmap = plt.cm.get_cmap("tab10")
-  colors = [cmap(i / numClasses) for i in range(numClasses)]
+    cmap = "Blues"
+  elif (cmap.lower() == "random"):
+    cmap = GetRandomCMAPalette()
+  # colors = [cmap(i / numClasses) for i in range(numClasses)]
+  colors = GetCmapColors(cmap, numClasses)
 
   # Create figure.
   fig = plt.figure(figsize=figSize)
@@ -2020,18 +2029,26 @@ def PlotCalibrationCurveFromModel(
     fig, ax1 = plt.subplots(figsize=(8, 6))
     ax2 = None
 
-  # Get color map for plotting.
-  if (cmap is None):
-    cmapObj = plt.cm.get_cmap("tab10", nClasses)
-  elif isinstance(cmap, str):
-    cmapObj = plt.cm.get_cmap(cmap, nClasses)
-  else:
-    cmapObj = cmap
+  # # Get color map for plotting.
+  # if (cmap is None):
+  #   cmapObj = plt.cm.get_cmap("tab10", nClasses)
+  # elif (isinstance(cmap, str)):
+  #   cmapObj = plt.cm.get_cmap(cmap, nClasses)
+  # else:
+  #   cmapObj = cmap
+  #
+  # # Pick random colors from the colormap for each class.
+  # colorIndices = random.sample(range(cmapObj.N), nClasses) if cmapObj.N >= nClasses else list(range(nClasses))
+  # random.shuffle(colorIndices)
+  # colors = [cmapObj(i) for i in colorIndices]
 
-  # Pick random colors from the colormap for each class.
-  colorIndices = random.sample(range(cmapObj.N), nClasses) if cmapObj.N >= nClasses else list(range(nClasses))
-  random.shuffle(colorIndices)
-  colors = [cmapObj(i) for i in colorIndices]
+  # Get colors from the specified colormap.
+  if (cmap is None):
+    cmap = "Blues"
+  elif (cmap.lower() == "random"):
+    cmap = GetRandomCMAPalette()
+  # colors = [cmap(i / numClasses) for i in range(numClasses)]
+  colors = GetCmapColors(cmap, nClasses)
 
   # Initialize lines and labels lists.
   lines = []
@@ -4010,6 +4027,8 @@ def ComputeECEPlotReliability(
   # Get colors from the specified colormap.
   if (cmap is None):
     cmap = "Blues"
+  elif (cmap.lower() == "random"):
+    cmap = GetRandomCMAPalette()
   cmapColors = GetCmapColors(
     cmap,
     noColors=10,

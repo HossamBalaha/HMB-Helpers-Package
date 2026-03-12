@@ -12,9 +12,9 @@ from statsmodels.stats.diagnostic import lilliefors
 from skimage.measure import shannon_entropy, moments
 from statsmodels.stats.diagnostic import acorr_ljungbox
 from scipy.stats import skew, kurtosis, bootstrap, wilcoxon
-from HMB.PlotsHelper import GetCmapColors
+from HMB.PlotsHelper import GetCmapColors, GetRandomCMAPalette
+from HMB.Initializations import UpdateMatplotlibSettings
 
-# Categorize each method as Parametric, Non-Parametric, or Both/Context-Dependent.
 # Parametric Methods
 # These assume an underlying probability distribution (typically normal) and often rely on parameters such as the mean and variance.
 # Note: Geometric Mean, Harmonic Mean, Skewness, Kurtosis, and Autocorrelation are marked with an asterisk (*)
@@ -1775,24 +1775,24 @@ class StatisticalAnalysisFramework(object):
     self.applicableMethods["JarqueBera"] = (self.dataType == "Continuous") and (n >= 30)
     # TOST equivalence test applicable when baseline and equivalence margin provided.
     self.applicableMethods["TOST"] = (self.baseline is not None) and (self.dataType == "Continuous") and (
-      self.equivalenceMargin is not None)
+        self.equivalenceMargin is not None)
 
     # Determine if one-sample threshold based methods should be considered.
     hasThreshold = (self.threshold is not None)
     # OneSampleTTest applicable for Continuous when threshold provided and either normal or large n.
     self.applicableMethods["OneSampleTTest"] = (
-      hasThreshold and (self.dataType == "Continuous") and
-      ((self.isNormal) or (n >= 30))
+        hasThreshold and (self.dataType == "Continuous") and
+        ((self.isNormal) or (n >= 30))
     )
     # WilcoxonSignedRankOneSample applicable when non-normal but symmetric.
     self.applicableMethods["WilcoxonSignedRankOneSample"] = (
-      hasThreshold and (self.dataType == "Continuous") and
-      (not ((self.isNormal) or (n >= 30))) and (self.isSymmetric)
+        hasThreshold and (self.dataType == "Continuous") and
+        (not ((self.isNormal) or (n >= 30))) and (self.isSymmetric)
     )
     # SignTest applicable when non-normal and not symmetric.
     self.applicableMethods["SignTest"] = (
-      hasThreshold and (self.dataType == "Continuous") and
-      (not ((self.isNormal) or (n >= 30))) and (not (self.isSymmetric))
+        hasThreshold and (self.dataType == "Continuous") and
+        (not ((self.isNormal) or (n >= 30))) and (not (self.isSymmetric))
     )
     # ExactBinomialTest applicable for binary one-sample tests when threshold provided.
     self.applicableMethods["ExactBinomialTest"] = hasThreshold and (self.dataType == "Binary")
@@ -1809,13 +1809,13 @@ class StatisticalAnalysisFramework(object):
     self.applicableMethods["PairedFTest"] = hasBaseline and (self.dataType == "Continuous") and (self.isNormal)
     # WilcoxonSignedRankPaired applicable when non-normal but symmetric.
     self.applicableMethods["WilcoxonSignedRankPaired"] = (
-      hasBaseline and (self.dataType == "Continuous") and
-      (not (self.isNormal)) and (self.isSymmetric)
+        hasBaseline and (self.dataType == "Continuous") and
+        (not (self.isNormal)) and (self.isSymmetric)
     )
     # PermutationTest applicable when non-normal and asymmetric.
     self.applicableMethods["PermutationTest"] = (
-      hasBaseline and (self.dataType == "Continuous")
-      and (not (self.isNormal)) and (not (self.isSymmetric))
+        hasBaseline and (self.dataType == "Continuous")
+        and (not (self.isNormal)) and (not (self.isSymmetric))
     )
     # McNemarTest applicable for binary paired comparisons.
     self.applicableMethods["McNemarTest"] = hasBaseline and (self.dataType == "Binary")
@@ -1837,15 +1837,15 @@ class StatisticalAnalysisFramework(object):
     self.applicableMethods["CohensD"] = (hasBaseline and (self.dataType == "Continuous") and (self.isNormal))
     self.applicableMethods["HedgesG"] = (hasBaseline and (self.dataType == "Continuous") and (self.isNormal))
     self.applicableMethods["VarghaDelaneyA12"] = (
-      hasBaseline and (self.dataType == "Continuous") and
-      (not (self.isNormal))
+        hasBaseline and (self.dataType == "Continuous") and
+        (not (self.isNormal))
     )
     # Determine applicability for tolerance interval estimation using bootstrap for continuous data.
     self.applicableMethods["ToleranceInterval"] = (self.dataType == "Continuous") and (n >= 2)
 
     # Calibration/ECE and Hosmer-Lemeshow require `predictions` (probabilities) and `labels` (binary true labels) to be set on the instance.
     hasPreds = (hasattr(self, "predictions") and (getattr(self, "predictions") is not None)) and (
-      hasattr(self, "labels") and (getattr(self, "labels") is not None))
+        hasattr(self, "labels") and (getattr(self, "labels") is not None))
     self.applicableMethods["CalibrationECE"] = hasPreds
     self.applicableMethods["HosmerLemeshow"] = hasPreds
 
@@ -2014,8 +2014,8 @@ class StatisticalAnalysisFramework(object):
     if ((self.dataType == "Binary") and ("Continuous" in methodName)):
       return "data is binary, not continuous"
     if (
-      (self.dataType == "Continuous") and
-      (methodName in ["ExactBinomialTest", "ClopperPearsonCI", "BayesianBetaBinomial"])
+        (self.dataType == "Continuous") and
+        (methodName in ["ExactBinomialTest", "ClopperPearsonCI", "BayesianBetaBinomial"])
     ):
       return "data is continuous, not binary"
     # Return reason for coefficient of variation when data contains non-positive values.
@@ -2842,7 +2842,7 @@ def StatisticalAnalysis(results, hypothesizedMean=0, secondMetricList=None, conf
         "Statistic"     : shapiroStat,
         "P-value"       : shapiroPValue,
         "Interpretation": "Normally Distributed (p > 0.05)" if (
-          shapiroPValue > 0.05) else "Not Normally Distributed (p <= 0.05)",
+            shapiroPValue > 0.05) else "Not Normally Distributed (p <= 0.05)",
       },
       "D'Agostino's K^2 Test"  : toAdd,  # Test for skewness and kurtosis.
       "Jarque-Bera Test"       : {  # Test for normality based on skewness and kurtosis.
@@ -2923,7 +2923,7 @@ def StatisticalAnalysis(results, hypothesizedMean=0, secondMetricList=None, conf
   zScores = (results - mean) / stdDev  # Z-scores for outlier detection.
   den = stats.median_abs_deviation(results)
   modifiedZScores = 0.6745 * (
-    results - np.median(results)) / den if (den != 0) else np.nan  # Modified Z-scores for outlier detection.
+      results - np.median(results)) / den if (den != 0) else np.nan  # Modified Z-scores for outlier detection.
 
   report.update(
     {
@@ -3153,14 +3153,14 @@ def ExtractDataFromSummaryFile(file):
 
 
 def PlotDistributionEDA(
-  df,  # DataFrame to analyze.
-  baseDir,  # Base directory to save the plots.
-  figsize=(18, 14),  # Figure size for subplots.
-  maxUnique=100,  # Maximum number of unique values to include in the plots.
-  minUnique=2,  # Minimum number of unique values to include in the plots.
-  dpi=720,  # Resolution for saved images (DPI).
-  keyword="X",  # Keyword to filter columns by name.
-  maxUniqueLabels=10,  # Maximum number of unique labels to include in the plots.
+    df,  # DataFrame to analyze.
+    baseDir,  # Base directory to save the plots.
+    figsize=(18, 14),  # Figure size for subplots.
+    maxUnique=100,  # Maximum number of unique values to include in the plots.
+    minUnique=2,  # Minimum number of unique values to include in the plots.
+    dpi=720,  # Resolution for saved images (DPI).
+    keyword="X",  # Keyword to filter columns by name.
+    maxUniqueLabels=10,  # Maximum number of unique labels to include in the plots.
 ):
   r'''
   Perform exploratory data analysis (EDA) by plotting the distributions of columns in a DataFrame.
@@ -3212,15 +3212,15 @@ def PlotDistributionEDA(
   '''
 
   def _PlotColumnsByType(
-    df,  # DataFrame to analyze.
-    baseDir,  # Base directory to save the plots.
-    numeric=True,  # Whether to plot numeric columns (True) or non-numeric columns (False).
-    figsize=(18, 14),  # Figure size for subplots.
-    maxUnique=100,  # Maximum number of unique values to include in the plots.
-    minUnique=2,  # Minimum number of unique values to include in the plots.
-    dpi=720,  # Resolution for saved images (DPI).
-    keyword="X",  # Keyword to filter columns by name.
-    maxUniqueLabels=10,  # Maximum number of unique labels to include in the plots.
+      df,  # DataFrame to analyze.
+      baseDir,  # Base directory to save the plots.
+      numeric=True,  # Whether to plot numeric columns (True) or non-numeric columns (False).
+      figsize=(18, 14),  # Figure size for subplots.
+      maxUnique=100,  # Maximum number of unique values to include in the plots.
+      minUnique=2,  # Minimum number of unique values to include in the plots.
+      dpi=720,  # Resolution for saved images (DPI).
+      keyword="X",  # Keyword to filter columns by name.
+      maxUniqueLabels=10,  # Maximum number of unique labels to include in the plots.
   ):
     r'''
     Dynamic function to plot the distribution of columns in a DataFrame.
@@ -3250,12 +3250,12 @@ def PlotDistributionEDA(
     filteredColumns = [
       col for col in df.columns
       if (
-        len(df[col].unique()) >= minUnique and
-        len(df[col].unique()) <= maxUnique and
-        (
-          df[col].dtype in ["int64", "float64"]
-          if numeric else df[col].dtype not in ["int64", "float64"]
-        )
+          len(df[col].unique()) >= minUnique and
+          len(df[col].unique()) <= maxUnique and
+          (
+            df[col].dtype in ["int64", "float64"]
+            if numeric else df[col].dtype not in ["int64", "float64"]
+          )
       )
     ]
 
@@ -3386,22 +3386,22 @@ def PlotDistributionEDA(
 
 
 def PlotMetrics(
-  data, names, metrics,
-  factor=5,  # Factor to multiply the default figure size.
-  keyword="AllMetrics",  # Keyword to append to the filenames of the saved plots.
-  dpi=1080,  # Dots per inch (resolution) of the saved plots.
-  xTicksRotation=45,  # Rotation angle for x-axis tick labels.
-  whichToPlot=[],  # List of plot types to generate.
-  fontSize=14,  # Font size for the plots.
-  showFigures=False,  # Whether to display the plots or not.
-  storeInsideNewFolder=False,  # Whether to store the plots inside a new folder.
-  newFolderName="PerformanceMetricsPlots",  # Name of the folder to store the plots.
-  noOfPlotsPerRow=3,  # Number of plots per row in the subplot grid.
-  cmap="viridis",  # Color map for the plots.
-  differentColors=True,  # Whether to use different colors for different plots.
-  fixedTicksColors=True,  # Whether to use fixed ticks colors for consistency across plots.
-  fixedTicksColor="black",  # Color to use for fixed ticks if `fixedTicksColors` is True.
-  extension=".pdf",  # File extension for saved plots.
+    data, names, metrics,
+    factor=5,  # Factor to multiply the default figure size.
+    keyword="AllMetrics",  # Keyword to append to the filenames of the saved plots.
+    dpi=1080,  # Dots per inch (resolution) of the saved plots.
+    xTicksRotation=45,  # Rotation angle for x-axis tick labels.
+    whichToPlot=[],  # List of plot types to generate.
+    fontSize=14,  # Font size for the plots.
+    showFigures=False,  # Whether to display the plots or not.
+    storeInsideNewFolder=False,  # Whether to store the plots inside a new folder.
+    newFolderName="PerformanceMetricsPlots",  # Name of the folder to store the plots.
+    noOfPlotsPerRow=3,  # Number of plots per row in the subplot grid.
+    cmap="viridis",  # Color map for the plots.
+    differentColors=True,  # Whether to use different colors for different plots.
+    fixedTicksColors=True,  # Whether to use fixed ticks colors for consistency across plots.
+    fixedTicksColor="black",  # Color to use for fixed ticks if `fixedTicksColors` is True.
+    extension=".pdf",  # File extension for saved plots.
 ):
   r'''
   Plot boxplots, violin plots, Q-Q plots, histograms, density plots, scatter plots,
@@ -3483,36 +3483,7 @@ def PlotMetrics(
     )
   '''
 
-  # Set the default Seaborn style for the plots.
-  sns.set(style="whitegrid")
-  sns.set_context(
-    "paper",
-    rc={
-      "font.size"       : fontSize,
-      "axes.titlesize"  : fontSize,
-      "axes.labelsize"  : fontSize,
-      "xtick.labelsize" : fontSize,
-      "ytick.labelsize" : fontSize,
-      "legend.fontsize" : fontSize,
-      "figure.titlesize": fontSize,
-    }
-  )
-
-  # Set the default font size for Matplotlib plots.
-  plt.rcParams.update({"font.size": fontSize})
-  plt.rcParams["axes.titlesize"] = fontSize
-  plt.rcParams["axes.labelsize"] = fontSize
-  plt.rcParams["xtick.labelsize"] = fontSize
-  plt.rcParams["ytick.labelsize"] = fontSize
-  plt.rcParams["legend.fontsize"] = fontSize
-  plt.rcParams["figure.titlesize"] = fontSize
-  plt.rcParams["lines.linewidth"] = 2  # Set the default line width for plots.
-  plt.rcParams["lines.markersize"] = 6  # Set the default marker size for plots.
-  plt.rcParams["legend.loc"] = "best"  # Set the default legend location.
-  plt.rcParams["figure.figsize"] = (factor * 5, factor * 5)  # Default figure size.
-  plt.rcParams["figure.dpi"] = dpi  # Set the resolution of the figures.
-  plt.rcParams["savefig.dpi"] = dpi  # Set the resolution for saved figures.
-  plt.rcParams["savefig.bbox"] = "tight"  # Save figures with tight bounding box.
+  UpdateMatplotlibSettings(fontSize=fontSize, figSize=(factor * 5, factor * 5))
 
   originalDir = os.getcwd()  # Store the current working directory.
   if (storeInsideNewFolder and newFolderName):
@@ -3595,6 +3566,12 @@ def PlotMetrics(
       "TreemapPlots",  # Treemap for hierarchical metric visualization.
       "SunburstPlots",  # Sunburst for hierarchical metric visualization.
     ]
+
+  # Get colors from the specified colormap.
+  if (cmap is None):
+    cmap = "Blues"
+  elif (cmap.lower() == "random"):
+    cmap = GetRandomCMAPalette()
 
   if (differentColors):
     # Get colors from the specified colormap.

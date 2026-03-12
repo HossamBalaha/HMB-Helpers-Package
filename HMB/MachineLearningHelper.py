@@ -3543,7 +3543,13 @@ def OptunaTuningClassificationTrialsStatistics(
           for el in os.listdir(recordPath)
           if (el.startswith("Trial_") and os.path.isdir(os.path.join(recordPath, el)))
         ]
-        filesToProcess[record] = trialFiles
+        if (len(trialFiles) == 0):
+          print(
+            f"\u26A0 No trial result folders found for model '{record}' (skipping). "
+            f"Expected subdirectories named 'Trial_X'."
+          )
+        else:
+          filesToProcess[record] = trialFiles
       else:
         print(f"\u26A0 Found unexpected file in trial results directory (skipping): {recordPath}")
   else:
@@ -3552,7 +3558,19 @@ def OptunaTuningClassificationTrialsStatistics(
       for el in os.listdir(trialResultsPath)
       if (el.startswith("Trial_") and os.path.isdir(os.path.join(trialResultsPath, el)))
     ]
+    if (len(trialFiles) == 0):
+      raise ValueError(
+        f"No trial result folders found in the specified directory: {trialResultsPath}. "
+        f"Ensure that the directory contains subdirectories named 'Trial_X' for each trial."
+      )
     filesToProcess["Current"] = trialFiles
+
+  if (len(filesToProcess) == 0):
+    raise ValueError(
+      f"No trial result folders found in the specified directory: {trialResultsPath}. "
+      f"Ensure that the directory contains subdirectories named 'Trial_X' for each trial."
+    )
+
   print(f"\u2713 Found the following trial files to process: {list(filesToProcess.keys())}")
 
   allHistory = {}

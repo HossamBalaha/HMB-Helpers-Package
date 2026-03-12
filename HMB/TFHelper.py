@@ -948,7 +948,7 @@ def TrainPretrainedAttentionModelFromDataFrame(
     normalize=False,  # Whether to normalize the confusion matrix.
     roundDigits=3,  # Number of decimal places to round normalized values.
     title="Confusion Matrix",  # Title of the plot.
-    cmap="Blues",  # Colormap for the heatmap.
+    cmap="random",  # Colormap for the heatmap.
     display=False,  # Whether to display the plot.
     save=True,  # Whether to save the plot.
     fileName=fileName,  # File name to save the plot.
@@ -1222,7 +1222,7 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
       normalize=False,  # Whether to normalize the confusion matrix.
       roundDigits=3,  # Number of decimal places to round normalized values.
       title="Confusion Matrix",  # Title of the plot.
-      cmap="Blues",  # Colormap for the heatmap.
+      cmap="random",  # Colormap for the heatmap.
       display=False,  # Whether to display the plot.
       save=True,  # Whether to save the plot.
       fileName=cmPath,  # File name to save the plot.
@@ -1256,7 +1256,7 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
       areProbabilities=True,  # Whether yPred are probabilities.
       title="ROC Curve & AUC",  # Plot title.
       figSize=(5, 5),  # Figure size.
-      cmap=None,  # Colormap for ROC curves.
+      cmap="random",  # Colormap for ROC curves.
       display=False,  # Display the plot.
       save=True,  # Save the plot.
       fileName=rocPath,  # File name.
@@ -1276,7 +1276,7 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
       areProbabilities=True,  # Whether yPred are probabilities.
       title="PRC Curve",  # Plot title.
       figSize=(5, 5),  # Figure size.
-      cmap=None,  # Colormap for PRC curves.
+      cmap="random",  # Colormap for PRC curves.
       display=False,  # Display the plot.
       save=True,  # Save the plot.
       fileName=prcPath,  # File name.
@@ -1509,7 +1509,7 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
       fileName=ecePath,
       dpi=dpi,
       returnFig=False,
-      cmap="Blues",
+      cmap="random",
       applyXYLimits=True,
     )
     print(f"ECE: {ece}")
@@ -1579,37 +1579,459 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
     print(f"Saved calibration curve to {calibCurvePath}.\n")
 
 
-# NOT USED.
-def PlotPredictionDistribution(sampleIdx, predsAll, outPath, classes=None, dpi=720):
+def StatisticsPretrainedAttentionModelFromDataFrame(
+    trialResultsPath,
+    statisticsStoragePath,
+    dpi=720,
+    plotMetricsIndividual=False,
+    plotMetricsOverall=False,
+    whichSubset="test",
+):
   r'''
-  Plot histogram/violin of probability draws for classes of interest for one sample.
+  Analyze the results from multiple trials of inference using a saved preprocessing + model objects bundle
+  with the best parameters from a previous tuning run.
 
   Parameters:
-    sampleIdx (int): Sample index into predsAll.
-    predsAll (numpy.ndarray): Shape (N, C, T) probability draws.
-    outPath (str): Where to save the plot PNG.
-    classes (list|None): Class indices to plot; if None use top-2 by mean.
-    dpi (int): Dots per inch for saved figure.
+    trialResultsPath (str): Path to the directory containing the results of multiple trials.
+    statisticsStoragePath (str): Directory where the aggregated performance plots and statistics will be saved.
+    dpi (int, optional): DPI for saving the performance plots. Default is 720.
+    plotMetricsIndividual (bool, optional): Whether to plot performance metrics for individual trials. Default is False.
+    plotMetricsOverall (bool, optional): Whether to plot aggregated performance metrics across all trials. Default is False.
+    whichSubset (str, optional): Which data subset's results to analyze (e.g., "test", "val"). Default is "test".
+
+  Returns:
+    dict: A dictionary containing the aggregated performance metrics and results from all trials.
   '''
 
-  import matplotlib.pyplot as plt
+  from sklearn.metrics import confusion_matrix
+  from HMB.PerformanceMetrics import CalculatePerformanceMetrics, PlotMultiTrialROCAUC, PlotMultiTrialPRCurve
+  from HMB.StatisticalAnalysisHelper import ExtractDataFromSummaryFile, PlotMetrics, StatisticalAnalysis
 
-  # Get probabilities for the specified sample.
-  probs = predsAll[int(sampleIdx), :, :]
-  # Compute mean probability across T draws.
-  meanProb = probs.mean(axis=1)
-  # Select classes to plot.
-  if (classes is None):
-    top = np.argsort(-meanProb)[:2]
-    classes = top.tolist()
-  # Create figure for distribution plot.
-  plt.figure(figsize=(4, 3))
-  # Plot violin per class.
-  parts = plt.violinplot([probs[c, :] for c in classes], showmeans=True)
-  plt.xticks(np.arange(1, len(classes) + 1), [str(c) for c in classes])
-  plt.xlabel("Class index")
-  plt.ylabel("Probability")
-  plt.title(f"Predictive distribution sample {sampleIdx}")
-  plt.tight_layout()
-  plt.savefig(outPath, dpi=dpi)
-  plt.close()
+  storageFolderName = os.path.basename(statisticsStoragePath)
+  print(f"\n\u2728 Starting statistics analysis for trial results in: {trialResultsPath}")
+  print(f"\u2728 Aggregated performance plots and statistics will be saved in: {statisticsStoragePath}\n")
+
+  # Check first if the folder contains multiple trial result folders with the expected structure or just a single
+  # trial result folder.
+  isFound = len([
+    el for el in os.listdir(trialResultsPath)
+    if (os.path.isdir(os.path.join(trialResultsPath, el)) and el != storageFolderName)
+  ]) > 0
+  filesToProcess = {}
+  if (isFound):
+    # Inform the user that trial result files were found in the directory.
+    print("\u2713 Found multiple models trial results file in:", trialResultsPath)
+    # Find subdirectories (per-model) inside the trial results' path.
+    foundModels = [
+      el
+      for el in os.listdir(trialResultsPath)
+      if (os.path.isdir(os.path.join(trialResultsPath, el)) and el != storageFolderName)
+    ]
+    # Print which models were discovered with trial results.
+    print(f"\u2713 Found the following models with trial results: {foundModels}")
+    for record in foundModels:
+      recordPath = os.path.join(trialResultsPath, record)
+      if (os.path.isdir(recordPath)):
+        trialFiles = [
+          el
+          for el in os.listdir(recordPath)
+          if (el.startswith("Trial_") and os.path.isdir(os.path.join(recordPath, el)))
+        ]
+        if (len(trialFiles) == 0):
+          print(
+            f"\u26A0 No trial result folders found for model '{record}' (skipping). "
+            f"Expected subdirectories named 'Trial_X'."
+          )
+        else:
+          filesToProcess[record] = trialFiles
+      else:
+        print(f"\u26A0 Found unexpected file in trial results directory (skipping): {recordPath}")
+  else:
+    trialFiles = [
+      el
+      for el in os.listdir(trialResultsPath)
+      if (el.startswith("Trial_") and os.path.isdir(os.path.join(trialResultsPath, el)))
+    ]
+    if (len(trialFiles) == 0):
+      raise ValueError(
+        f"No trial result folders found in the specified directory: {trialResultsPath}. "
+        f"Ensure that the directory contains subdirectories named 'Trial_X' for each trial."
+      )
+    filesToProcess["Current"] = trialFiles
+
+  if (len(filesToProcess) == 0):
+    raise ValueError(
+      f"No trial result folders found in the specified directory: {trialResultsPath}. "
+      f"Ensure that the directory contains subdirectories named 'Trial_X' for each trial."
+    )
+  print(f"\u2713 Found the following trial files to process: {list(filesToProcess.keys())}")
+  # Print the trial files that will be processed for each model.
+  for modelKey, trialFiles in filesToProcess.items():
+    print(f"\u2713 For model '{modelKey}', found trial files: {trialFiles}")
+
+  allHistory = {}
+  for k, trialFiles in filesToProcess.items():
+    print(f"\nProcessing trial results for: {k}")
+    if (k == "Current"):
+      newStorageDir = statisticsStoragePath
+    else:
+      newStorageDir = os.path.join(statisticsStoragePath, k)
+    os.makedirs(newStorageDir, exist_ok=True)
+
+    allYTrue = []
+    allYPred = []
+    classes = []
+    kHistory = {}
+
+    for trialFile in trialFiles:
+      if (k == "Current"):
+        csvFolder = os.path.join(trialResultsPath, trialFile)
+      else:
+        csvFolder = os.path.join(trialResultsPath, k, trialFile)
+
+      if (not os.path.isdir(csvFolder) or not os.path.exists(csvFolder)):
+        raise FileNotFoundError(
+          f"Expected directory not found: {csvFolder}. Please ensure that the trial results are "
+          f"generated correctly and the file structure is as expected."
+        )
+
+      # Search for the `whichSubset` folder.
+      testFolder = None
+      for el in os.listdir(csvFolder):
+        if (os.path.isdir(os.path.join(csvFolder, el)) and el.lower().startswith(whichSubset.lower())):
+          testFolder = os.path.join(csvFolder, el)
+          break
+      if (testFolder is None):
+        raise FileNotFoundError(
+          f"Expected the {whichSubset} folder not found in: {csvFolder}. "
+          f"Please ensure that the trial results are "
+          f"generated correctly and the file structure is as expected."
+        )
+      # Search for the evaluation results CSV file inside the folder.
+      # It can be "{whichSubset}Results.csv" or "EvaluationResults.csv" (case-insensitive).
+      csvPath = None
+      for el in os.listdir(testFolder):
+        if (
+            os.path.isfile(os.path.join(testFolder, el)) and
+            el.lower() in [f"{whichSubset.lower()}results.csv", "evaluationresults.csv"]
+        ):
+          csvPath = os.path.join(testFolder, el)
+          break
+
+      if (not os.path.isfile(csvPath)):
+        raise FileNotFoundError(
+          f"Expected file not found: {csvPath}. Please ensure that the trial results are "
+          f"generated correctly and the file structure is as expected."
+        )
+
+      # yTrue	yPred	yPredProb	yPredConfidences	yTrueLabels	yPredLabels.
+      df = pd.read_csv(csvPath)
+      yTrue = df["yTrue"].values
+      yPred = df["yPred"].values
+      try:
+        yPredProb = df["yPredProb"].values
+        # Parse the yPredProb column from string representation of list to actual list of floats.
+        yPredProb = np.array([np.fromstring(probStr.strip("[]"), sep=",") for probStr in yPredProb])
+      except:
+        yPredProb = None
+
+      yPredConfidences = df["yPredConfidences"].values
+      yTrueLabels = df["yTrueLabels"].values
+      yPredLabels = df["yPredLabels"].values
+      classes = np.unique(yTrueLabels)
+      cm = confusion_matrix(yTrue, yPred)
+      metrics = CalculatePerformanceMetrics(cm, addWeightedAverage=True, eps=1e-8)
+      kHistory[trialFile] = {
+        "yTrue"           : yTrue,
+        "yPred"           : yPred,
+        "yPredProb"       : yPredProb,
+        "yPredConfidences": yPredConfidences,
+        "yTrueLabels"     : yTrueLabels,
+        "yPredLabels"     : yPredLabels,
+        "confusionMatrix" : cm,
+        "metrics"         : metrics,
+      }
+      allYTrue = yTrue
+      allYPred.append(np.array(yPredProb) if (yPredProb is not None) else np.array(yPred))
+
+    print(f"Total samples across all trials: {len(allYTrue)}")
+    print(f"Unique classes: {classes}")
+
+    for which in ["CI", "SD"]:
+      fileName = os.path.join(newStorageDir, f"{which}_MultiTrial_PRC_Curve.pdf")
+      PlotMultiTrialPRCurve(
+        allYTrue,  # List of true labels arrays from all trials.
+        allYPred,  # List of predicted probabilities from all trials.
+        classes,  # List of class names.
+        confidenceLevel=0.95,  # Confidence level for CI.
+        which=which,  # Method for confidence intervals: "CI" for confidence intervals, "SD" for standard deviation.
+        title="Multi-Trial Precision-Recall Curve",
+        figSize=(8, 8),  # Figure size in inches.
+        cmap="random",  # Colormap for different classes.
+        display=False,  # Whether to display the plot.
+        save=True,  # Whether to save the plot.
+        fileName=fileName,  # File name for saving.
+        fontSize=15,  # Font size for labels and annotations.
+        showLegend=True,  # Whether to show legend.
+        returnFig=False,  # Whether to return the matplotlib figure object.
+        dpi=dpi,  # DPI for saving the figure.
+        addZoomedInset=True,  # Whether to add a zoomed inset for the top-right corner of the PRC plot.
+      )
+
+      fileName = os.path.join(newStorageDir, f"{which}_MultiTrial_ROC_AUC.pdf")
+      PlotMultiTrialROCAUC(
+        allYTrue,  # List of true labels arrays from all trials.
+        allYPred,  # List of predicted probabilities from all trials.
+        classes,  # List of class names.
+        confidenceLevel=0.95,  # Confidence level for CI (default 95%).
+        which=which,  # Method for confidence intervals: "CI" for confidence intervals, "SD" for standard deviation.
+        title="Multi-Trial ROC Curve",  # Plot title.
+        figSize=(8, 8),  # Figure size.
+        cmap="random",  # Colormap for ROC curves.
+        display=False,  # Display the plot.
+        save=True,  # Save the plot.
+        fileName=fileName,  # File name.
+        fontSize=15,  # Font size.
+        plotDiagonal=True,  # Plot diagonal reference line.
+        showLegend=True,  # Show legend.
+        returnFig=False,  # Return figure object.
+        dpi=dpi,  # DPI for saving the figure.
+        addZoomedInset=True,  # Whether to add a zoomed inset for the top-left corner.
+      )
+
+    # Save the calculated metrics for each trial to a CSV file for comparison.
+    # Example of the file structure (if you have a single system):
+    #     Precision, Recall, F1, Accuracy, Specificity, Average
+    #     Metric, Metric, Metric, Metric, Metric, Metric
+    #     0.5556, 0.5556, 0.5556, 0.6667, 0.7333, 0.6133,
+    #     0.7692, 0.5556, 0.6452, 0.7708, 0.9000, 0.7282,
+    #     0.8333, 0.2778, 0.4167, 0.7083, 0.9667, 0.6406,
+    #     0.5882, 0.5556, 0.5714, 0.6875, 0.7667, 0.6339,
+    #     0.8000, 0.6667, 0.7273, 0.8125, 0.9000, 0.7813,
+    firstRow = [
+      " ".join(el.split(" ")[1:])  # Remove the "Weighted " prefix from the metric names for cleaner column headers.
+      for el in kHistory[trialFiles[0]]["metrics"].keys()
+      if ("Weighted" in el)
+    ]
+    secondRow = ["Metric"] * len(firstRow)
+    metricValues = [
+      [kHistory[trial]["metrics"][f"Weighted {metric}"] for metric in firstRow]
+      for trial in trialFiles
+    ]
+    # Create a DataFrame to store the metrics for each trial, with the first row containing metric names and the
+    # second row containing the keyword "Metric".
+    dfMetrics = pd.DataFrame(
+      data=metricValues,
+      columns=firstRow,
+    )
+    # Insert the secondRow as the second row in the DataFrame at index 0 (after the header); pushes the metric values down by one row.
+    dfMetrics.loc[-1] = secondRow  # Add the second row with "Metric" values.
+    dfMetrics.index = dfMetrics.index + 1  # Shift the index to accommodate the new row.
+    # Sort the index to maintain the correct order (header, "Metric" row, then metric values).
+    dfMetrics.sort_index(inplace=True)
+    # Save the DataFrame to a CSV file for comparison.
+    trialMetricsComparisonFile = os.path.join(newStorageDir, "Trial_Metrics_Comparison.csv")
+    dfMetrics.to_csv(trialMetricsComparisonFile, index=False)
+    print(f"Trial metrics comparison saved to: {trialMetricsComparisonFile}")
+    print(f"Trial Metrics Comparison:\n{dfMetrics}")
+
+    history, names, metrics = ExtractDataFromSummaryFile(trialMetricsComparisonFile)
+
+    newFolderName = ""
+    if (plotMetricsIndividual):
+      newFolderName = os.path.join(newStorageDir, "PerformanceMetricsPlots")
+      os.makedirs(newFolderName, exist_ok=True)  # Create the folder if it doesn't exist.
+
+      PlotMetrics(
+        history, names, metrics,
+        factor=5,  # Factor to multiply the default figure size.
+        keyword="AllMetrics",  # Keyword to append to the filenames of the saved plots.
+        dpi=dpi,  # Dots per inch (resolution) of the saved plots.
+        xTicksRotation=45,  # Rotation angle for x-axis tick labels.
+        whichToPlot=[],  # List of plot types to generate.
+        fontSize=14,  # Font size for the plots.
+        showFigures=False,  # Whether to display the plots or not.
+        storeInsideNewFolder=True,  # Whether to store the plots inside a new folder.
+        newFolderName=newFolderName,  # Name of the folder to store the plots.
+        noOfPlotsPerRow=3,  # Number of plots per row in the subplot grid.
+        cmap="random",  # Color map for the plots.
+        differentColors=True,  # Whether to use different colors for different plots.
+        fixedTicksColors=True,  # Whether to use fixed ticks colors for consistency across plots.
+        fixedTicksColor="black",  # Color to use for fixed ticks if `fixedTicksColors` is True.
+        extension=".pdf",  # File extension for saved plots.
+      )
+
+    print("\u2713 Performance plots generated.")
+    print("\nGenerating statistical analysis report...")
+    overallReport = []
+    for metric in metrics:
+      for index, data in enumerate(history):
+        report = StatisticalAnalysis(
+          data[metric]["Trials"],
+          hypothesizedMean=data[metric]["Mean"],
+          secondMetricList=None,
+        )
+        report["Type"] = names[index]
+        report["Metric"] = metric
+        overallReport.append(report)
+    reportDF = pd.DataFrame(overallReport)
+    reportCsvPath = os.path.join(newStorageDir, "Statistical_Analysis_Report.csv")
+    reportDF.to_csv(reportCsvPath, index=False)
+    print(f"\u2713 Statistical analysis report saved: {reportCsvPath}")
+
+    kHistory.update({
+      "allYTrue"                  : allYTrue,
+      "allYPred"                  : allYPred,
+      "classes"                   : classes,
+      "reportDF"                  : reportDF,
+      "dfMetrics"                 : dfMetrics,
+      "averageMetrics"            : {
+        # Calculate the average of the metric values across all trials, skipping the first two rows (header and "Metric" row).
+        metric: dfMetrics[metric][1:].mean()
+        for metric in firstRow
+      },
+      "overallReport"             : overallReport,
+      "trialMetricsComparisonFile": trialMetricsComparisonFile,
+      "statisticsStoragePath"     : newStorageDir,
+      "performancePlotsFolder"    : newFolderName,
+    })
+
+    allHistory[k] = kHistory
+
+  noOfSystems = len(allHistory.keys())
+  print(
+    f"\n\u2713 Completed processing all trials for {noOfSystems} systems. "
+    f"Aggregated history and results are stored in the `allHistory` dictionary."
+  )
+  if (noOfSystems > 1):
+    print(
+      f"\n\u2713 Note: Since multiple top experiments were processed, the `allHistory` dictionary contains "
+      f"separate entries for each model with their respective trial results and analyses."
+    )
+
+    # Now we need to report the statistics summary across the different top experiments (if there are multiple)
+    # for easier comparison.
+    for k in allHistory.keys():
+      # Example of the file structure (if you have multiple systems):
+      #     System A, , , , , , System B, , , , ,
+      #     Precision, Recall, F1, Accuracy, Specificity, Average, Precision, Recall, F1, Accuracy, Specificity, Average
+      #     0.5556, 0.5556, 0.5556, 0.6667, 0.7333, 0.6133, 0.5556, 0.5556, 0.5556, 0.6667, 0.7333, 0.6133
+      #     0.7692, 0.5556, 0.6452, 0.7708, 0.9000, 0.7282, 0.7692, 0.5556, 0.6452, 0.7708, 0.9000, 0.7282
+      #     0.8333, 0.2778, 0.4167, 0.7083, 0.9667, 0.6406, 0.8333, 0.2778, 0.4167, 0.7083, 0.9667, 0.6406
+      #     0.5882, 0.5556, 0.5714, 0.6875, 0.7667, 0.6339, 0.5882, 0.5556, 0.5714, 0.6875, 0.7667, 0.6339
+      #     0.8000, 0.6667, 0.7273, 0.8125, 0.9000, 0.7813, 0.8000, 0.6667, 0.7273, 0.8125, 0.9000, 0.7813
+      systems = list(allHistory.keys())
+      metricsNames = allHistory[systems[0]]["dfMetrics"].columns.tolist()
+      print("Systems:", systems)
+      print("Metrics Names:", metricsNames)
+
+      systemsRow = []
+      for system in systems:
+        systemsRow.extend([system] + [""] * (len(metricsNames) - 1))
+      metricsRow = []
+      for system in systems:
+        metricsRow.extend(metricsNames)
+      dataRows = []
+      dfMetrics = allHistory[k]["dfMetrics"]
+      # Start from 1 to skip the "Metric" row.
+      for i in range(1, len(dfMetrics)):
+        row = []
+        for system in systems:
+          row.extend(dfMetrics.iloc[i].values.tolist())
+        dataRows.append(row)
+      finalDf = pd.DataFrame(
+        dataRows,
+        columns=systemsRow,
+      )
+      # Insert the metricsRowNames as the first row in the DataFrame at index 0 (after the header); pushes the
+      # metric values down by one row.
+      finalDf.loc[-1] = metricsRow  # Add the first row with system names.
+      finalDf.index = finalDf.index + 1  # Shift the index to accommodate the new row.
+
+      # Sort the index to maintain the correct order (header, system names row, then metric values).
+      finalDf.sort_index(inplace=True)
+      print(finalDf.head())
+
+      # Save the DataFrame to a CSV file for comparison.
+      newFolderName = os.path.join(statisticsStoragePath, "Statistics Summary")
+      os.makedirs(newFolderName, exist_ok=True)  # Create the folder if it doesn't exist.
+      allSystemsMetricsComparisonFile = os.path.join(newFolderName, "All_Systems_Metrics_Comparison.csv")
+      finalDf.to_csv(allSystemsMetricsComparisonFile, index=False)
+      # Store as Latex table as well for easier inclusion in reports and papers.
+      allSystemsMetricsComparisonLatexFile = os.path.join(newFolderName, "All_Systems_Metrics_Comparison.tex")
+      with open(allSystemsMetricsComparisonLatexFile, "w") as f:
+        f.write(finalDf.to_latex(index=False))
+      print(f"All systems metrics comparison saved to: {allSystemsMetricsComparisonFile}")
+
+      # Generate performance metric plots for all systems combined.
+      hist, names, metrics = ExtractDataFromSummaryFile(allSystemsMetricsComparisonFile)
+
+      if (plotMetricsOverall):
+        PlotMetrics(
+          hist, names, metrics,
+          factor=5,  # Factor to multiply the default figure size.
+          keyword="AllSystems_AllMetrics",  # Keyword to append to the filenames of the saved plots.
+          dpi=dpi,  # Dots per inch (resolution) of the saved plots.
+          xTicksRotation=45,  # Rotation angle for x-axis tick labels.
+          whichToPlot=[],  # List of plot types to generate.
+          fontSize=14,  # Font size for the plots.
+          showFigures=False,  # Whether to display the plots or not.
+          storeInsideNewFolder=True,  # Whether to store the plots inside a new folder.
+          newFolderName=newFolderName,  # Name of the folder to store the plots.
+          noOfPlotsPerRow=3,  # Number of plots per row in the subplot grid.
+          cmap="random",  # Color map for the plots.
+          differentColors=True,  # Whether to use different colors for different plots.
+          fixedTicksColors=True,  # Whether to use fixed ticks colors for consistency across plots.
+          fixedTicksColor="black",  # Color to use for fixed ticks if `fixedTicksColors` is True.
+          extension=".pdf",  # File extension for saved plots.
+        )
+
+      print("\u2713 Performance plots generated.")
+      print("\nGenerating statistical analysis report...")
+      overallReport = []
+      for metric in metrics:
+        for index, data in enumerate(hist):
+          report = StatisticalAnalysis(
+            data[metric]["Trials"],
+            hypothesizedMean=data[metric]["Mean"],
+            secondMetricList=None,
+          )
+          report["Type"] = names[index]
+          report["Metric"] = metric
+          overallReport.append(report)
+      reportDF = pd.DataFrame(overallReport)
+      reportCsvPath = os.path.join(newFolderName, "All_Systems_Statistical_Analysis_Report.csv")
+      reportDF.to_csv(reportCsvPath, index=False)
+      # Save the report as Latex table as well for easier inclusion in reports and papers.
+      reportLatexPath = os.path.join(newFolderName, "All_Systems_Statistical_Analysis_Report.tex")
+      with open(reportLatexPath, "w") as f:
+        f.write(reportDF.to_latex(index=False))
+      print(f"\u2713 Statistical analysis report saved: {reportCsvPath}")
+      print(f"Generated combined performance metric plots for {k} and saved to: {newFolderName}")
+
+  if (noOfSystems > 1):
+    print(
+      f"\n\u2713 Since multiple top experiments were processed, the `allHistory` dictionary contains "
+      f"separate entries for each model with their respective trial results and analyses. "
+      f"The statistics summary across the different top experiments has been generated and saved in the "
+      f"`Statistics Summary` folder inside the `statisticsStoragePath` directory for easier comparison."
+    )
+    # Return the top-1 experiment history for each model in the `allHistory` dictionary for further analysis and comparison.
+    topSystemDict = {}
+    topValue = -1
+    for k in allHistory.keys():
+      averageMetrics = allHistory[k]["averageMetrics"]
+      avg = averageMetrics["Average"]
+      if (avg > topValue):
+        topValue = avg
+        topSystemDict = {
+          k: allHistory[k],
+        }
+    allHistory = topSystemDict
+  else:
+    print(
+      f"\n\u2713 Since there is only one top experiment, the `allHistory` dictionary "
+      f"contains the history and results for that single experiment."
+    )
+
+  return allHistory

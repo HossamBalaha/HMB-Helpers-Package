@@ -28,39 +28,59 @@ def CheckInstalledModules(modules):
       )
 
 
-def UpdateMatplotlibSettings():
+def UpdateMatplotlibSettings(fontSize=16, dpi=720, figSize=None):
   r'''
   Update Matplotlib settings for better visualization.
   This function sets various parameters in Matplotlib to improve the appearance of plots.
   It configures figure resolution, font styles, grid settings, and line properties.
+
+  Parameters:
+    fontSize (int): The default font size to use for plot elements.
+    dpi (int): The dots per inch (DPI) setting for figure resolution.
   '''
 
+  import seaborn as sns
   import matplotlib.pyplot as plt
 
   fontSerif = ["Times New Roman", "Georgia", "Garamond", "Palatino", "Bookman", "New Century Schoolbook"]
 
+  # Set the default Seaborn style for the plots.
+  sns.set(style="whitegrid")
+  sns.set_context(
+    "paper",
+    rc={
+      "font.size"       : fontSize,
+      "axes.titlesize"  : fontSize,
+      "axes.labelsize"  : fontSize,
+      "xtick.labelsize" : fontSize,
+      "ytick.labelsize" : fontSize,
+      "legend.fontsize" : fontSize,
+      "figure.titlesize": fontSize,
+    }
+  )
+
   # Update Matplotlib settings for better visualization.
   params = {
-    "figure.dpi"        : 720,  # Set figure DPI for better resolution.
+    "figure.dpi"        : dpi,  # Set figure DPI for better resolution.
     "figure.facecolor"  : "white",  # Set figure background color.
 
-    "savefig.dpi"       : 720,  # Set savefig DPI for better resolution.
+    "savefig.dpi"       : dpi,  # Set savefig DPI for better resolution.
     "savefig.bbox"      : "tight",  # Save figures with tight bounding box.
     "savefig.pad_inches": 0.05,  # Set padding around saved figures.
 
     "font.family"       : "serif",  # Use serif font family.
     "font.serif"        : fontSerif,  # Specify serif font.
-    "font.size"         : 12,  # Set default font size.
+    "font.size"         : fontSize,  # Set default font size.
 
-    "axes.titlesize"    : 16,  # Set title font size.
-    "axes.labelsize"    : 14,  # Set axis label font size.
+    "axes.titlesize"    : fontSize,  # Set title font size.
+    "axes.labelsize"    : fontSize,  # Set axis label font size.
     "axes.grid"         : True,  # Enable grid by default.
     "axes.facecolor"    : "white",  # Set axes background color.
 
-    "xtick.labelsize"   : 12,  # Set x-tick label font size.
-    "ytick.labelsize"   : 12,  # Set y-tick label font size.
+    "xtick.labelsize"   : fontSize,  # Set x-tick label font size.
+    "ytick.labelsize"   : fontSize,  # Set y-tick label font size.
 
-    "legend.fontsize"   : 12,  # Set legend font size.
+    "legend.fontsize"   : fontSize,  # Set legend font size.
     "legend.frameon"    : True,  # Enable legend frame.
     "legend.framealpha" : 0.9,  # Set legend frame transparency.
 
@@ -78,7 +98,13 @@ def UpdateMatplotlibSettings():
     "axes.axisbelow"    : True,  # Ensure grid is behind other plot elements.
     "axes.edgecolor"    : "black",  # Set axes edge color.
     "axes.linewidth"    : 1.0,  # Set axes line width.
+
+    "figure.titlesize"  : fontSize,  # Set figure title font size.
+    "legend.loc"        : "best",  # Set legend location to best.
   }
+
+  if (figSize is not None):
+    params["figure.figsize"] = figSize  # Set default figure size if provided.
 
   # Filter out any parameters that are not recognized by Matplotlib to avoid warnings.
   validParams = {key: value for key, value in params.items() if key in plt.rcParams}
@@ -89,6 +115,11 @@ def UpdateMatplotlibSettings():
   print("Matplotlib settings updated for better visualization.")
   for key, value in validParams.items():
     print(f"{key}: {value}")
+
+  # Set the grid to be behind other plot elements.
+  plt.rcParams["axes.axisbelow"] = True
+  print("Grid will be displayed behind other plot elements.")
+
 
 
 # -------------------------------------------------- #

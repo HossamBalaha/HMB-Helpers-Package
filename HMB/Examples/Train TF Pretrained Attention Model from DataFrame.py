@@ -1,63 +1,18 @@
 import os
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
-from HMB.TFHelper import TrainPretrainedAttentionModelFromDataFrame, EvaluatePretrainedAttentionModelFromDataFrame
+from HMB.TFHelper import (
+  TrainPretrainedAttentionModelFromDataFrame,
+  EvaluatePretrainedAttentionModelFromDataFrame,
+  StatisticsPretrainedAttentionModelFromDataFrame
+)
+from HMB.DatasetsHelper import RawImageFolder
 
 if (__name__ == "__main__"):
-  # Define the dataset base paths using camelCase naming for clarity.
-  basePaths = {
-    "train": r"/path/to/the/project/Dataset/Training",
-    "test" : r"/path/to/the/project/Dataset/Test",
-    "val"  : r"/path/to/the/project/Dataset/Validation"
-  }
-
-  # Base directory for storing experiment results.
-  baseStorageDir = r"/path/to/the/project/Experiments"
-  # Ensure the base storage directory exists.
-  if (not os.path.exists(baseStorageDir)):
-    os.makedirs(baseStorageDir)
-
-  # Define the class categories as a list.
-  categories = ["grade0", "grade1", "grade2", "grade3", "grade4"]
-
-  # Initialize list for image paths.
-  imagePaths = []
-  # Initialize list for labels.
-  labels = []
-  # Initialize list for split names.
-  splits = []
-
-  # Walk the dataset folders and collect all image paths with labels and split info.
-  for splitName, basePath in basePaths.items():
-    for category in categories:
-      # Build category directory path.
-      categoryPath = os.path.join(basePath, category)
-      # Check whether the category path exists before listing files.
-      if (os.path.exists(categoryPath)):
-        for imageName in os.listdir(categoryPath):
-          # Build full image path.
-          imagePath = os.path.join(categoryPath, imageName)
-          # Append image path to list.
-          imagePaths.append(imagePath)
-          # Append label to list.
-          labels.append(category)
-          # Append split (train/val/test) to list.
-          splits.append(splitName)
-
-  # Create a DataFrame containing image paths, labels and split information.
-  dataFrame = pd.DataFrame({
-    "image_path": imagePaths,
-    "label"     : labels,
-    "split"     : splits
-  })
-
-  # Encode string labels to integer classes using LabelEncoder.
-  # Create a label encoder instance.
-  labelEncoder = LabelEncoder()
-  # Encode labels.
-  dataFrame["category_encoded"] = labelEncoder.fit_transform(dataFrame["label"])
-  # Convert labels to string.
-  dataFrame["category_encoded"] = dataFrame["category_encoded"].astype(str)
+  # Set to "TRAINING", "TESTING", "STATISTICS", "REPORTING", "EXPLAINABILITY", or "ALL"
+  # based on the desired phase of execution.
+  # Set to "ALL" to run all phases sequentially.
+  CURRENT_PHASE = "STATISTICS"
 
   # Training parameters and image shapes.
   initialEpochs = 25  # Number of initial epochs.
@@ -67,44 +22,85 @@ if (__name__ == "__main__"):
   imgSize = (512, 512)  # Define target image size.
   imgShape = (imgSize[0], imgSize[1], channels)  # Define input shape.
   columnsMap = {"imagePath": "image_path", "categoryEncoded": "category_encoded", "split": "split"}
+  baseModelString = "ResNet50V2"  # "Xception"
+  attentionBlockStr = "ECA"  # "CBAM"
+  noOfTrials = 10  # Number of trials to run for training and evaluation.
+  dpi = 720  # Set the DPI for saving evaluation results.
+  ensureCUDA = True  # Set to True to ensure CUDA is available for training.
+  categories = ["grade0", "grade1", "grade2", "grade3", "grade4"]  # Define the class categories as a list.
 
-  # Define experiment directory.
-  baseModelString = "Xception"
-  attentionBlockStr = "CBAM"
-  for trial in range(1, 11):
-    print(f"Starting trial {trial} with model {baseModelString} and attention block {attentionBlockStr}...")
-    expDir = os.path.join(baseStorageDir, f"{baseModelString}_{attentionBlockStr}_T{trial}")
-    os.makedirs(expDir, exist_ok=True)
-    modelPath = os.path.join(expDir, "BestModel.keras")
+  # Define the dataset base paths using camelCase naming for clarity.
+  baseDir = r"C:\Users\Hossam\Downloads\[B] Kidney - KMC DATASET - RCC - AbdElAziz\Dataset"
+  basePaths = {
+    "train": rf"{baseDir}/Training",
+    "test" : rf"{baseDir}/Test",
+    "val"  : rf"{baseDir}/Validation"
+  }
 
-    TrainPretrainedAttentionModelFromDataFrame(
-      dataFrame,
-      columnsMap=columnsMap,
-      labelEncoder=labelEncoder,
-      imgShape=imgShape,
-      batchSize=batchSize,
-      baseModelString=baseModelString,
-      attentionBlockStr=attentionBlockStr,
-      initialEpochs=initialEpochs,
-      fineTuneEpochs=fineTuneEpochs,
-      augmentationConfigs=None,
-      monitor="val_loss",
-      earlyStoppingPatience=10,
-      ensureCUDA=True,
-      storageDir=expDir,
-      dpi=720,
-      verbose=2,
-    )
+  # Base directory for storing experiment results.
+  # baseStorageDir = r"/path/to/the/project/Experiments"
+  baseStorageDir = r"C:\Users\Hossam\Downloads\[B] Kidney - KMC DATASET - RCC - AbdElAziz\ExperimentsV2"
+  # Ensure the base storage directory exists.
+  if (not os.path.exists(baseStorageDir)):
+    os.makedirs(baseStorageDir)
 
-    EvaluatePretrainedAttentionModelFromDataFrame(
-      dataFrame,
-      modelPath,
-      columnsMap=columnsMap,
-      labelEncoder=labelEncoder,
-      imgShape=imgShape,
-      batchSize=batchSize,
-      storageDir=expDir,
-      dpi=720,
-      verbose=2,
-      ensureCUDA=True,
+  statisticsStoragePath = os.path.join(baseStorageDir, "Statistics")  # Path to store statistics results.
+  os.makedirs(statisticsStoragePath, exist_ok=True)  # Ensure the statistics storage directory exists.
+
+  # Create a RawImageFolder object to read images and labels from the specified base paths and categories.
+  obj = RawImageFolder(basePaths, rootType="dict", categories=categories)
+  dataFrame = obj.ToDataFrame()
+
+  expFolderName = f"{baseModelString}_{attentionBlockStr}"
+  expFolderPath = os.path.join(baseStorageDir, expFolderName)
+  os.makedirs(expFolderPath, exist_ok=True)
+
+  if (CURRENT_PHASE in ["TRAINING", "TESTING", "ALL"]):
+    for trial in range(1, noOfTrials):
+      print(f"Starting trial {trial} with model {baseModelString} and attention block {attentionBlockStr}...")
+      expDir = os.path.join(expFolderPath, f"Trial_{trial}")
+      os.makedirs(expDir, exist_ok=True)
+      modelPath = os.path.join(expDir, "BestModel.keras")
+
+      if (CURRENT_PHASE in ["TRAINING", "ALL"]):
+        TrainPretrainedAttentionModelFromDataFrame(
+          dataFrame,
+          columnsMap=columnsMap,
+          labelEncoder=obj.GetLabelEncoder(),
+          imgShape=imgShape,
+          batchSize=batchSize,
+          baseModelString=baseModelString,
+          attentionBlockStr=attentionBlockStr,
+          initialEpochs=initialEpochs,
+          fineTuneEpochs=fineTuneEpochs,
+          augmentationConfigs=None,
+          monitor="val_loss",
+          earlyStoppingPatience=10,
+          ensureCUDA=ensureCUDA,
+          storageDir=expDir,
+          dpi=dpi,
+          verbose=2,
+        )
+
+      if (CURRENT_PHASE in ["TESTING", "ALL"]):
+        EvaluatePretrainedAttentionModelFromDataFrame(
+          dataFrame,
+          modelPath,
+          columnsMap=columnsMap,
+          labelEncoder=obj.GetLabelEncoder(),
+          imgShape=imgShape,
+          batchSize=batchSize,
+          storageDir=expDir,
+          dpi=dpi,
+          verbose=2,
+          ensureCUDA=ensureCUDA,
+        )
+
+  if (CURRENT_PHASE in ["STATISTICS", "ALL"]):
+    StatisticsPretrainedAttentionModelFromDataFrame(
+      baseStorageDir,
+      statisticsStoragePath,
+      dpi=dpi,
+      plotMetricsIndividual=True,
+      plotMetricsOverall=True,
     )
