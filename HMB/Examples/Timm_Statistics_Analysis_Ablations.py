@@ -17,10 +17,8 @@ from HMB.Initializations import IMAGE_SUFFIXES
 from HMB.PyTorchModelMemoryProfiler import PyTorchModelMemoryProfiler
 
 # Ensure all prints flush by default to make logs appear promptly.
-# Use the real built-in print function for delegation to avoid analyzer warnings.
-import builtins as _builtins
-
-_original_print = _builtins.print
+# Save the original built-in print function for delegation.
+_original_print = print
 
 
 # Define a wrapper that sets flush=True when not explicitly provided.
