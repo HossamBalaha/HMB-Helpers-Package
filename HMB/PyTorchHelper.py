@@ -364,7 +364,7 @@ class PyTorchUNetSegmentationModule:
   # Save a checkpoint to disk with a given tag.
   def SaveCheckpoint(self, epoch: int, tag: str = "latest"):
     filePath = os.path.join(self.checkpointDir, f"Checkpoint{tag.lower().capitalize()}.pth")
-    SaveCheckpoint(self.model, self.optimizer, filePath, epoch=epoch, hparams=self.hparams)
+    SaveCheckpoint(self.model, self.optimizer, filePath, epoch=epoch, hparams=None)
     return filePath
 
   # Load checkpoint from disk and restore model and optimizer states.
