@@ -299,7 +299,26 @@ class PyTorchUNetSegmentationModule:
       device: str = "cuda",
       outputDir: str = "Output",
       dpi: int = 720,
+      logEveryNSteps: int = 100,
   ):
+    r'''
+    Initialize the PyTorch UNet Segmentation Trainer.
+
+    Parameters:
+      model (torch.nn.Module): The U-Net model to train and evaluate.
+      trainLoader (DataLoader): DataLoader for training data.
+      valLoader (DataLoader): DataLoader for validation data.
+      allLoader (DataLoader): DataLoader covering the entire dataset for inference/export.
+      optimizer (torch.optim.Optimizer): Optimizer for training the model.
+      scheduler: Learning rate scheduler (optional) to adjust learning rate during training.
+      lossFn: Loss function used for training (e.g., BCEWithLogitsLoss, DiceLoss).
+      learningRate (float): Base learning rate for bookkeeping and checkpointing (default: 1e-4).
+      device (str): Device to run computations on ("cuda" or "cpu").
+      outputDir (str): Directory where logs, checkpoints and outputs will be saved.
+      dpi (int): DPI used when saving figures (default: 720).
+      logEveryNSteps (int): Frequency of logging batch-level metrics to TensorBoard (default: 100).
+    '''
+
     # Store references to the model and device.
     self.model = model
     self.device = device
@@ -314,6 +333,7 @@ class PyTorchUNetSegmentationModule:
     self.outputDir = outputDir
     self.learningRate = learningRate
     self.dpi = dpi
+    self.logEveryNSteps = logEveryNSteps
     # Initialize TensorBoard writer in the output directory.
     self.writer = SummaryWriter(log_dir=os.path.join(self.outputDir, "Logs"))
     # Prepare the model on the target device.
@@ -423,6 +443,29 @@ class PyTorchUNetSegmentationModule:
       probPath,
       combinedPath,
   ):
+    r'''
+    Visualize the input image, ground truth mask, and predicted mask side by side.
+
+    This function prepares the input image, ground truth mask, and predicted mask for visualization.
+    It handles both single-channel and multi-channel images, normalizes them for display,
+    and saves a combined figure showing the image, mask, and prediction. If the model outputs binary
+    logits, it also saves the probability map as a separate image for inspection.
+
+    Parameters:
+      image (torch.Tensor): The input image tensor to visualize.
+      mask (torch.Tensor): The ground truth mask tensor to visualize.
+      pred (torch.Tensor): The predicted mask tensor to visualize.
+      logits (torch.Tensor): The raw output logits from the model (used to determine if binary).
+      probPath (str): The file path to save the probability map image if applicable.
+      combinedPath (str): The file path to save the combined visualization image.
+
+    Notes:
+      - The function handles both [C, H, W] and [H, W] image tensors, normalizing them for display.
+      - The ground truth mask and predicted mask are also prepared for visualization, squeezing channel dimensions if necessary.
+      - If the model outputs binary logits (single channel), the function saves the probability map as a separate image using a perceptually-uniform colormap.
+      - The combined figure shows the input image, ground truth mask, and predicted mask side by side with appropriate titles and no axis decorations.
+    '''
+
     # Prepare image, mask and prediction numpy arrays for plotting.
     # images: [B, C, H, W] or [B, H, W].
     imgTensor = image.detach().cpu()
@@ -528,6 +571,16 @@ class PyTorchUNetSegmentationModule:
     plt.close(fig)
 
   def PredictImage(self, image: torch.Tensor) -> torch.Tensor:
+    r'''
+    Run inference on a single input image tensor and return the predicted mask tensor.
+
+    Parameters:
+      image (torch.Tensor): The input image tensor to run inference on. Expected shape is [C, H, W] or [H, W].
+
+    Returns:
+      torch.Tensor: The predicted mask tensor. Shape will be [H, W] for single-channel output or [C, H, W] for multi-channel output.
+    '''
+
     # Set model to evaluation mode.
     self.model.eval()
     # Disable gradient calculation for inference.
@@ -548,13 +601,23 @@ class PyTorchUNetSegmentationModule:
 
   # Run a single training epoch and return average loss.
   def TrainEpoch(self, epoch: int) -> float:
+    r'''
+    Run a single training epoch over the training dataset and return the average loss.
+
+    Parameters:
+      epoch (int): The current epoch number (used for logging and checkpointing).
+
+    Returns:
+      float: The average training loss for the epoch.
+    '''
+
     # Set model to training mode.
     self.model.train()
     # Initialize running loss and sample count.
     runningLoss = 0.0
     count = 0
     # Iterate over batches from the train loader.
-    for batchIdx, (images, masks) in tqdm(
+    for batchIdx, (images, masks) in tqdm.tqdm(
         enumerate(self.trainLoader),
         total=len(self.trainLoader),
         desc=f"Training Epoch {epoch}"
@@ -576,8 +639,12 @@ class PyTorchUNetSegmentationModule:
       runningLoss += loss.item()
       count += 1
       # Optionally log batch-level loss to TensorBoard.
-      if ((batchIdx + 1) % 10 == 0):
-        self.writer.add_scalar("Loss/TrainBatch", runningLoss / float(count), epoch * 1000 + batchIdx)
+      if ((batchIdx + 1) % self.logEveryNSteps == 0):
+        self.writer.add_scalar(
+          "Loss/TrainBatch",
+          runningLoss / float(count),
+          epoch * len(self.trainLoader) + batchIdx
+        )
         # Predict on a few samples and log images to `TensorBoard`.
         # Disable gradient calculation for prediction logging.
         with torch.no_grad():
@@ -613,6 +680,16 @@ class PyTorchUNetSegmentationModule:
 
   # Run validation over the validation set and return metrics dictionary.
   def Validate(self, epoch: int) -> Dict:
+    r'''
+    Run validation over the validation set and compute metrics.
+
+    Parameters:
+      epoch (int): The current epoch number (used for logging and checkpointing).
+
+    Returns:
+      dict: A dictionary containing average loss and computed metrics (e.g., MeanDice, Mean IoU, PixelAccuracy) for the validation set.
+    '''
+
     # Set model to evaluation mode.
     self.model.eval()
 
@@ -666,6 +743,10 @@ class PyTorchUNetSegmentationModule:
     return {"Loss": avgLoss, "MeanDice": meanDice, "MeanIoU": meanIoU, "PixelAccuracy": meanAcc}
 
   def Inference(self):
+    r'''
+    Run inference on the entire dataset using the allLoader and save predicted masks, actual masks, and overlays to disk.
+    '''
+
     # Set the model to evaluation mode to disable training-specific layers.
     self.model.eval()
     # Initialize a global counter for saved prediction files.
@@ -992,8 +1073,8 @@ class PyTorchUNetSegmentationModule:
       vals = [r.get(mname) for r in perImageMetrics if (r.get(mname) is not None)]
       if (len(vals) > 0):
         arr = np.array(vals, dtype=float)
-        print(f"Metric {mname} - Mean: {np.nanmean(arr):.4f}, Std: {np.nanstd(arr):.4f}")
-        print(np.mean(arr), np.std(arr))
+        # print(f"Metric {mname} - Mean: {np.nanmean(arr):.4f}, Std: {np.nanstd(arr):.4f}")
+        # print(np.mean(arr), np.std(arr))
         overallSummary["Mean"][mname] = float(np.nanmean(arr))
         overallSummary["Std"][mname] = float(np.nanstd(arr))
       else:

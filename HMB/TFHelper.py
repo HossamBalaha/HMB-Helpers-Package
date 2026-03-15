@@ -1585,6 +1585,7 @@ def StatisticsPretrainedAttentionModelFromDataFrame(
     dpi=720,
     plotMetricsIndividual=False,
     plotMetricsOverall=False,
+    includeAverageInPlots=False,
     whichSubset="test",
 ):
   r'''
@@ -1597,6 +1598,7 @@ def StatisticsPretrainedAttentionModelFromDataFrame(
     dpi (int, optional): DPI for saving the performance plots. Default is 720.
     plotMetricsIndividual (bool, optional): Whether to plot performance metrics for individual trials. Default is False.
     plotMetricsOverall (bool, optional): Whether to plot aggregated performance metrics across all trials. Default is False.
+    includeAverageInPlots (bool, optional): Whether to include the average performance across trials in the plots. Default is False.
     whichSubset (str, optional): Which data subset's results to analyze (e.g., "test", "val"). Default is "test".
 
   Returns:
@@ -1741,6 +1743,11 @@ def StatisticsPretrainedAttentionModelFromDataFrame(
       classes = np.unique(yTrueLabels)
       cm = confusion_matrix(yTrue, yPred)
       metrics = CalculatePerformanceMetrics(cm, addWeightedAverage=True, eps=1e-8)
+
+      if (not includeAverageInPlots):
+        # Remove the columns that contain the word "average".
+        metrics = {key: value for key, value in metrics.items() if ("average" not in key.lower())}
+
       kHistory[trialFile] = {
         "yTrue"           : yTrue,
         "yPred"           : yPred,

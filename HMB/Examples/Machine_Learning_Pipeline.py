@@ -40,7 +40,7 @@ if (__name__ == "__main__"):
   # Set to "TRAINING", "TESTING", "TRIALS", "STATISTICS", "REPORTING", "EXPLAINABILITY", or "ALL"
   # based on the desired phase of execution.
   # Set to "ALL" to run all phases sequentially.
-  CURRENT_PHASE = "EXPLAINABILITY"
+  CURRENT_PHASE = "TRAINING"
 
   # Set the DPI for saved figures; higher values yield better quality but larger file sizes.
   DPI = 300
@@ -92,7 +92,7 @@ if (__name__ == "__main__"):
         scalers=["Standard", "MinMax", "MaxAbs", "Robust", "L1", "L2", "Normalizer", "QT", None],
         models=["RF", "LR", "XGB", "SGD", "SVC", "KNN", "AB", "LGBM"],
         fsTechs=["PCA", "RF", "LDA", "RFE", "Chi2", "ANOVA", "MI", None],
-        fsRatios=[25, 50, 75, 100] + [10, 20, 30, 40, 60, 70, 80, 90],
+        fsRatios=[10, 20, 25, 30, 40, 50, 60, 70, 75, 80, 90, 100],
         dataBalanceTechniques=[None],
         outliersTechniques=[
           "IQR", "ZScore", "IForest", "LOF", "EllipticEnvelope",
@@ -193,6 +193,7 @@ if (__name__ == "__main__"):
         dpi=DPI,
         plotMetricsIndividual=False,
         plotMetricsOverall=False,
+        includeAverageInPlots=False,
       )
       key = list(fileHistory.keys())[0]
       dfMetrics = fileHistory[key]["dfMetrics"]

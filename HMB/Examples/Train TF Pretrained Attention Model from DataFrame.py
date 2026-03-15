@@ -46,12 +46,12 @@ if (__name__ == "__main__"):
   baseModelString = "ResNet50V2"  # "Xception"
   attentionBlockStr = "ECA"  # "CBAM"
   noOfTrials = 10  # Number of trials to run for training and evaluation.
-  dpi = 720  # Set the DPI for saving evaluation results.
+  dpi = 300  # Set the DPI for saving evaluation results.
   ensureCUDA = True  # Set to True to ensure CUDA is available for training.
   categories = ["grade0", "grade1", "grade2", "grade3", "grade4"]  # Define the class categories as a list.
 
   # Define the dataset base paths using camelCase naming for clarity.
-  baseDir = r"C:\Users\Hossam\Downloads\[B] Kidney - KMC DATASET - RCC - AbdElAziz\Dataset"
+  baseDir = r"/path/to/the/project/Dataset"
   basePaths = {
     "train": rf"{baseDir}/Training",
     "test" : rf"{baseDir}/Test",
@@ -59,8 +59,7 @@ if (__name__ == "__main__"):
   }
 
   # Base directory for storing experiment results.
-  # baseStorageDir = r"/path/to/the/project/Experiments"
-  baseStorageDir = r"C:\Users\Hossam\Downloads\[B] Kidney - KMC DATASET - RCC - AbdElAziz\ExperimentsV2"
+  baseStorageDir = r"/path/to/the/project/Experiments"
   # Ensure the base storage directory exists.
   if (not os.path.exists(baseStorageDir)):
     os.makedirs(baseStorageDir)
@@ -124,4 +123,5 @@ if (__name__ == "__main__"):
       dpi=dpi,
       plotMetricsIndividual=True,
       plotMetricsOverall=True,
+      includeAverageInPlots=False,
     )
