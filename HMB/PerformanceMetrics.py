@@ -324,7 +324,7 @@ def PlotConfusionMatrix(
     )
   '''
 
-  # Make the grid lines behind the confusion matrix.
+  # Set the grid to be behind other plot elements.
   plt.rcParams["axes.axisbelow"] = True
 
   # Check if normalization is requested.
@@ -387,6 +387,8 @@ def PlotConfusionMatrix(
     plt.xlabel("Predicted Label", fontsize=fontSize)
     # Tight the layout to ignore wasted spaces.
     plt.tight_layout()
+    # Hide the grid for the confusion matrix.
+    plt.grid(False)
 
     # Save the plot if requested.
     if (save):  # Save the plot.

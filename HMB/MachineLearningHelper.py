@@ -1840,6 +1840,7 @@ def MachineLearningClassification(
     "Contamination"            : contamination,
     "OutlierDetectionMask"     : dbObj,
     "LabelEncoder"             : le,
+    "Labels"                   : labels,
     "FeaturesEncoders"         : featuresEncoders,
     "Configurations"           : {
       "datasetFilePath"  : datasetFilePath,
@@ -1860,8 +1861,10 @@ def MachineLearningClassification(
     }
   }
 
+  data = (xTrain, xTest, yTrain, yTest)
+
   # Return the performance metrics, plot object, and objects for saving.
-  return metrics, pltObject, objects
+  return metrics, pltObject, objects, data
 
 
 def MachineLearningRegression(
@@ -2348,7 +2351,7 @@ class OptunaTuningClassification(object):
 
     try:
       # Call the function to perform machine learning classification.
-      metrics, pltObject, objects = MachineLearningClassification(
+      metrics, pltObject, objects, trialData = MachineLearningClassification(
         os.path.join(self.baseDir, self.datasetFilename),  # Path to the dataset file.
         scalerName,  # Name of the scaler to be used.
         modelName,  # Name of the machine learning model to be used.
@@ -2372,6 +2375,12 @@ class OptunaTuningClassification(object):
         f"{fsRatio if (fsTech is not None) else None}_{dataBalanceTech}_"
         f"{outliersTech if (outliersTech is not None) else None}"
       )
+
+      # Store the split if the `testFilePath` is None.
+      if (self.testFilePath is None):
+        # Store trialData in a Pickle file for future use.
+        from HMB.Utils import WritePickleFile
+        WritePickleFile(os.path.join(self.storageFolderPath, f"{pattern}-Data.p"), trialData)
 
       if (self.saveFigures):
         # Added to check if the plot object is not None before saving.
@@ -3291,7 +3300,7 @@ def OptunaTuningClassificationTrials(
       # Run a new experiment with the best parameters for the current file and
       # save the results in a separate folder for each trial.
       # Call the function to perform machine learning classification.
-      metrics, pltObject, objects = MachineLearningClassification(
+      metrics, pltObject, objects, trialData = MachineLearningClassification(
         datasetFilePath,
         scalerName if (scalerName != "None") else None,
         modelName,

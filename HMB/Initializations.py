@@ -85,7 +85,7 @@ def UpdateMatplotlibSettings(fontSize=16, dpi=720, figSize=None):
     "legend.framealpha" : 0.9,  # Set legend frame transparency.
 
     "grid.alpha"        : 0.2,  # Set grid transparency.
-    "grid.linestyle"    : "-",  # Set grid line style.
+    "grid.linestyle"    : "--",  # Set grid line style.
     "grid.linewidth"    : 0.5,  # Set grid line width.
     "grid.color"        : "gray",  # Set grid color.
     "grid.which"        : "both",  # Show grid on both major and minor ticks.
