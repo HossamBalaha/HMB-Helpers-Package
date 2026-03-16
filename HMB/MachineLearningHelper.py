@@ -1664,6 +1664,8 @@ def MachineLearningClassification(
   le = LabelEncoder()
   yEnc = le.fit_transform(y)
   labels = le.classes_
+  # print("Labels:", labels)
+  # print(yEnc.shape, np.unique(yEnc))
 
   # Encode categorical features if any and if encodeCategorical is True.
   featuresEncoders = {}
@@ -1673,9 +1675,9 @@ def MachineLearningClassification(
     if (len(categoricalCols) > 0):
       # Encode each categorical column using LabelEncoder.
       for col in categoricalCols:
-        le = LabelEncoder()
-        X[col] = le.fit_transform(X[col])
-        featuresEncoders[col] = le
+        leCol = LabelEncoder()
+        X[col] = leCol.fit_transform(X[col])
+        featuresEncoders[col] = leCol
 
   if (testFilePath and os.path.exists(testFilePath)):
     # If a test file is provided, read it into a DataFrame.
@@ -2433,10 +2435,16 @@ class OptunaTuningClassification(object):
     '''
 
     # Create the study object.
+    storagePath = f"{self.storageFolderPath}/{self.prefix}_Study.db"
+    if (not self.loadStudy and os.path.exists(storagePath)):
+      print("The study database file already exists and will be removed to create a new study.", flush=True)
+      shutil.rmtree(self.storageFolderPath, ignore_errors=True)
+      os.makedirs(self.storageFolderPath, exist_ok=True)
+
     self.study = optuna.create_study(
       direction="maximize",  # To maximize the objective function.
       study_name=f"{self.prefix}_Study",  # The study name.
-      storage=f"sqlite:///{self.storageFolderPath}/{self.prefix}_Study.db",  # The database file.
+      storage=f"sqlite:///{storagePath}",  # The database file.
       load_if_exists=self.loadStudy,  # To load the study if it exists.
       # https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/003_efficient_optimization_algorithms.html
       sampler=self.sampler,  # Setting the sampler.
@@ -2713,6 +2721,7 @@ def OptunaTuningClassificationTesting(
     y = data[targetColumn]
 
     # Encode the target labels using the loaded label encoder.
+    print(f"Current labels for {targetColumn}:", labelEncoder.classes_)
     y = labelEncoder.transform(y)
 
     # Encode the features using the loaded features encoders if they exist.

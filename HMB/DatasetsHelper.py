@@ -1391,10 +1391,10 @@ class CustomDataset(torch.utils.data.Dataset):
   '''
 
   def __init__(
-    self,
-    dataDir,
-    transform=None,
-    allowedExtensions=tuple(IMAGE_SUFFIXES)
+      self,
+      dataDir,
+      transform=None,
+      allowedExtensions=tuple(IMAGE_SUFFIXES)
   ):
     r'''
     Initialize the custom dataset for image classification tasks.
@@ -1946,3 +1946,107 @@ def DiscoverCsvFiles(dataDir: str) -> List[str]:
         csvFiles.append(os.path.join(root, file))
   # Return the list of discovered CSV files.
   return csvFiles
+
+
+def SanitizeArray(inputData):
+  r'''
+  Replace infinite values and fill NaNs in array-like inputs.
+
+  - If inputData is a pandas DataFrame, replace +/-inf with NaN and fill numeric columns with
+    the column mean (or 0 if mean is not finite). Non-numeric columns are forward/back
+    filled where possible.
+  - If inputData is a numpy array or other sequence, convert to float64, replace non-finite
+    entries with NaN and fill each column with the column mean (or 0 if no finite vals).
+
+  Returns the same type as input where practical (DataFrame -> DataFrame, ndarray -> ndarray).
+  Note: List inputs will be converted to numpy.ndarray.
+
+  Parameters:
+    inputData (array-like): Input data to sanitize. It can be a pandas DataFrame, a numpy array, or a list of lists.
+
+  Returns:
+    array-like: Sanitized data with infinities replaced and NaNs filled.
+  '''
+
+  import numpy as np
+  import pandas as pd
+
+  # Check if the input data is None.
+  if (inputData is None):
+    # Return None immediately if input is None.
+    return inputData
+
+  # Check if the input data is a pandas DataFrame.
+  if (isinstance(inputData, pd.DataFrame)):
+    # Create a copy of the DataFrame to avoid modifying the original.
+    inputData = inputData.copy()
+    # Replace infinity values with NaN in the DataFrame.
+    inputData.replace([np.inf, -np.inf], np.nan, inplace=True)
+    # Check if there are any null values in the DataFrame.
+    if (inputData.isnull().values.any()):
+      # Iterate over each column in the DataFrame.
+      for col in inputData.columns:
+        # Attempt to process the column data.
+        try:
+          # Check if the column data type is numeric.
+          if (np.issubdtype(inputData[col].dtype, np.number)):
+            # Calculate the mean of the column skipping NaN values.
+            colMean = inputData[col].mean(skipna=True)
+            # Check if the mean is None or not finite.
+            if ((colMean is None) or (not np.isfinite(colMean))):
+              # Fill NaN values with 0.0 if mean is invalid.
+              inputData[col].fillna(0.0, inplace=True)
+            else:
+              # Fill NaN values with the calculated mean.
+              inputData[col].fillna(colMean, inplace=True)
+          else:
+            # Handle non-numeric columns by forward and backward filling.
+            inputData[col] = inputData[col].ffill().bfill()
+            # Fill remaining NaN values with an empty string.
+            inputData[col].fillna("", inplace=True)
+        # Catch any exceptions during column processing.
+        except Exception:
+          # Fill NaN values with 0.0 as a last resort.
+          inputData[col].fillna(0.0, inplace=True)
+    # Return the sanitized DataFrame.
+    return inputData
+
+  # Attempt to convert the input to a numpy array of float64.
+  try:
+    # Convert input data to a numpy array.
+    arr = np.array(inputData, dtype=np.float64)
+  # Catch exceptions if conversion fails.
+  except (ValueError, TypeError):
+    # Return the original input if conversion fails.
+    return inputData
+
+  # Replace non-finite values with NaN in the numpy array.
+  arr[~np.isfinite(arr)] = np.nan
+
+  # Check if the array is one-dimensional.
+  if (arr.ndim == 1):
+    # Check if there are any NaN values in the array.
+    if (np.isnan(arr).any()):
+      # Extract finite values from the array.
+      finite = arr[np.isfinite(arr)]
+      # Calculate the fill value based on finite values or default to 0.0.
+      fill = np.nanmean(finite) if (finite.size > 0) else 0.0
+      # Replace NaN values with the calculated fill value.
+      arr[np.isnan(arr)] = fill
+    # Return the sanitized one-dimensional array.
+    return arr
+
+  # Iterate over each column index in the two-dimensional array.
+  for j in range(arr.shape[1]):
+    # Extract the current column from the array.
+    col = arr[:, j]
+    # Check if there are any NaN values in the current column.
+    if (np.isnan(col).any()):
+      # Extract finite values from the current column.
+      finite = col[np.isfinite(col)]
+      # Calculate the fill value based on finite values or default to 0.0.
+      fill = np.nanmean(finite) if (finite.size > 0) else 0.0
+      # Replace NaN values in the column with the calculated fill value.
+      col[np.isnan(col)] = fill
+  # Return the sanitized two-dimensional array.
+  return arr
