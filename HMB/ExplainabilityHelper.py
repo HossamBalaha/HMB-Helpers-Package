@@ -1,4 +1,4 @@
-import shap, os, pickle, copy, cv2, torch, time
+import shap, os, pickle, copy, cv2, torch, time, shutil
 import numpy as np
 import pandas as pd
 from PIL import Image
@@ -172,6 +172,8 @@ class SHAPExplainer(object):
       scalerName = optunaBestParams["Scaler"] if (optunaBestParams["Scaler"] != "None") else None
       fsTech = optunaBestParams["FS Tech"] if (optunaBestParams["FS Tech"] != "None") else None
       fsRatio = optunaBestParams["FS Ratio"] if (optunaBestParams["FS Ratio"] != "None") else None
+      if (fsTech is None):
+        fsRatio = None
       dataBalanceTech = optunaBestParams["DB Tech"] if (optunaBestParams["DB Tech"] != "None") else None
       outliersTech = optunaBestParams["Outliers Tech"] if (optunaBestParams["Outliers Tech"] != "None") else None
       pattern = f"{modelName}_{scalerName}_{fsTech}_{fsRatio}_{dataBalanceTech}_{outliersTech}.p"
@@ -184,6 +186,12 @@ class SHAPExplainer(object):
         "rb",  # Open the file in read-binary mode.
     ) as f:
       self.objects = pickle.load(f)  # Load the objects (model, scaler, etc.) from the file.
+
+    # Make a copy of the pickle file in the SHAP storage directory for reference.
+    shutil.copy(
+      os.path.join(self.baseDir, self.experimentFolderName, f"{pattern}"),
+      os.path.join(self.storagePath, f"{pattern}")
+    )
 
     # Read the test data from the specified CSV file.
     self.testData = pd.read_csv(os.path.join(self.baseDir, self.testFilename))

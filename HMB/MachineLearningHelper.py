@@ -3293,6 +3293,14 @@ def OptunaTuningClassificationTrials(
       trialStorageDir = os.path.join(newStorageDir, f"Trial_{trial + 1}")
       os.makedirs(trialStorageDir, exist_ok=True)
 
+      if (os.path.exists(trialStorageDir)):
+        print(f"Storage directory for trial {trial + 1} already exists at: {trialStorageDir}")
+        if (os.path.exists(os.path.join(trialStorageDir, "Testing"))):
+          print("This trial is completed. Skipping.")
+          continue
+      else:
+        print(f"Created storage directory for trial {trial + 1} at: {trialStorageDir}")
+
       # Copy the best parameters file to the trial storage directory for reference.
       trialBestParamsPath = os.path.join(trialStorageDir, "Optuna Best Params.csv")
       pd.DataFrame([record]).to_csv(trialBestParamsPath, index=False)
@@ -3610,14 +3618,18 @@ def OptunaTuningClassificationTrialsStatistics(
     for trialFile in trialFiles:
       if (k == "Current"):
         csvPath = os.path.join(trialResultsPath, trialFile, "Testing", "EvaluationResults.csv")
+        csvPathAlt = os.path.join(trialResultsPath, trialFile, "Testing", "EvaluationResults.csv")
       else:
         csvPath = os.path.join(trialResultsPath, k, trialFile, "Testing", "EvaluationResults.csv")
+        csvPathAlt = os.path.join(trialResultsPath, k, trialFile, "Testing", k, "EvaluationResults.csv")
 
-      if (not os.path.isfile(csvPath)):
+      if (not os.path.isfile(csvPath) and not os.path.isfile(csvPathAlt)):
         raise FileNotFoundError(
-          f"Expected file not found: {csvPath}. Please ensure that the trial results are "
+          f"Expected file not found in {csvPath} or {csvPathAlt}. Please ensure that the trial results are "
           f"generated correctly and the file structure is as expected."
         )
+      elif (not os.path.isfile(csvPath) and os.path.isfile(csvPathAlt)):
+        csvPath = csvPathAlt
 
       # yTrue	yPred	yPredProb	yPredConfidences	yTrueLabels	yPredLabels.
       df = pd.read_csv(csvPath)
@@ -3921,7 +3933,11 @@ def OptunaTuningClassificationTrialsStatistics(
     topValue = -1
     for k in allHistory.keys():
       averageMetrics = allHistory[k]["averageMetrics"]
-      avg = averageMetrics["Average"]
+      if (includeAverageInPlots):
+        avg = averageMetrics["Average"]
+      else:
+        # If not including the average in the comparison, we can use one of the main metrics (e.g., F1) for comparison.
+        avg = averageMetrics.get("F1", -1)  # Use F1 score as the main metric for comparison if available.
       if (avg > topValue):
         topValue = avg
         topSystemDict = {

@@ -175,45 +175,141 @@ def SaveCheckpoint(model, optimizer, filename="chk.pth.tar", epoch=None, hparams
   print(f"Checkpoint saved to {filename}. You can load it later using `LoadCheckpoint`.")
 
 
-def LoadCheckpoint(checkpointFile, model, optimizer, lr, device, strict=True):
+def LoadCheckpoint(checkpointFile, model, optimizer, lr, device, strict=True, verbose=False):
   r'''
-  Load model and optimizer state from a checkpoint file.
-  Updates the learning rate of the optimizer if provided.
-  This function loads the model's state dictionary and the optimizer's state dictionary
-  from a specified checkpoint file. It also updates the learning rate of the optimizer.
+  Load model and optimizer states from a specified checkpoint file with automatic key reconciliation.
+
+  This function initializes the model and optimizer using weights and states stored in a checkpoint file.
+  It incorporates a robust mechanism to handle naming convention mismatches (e.g., camelCase versus snake_case)
+  between the checkpoint keys and the model definition. If key mismatches are detected, the function employs
+  fuzzy string matching to map unexpected keys to missing keys, validated by tensor shape compatibility to
+  ensure weight integrity. Additionally, it updates the learning rate for the optimizer if specified.
 
   Parameters:
-    checkpointFile (str): The path to the checkpoint file.
-    model (torch.nn.Module): The model to load the state into.
-    optimizer (torch.optim.Optimizer): The optimizer to load the state into.
-    lr (float): The learning rate to set for the optimizer.
-    device (torch.device): The device to load the model onto (e.g., "cpu" or "cuda").
-    strict (bool): Whether to strictly enforce that the keys in the state dictionary match the model's keys when loading.
+    checkpointFile (str): The absolute or relative path to the checkpoint file.
+    model (torch.nn.Module): The neural network model into which the state dictionary will be loaded.
+    optimizer (torch.optim.Optimizer): The optimizer into which the state dictionary will be loaded. If None, optimizer state loading is skipped.
+    lr (float): The learning rate to enforce for all parameter groups in the optimizer after loading.
+    device (torch.device): The target device for loading tensors (e.g., torch.device("cpu") or "cuda").
+    strict (bool): If True, raises an error if any keys remain unmatched after reconciliation. If False, allows partial loading.
+    verbose (bool): If True, it will print the handling messages.
 
+  Note:
+    Key reconciliation uses a similarity threshold of 0.85. Weights are only mapped if the source 
+    and target tensor shapes match exactly to prevent parameter corruption.
+    
   Returns:
-    dict: The loaded checkpoint dictionary.
+    dict: The loaded checkpoint dictionary containing state_dict, optimizer, and other metadata. Returns None if the checkpoint file does not exist.
   '''
+
+  import difflib
 
   # Check if the checkpoint file exists before loading.
   if (not os.path.exists(checkpointFile)):
-    print(f"Checkpoint file not found: {checkpointFile}")
-    return
+    if (verbose):
+      print(f"Checkpoint file not found: {checkpointFile}")
+    return None
 
   # Load the checkpoint dictionary from file and map to the specified device.
   checkpoint = torch.load(checkpointFile, map_location=device)
-  # Load the model state from the checkpoint.
-  model.load_state_dict(checkpoint["state_dict"], strict=strict)
+
+  # Extract the state dict from the checkpoint.
+  stateDict = checkpoint["state_dict"]
+
+  # Initial load with strict=False to identify mismatches without raising an error.
+  loadReport = model.load_state_dict(stateDict, strict=False)
+
+  # Proceed with key reconciliation if mismatches exist.
+  if (len(loadReport.missing_keys) > 0 or len(loadReport.unexpected_keys) > 0):
+    if (verbose):
+      print(
+        f"Key mismatch detected. Missing: {len(loadReport.missing_keys)}, "
+        f"Unexpected: {len(loadReport.unexpected_keys)}"
+      )
+
+    modelState = model.state_dict()
+    newStateDict = {}
+
+    # Track used unexpected keys to ensure one-to-one mapping.
+    usedUnexpectedKeys = set()
+
+    # Iterate over missing keys to find the best match from unexpected keys.
+    for missingKey in loadReport.missing_keys:
+      bestMatch = None
+      bestRatio = 0.0
+
+      # Ensure the missing key exists in the current model structure.
+      if (missingKey not in modelState):
+        continue
+
+      targetShape = modelState[missingKey].shape
+
+      for unexpectedKey in loadReport.unexpected_keys:
+        if (unexpectedKey in usedUnexpectedKeys):
+          continue
+
+        # Calculate similarity ratio.
+        ratio = difflib.SequenceMatcher(None, missingKey, unexpectedKey).ratio()
+
+        # Validate tensor shape to prevent weight corruption.
+        if (unexpectedKey in stateDict):
+          sourceShape = stateDict[unexpectedKey].shape
+          shapeMatch = (targetShape == sourceShape)
+        else:
+          shapeMatch = False
+
+        # Update best match if ratio is higher and shapes match.
+        if (ratio > bestRatio and shapeMatch):
+          bestRatio = ratio
+          bestMatch = unexpectedKey
+
+      # Apply threshold for confidence (e.g., 0.85).
+      if (bestMatch and bestRatio >= 0.85):
+        newStateDict[missingKey] = stateDict[bestMatch]
+        usedUnexpectedKeys.add(bestMatch)
+        if (verbose):
+          print(f"  Mapped: '{bestMatch}' -> '{missingKey}' (Similarity: {bestRatio:.2f})")
+      else:
+        # Retain original key if no safe match is found (will remain missing).
+        if (missingKey in stateDict):
+          newStateDict[missingKey] = stateDict[missingKey]
+
+    # Add remaining keys that were not missing (already matched or not involved in mismatch).
+    for key, value in stateDict.items():
+      if (key not in usedUnexpectedKeys and key not in newStateDict):
+        # Check if this key is actually expected by the model to avoid adding unexpected keys back.
+        if (key in modelState):
+          newStateDict[key] = value
+
+    # Attempt to load the reconciled state dictionary.
+    try:
+      loadReport = model.load_state_dict(newStateDict, strict=strict)
+      if (len(loadReport.missing_keys) == 0 and len(loadReport.unexpected_keys) == 0):
+        if (verbose):
+          print("Key mismatch resolved successfully via fuzzy matching.")
+      else:
+        if (verbose):
+          print(f"Warning: Some keys remain unresolved after fuzzy matching.")
+          print(f"  Remaining Missing: {len(loadReport.missing_keys)}")
+    except RuntimeError as e:
+      if (verbose):
+        print(f"Error loading reconciled state dict: {e}")
 
   # If optimizer is provided, load its state and update learning rate.
   if (optimizer is not None):
-    optimizer.load_state_dict(checkpoint["optimizer"])
+    if ("optimizer" in checkpoint):
+      optimizer.load_state_dict(checkpoint["optimizer"])
 
-    # Update learning rate for all parameter groups in the optimizer.
-    for paramGroup in optimizer.param_groups:
-      paramGroup["lr"] = lr
+      # Update learning rate for all parameter groups in the optimizer.
+      for paramGroup in optimizer.param_groups:
+        paramGroup["lr"] = lr
+    else:
+      if (verbose):
+        print("Warning: Optimizer state not found in checkpoint.")
 
   # Print confirmation message with checkpoint file and device.
-  print(f"Checkpoint loaded from {checkpointFile} and model moved to {device}.")
+  if (verbose):
+    print(f"Checkpoint loaded from {checkpointFile} and model moved to {device}.")
 
   return checkpoint
 

@@ -3577,13 +3577,13 @@ def PlotMetrics(
     # Get colors from the specified colormap.
     cmapColors = GetCmapColors(
       cmap,
-      (len(names) * len(metrics)),
+      (len(names) * len(metrics)) * 10,
       darkColorsOnly=True,
-      darknessThreshold=0.6
+      darknessThreshold=0.6,
     )
     print(f"Using colormap '{cmap}' with {len(cmapColors)} colors.")
   else:
-    cmapColors = ["blue"] * (len(names) * len(metrics))
+    cmapColors = ["blue"] * (len(names) * len(metrics) * 10)
     print("Using single color 'blue' for all plots.")
 
   def GetTickColor(idx):

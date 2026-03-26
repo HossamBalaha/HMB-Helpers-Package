@@ -45,8 +45,13 @@ if (__name__ == "__main__"):
   # Set the DPI for saved figures; higher values yield better quality but larger file sizes.
   DPI = 300
 
-  # Set the number of top experiments to consider for testing and trial runs; this will create subfolders for each of the top experiments.
+  # Set the number of top experiments to consider for testing and trial runs; this will create subfolders
+  # for each of the top experiments.
   NUM_OF_TOP_EXPERIMENTS = 5
+
+  # Set the number of trials to run for the trial evaluation phase; this will run the best parameters
+  # obtained from training across multiple trials to evaluate their performance and stability.
+  NUM_OF_TRIALS = 10
 
   # Restricted metrics for statistics.
   RESTRICTED_METRICS_FOR_STATISTICS = [
@@ -162,7 +167,7 @@ if (__name__ == "__main__"):
         datasetFilePath,
         experimentPath,
         storageDir,
-        noOfTrials=10,
+        noOfTrials=NUM_OF_TRIALS,
         dpi=DPI,
         T=50,
         numberOfTopExperiments=NUM_OF_TOP_EXPERIMENTS,
