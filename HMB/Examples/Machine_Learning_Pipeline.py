@@ -45,6 +45,22 @@ if (__name__ == "__main__"):
   # Set the DPI for saved figures; higher values yield better quality but larger file sizes.
   DPI = 300
 
+  # Training Parameters:
+  NUM_OF_TUNING_TRIALS = 250  # Number of trials for the Optuna tuning process during training.
+  TUNING_TECH = "TPE"  # Sampler technique for Optuna tuning; "TPE" is a common choice for efficient optimization.
+  DROP_FIRST_COLUMN = False  # Whether to drop the first column in the dataset (often an ID column).
+  DROP_NA_COLUMNS = True  # Whether to drop columns with missing values.
+  ENCODE_CATEGORICAL = True  # Whether to encode categorical variables (e.g., using one-hot encoding).
+  SCALERS_LIST = ["Standard", "MinMax", "MaxAbs", "Robust", "L1", "L2", "Normalizer", "QT", None]
+  MODELS_LIST = ["RF", "LR", "XGB", "SGD", "SVC", "KNN", "AB", "LGBM"]
+  FS_TECHS_LIST = ["PCA", "RF", "LDA", "RFE", "Chi2", "ANOVA", "MI", None]
+  FS_RATIOS_LIST = [10, 20, 25, 30, 40, 50, 60, 70, 75, 80, 90, 100],
+  DB_TECHS_LIST = [None]
+  OD_TECHS_LIST = [
+    "IQR", "ZScore", "IForest", "LOF", "EllipticEnvelope",
+    "OCSVM", "DBSCAN", "Mahalanobis", None
+  ]
+
   # Set the number of top experiments to consider for testing and trial runs; this will create subfolders
   # for each of the top experiments.
   NUM_OF_TOP_EXPERIMENTS = 5
@@ -94,27 +110,24 @@ if (__name__ == "__main__"):
       baseName = os.path.splitext(file)[0]
       tuner = OptunaTuningClassification(
         baseDir=BASE_DIR,
-        scalers=["Standard", "MinMax", "MaxAbs", "Robust", "L1", "L2", "Normalizer", "QT", None],
-        models=["RF", "LR", "XGB", "SGD", "SVC", "KNN", "AB", "LGBM"],
-        fsTechs=["PCA", "RF", "LDA", "RFE", "Chi2", "ANOVA", "MI", None],
-        fsRatios=[10, 20, 25, 30, 40, 50, 60, 70, 75, 80, 90, 100],
-        dataBalanceTechniques=[None],
-        outliersTechniques=[
-          "IQR", "ZScore", "IForest", "LOF", "EllipticEnvelope",
-          "OCSVM", "DBSCAN", "Mahalanobis", None
-        ],
+        scalers=SCALERS_LIST,
+        models=MODELS_LIST,
+        fsTechs=FS_TECHS_LIST,
+        fsRatios=FS_RATIOS_LIST,
+        dataBalanceTechniques=DB_TECHS_LIST,
+        outliersTechniques=OD_TECHS_LIST,
         datasetFilename=file,
         storageFolderPath=os.path.join(BASE_DIR, f"Optuna_Results_{baseName}"),
         testFilename=None,
         testRatio=0.2,
         contamination=0.05,
-        numTrials=250,
+        numTrials=NUM_OF_TUNING_TRIALS,
         prefix="Optuna",
-        samplerTech="TPE",
+        samplerTech=TUNING_TECH,
         targetColumn=TARGET_COLUMN,
-        dropFirstColumn=True,
-        dropNAColumns=True,
-        encodeCategorical=True,
+        dropFirstColumn=DROP_FIRST_COLUMN,
+        dropNAColumns=DROP_NA_COLUMNS,
+        encodeCategorical=ENCODE_CATEGORICAL,
         # To avoid saving a large number of figures for all trials; set to True if you want to save them.
         saveFigures=False,
         eps=1e-8,

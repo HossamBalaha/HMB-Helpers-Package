@@ -49,7 +49,7 @@ class RawImageFolder(object):
       if (not os.path.exists(root)):
         raise ValueError(f"Root directory not found: {root}")
 
-      if (categories is not None):
+      if (categories is None):
         self.classes = sorted(
           entry.name for entry in os.scandir(root) if (entry.is_dir())
         )
@@ -122,6 +122,26 @@ class RawImageFolder(object):
     '''
 
     return (self.paths[idx], self.labels[idx])
+
+  def GetPaths(self):
+    r'''
+    Get the list of image file paths in the dataset.
+
+    Returns:
+      list: A list of image file paths (str) in the dataset.
+    '''
+
+    return self.paths
+
+  def GetLabels(self):
+    r'''
+    Get the list of labels corresponding to the image paths in the dataset.
+
+    Returns:
+      list: A list of labels (str) corresponding to the image paths in the dataset.
+    '''
+
+    return self.labels
 
   def ToDataFrame(self):
     r'''

@@ -335,7 +335,7 @@ def PlotConfusionMatrix(
   # Get colors from the specified colormap.
   if (cmap is None):
     cmap = "Blues"
-  elif (cmap.lower() == "random"):
+  elif (type(cmap) == str and cmap.lower() == "random"):
     cmap = GetRandomCMAPalette()
 
   if (save or display or returnFig):
