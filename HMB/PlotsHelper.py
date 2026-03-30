@@ -1384,3 +1384,124 @@ def GenerateGenericBubblePlot(
 
   print(f"\nBubble plot saved to: {outputPath}")
   return True
+
+
+def PlotApproachesComplexityComparison(
+    approaches,
+    flopsValues,
+    paramsValues,
+    outDir,
+    baseFlops=None,
+    baseParams=None,
+    dpi=300,
+    deviceName="CUDA",
+):
+  r'''
+  Plot a complexity comparison chart for different approaches.
+  This function creates a dual-axis line chart comparing FLOPs and Parameters for various approaches. It
+  annotates each point with values and percentage deltas from a base approach when provided. The plot is
+  saved to the specified output directory with a filename that includes the device type for clarity.
+
+  Parameters:
+    approaches (list[str]): List of approach names to compare.
+    flopsValues (list[float]): Corresponding FLOPs values (in GigaFLOPs) for each approach.
+    paramsValues (list[float]): Corresponding Parameters values (in Millions) for each approach.
+    outDir (str|Path): Directory where the plot will be saved.
+    baseFlops (float|None): Optional base FLOPs value for calculating percentage deltas. If None, deltas are not calculated.
+    baseParams (float|None): Optional base Parameters value for calculating percentage deltas. If None, deltas are not calculated.
+    dpi (int): DPI for the saved plot image.
+    deviceName (str): Human-readable name for the device type to include in the title (default is "CUDA").
+  '''
+
+  import os
+  import numpy as np
+  import matplotlib.pyplot as plt
+
+  # Create x-axis indices for plotting based on the number of approaches.
+  x = np.arange(len(approaches))
+  # Create the figure and the primary axis object.
+  fig, ax1 = plt.subplots(figsize=(12, 6))
+  # Define the color for the FLOPs plot.
+  color1 = "tab:blue"
+  # Set the label for the x-axis.
+  ax1.set_xlabel("Approach")
+  # Set the label for the left y-axis with the specified color.
+  ax1.set_ylabel("FLOPs (G)", color=color1)
+  # Plot the FLOPs values on the left axis with lines and markers.
+  ax1.plot(x, flopsValues, color=color1, marker="o", linestyle="-", label="FLOPs (G)")
+  # Scatter the FLOPs values on the left axis for emphasis.
+  ax1.scatter(x, flopsValues, color=color1)
+  # Configure the tick parameters for the left y-axis to match the color.
+  ax1.tick_params(axis="y", labelcolor=color1)
+  # Set the x-axis ticks to the generated indices.
+  ax1.set_xticks(x)
+  # Set the x-axis tick labels to the approach names with rotation.
+  ax1.set_xticklabels(approaches, rotation=45, ha="right")
+  # Create a twin axis sharing the x-axis for the parameters plot.
+  ax2 = ax1.twinx()
+  # Define the color for the Parameters plot.
+  color2 = "tab:red"
+  # Set the label for the right y-axis with the specified color.
+  ax2.set_ylabel("Parameters (M)", color=color2)
+  # Plot the Parameters values on the right axis with lines and markers.
+  ax2.plot(x, paramsValues, color=color2, marker="s", linestyle="--", label="Params (M)")
+  # Scatter the Parameters values on the right axis for emphasis.
+  ax2.scatter(x, paramsValues, color=color2)
+  # Configure the tick parameters for the right y-axis to match the color.
+  ax2.tick_params(axis="y", labelcolor=color2)
+  # Iterate through the range of values to annotate each point.
+  for i in range(len(flopsValues)):
+    # Check if the FLOPs value is not NaN before annotating.
+    if (not np.isnan(flopsValues[i])):
+      # Check if a base FLOPs value is provided and non-zero for delta calculation.
+      if (baseFlops is not None and baseFlops != 0):
+        # Calculate the percentage delta from the base FLOPs.
+        delta = (flopsValues[i] - baseFlops) / baseFlops * 100.0
+        # Determine the sign string for the delta annotation.
+        sign = "+" if (delta >= 0) else ""
+        # Format the annotation string with value and delta percentage.
+        ann = f"{flopsValues[i]:.2f}\n({sign}{delta:.1f}%)"
+      # Otherwise use only the FLOPs value for the annotation.
+      else:
+        # Format the annotation string with only the value.
+        ann = f"{flopsValues[i]:.2f}"
+      # Annotate the FLOPs point above the marker on the first axis.
+      ax1.annotate(ann, (x[i], flopsValues[i]), textcoords="offset points", xytext=(0, 6), ha="center", fontsize=8)
+    # Check if the Parameters value is not NaN before annotating.
+    if (not np.isnan(paramsValues[i])):
+      # Check if a base Parameters value is provided and non-zero for delta calculation.
+      if (baseParams is not None and baseParams != 0):
+        # Calculate the percentage delta from the base Parameters.
+        delta2 = (paramsValues[i] - baseParams) / baseParams * 100.0
+        # Determine the sign string for the delta annotation.
+        sign2 = "+" if (delta2 >= 0) else ""
+        # Format the annotation string with value and delta percentage.
+        ann2 = f"{paramsValues[i]:.1f}\n({sign2}{delta2:.1f}%)"
+      # Otherwise use only the Parameters value for the annotation.
+      else:
+        # Format the annotation string with only the value.
+        ann2 = f"{paramsValues[i]:.1f}"
+      # Annotate the Parameters point below the marker on the second axis.
+      ax2.annotate(
+        ann2, (x[i], paramsValues[i]),
+        textcoords="offset points",
+        xytext=(0, -18),
+        ha="center",
+        fontsize=8,
+        color=color2
+      )
+
+  # Format the title string with generic device details.
+  titleDevice = f"Complexity Comparison - Device: {deviceName}"
+  # Set the title of the plot using the generated device string.
+  plt.title(titleDevice)
+  # Adjust the layout of the figure to prevent label overlap.
+  fig.tight_layout()
+  # Create the output directory if it does not already exist.
+  os.makedirs(outDir, exist_ok=True)
+  # Save the figure as a PDF file in the output directory.
+  plt.savefig(os.path.join(outDir, "ComplexityComparison.pdf"), dpi=dpi)
+  # Save the figure as a PNG file in the output directory.
+  plt.savefig(os.path.join(outDir, "ComplexityComparison.png"), dpi=dpi)
+  # Close the figure to free up memory.
+  plt.close()

@@ -827,3 +827,38 @@ def PrintHyperParamsList(hparamsFile, returnList=False):
   # Return the list of hyperparameter sets if requested; otherwise, return None.
   return result if (returnList) else None
 
+
+def FormatNumericWithDelta(value, baseValue=None, fmt="{:.2f}"):
+  r'''
+  Format a numeric value with its percentage delta relative to a baseline.
+
+  Parameters:
+    value (float or None): The current value to format. If None, "N/A" will be returned.
+    baseValue (float or None): The baseline value for comparison. If None or zero, the delta will not be computed
+      to avoid division by zero.
+    fmt (str, optional): A format string for the value (default is "{:.2f}"). This should be a valid Python format
+      string that can be used with the `format` method to format the value. For example, "{:.2f}" will format the
+      value to two decimal places, while "{:.1f}" will format it to one decimal place. You can customize this
+      format string based on your specific needs for displaying the value. The function will use this format
+      string to format the value before appending the percentage delta in parentheses. If the value is missing
+      (None), it will return "N/A" regardless of the format string. If the baseValue is missing or zero, it will
+      return the formatted value without the delta to avoid division by zero errors.
+
+  Returns:
+    str: A formatted string that includes the value and its percentage delta relative to the baseline. The format of the returned string will be:
+      - If value is None: "N/A"
+      - If baseValue is None or zero: the formatted value without delta (e.g., "123.45")
+      - Otherwise: the formatted value followed by the percentage delta in parentheses (e.g., "123.45 (+10.0%)" or "123.45 (-5.0%)").
+  '''
+
+  # Return placeholder when value is missing.
+  if (value is None):
+    return "N/A"
+  # Avoid division-by-zero when baseValue is 0 or missing.
+  if ((baseValue is None) or (baseValue == 0)):
+    return fmt.format(value)
+  # Compute percentage delta relative to baseline.
+  delta = (value - baseValue) / baseValue * 100.0
+  sign = "+" if (delta >= 0) else ""
+  # Return formatted string including delta sign.
+  return f"{fmt.format(value)} ({sign}{delta:.1f}%)"

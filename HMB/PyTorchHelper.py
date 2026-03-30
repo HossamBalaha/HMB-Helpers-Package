@@ -29,19 +29,61 @@ from HMB.UNetHelper import PreparePredTensorToNumpy
 from HMB import ImageSegmentationMetrics as ISM
 
 
-def GetParamCount(model):
+def GetParamCount(model, restrictGrad=True, formatMillions=True):
   r'''
-  Get the total number of trainable parameters in a PyTorch model.
+  Get the total number of parameters in a PyTorch model, optionally restricting to only those that require gradients (trainable parameters).
 
   Parameters:
     model (torch.nn.Module): The model to count parameters for.
+    restrictGrad (bool): If True, only count parameters that require gradients (trainable). If False, count all parameters.
+    formatMillions (bool): If True, format the result in millions with one decimal place. If False, return the raw count of parameters.
 
   Returns:
-    int: Total number of trainable parameters.
+    int: Total number of parameters in the model, optionally restricted to those that require gradients.
   '''
 
-  # Sum the number of elements for all trainable parameters.
-  return sum(p.numel() for p in model.parameters() if (p.requires_grad))
+  if (restrictGrad):
+    # Sum the number of elements for all trainable parameters.
+    result = sum(p.numel() for p in model.parameters() if (p.requires_grad))
+  else:
+    # Sum the number of elements for all parameters regardless of requires_grad.
+    result = sum(p.numel() for p in model.parameters())
+
+  if (formatMillions):
+    # Format the result in millions with one decimal place.
+    result = result / float(1e6)
+
+  return result
+
+
+def GetPyTorchDeviceName(device):
+  r'''
+  Get a human-readable name for a PyTorch device.
+
+  Parameters:
+    device (torch.device): The device to get the name for.
+
+  Returns:
+    str: A human-readable name for the device (e.g., "CPU", "NVIDIA GeForce RTX 3080").
+  '''
+
+  # Check if the device type is CUDA to include specific device name in title.
+  if (device.type == "cuda"):
+    # Attempt to retrieve CUDA device information.
+    try:
+      # Get the current CUDA device index.
+      devIdx = torch.cuda.current_device()
+      # Get the name of the current CUDA device.
+      devName = torch.cuda.get_device_name(devIdx)
+    # Catch any exception during CUDA device retrieval.
+    except Exception:
+      # Set a default device name if retrieval fails.
+      devName = "CUDA"
+  else:
+    # For non-CUDA devices, use the device type as the name.
+    devName = device.type.upper()
+
+  return devName
 
 
 # Function to save a PyTorch model's state dictionary to a file.
@@ -344,6 +386,84 @@ def GetOptimizer(model, optimizerType="adamw", learningRate=1e-4, weightDecay=1e
   else:
     raise ValueError(f"Unsupported optimizer type: {optimizerType}")
   return optimizer
+
+
+class PyTorchCrossAttentionHead(nn.Module):
+  r'''
+  A PyTorch module implementing a cross-attention head for transformer architectures.
+  This module computes cross-attention between input embeddings and optional metadata embeddings.
+  '''
+
+  def __init__(self, hiddenSize, attentionHeadSize, dropout, bias=True, metadataDim=None):
+    r'''
+    Initialize the `CrossAttentionHead` module.
+
+    Parameters:
+      hiddenSize (int): The dimensionality of the input embeddings.
+      attentionHeadSize (int): The dimensionality of the attention head output.
+      dropout (float): Dropout rate to apply to attention probabilities.
+      bias (bool): Whether to include bias terms in linear projections (default: True).
+      metadataDim (int): Dimensionality of the metadata input. If None, metadata projections are not created.
+    '''
+
+    # Call the parent class constructor.
+    super().__init__()
+    # Store the attention head size.
+    self.attentionHeadSize = attentionHeadSize
+    # Create linear projection for queries.
+    self.query = nn.Linear(hiddenSize, attentionHeadSize, bias=bias)
+    # Create linear projection for keys.
+    self.key = nn.Linear(hiddenSize, attentionHeadSize, bias=bias)
+    # Create linear projection for values.
+    self.value = nn.Linear(hiddenSize, attentionHeadSize, bias=bias)
+    # Create metadata projections to produce extra key/value.
+    self.metadataKey = nn.Linear(metadataDim, attentionHeadSize, bias=bias)
+    # Create metadata projection for value token.
+    self.metadataValue = nn.Linear(metadataDim, attentionHeadSize, bias=bias)
+    # Create dropout module for attention probabilities.
+    self.dropout = nn.Dropout(dropout)
+    # Set head type description.
+    self.headType = "Cross-Attention"
+
+  # Define the forward pass for the CrossAttentionHead.
+  def forward(self, x, metadata=None):
+    r'''
+    Compute cross-attention between input embeddings and metadata.
+
+    Parameters:
+      x (torch.Tensor): Input embeddings of shape (batchSize, seqLen, hiddenSize).
+      metadata (torch.Tensor): Metadata embeddings of shape (batchSize, metadataDim).
+
+    Returns:
+      tuple: A tuple containing:
+        - context (torch.Tensor): The output of the cross-attention mechanism, of shape (batchSize, seqLen, attentionHeadSize).
+        - probs (torch.Tensor): The attention probabilities, of shape (batchSize, seqLen + 1) where the last token corresponds to metadata.
+    '''
+
+    # Project queries from input embeddings.
+    query = self.query(x)
+    # Project keys from input embeddings.
+    key = self.key(x)
+    # Project values from input embeddings.
+    value = self.value(x)
+    # Project metadata to a single token and unsqueeze to sequence dimension.
+    metaK = self.metadataKey(metadata).unsqueeze(1)
+    # Project metadata to a single value token and unsqueeze to sequence dimension.
+    metaV = self.metadataValue(metadata).unsqueeze(1)
+    # Concatenate image keys with metadata key along the sequence dimension.
+    keyTotal = torch.cat([key, metaK], dim=1)
+    # Concatenate image values with metadata value along the sequence dimension.
+    valueTotal = torch.cat([value, metaV], dim=1)
+    # Compute scaled dot-product attention scores.
+    scores = torch.matmul(query, keyTotal.transpose(-1, -2)) / (self.attentionHeadSize ** 0.5)
+    # Compute attention probabilities.
+    probs = torch.softmax(scores, dim=-1)
+    # Apply dropout to attention probabilities.
+    probs = self.dropout(probs)
+    # Compute context as weighted sum of values.
+    context = torch.matmul(probs, valueTotal)
+    # Return context and attention probabilities.
+    return (context, probs)
 
 
 class PyTorchUNetSegmentationModule:
@@ -3852,3 +3972,136 @@ def EvaluateModelOnPerturbations(
   # Announce that the interpretation file was written.
   # Show where the interpretation file was written.
   print(f"Interpretation written to: {interpTxt}")
+
+
+def MeasureLatency(model, device, inputsList, runs=100, warmup=10, useCudaEvents=True):
+  r'''
+  Measures the latency of a PyTorch model's forward pass on a specified device, with options for warmup and precise timing.
+
+  Parameters:
+    model (torch.nn.Module): The PyTorch model to evaluate.
+    device (torch.device): The device on which to run the model (e.g., CPU or CUDA).
+    inputsList (list): A list of input argument tuples to pass to the model's forward method. Each tuple should contain the positional arguments for one forward pass.
+    runs (int): The number of timed runs to execute for latency measurement (default: 100).
+    warmup (int): The number of warmup runs to perform before timing (default: 10).
+    useCudaEvents (bool): Whether to use CUDA events for timing when running on a CUDA device (default: True).
+
+  Returns:
+    tuple: A tuple containing the mean latency (in milliseconds), standard deviation of latency, and a dictionary of additional statistics (min, max, percentiles).
+  '''
+
+  # Ensure the model is set to evaluation mode.
+  model.eval()
+  # Move the model to the specified device.
+  model.to(device)
+  # Prepare a list to store the timing results.
+  timings = []
+  # Move all tensor arguments to the correct device.
+  inputs = tuple(el.to(device) if isinstance(el, torch.Tensor) else el for el in inputsList)
+  # Disable gradient computation for the measurement block.
+  with torch.no_grad():
+    # Execute warmup passes to stabilize the hardware performance.
+    for _ in range(warmup):
+      # Run the model forward pass with the prepared inputs.
+      _ = model(*inputs)
+      # Synchronize CUDA streams if the device is a GPU.
+      if (device.type == "cuda"):
+        # Force synchronization to ensure warmup completion.
+        torch.cuda.synchronize()
+    # Check if CUDA events should be used for precise timing.
+    if (device.type == "cuda" and useCudaEvents):
+      # Create a start event for recording the beginning of execution.
+      startEvent = torch.cuda.Event(enable_timing=True)
+      # Create an end event for recording the completion of execution.
+      endEvent = torch.cuda.Event(enable_timing=True)
+      # Iterate through the specified number of timed runs.
+      for _ in range(runs):
+        # Record the start timestamp on the GPU stream.
+        startEvent.record()
+        # Execute the model forward pass.
+        _ = model(*inputs)
+        # Record the end timestamp on the GPU stream.
+        endEvent.record()
+        # Synchronize to ensure the events are fully processed.
+        torch.cuda.synchronize()
+        # Calculate the elapsed time in milliseconds and append to the list.
+        timings.append(startEvent.elapsed_time(endEvent))
+    # Otherwise use the CPU high-resolution timer for measurement.
+    else:
+      # Iterate through the specified number of timed runs.
+      for _ in range(runs):
+        # Capture the start time using the performance counter.
+        start = time.perf_counter()
+        # Execute the model forward pass.
+        _ = model(*inputs)
+        # Synchronize CUDA streams if the device is a GPU.
+        if (device.type == "cuda"):
+          # Force synchronization to measure full kernel execution time.
+          torch.cuda.synchronize()
+        # Capture the end time using the performance counter.
+        end = time.perf_counter()
+        # Calculate duration in milliseconds and add to the timings list.
+        timings.append((end - start) * 1000.0)
+  # Convert the list of timings into a NumPy array for statistical analysis.
+  timingsArray = np.array(timings)
+  # Calculate the mean latency value.
+  meanLatency = float(timingsArray.mean())
+  # Calculate the standard deviation of the latency values.
+  stdLatency = float(timingsArray.std())
+  # Initialize a dictionary to hold additional statistical metrics.
+  additionalStats = {
+    "Min": float(timingsArray.min()),
+    "Max": float(timingsArray.max()),
+    "P50": float(np.percentile(timingsArray, 50)),
+    "P95": float(np.percentile(timingsArray, 95)),
+    "P99": float(np.percentile(timingsArray, 99)),
+  }
+  # Return the calculated mean, standard deviation, and the statistics dictionary.
+  return (meanLatency, stdLatency, additionalStats)
+
+
+def ComputeProfileFLOPs(model, inputsList, doCPU=True, formatGigas=True):
+  r'''
+  Attempts to profile the FLOPs of a PyTorch model using the thop library, with an option to run on CPU for compatibility.
+
+  Parameters:
+    model (torch.nn.Module): The PyTorch model to profile.
+    inputsList (list): A list of input argument tuples to pass to the model's forward method. Each tuple should
+      contain the positional arguments for one forward pass.
+    doCPU (bool): Whether to move the model and inputs to CPU for profiling (default: True). This can improve
+      compatibility with thop if GPU profiling causes issues, but may be slower for large models.
+    formatGigas (bool): If True, format the result in Gigas with one decimal place. If False, return the raw count of FLOPs.
+
+  Returns:
+    float or None: The calculated FLOPs for the model if profiling is successful, or None if thop is not available or if profiling fails for any reason.
+  '''
+
+  # Attempt to import the profile function from the thop library.
+  try:
+    # Import the profile module locally to avoid errors if missing.
+    from thop import profile
+  # Catch any exception during the import process.
+  except Exception:
+    # Return None if thop is unavailable.
+    return None
+
+  # Attempt to execute the profiling logic.
+  try:
+    # Check if CPU profiling is requested.
+    if (doCPU):
+      # Move the model to the CPU device.
+      model = model.cpu()
+      # Move the metadata tensor to the CPU device.
+      inputs = tuple(el.cpu() if isinstance(el, torch.Tensor) else el for el in inputsList)
+    else:
+      inputs = tuple(el for el in inputsList)
+    # Run the profiling call and retrieve flops and params.
+    flops, params = profile(model, inputs=inputs, verbose=False)
+    if (formatGigas):
+      flops = flops / float(1e9)
+    # Return the calculated flops value.
+    return flops
+  # Catch any exception during the profiling process.
+  except Exception:
+    # Return None if profiling fails for any reason.
+    return None

@@ -28,7 +28,7 @@ def CheckInstalledModules(modules):
       )
 
 
-def UpdateMatplotlibSettings(fontSize=16, dpi=720, figSize=None):
+def UpdateMatplotlibSettings(fontSize=16, dpi=720, figSize=None, silent=True):
   r'''
   Update Matplotlib settings for better visualization.
   This function sets various parameters in Matplotlib to improve the appearance of plots.
@@ -37,6 +37,8 @@ def UpdateMatplotlibSettings(fontSize=16, dpi=720, figSize=None):
   Parameters:
     fontSize (int): The default font size to use for plot elements.
     dpi (int): The dots per inch (DPI) setting for figure resolution.
+    figSize (tuple): The default figure size (width, height) in inches. If None, the default Matplotlib size is used.
+    silent (bool): If True, suppresses the output of the updated settings. If False, prints the updated settings to the console.
   '''
 
   import seaborn as sns
@@ -112,14 +114,15 @@ def UpdateMatplotlibSettings(fontSize=16, dpi=720, figSize=None):
   # Update Matplotlib rcParams with the defined settings.
   plt.rcParams.update(validParams)
 
-  print("Matplotlib settings updated for better visualization.")
-  for key, value in validParams.items():
-    print(f"{key}: {value}")
+  if (not silent):
+    print("Matplotlib settings updated for better visualization.")
+    for key, value in validParams.items():
+      print(f"{key}: {value}")
 
   # Set the grid to be behind other plot elements.
   plt.rcParams["axes.axisbelow"] = True
-  print("Grid will be displayed behind other plot elements.")
-
+  if (not silent):
+    print("Grid will be displayed behind other plot elements.")
 
 
 # -------------------------------------------------- #
