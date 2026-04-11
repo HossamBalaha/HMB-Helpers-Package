@@ -64,9 +64,6 @@ if (__name__ == "__main__"):
   if (not os.path.exists(baseStorageDir)):
     os.makedirs(baseStorageDir)
 
-  statisticsStoragePath = os.path.join(baseStorageDir, "Statistics")  # Path to store statistics results.
-  os.makedirs(statisticsStoragePath, exist_ok=True)  # Ensure the statistics storage directory exists.
-
   # Create a RawImageFolder object to read images and labels from the specified base paths and categories.
   obj = RawImageFolder(basePaths, rootType="dict", categories=categories)
   dataFrame = obj.ToDataFrame()
@@ -76,7 +73,7 @@ if (__name__ == "__main__"):
   os.makedirs(expFolderPath, exist_ok=True)
 
   if (CURRENT_PHASE in ["TRAINING", "TESTING", "ALL"]):
-    for trial in range(1, noOfTrials):
+    for trial in range(1, noOfTrials + 1):
       print(f"Starting trial {trial} with model {baseModelString} and attention block {attentionBlockStr}...")
       expDir = os.path.join(expFolderPath, f"Trial_{trial}")
       os.makedirs(expDir, exist_ok=True)
@@ -117,6 +114,9 @@ if (__name__ == "__main__"):
         )
 
   if (CURRENT_PHASE in ["STATISTICS", "ALL"]):
+    statisticsStoragePath = os.path.join(baseStorageDir, "Statistics")  # Path to store statistics results.
+    os.makedirs(statisticsStoragePath, exist_ok=True)  # Ensure the statistics storage directory exists.
+
     StatisticsPretrainedAttentionModelFromDataFrame(
       baseStorageDir,
       statisticsStoragePath,

@@ -298,7 +298,7 @@ def BuildPretrainedAttentionModel(
   '''
 
   from tensorflow.keras.models import Model
-  from tensorflow.keras.losses import SparseCategoricalCrossentropy
+  from tensorflow.keras.losses import SparseCategoricalCrossentropy, BinaryCrossentropy
   from tensorflow.keras.layers import GlobalAveragePooling2D, Dense, Dropout
 
   # Load the specified backbone model.
@@ -409,10 +409,12 @@ def BuildPretrainedAttentionModel(
         custom_objects={"Adam": tf.keras.optimizers.Adam}
       )
 
+    lossFn = SparseCategoricalCrossentropy() if (numClasses > 2) else BinaryCrossentropy()
+
     # Compile the model.
     model.compile(
       optimizer=optimizer,
-      loss=SparseCategoricalCrossentropy(),
+      loss=lossFn,
       metrics=["accuracy"],
     )
 

@@ -31,9 +31,13 @@ class RawImageFolder(object):
     Initialize the `RawImageFolder` by scanning the root directory for class subfolders and image files.
 
     Parameters:
-      root (str|dict): If `rootType` is "str", this should be a string path to the dataset root directory containing class subfolders. If `rootType` is "dict", this should be a dictionary mapping split names ("train", "val", "test") to their respective root directories.
-      rootType (str): Type of the root parameter, either "str" for a single directory or "dict" for split-based directories. Default is "str".
-      categories (list|None): Optional list of category names to include. If None, all subdirectories in the root will be considered as classes.
+      root (str|dict): If `rootType` is "str", this should be a string path to the dataset root directory containing
+        class subfolders. If `rootType` is "dict", this should be a dictionary mapping split names
+        ("train", "val", "test") to their respective root directories.
+      rootType (str): Type of the root parameter, either "str" for a single directory or "dict" for split-based
+        directories. Default is "str".
+      categories (list|None): Optional list of category names to include. If None, all subdirectories in the
+        root will be considered as classes.
     '''
 
     from sklearn.preprocessing import LabelEncoder
