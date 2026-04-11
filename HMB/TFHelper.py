@@ -463,7 +463,7 @@ def CreateFitPretrainedAttentionModel(
     configs (dict): Dictionary of training configurations and parameters.
   '''
 
-  from tensorflow.keras.losses import SparseCategoricalCrossentropy
+  from tensorflow.keras.losses import SparseCategoricalCrossentropy, BinaryCrossentropy
 
   model = BuildPretrainedAttentionModel(
     baseModelString=baseModelString,
@@ -500,12 +500,11 @@ def CreateFitPretrainedAttentionModel(
       custom_objects={"Adam": tf.keras.optimizers.Adam}
     )
 
+  lossFn = SparseCategoricalCrossentropy() if (numClasses > 2) else BinaryCrossentropy()
+
   model.compile(
-    # Lower LR for fine-tuning.
     optimizer=optimizer,
-    # Use sparse categorical crossentropy loss.
-    loss=SparseCategoricalCrossentropy(),
-    # Track accuracy metric.
+    loss=lossFn,
     metrics=["accuracy"],
   )
 
