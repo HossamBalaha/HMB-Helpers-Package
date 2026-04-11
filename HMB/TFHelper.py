@@ -6,170 +6,6 @@ import tensorflow as tf
 from PIL import Image
 
 
-# Compute Grad-CAM heatmap for a single image and target class.
-def TFGradCam(model, imgTensor, classIdx=None, lastConvLayerName=None):
-  '''
-  Compute Grad-CAM heatmap for imgTensor and target class index.
-
-  Parameters:
-    model (tensorflow.keras.Model): Trained Keras model.
-    imgTensor (numpy.ndarray or tf.Tensor): Shape (1,H,W,3) preprocessed input.
-    classIdx (int or None): Target class index; if None uses model prediction.
-    lastConvLayerName (str|None): Specify conv layer name; if None pick last Conv2D.
-
-  Returns.
-    heatmap (2D numpy array): normalized heatmap in [0,1].
-
-  Example
-  -------
-  .. code-block:: python
-
-  import HMB.TFHelper as tfh
-
-  model = ...  # Load or build model.
-  img = ...    # Load and preprocess image to shape (1, H, W, 3).
-  heatmap = tfh.TFGradCam(model, img, classIdx=2, lastConvLayerName=None)
-  '''
-
-  # Convert to tensor and ensure batch dimension.
-  x = tf.convert_to_tensor(imgTensor, dtype=tf.float32)
-
-  # Find last convolutional 2D layer if name not provided.
-  if (lastConvLayerName is None):
-    lastConv = None
-    for layer in reversed(model.layers):
-      if (isinstance(layer, tf.keras.layers.Conv2D)):
-        lastConv = layer
-        break
-    if (lastConv is None):
-      raise ValueError("TFGradCam: no Conv2D layer found in model.")
-    lastConvLayerName = lastConv.name
-
-  # Build a model that outputs conv layer activations and predictions.
-  convLayer = model.get_layer(lastConvLayerName).output
-  # Use the same input structure as the original model to avoid Keras warnings about input nesting
-  # gradModel = tf.keras.models.Model([model.inputs], [convLayer, model.output])
-  gradModel = tf.keras.models.Model(model.inputs, [convLayer, model.output])
-
-  with tf.GradientTape() as tape:
-    convOutputs, predictions = gradModel(x)
-    if (classIdx is None):
-      classIdx = tf.argmax(predictions[0])
-    classScore = predictions[:, classIdx]
-
-  # Compute gradients of the class score w.r.t conv outputs.
-  grads = tape.gradient(classScore, convOutputs)
-
-  # Compute channel-wise mean of gradients.
-  weights = tf.reduce_mean(grads, axis=(1, 2))
-  convOutputs = convOutputs[0]
-  weights = weights[0]
-
-  # Weighted combination of activations.
-  cam = tf.zeros(shape=convOutputs.shape[:2], dtype=tf.float32)
-  for i in range(int(convOutputs.shape[-1])):
-    cam += weights[i] * convOutputs[:, :, i]
-
-  # Relu and normalize.
-  cam = tf.nn.relu(cam)
-  cam = cam.numpy()
-  if (cam.max() != 0):
-    cam = (cam - cam.min()) / (cam.max() - cam.min())
-  else:
-    cam = np.zeros_like(cam)
-
-  return cam
-
-
-# Save Grad-CAM overlays for a list of sample indices.
-def SaveGradCamsForSamples(
-    model,
-    imgPaths,
-    sampleIndices,
-    outFolder,
-    imgSize=(512, 512),
-    lastConvLayerName=None
-):
-  '''
-  Compute and save Grad-CAM overlays for the provided samples.
-
-  Parameters:
-    model (tensorflow.keras.Model): Trained Keras model.
-    imgPaths (list): List of image file paths in the same order as indices refer to.
-    sampleIndices (array-like): Indices to visualize.
-    outFolder (str): Output folder where overlays will be saved.
-    imgSize (tuple): Size to resize images for model input.
-    lastConvLayerName (str): Optional conv layer to use.
-
-  Example
-  -------
-  .. code-block:: python
-
-    import HMB.TFHelper as tfh
-
-    model = ...  # Load or build model.
-    imgPaths = [...]  # List of image file paths.
-    sampleIndices = [0, 5, 10]  # Indices of samples to visualize.
-    outFolder = "GradCAM_Overlays"
-
-    tfh.SaveGradCamsForSamples(
-      model,
-      imgPaths,
-      sampleIndices,
-      outFolder,
-      imgSize=(512, 512),
-      lastConvLayerName=None
-    )
-  '''
-
-  from HMB.ImagesHelper import OverlayHeatmapOnImage
-
-  # Input validation.
-  if ((model is None) or (imgPaths is None) or (sampleIndices is None) or (outFolder is None)):
-    raise ValueError("Model, imgPaths, sampleIndices, and outFolder are required.")
-  if (not isinstance(imgPaths, list) or (len(imgPaths) == 0)):
-    raise ValueError("imgPaths must be a non-empty list.")
-  if (not isinstance(outFolder, str) or (len(outFolder.strip()) == 0)):
-    raise ValueError("Invalid output folder.")
-  # Raise if path exists and is a file, or cannot be created.
-  if (os.path.exists(outFolder) and not os.path.isdir(outFolder)):
-    raise ValueError("Output path is not a directory.")
-  try:
-    os.makedirs(outFolder, exist_ok=True)
-  except Exception:
-    raise ValueError("Failed to create output folder.")
-
-  for idx in sampleIndices:
-    imgPath = imgPaths[int(idx)]
-    try:
-      orig = Image.open(imgPath).convert("RGB")
-    except Exception:
-      orig = Image.new("RGB", imgSize, (255, 255, 255))
-
-    # Prepare model input.
-    inp = orig.resize(imgSize)
-    inpArr = np.asarray(inp).astype(np.float32) / 255.0
-    inpBatch = np.expand_dims(inpArr, axis=0)
-
-    # Compute prediction to get predicted class.
-    preds = model(inpBatch, training=False).numpy()
-    predClass = int(np.argmax(preds[0]))
-
-    # Compute Grad-CAM heatmap.
-    try:
-      heatmap = TFGradCam(model, inpBatch, classIdx=predClass, lastConvLayerName=lastConvLayerName)
-    except Exception as e:
-      # If Grad-CAM fails, skip and continue.
-      print(f"[WARN] TFGradCam failed for {imgPath}: {e}.")
-      continue
-
-    # Create and save overlay.
-    overlay = OverlayHeatmapOnImage(orig, heatmap, alpha=0.5)
-
-    outPath = os.path.join(outFolder, f"GradCAM_IDx{idx}_Pred{predClass}.pdf")
-    overlay.save(outPath)
-
-
 def MCDropoutPredictions(model, genObj, steps, T=30):
   r'''
   Run T stochastic forward passes with dropout enabled (model called with training=True).
@@ -267,14 +103,14 @@ def ComputeUncertaintyStats(predsAll, eps=1e-12):
 
 
 def SaveTopUncertainImages(
-    testDf,
-    meanProbs,
-    mutualInfo,
-    storePath,
-    labelEncoder,
-    topN=16,
-    imgSize=(128, 128),
-    dpi=720,
+  testDf,
+  meanProbs,
+  mutualInfo,
+  storePath,
+  labelEncoder,
+  topN=16,
+  imgSize=(128, 128),
+  dpi=720,
 ):
   r'''
   Save a grid of the top-N images ranked by mutual information for inspection.
@@ -406,12 +242,43 @@ def ComputeEnergyScore(logits):
   return -np.squeeze(lse)
 
 
+def FindGlobalPoolingLayer(model):
+  r'''
+  Find global pooling layer. First look for standard Keras global pooling layers, then use name heuristics,
+  then fallback to any layer with output rank 2.
+
+  Parameters:
+    model (keras.models.Model): Keras model object.
+
+  Returns:
+    keras.models.Model: Keras model object.
+  '''
+
+  from tensorflow.keras.layers import GlobalAveragePooling2D, GlobalMaxPooling2D
+  for layer in model.layers[::-1]:
+    if (isinstance(layer, (GlobalAveragePooling2D, GlobalMaxPooling2D))):
+      return layer
+    # Name heuristics.
+    lname = layer.name.lower()
+    if ("gap" in lname or "global" in lname):
+      return layer
+  # Fallback: look for layer with output rank 2.
+  for layer in model.layers[::-1]:
+    try:
+      if (len(layer.output_shape) == 2):
+        return layer
+    except Exception:
+      continue
+  return None
+
+
 def BuildPretrainedAttentionModel(
-    baseModelString,
-    attentionBlockStr,
-    inputShape,
-    numClasses,
-    optimizer=None,
+  baseModelString,
+  attentionBlockStr,
+  inputShape,
+  numClasses,
+  optimizer=None,
+  compile=True,
 ):
   r'''
   Reconstruct model architecture used in training so weights can be loaded.
@@ -422,7 +289,9 @@ def BuildPretrainedAttentionModel(
     attentionBlockStr (str): attention block name (e.g. "CBAM").
     inputShape (tuple): input shape used for training (H, W, C).
     numClasses (int): number of target classes.
-    optimizer (tensorflow.keras.optimizers.Optimizer or None): optional optimizer to use; if None, defaults to Adam with lr=1e-4.
+    optimizer (tensorflow.keras.optimizers.Optimizer or None): optional optimizer to use;
+      if None, defaults to Adam with lr=1e-4.
+    compile (bool): whether to compile the model; if False, returns uncompiled model.
 
   Returns:
     model (tensorflow.keras.Model): compiled model ready to load weights and predict.
@@ -528,42 +397,43 @@ def BuildPretrainedAttentionModel(
 
   model = Model(inputs=baseModel.input, outputs=predictions)
 
-  if (optimizer is None):
-    from tensorflow.keras.optimizers import Adam
-    # Default optimizer with lower LR for fine-tuning.
-    optimizer = Adam(learning_rate=1e-4)
-  else:
-    # Clone the provided optimizer to avoid modifying the original optimizer's state.
-    optimizer = tf.keras.optimizers.deserialize(
-      tf.keras.optimizers.serialize(optimizer),
-      custom_objects={"Adam": tf.keras.optimizers.Adam}
-    )
+  if (compile):
+    if (optimizer is None):
+      from tensorflow.keras.optimizers import Adam
+      # Default optimizer with lower LR for fine-tuning.
+      optimizer = Adam(learning_rate=1e-4)
+    else:
+      # Clone the provided optimizer to avoid modifying the original optimizer's state.
+      optimizer = tf.keras.optimizers.deserialize(
+        tf.keras.optimizers.serialize(optimizer),
+        custom_objects={"Adam": tf.keras.optimizers.Adam}
+      )
 
-  # Compile the model.
-  model.compile(
-    optimizer=optimizer,
-    loss=SparseCategoricalCrossentropy(),
-    metrics=["accuracy"],
-  )
+    # Compile the model.
+    model.compile(
+      optimizer=optimizer,
+      loss=SparseCategoricalCrossentropy(),
+      metrics=["accuracy"],
+    )
 
   return model
 
 
 def CreateFitPretrainedAttentionModel(
-    trainGenNew,
-    validGenNew,
-    baseModelString,
-    attentionBlockStr,
-    inputShape,
-    numClasses,
-    callbacks,
-    modelCheckpointPath=None,
-    initialEpochs=10,
-    fineTuneEpochs=20,
-    fineTuneAt=100,
-    optimizer=None,
-    storageDir="History",
-    verbose=1,
+  trainGenNew,
+  validGenNew,
+  baseModelString,
+  attentionBlockStr,
+  inputShape,
+  numClasses,
+  callbacks,
+  modelCheckpointPath=None,
+  initialEpochs=10,
+  fineTuneEpochs=20,
+  fineTuneAt=100,
+  optimizer=None,
+  storageDir="History",
+  verbose=1,
 ):
   r'''
   Create a CNN model with a specified backbone and attention block.
@@ -675,22 +545,22 @@ def CreateFitPretrainedAttentionModel(
 
 
 def TrainPretrainedAttentionModelFromDataFrame(
-    dataFrame,
-    columnsMap={"imagePath": "image_path", "categoryEncoded": "category_encoded", "split": "split"},
-    labelEncoder=None,
-    imgShape=(512, 512, 3),
-    batchSize=32,
-    baseModelString="Xception",
-    attentionBlockStr="CBAM",
-    initialEpochs=10,
-    fineTuneEpochs=20,
-    augmentationConfigs=None,
-    monitor="val_loss",
-    earlyStoppingPatience=10,
-    ensureCUDA=True,
-    storageDir="History",
-    dpi=720,
-    verbose=1,
+  dataFrame,
+  columnsMap={"imagePath": "image_path", "categoryEncoded": "category_encoded", "split": "split"},
+  labelEncoder=None,
+  imgShape=(512, 512, 3),
+  batchSize=32,
+  baseModelString="Xception",
+  attentionBlockStr="CBAM",
+  initialEpochs=10,
+  fineTuneEpochs=20,
+  augmentationConfigs=None,
+  monitor="val_loss",
+  earlyStoppingPatience=10,
+  ensureCUDA=True,
+  storageDir="History",
+  dpi=720,
+  verbose=1,
 ):
   r'''
   Perform training, evaluation, and reporting for the model.
@@ -1047,17 +917,17 @@ def TrainPretrainedAttentionModelFromDataFrame(
 
 
 def EvaluatePretrainedAttentionModelFromDataFrame(
-    dataFrame,
-    modelPath,
-    columnsMap={"imagePath": "image_path", "categoryEncoded": "category_encoded", "split": "split"},
-    labelEncoder=None,
-    imgShape=(512, 512, 3),
-    batchSize=32,
-    storageDir="History",
-    dpi=720,
-    verbose=1,
-    ensureCUDA=True,
-    T=50  # Number of stochastic forward passes for MC-dropout.
+  dataFrame,
+  modelPath,
+  columnsMap={"imagePath": "image_path", "categoryEncoded": "category_encoded", "split": "split"},
+  labelEncoder=None,
+  imgShape=(512, 512, 3),
+  batchSize=32,
+  storageDir="History",
+  dpi=720,
+  verbose=1,
+  ensureCUDA=True,
+  T=50  # Number of stochastic forward passes for MC-dropout.
 ):
   r'''
   Evaluate a trained model on the test set and save results.
@@ -1580,13 +1450,13 @@ def EvaluatePretrainedAttentionModelFromDataFrame(
 
 
 def StatisticsPretrainedAttentionModelFromDataFrame(
-    trialResultsPath,
-    statisticsStoragePath,
-    dpi=720,
-    plotMetricsIndividual=False,
-    plotMetricsOverall=False,
-    includeAverageInPlots=False,
-    whichSubset="test",
+  trialResultsPath,
+  statisticsStoragePath,
+  dpi=720,
+  plotMetricsIndividual=False,
+  plotMetricsOverall=False,
+  includeAverageInPlots=False,
+  whichSubset="test",
 ):
   r'''
   Analyze the results from multiple trials of inference using a saved preprocessing + model objects bundle
@@ -1714,8 +1584,8 @@ def StatisticsPretrainedAttentionModelFromDataFrame(
       csvPath = None
       for el in os.listdir(testFolder):
         if (
-            os.path.isfile(os.path.join(testFolder, el)) and
-            el.lower() in [f"{whichSubset.lower()}results.csv", "evaluationresults.csv"]
+          os.path.isfile(os.path.join(testFolder, el)) and
+          el.lower() in [f"{whichSubset.lower()}results.csv", "evaluationresults.csv"]
         ):
           csvPath = os.path.join(testFolder, el)
           break

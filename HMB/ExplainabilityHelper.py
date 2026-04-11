@@ -2,9 +2,10 @@ import shap, os, pickle, copy, cv2, torch, time, shutil
 import numpy as np
 import pandas as pd
 from PIL import Image
+import tensorflow as tf
 from pathlib import Path
 import matplotlib.pyplot as plt
-import tensorflow as tf
+from tensorflow.keras.layers import Conv2D
 
 
 class SHAPExplainer(object):
@@ -73,15 +74,15 @@ class SHAPExplainer(object):
   '''
 
   def __init__(
-      self,
-      baseDir,
-      experimentFolderName,
-      testFilename,
-      targetColumn,
-      pickleFilePath,
-      shapStorageKeyword,
-      csvName="Optuna_Best_Params.csv",
-      dpi=1080,
+    self,
+    baseDir,
+    experimentFolderName,
+    testFilename,
+    targetColumn,
+    pickleFilePath,
+    shapStorageKeyword,
+    csvName="Optuna_Best_Params.csv",
+    dpi=1080,
   ):
     r'''
     Initialize the SHAPExplainer object with file paths and configuration.
@@ -182,8 +183,8 @@ class SHAPExplainer(object):
 
     # Load the storage dictionary from the pickle file.
     with open(
-        os.path.join(self.baseDir, self.experimentFolderName, f"{pattern}"),
-        "rb",  # Open the file in read-binary mode.
+      os.path.join(self.baseDir, self.experimentFolderName, f"{pattern}"),
+      "rb",  # Open the file in read-binary mode.
     ) as f:
       self.objects = pickle.load(f)  # Load the objects (model, scaler, etc.) from the file.
 
@@ -319,8 +320,8 @@ class SHAPExplainer(object):
 
     # Iterate through unique category labels and their mapped names.
     for catLabel, catName in zip(
-        self.yTest.unique(),
-        [self.categoryMap.get(c, f"Class: {c}") for c in self.yTest.unique()]
+      self.yTest.unique(),
+      [self.categoryMap.get(c, f"Class: {c}") for c in self.yTest.unique()]
     ):
       # Create boolean mask for current category samples.
       mask = self.yTest == catLabel
@@ -622,11 +623,11 @@ class SHAPExplainer(object):
     plt.close()
 
   def VisualizeExplanations(
-      self,
-      instanceIndex=None,
-      categoryToExplain="all",
-      noOfRecords=150,
-      noOfFeatures=5
+    self,
+    instanceIndex=None,
+    categoryToExplain="all",
+    noOfRecords=150,
+    noOfFeatures=5
   ):
     r'''
     Generate and save various SHAP visualizations for model interpretability.
@@ -925,19 +926,19 @@ class CAMExplainerPyTorch(object):
   }
 
   def __init__(
-      self,
-      torchModel=None,
-      yoloModel=None,
-      device="cpu",
-      camType="gradcam",
-      imgSize=640,
-      alpha=0.45,
-      outputBase=None,
-      figsize=(14, 12),
-      dpi=300,
-      fontSize=14,
-      topN=20,
-      debug=False,
+    self,
+    torchModel=None,
+    yoloModel=None,
+    device="cpu",
+    camType="gradcam",
+    imgSize=640,
+    alpha=0.45,
+    outputBase=None,
+    figsize=(14, 12),
+    dpi=300,
+    fontSize=14,
+    topN=20,
+    debug=False,
   ):
     r'''
     Initialize the CAMExplainerPyTorch with model, device and visualization settings.
@@ -1208,19 +1209,19 @@ class CAMExplainerPyTorch(object):
     return classNames.get(classIndex, defaultLabel)
 
   def CreateAnnotatedVisualization(
-      self,
-      imageRgb,
-      heatmap,
-      overlayImage,
-      className,
-      predictedClassName,
-      trueClassName,
-      alpha,
-      confidence,
-      methodName="GradCam",
-      figureSize=(12, 12),
-      dpiValue=300,
-      fontSize=14
+    self,
+    imageRgb,
+    heatmap,
+    overlayImage,
+    className,
+    predictedClassName,
+    trueClassName,
+    alpha,
+    confidence,
+    methodName="GradCam",
+    figureSize=(12, 12),
+    dpiValue=300,
+    fontSize=14
   ):
     r'''
     Build a 2x2 annotated saliency figure with colorbars.
@@ -1409,13 +1410,13 @@ class CAMExplainerPyTorch(object):
     raise RuntimeError(f"No implementation found for CAM type: {self.camType}")
 
   def ComputeSmoothGradCamPlusPlusSaliency(
-      self,
-      inputTensor,
-      targetClass,
-      targetLayer=None,
-      device=None,
-      samples=16,
-      noiseLevel=0.15
+    self,
+    inputTensor,
+    targetClass,
+    targetLayer=None,
+    device=None,
+    samples=16,
+    noiseLevel=0.15
   ):
     r'''
     Compute SmoothGrad-CAM++ by averaging Grad-CAM++ maps over noisy inputs.
@@ -1465,13 +1466,13 @@ class CAMExplainerPyTorch(object):
     return avg.astype(np.float32)
 
   def ProcessImage(
-      self,
-      imagePath,
-      classNames=None,
-      overlaysDir=None,
-      annotationsDir=None,
-      heatmapsDir=None,
-      contrast=False
+    self,
+    imagePath,
+    classNames=None,
+    overlaysDir=None,
+    annotationsDir=None,
+    heatmapsDir=None,
+    contrast=False
   ):
     r'''
     Process a single image: predict, compute saliency and save outputs.
@@ -1873,7 +1874,7 @@ class CAMExplainerPyTorch(object):
       grad = gradients[-1]
       eps = 1e-8
       weights = (torch.relu(grad) * act).sum(dim=(2, 3), keepdim=True) / (
-          grad.abs().sum(dim=(2, 3), keepdim=True) + eps)
+        grad.abs().sum(dim=(2, 3), keepdim=True) + eps)
       cam = torch.relu((weights * act).sum(dim=1, keepdim=True))
       cam = torch.nn.functional.interpolate(cam, size=(x.shape[2], x.shape[3]), mode="bilinear", align_corners=False)
       cam = cam.squeeze().cpu().numpy()
@@ -2225,7 +2226,7 @@ class CAMExplainerPyTorch(object):
           return mod
       # fallback to None if not found.
       return None
-    # If it's already a module-like object with hook API, return it.
+    # If it is already a module-like object with hook API, return it.
     if (hasattr(targetLayer, "register_forward_hook")):
       return targetLayer
     # Unknown type -> return None.
@@ -2537,18 +2538,18 @@ class CAMExplainerTensorFlow(object):
   }
 
   def __init__(
-      self,
-      tfModel=None,
-      device="cpu",
-      camType="gradcam",
-      imgSize=640,
-      alpha=0.45,
-      outputBase=None,
-      figsize=(14, 12),
-      dpi=300,
-      fontSize=14,
-      topN=20,
-      debug=False,
+    self,
+    tfModel=None,
+    device="cpu",
+    camType="gradcam",
+    imgSize=640,
+    alpha=0.45,
+    outputBase=None,
+    figsize=(14, 12),
+    dpi=300,
+    fontSize=14,
+    topN=20,
+    debug=False,
   ):
     r'''
     Initialize the CAMExplainerTensorFlow with model, device and visualization settings.
@@ -2566,6 +2567,7 @@ class CAMExplainerTensorFlow(object):
       topN (int): Top-N value used for uncertainty/confidence tracking.
       debug (bool): Enable verbose debug prints if True.
     '''
+
     # Store configuration values.
     self.tfModel = tfModel
     self.device = device
@@ -2601,6 +2603,7 @@ class CAMExplainerTensorFlow(object):
     Returns:
       tf.keras.layers.Layer | None: The last Conv2D layer found or None.
     '''
+
     # Return None if model is None.
     if (model is None):
       return None
@@ -2623,6 +2626,7 @@ class CAMExplainerTensorFlow(object):
     Returns:
       tf.keras.layers.Layer | None: Resolved layer instance or None if not found.
     '''
+
     # If user passed None, pick the last Conv2D layer using existing helper.
     if (targetLayer is None):
       return self.GetLastConvLayer(model)
@@ -2647,7 +2651,7 @@ class CAMExplainerTensorFlow(object):
           return layer
       # Return None if layer name is not found.
       return None
-    # If it's already a layer-like object with output attribute, return it.
+    # If it is already a layer-like object with output attribute, return it.
     if (hasattr(targetLayer, "output")):
       return targetLayer
     # Unknown type returns None.
@@ -2663,6 +2667,7 @@ class CAMExplainerTensorFlow(object):
     Returns:
       str: CamelCase folder name suitable for file system use.
     '''
+
     # Define mapping from lowercase to CamelCase folder names.
     mapping = {
       "gradcam"            : "GradCam",
@@ -2694,6 +2699,7 @@ class CAMExplainerTensorFlow(object):
     Returns:
       str: Resolved class name or the provided defaultLabel.
     '''
+
     # Return default label if class index is None.
     if (classIndex is None):
       return defaultLabel
@@ -2711,7 +2717,8 @@ class CAMExplainerTensorFlow(object):
     Returns:
       tuple: (inputTensor, originalImage) where inputTensor is a tf tensor and originalImage is RGB numpy array.
     '''
-    # Use instance imgSize if imageSize is not provided.
+
+    # Use instance `imgSize` if `imageSize` is not provided.
     if (imageSize is None):
       imageSize = self.imgSize
     # Open and convert image to RGB.
@@ -2737,6 +2744,7 @@ class CAMExplainerTensorFlow(object):
     Returns:
       numpy.ndarray: Normalized and smoothed heatmap clipped to [0,1].
     '''
+
     # Convert heatmap to float32 numpy array.
     hm = np.asarray(heatmap, dtype=np.float32)
     # Return empty array if heatmap has no elements.
@@ -2773,6 +2781,7 @@ class CAMExplainerTensorFlow(object):
     Returns:
       numpy.ndarray: Blended RGB image as uint8.
     '''
+
     # Use instance alpha if not provided.
     if (alpha is None):
       alpha = self.alpha
@@ -2811,6 +2820,7 @@ class CAMExplainerTensorFlow(object):
     Returns:
       numpy.ndarray: Heatmap normalized to [0,1].
     '''
+
     # Use provided target class or predicted class.
     useTarget = targetForCam if (targetForCam is not None) else predictedClass
     # Map camType to method name.
@@ -2855,6 +2865,7 @@ class CAMExplainerTensorFlow(object):
     Returns:
       numpy.ndarray: Grad-CAM heatmap normalized to [0,1].
     '''
+
     # Get the TensorFlow model.
     model = self.tfModel
     # Raise error if no model is available.
@@ -2940,6 +2951,7 @@ class CAMExplainerTensorFlow(object):
     Returns:
       numpy.ndarray: Grad-CAM++ heatmap normalized to [0,1].
     '''
+
     # Get the TensorFlow model.
     model = self.tfModel
     # Raise error if no model is available.
@@ -3024,6 +3036,7 @@ class CAMExplainerTensorFlow(object):
     Returns:
       numpy.ndarray: XGrad-CAM heatmap normalized to [0,1].
     '''
+
     # Get the TensorFlow model.
     model = self.tfModel
     # Raise error if no model is available.
@@ -3093,6 +3106,7 @@ class CAMExplainerTensorFlow(object):
     Returns:
       numpy.ndarray: Eigen-CAM heatmap normalized to [0,1].
     '''
+
     # Get the TensorFlow model.
     model = self.tfModel
     # Raise error if no model is available.
@@ -3153,6 +3167,7 @@ class CAMExplainerTensorFlow(object):
     Returns:
       numpy.ndarray: Layer-CAM heatmap normalized to [0,1].
     '''
+
     # Get the TensorFlow model.
     model = self.tfModel
     # Raise error if no model is available.
@@ -3218,6 +3233,7 @@ class CAMExplainerTensorFlow(object):
     Returns:
       numpy.ndarray: Score-CAM heatmap normalized to [0,1].
     '''
+
     # Get the TensorFlow model.
     model = self.tfModel
     # Raise error if no model is available.
@@ -3302,6 +3318,7 @@ class CAMExplainerTensorFlow(object):
     Returns:
       numpy.ndarray: Ablation-CAM heatmap normalized to [0,1].
     '''
+
     # Get the TensorFlow model.
     model = self.tfModel
     # Raise error if no model is available.
@@ -3367,6 +3384,7 @@ class CAMExplainerTensorFlow(object):
     Returns:
       numpy.ndarray: Integrated Gradients attribution map normalized to [0,1].
     '''
+
     # Get the TensorFlow model.
     model = self.tfModel
     # Raise error if no model is available.
@@ -3424,6 +3442,7 @@ class CAMExplainerTensorFlow(object):
     Returns:
       numpy.ndarray: Occlusion sensitivity map normalized to [0,1].
     '''
+
     # Get base input.
     xBase = inputTensor.numpy()[0]
     H, W, C = xBase.shape
@@ -3474,6 +3493,7 @@ class CAMExplainerTensorFlow(object):
     Returns:
       numpy.ndarray: Saliency map normalized to [0,1].
     '''
+
     # Get the TensorFlow model.
     model = self.tfModel
     # Raise error if no model is available.
@@ -3514,6 +3534,7 @@ class CAMExplainerTensorFlow(object):
     Returns:
       numpy.ndarray: SmoothGrad saliency map normalized to [0,1].
     '''
+
     # Get base input.
     inputsBase = inputTensor.numpy()[0]
     accumulated = None
@@ -3548,6 +3569,7 @@ class CAMExplainerTensorFlow(object):
     Returns:
       numpy.ndarray: Grad x Input attribution map normalized to [0,1].
     '''
+
     # Get the TensorFlow model.
     model = self.tfModel
     # Raise error if no model is available.
@@ -3576,8 +3598,10 @@ class CAMExplainerTensorFlow(object):
         sal = sal / float(sal.max())
       return sal.astype(np.float32)
 
-  def ComputeSmoothGradCamPlusPlusSaliency(self, inputTensor, targetClass, targetLayer=None, samples=16,
-                                           noiseLevel=0.15):
+  def ComputeSmoothGradCamPlusPlusSaliency(
+    self, inputTensor, targetClass, targetLayer=None, samples=16,
+    noiseLevel=0.15
+  ):
     r'''
     Compute SmoothGrad-CAM++ by averaging Grad-CAM++ maps.
 
@@ -3591,6 +3615,7 @@ class CAMExplainerTensorFlow(object):
     Returns:
       numpy.ndarray: SmoothGrad-CAM++ heatmap normalized to [0,1].
     '''
+
     # Get base input.
     inputsBase = inputTensor.numpy()[0]
     accumulated = None
@@ -3617,8 +3642,15 @@ class CAMExplainerTensorFlow(object):
       avg = avg / float(avg.max())
     return avg.astype(np.float32)
 
-  def ProcessImage(self, imagePath, classNames=None, overlaysDir=None, annotationsDir=None, heatmapsDir=None,
-                   contrast=False):
+  def ProcessImage(
+    self,
+    imagePath,
+    classNames=None,
+    overlaysDir=None,
+    annotationsDir=None,
+    heatmapsDir=None,
+    contrast=False
+  ):
     r'''
     Process a single image: predict, compute saliency and save outputs.
 
@@ -3633,6 +3665,7 @@ class CAMExplainerTensorFlow(object):
     Returns:
       dict: Summary information about the processed image.
     '''
+
     # Validate classNames is a dict if provided.
     if (classNames is not None and not isinstance(classNames, dict)):
       raise ValueError("`classNames` must be a dict mapping class indices to class names.")
@@ -3672,8 +3705,11 @@ class CAMExplainerTensorFlow(object):
     # Compute the saliency map through the dispatch method.
     saliencyMap = self.ComputeSaliency(inputTensor, predictedClass, targetForCam, targetLayer=self.targetLayer)
     # Resize saliency map to original image dimensions.
-    saliencyResized = cv2.resize(saliencyMap, (originalImage.shape[1], originalImage.shape[0]),
-                                 interpolation=cv2.INTER_LINEAR)
+    saliencyResized = cv2.resize(
+      saliencyMap,
+      (originalImage.shape[1], originalImage.shape[0]),
+      interpolation=cv2.INTER_LINEAR
+    )
     # Apply heatmap overlay to original image.
     overlay = self.ApplyHeatmapOverlay(originalImage, saliencyResized, alpha=self.alpha)
     # Resolve class name strings.
@@ -3693,12 +3729,20 @@ class CAMExplainerTensorFlow(object):
     # Format true class name.
     trueClassName = self.FormatClassName(trueClass, classNames or {}, "Unknown")
     # Create annotated visualization.
-    annotatedVisualization = self.CreateAnnotatedVisualization(originalImage, saliencyResized, overlay, className,
-                                                               predictedClassName, trueClassName, alpha=self.alpha,
-                                                               confidence=confidence,
-                                                               methodName=self.CamTypeToFolderName(self.camType),
-                                                               figureSize=self.figsize, dpiValue=self.dpi,
-                                                               fontSize=self.fontSize)
+    annotatedVisualization = self.CreateAnnotatedVisualization(
+      originalImage,
+      saliencyResized,
+      overlay,
+      className,
+      predictedClassName,
+      trueClassName,
+      alpha=self.alpha,
+      confidence=confidence,
+      methodName=self.CamTypeToFolderName(self.camType),
+      figureSize=self.figsize,
+      dpiValue=self.dpi,
+      fontSize=self.fontSize
+    )
     # Set default output directories if not provided.
     if (overlaysDir is None and self.outputBase is not None):
       overlaysDir = self.outputBase / "Overlays"
@@ -3795,9 +3839,19 @@ class CAMExplainerTensorFlow(object):
     return results
 
   def CreateAnnotatedVisualization(
-      self, imageRgb, heatmap, overlayImage, className, predictedClassName, trueClassName,
-      alpha, confidence, methodName="GradCam", figureSize=(12, 12), dpiValue=300,
-      fontSize=14
+    self,
+    imageRgb,
+    heatmap,
+    overlayImage,
+    className,
+    predictedClassName,
+    trueClassName,
+    alpha,
+    confidence,
+    methodName="GradCam",
+    figureSize=(12, 12),
+    dpiValue=300,
+    fontSize=14
   ):
     r'''
     Build a 2x2 annotated saliency figure with colorbars.
@@ -3819,6 +3873,7 @@ class CAMExplainerTensorFlow(object):
     Returns:
       numpy.ndarray: RGB numpy array containing the rendered annotated visualization.
     '''
+
     # Create font size variants.
     fontSizeTitle = int(fontSize * 1.6)
     fontSizePanel = int(fontSize * 1.2)
@@ -3839,9 +3894,16 @@ class CAMExplainerTensorFlow(object):
     if (trueClassName != "Unknown"):
       infoText += f"\nGround Truth: {trueClassName}"
     # Add text to subplot.
-    axisOriginal.text(0.03, 0.95, infoText, transform=axisOriginal.transAxes, fontsize=fontSizeText, va="top",
-                      bbox=dict(boxstyle="round,pad=0.6", facecolor="white", alpha=0.9, edgecolor="black",
-                                linewidth=1.2))
+    axisOriginal.text(
+      0.03, 0.95, infoText, transform=axisOriginal.transAxes, fontsize=fontSizeText, va="top",
+      bbox=dict(
+        boxstyle="round,pad=0.6",
+        facecolor="white",
+        alpha=0.9,
+        edgecolor="black",
+        linewidth=1.2
+      )
+    )
     # Top-right subplot.
     axisHeatmapJet = figure.add_subplot(grid[0, 1])
     imageJet = axisHeatmapJet.imshow(heatmap, cmap="jet", vmin=0.0, vmax=1.0, interpolation="bilinear")
@@ -3852,21 +3914,27 @@ class CAMExplainerTensorFlow(object):
     colorbarJet.set_label("Importance", rotation=270, labelpad=14, fontsize=fontSizeText, fontweight="bold")
     colorbarJet.ax.tick_params(labelsize=max(10, int(fontSizeText * 0.9)))
     # Add High label.
-    colorbarJet.ax.text(1.12, 1.02, "High", transform=colorbarJet.ax.transAxes,
-                        fontsize=max(9, int(fontSizeText * 0.9)), color="red", fontweight="bold")
+    colorbarJet.ax.text(
+      1.12, 1.02, "High", transform=colorbarJet.ax.transAxes,
+      fontsize=max(9, int(fontSizeText * 0.9)), color="red", fontweight="bold"
+    )
     # Add Low label.
-    colorbarJet.ax.text(1.12, -0.08, "Low", transform=colorbarJet.ax.transAxes,
-                        fontsize=max(9, int(fontSizeText * 0.9)), color="blue", fontweight="bold")
+    colorbarJet.ax.text(
+      1.12, -0.08, "Low", transform=colorbarJet.ax.transAxes,
+      fontsize=max(9, int(fontSizeText * 0.9)), color="blue", fontweight="bold"
+    )
     # Bottom-left subplot.
     axisOverlay = figure.add_subplot(grid[1, 0])
     axisOverlay.imshow(overlayImage)
     axisOverlay.set_title(rf"Overlay ($\alpha={alpha:.2f}$)", fontsize=fontSizePanel, fontweight="bold", pad=6)
     axisOverlay.axis("off")
     # Add explanation text.
-    axisOverlay.text(0.03, 0.95, f"Explaining predicted: {className}", transform=axisOverlay.transAxes,
-                     fontsize=fontSizeText, va="top",
-                     bbox=dict(boxstyle="round,pad=0.6", facecolor="yellow", alpha=0.85, edgecolor="orange",
-                               linewidth=1.2))
+    axisOverlay.text(
+      0.03, 0.95, f"Explaining predicted: {className}", transform=axisOverlay.transAxes,
+      fontsize=fontSizeText,
+      va="top",
+      bbox=dict(boxstyle="round,pad=0.6", facecolor="yellow", alpha=0.85, edgecolor="orange", linewidth=1.2)
+    )
     # Bottom-right subplot.
     axisHeatmapViridis = figure.add_subplot(grid[1, 1])
     imageViridis = axisHeatmapViridis.imshow(heatmap, cmap="viridis", vmin=0.0, vmax=1.0, interpolation="bilinear")
@@ -3877,19 +3945,27 @@ class CAMExplainerTensorFlow(object):
     colorbarViridis.set_label("Importance", rotation=270, labelpad=14, fontsize=fontSizeText, fontweight="bold")
     colorbarViridis.ax.tick_params(labelsize=max(10, int(fontSizeText * 0.9)))
     # Add High label.
-    colorbarViridis.ax.text(1.12, 1.02, "High", transform=colorbarViridis.ax.transAxes,
-                            fontsize=max(9, int(fontSizeText * 0.9)), color="yellow", fontweight="bold")
+    colorbarViridis.ax.text(
+      1.12, 1.02, "High", transform=colorbarViridis.ax.transAxes,
+      fontsize=max(9, int(fontSizeText * 0.9)), color="yellow", fontweight="bold"
+    )
     # Add Low label.
-    colorbarViridis.ax.text(1.12, -0.08, "Low", transform=colorbarViridis.ax.transAxes,
-                            fontsize=max(9, int(fontSizeText * 0.9)), color="purple", fontweight="bold")
+    colorbarViridis.ax.text(
+      1.12, -0.08, "Low", transform=colorbarViridis.ax.transAxes,
+      fontsize=max(9, int(fontSizeText * 0.9)), color="purple", fontweight="bold"
+    )
     # Add global title.
     figure.suptitle(f"{methodName} Visualization: {className}", fontsize=fontSizeTitle, fontweight="bold", y=0.97)
     # Create footer text.
     footer = (
-      "Maps highlight regions driving the predicted class.\n" "Higher colors = stronger evidence. Only predicted class is visualized for clarity.")
+      "Maps highlight regions driving the predicted class.\n"
+      "Higher colors = stronger evidence. Only predicted class is visualized for clarity."
+    )
     # Add footer text.
-    figure.text(0.5, 0.02, footer, ha="center", fontsize=fontSizeFooter, style="italic",
-                bbox=dict(boxstyle="round,pad=0.5", facecolor="lightblue", alpha=0.6, edgecolor="blue", linewidth=1.0))
+    figure.text(
+      0.5, 0.02, footer, ha="center", fontsize=fontSizeFooter, style="italic",
+      bbox=dict(boxstyle="round,pad=0.5", facecolor="lightblue", alpha=0.6, edgecolor="blue", linewidth=1.0)
+    )
     # Adjust subplots.
     try:
       figure.subplots_adjust(left=0.03, right=0.94, top=0.94, bottom=0.02, hspace=0.06, wspace=0.12)
@@ -3904,3 +3980,1036 @@ class CAMExplainerTensorFlow(object):
     # Close figure.
     plt.close(figure)
     return annotatedImage
+
+
+def TSNEFeaturesExplainability(
+  featsSub,
+  labelEncoder,
+  nSamples,
+  outDir,
+  predIdxSub,
+  trueIdxSub,
+  numComponents=2,
+  dpi=720,
+  randomState=42,
+  exportInteractive=False,
+  figureTitlePrefix="t-SNE of Features",
+  axisLabelPrefix="t-SNE Dimension",
+  fileNamePrefix="TSNEFeatures",
+  colorPaletteName="colorblind",
+  enableClusterMetrics=True,
+  enableMisclassificationHighlight=True,
+  enableCentroidAnnotations=True,
+  markerStyleCorrect="o",
+  markerStylePredicted="^",
+  markerStyleError="X",
+  outputFileFormat="pdf",
+  customClassNames=None,
+  perplexityMin=5,
+  perplexityMax=50,
+  annotationOffset=(8, -5),
+  fontSizeTitle=16,
+  fontSizeAxis=14,
+  alphaCorrect=0.85,
+  alphaError=0.9,
+  edgeColor="white",
+  edgeWidth=0.3,
+):
+  '''
+
+  Create a set of publication-ready t-SNE visualizations for feature embeddings and
+  optionally compute cluster quality metrics.
+
+  The function produces several static figures saved to `outDir`:
+    - Basic t-SNE colored by true labels
+    - Basic t-SNE colored by predicted labels
+    - Enhanced t-SNE (true labels) with optional centroid annotations
+    - Enhanced t-SNE (predicted labels)
+    - Side-by-side comparison of true vs predicted labels
+    - Misclassification-highlighted view (optional)
+    - Optional interactive Plotly HTML export (if `exportInteractive` and plotly installed)
+
+  Parameters:
+    featsSub (array-like): Feature vectors to embed (n_samples x n_features).
+    labelEncoder (sklearn.preprocessing.LabelEncoder or None): Optional encoder to map
+        integer class indices back to human-readable class names. If None, integer
+        class ids or `customClassNames` are used.
+    nSamples (int): Number of samples in `featsSub` (used for metrics and adaptive params).
+    outDir (pathlib.Path or str): Directory where generated figures and JSON metrics
+        will be saved.
+    predIdxSub (array-like): Predicted class indices for each sample (length nSamples).
+    trueIdxSub (array-like): Ground-truth class indices for each sample (length nSamples).
+    numComponents (int): Dimensionality of the embedding (default: 2).
+    dpi (int): DPI to use when saving figures (default: 720).
+    randomState (int): Random seed controlling t-SNE initialization (default: 42).
+    exportInteractive (bool): If True, export an interactive Plotly HTML file.
+    figureTitlePrefix (str): Prefix used in figure titles.
+    axisLabelPrefix (str): Prefix used for axis labels.
+    fileNamePrefix (str): Prefix used for output filenames.
+    colorPaletteName (str): Seaborn palette name for consistent class colors.
+    enableClusterMetrics (bool): If True compute silhouette, Davies-Bouldin and
+        Calinski-Harabasz scores and save them as JSON.
+    enableMisclassificationHighlight (bool): If True generate an additional figure
+        highlighting misclassified samples.
+    enableCentroidAnnotations (bool): If True annotate cluster centroids with class names.
+    markerStyleCorrect (str): Matplotlib marker for correct predictions.
+    markerStylePredicted (str): Matplotlib marker for predicted-label plots.
+    markerStyleError (str): Matplotlib marker for error highlights.
+    outputFileFormat (str): File format used when saving figures (e.g., "pdf", "png").
+    customClassNames (list or None): Optional explicit list of class names matching the sorted unique values in `trueIdxSub`.
+    perplexityMin (int): Minimum perplexity allowed when adapting to `nSamples`.
+    perplexityMax (int): Maximum perplexity allowed when adapting to `nSamples`.
+    annotationOffset (tuple): Offset in points for centroid annotation text (x,y).
+    fontSizeTitle (int): Font size for figure titles.
+    fontSizeAxis (int): Font size for axis labels.
+    alphaCorrect (float): Alpha (opacity) for correctly-classified points.
+    alphaError (float): Alpha (opacity) for error points.
+    edgeColor (str): Edge color for plotted markers.
+    edgeWidth (float): Edge line width for plotted markers.
+
+  Returns:
+    dict or None: If `enableClusterMetrics` is True, returns a dictionary containing computed cluster quality metrics (SilhouetteScore, DaviesBouldinIndex, CalinskiHarabaszScore, NumSamples, Perplexity). Otherwise returns None.
+
+  Example
+  -------
+  .. code-block:: python
+
+    from HMB.ExplainabilityHelper import TSNEFeaturesExplainability
+
+    metrics = TSNEFeaturesExplainability(
+      featsSub=featuresArray,
+      labelEncoder=le,
+      nSamples=len(featuresArray),
+      outDir=Path("./figures"),
+      predIdxSub=preds,
+      trueIdxSub=labels,
+      exportInteractive=True
+    )
+  '''
+
+  import seaborn as sns
+  from sklearn.manifold import TSNE
+  if (enableClusterMetrics):
+    from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
+    import json
+
+  # Initialize t-SNE with adaptive perplexity based on sample size for optimal embedding.
+  perplexityValue = min(perplexityMax, max(perplexityMin, int(nSamples) // 10))
+  tsne = TSNE(
+    n_components=numComponents,
+    perplexity=perplexityValue,
+    random_state=randomState,
+    n_jobs=-1,
+  )
+
+  # Compute the low-dimensional t-SNE projection of the input feature vectors.
+  zTsne = tsne.fit_transform(featsSub)
+
+  # Determine class names from `labelEncoder` or custom list or fallback to integer strings.
+  if (customClassNames is not None):
+    classNames = customClassNames
+  elif (labelEncoder is not None):
+    classNames = [
+      str(labelEncoder.inverse_transform([int(cls)])[0])
+      for cls in sorted(np.unique(trueIdxSub))
+    ]
+  else:
+    classNames = [f"Class-{int(cls)}" for cls in sorted(np.unique(trueIdxSub))]
+
+  # Generate basic t-SNE plot colored by ground truth labels for initial inspection.
+  plt.figure(figsize=(8, 8))
+  for cls in np.unique(trueIdxSub):
+    sel = trueIdxSub == cls
+    plt.scatter(
+      zTsne[sel, 0],
+      zTsne[sel, 1],
+      label=classNames[int(cls)],
+      s=8
+    )
+  plt.legend(markerscale=3)
+  plt.title(f"{figureTitlePrefix} (Colored by True Label)", fontsize=fontSizeTitle)
+  plt.xlabel(f"{axisLabelPrefix} 1", fontsize=fontSizeAxis)
+  plt.ylabel(f"{axisLabelPrefix} 2", fontsize=fontSizeAxis)
+  plt.savefig(outDir / f"{fileNamePrefix}True.{outputFileFormat}", dpi=dpi, bbox_inches="tight")
+  plt.close()
+
+  # Generate basic t-SNE plot colored by model predictions for performance assessment.
+  plt.figure(figsize=(8, 8))
+  for cls in np.unique(predIdxSub):
+    sel = predIdxSub == cls
+    plt.scatter(
+      zTsne[sel, 0],
+      zTsne[sel, 1],
+      label=classNames[int(cls)],
+      s=8,
+    )
+  plt.legend(markerscale=3)
+  plt.title(f"{figureTitlePrefix} (Colored by Predicted Label)", fontsize=fontSizeTitle)
+  plt.xlabel(f"{axisLabelPrefix} 1", fontsize=fontSizeAxis)
+  plt.ylabel(f"{axisLabelPrefix} 2", fontsize=fontSizeAxis)
+  plt.savefig(outDir / f"{fileNamePrefix}Predicted.{outputFileFormat}", dpi=dpi, bbox_inches="tight")
+  plt.close()
+
+  # Define colorblind-accessible palette for consistent class representation across figures.
+  palette = sns.color_palette(colorPaletteName, n_colors=len(classNames))
+
+  # Create enhanced t-SNE visualization with true labels including optional centroid annotations.
+  fig, ax = plt.subplots(figsize=(9, 8))
+  for i, cls in enumerate(sorted(np.unique(trueIdxSub))):
+    sel = trueIdxSub == cls
+    ax.scatter(
+      zTsne[sel, 0], zTsne[sel, 1],
+      label=classNames[i],
+      c=[palette[i]],
+      s=25,
+      alpha=alphaCorrect,
+      edgecolors=edgeColor,
+      linewidth=edgeWidth
+    )
+
+  # Annotate each cluster with its class label positioned at the centroid if enabled.
+  if (enableCentroidAnnotations):
+    for i, cls in enumerate(sorted(np.unique(trueIdxSub))):
+      sel = trueIdxSub == cls
+      centroid = zTsne[sel].mean(axis=0)
+      ax.annotate(
+        classNames[i],
+        xy=centroid,
+        xytext=annotationOffset,
+        textcoords="offset points",
+        fontsize=9,
+        bbox=dict(boxstyle="round,pad=0.3", facecolor=palette[i], alpha=0.2),
+        arrowprops=dict(arrowstyle="->", color=palette[i], lw=0.8)
+      )
+
+  # Configure axis labels, title, legend, and grid for publication-ready formatting.
+  ax.set_xlabel(f"{axisLabelPrefix} 1", fontsize=fontSizeAxis)
+  ax.set_ylabel(f"{axisLabelPrefix} 2", fontsize=fontSizeAxis)
+  ax.set_title(f"{figureTitlePrefix} (Colored by True Labels)", fontsize=fontSizeTitle, pad=15)
+  ax.legend(title="Class", title_fontsize=11, markerscale=2, frameon=True, shadow=False)
+  ax.grid(alpha=0.15, linestyle="--", linewidth=0.3)
+  plt.savefig(
+    outDir / f"{fileNamePrefix}TrueLabelsEnhanced.{outputFileFormat}",
+    dpi=dpi,
+    bbox_inches="tight"
+  )
+  plt.close()
+
+  # Create enhanced t-SNE visualization with predicted labels using distinct marker style.
+  fig, ax = plt.subplots(figsize=(9, 8))
+  for i, cls in enumerate(sorted(np.unique(predIdxSub))):
+    sel = predIdxSub == cls
+    ax.scatter(
+      zTsne[sel, 0], zTsne[sel, 1],
+      label=classNames[i],
+      c=[palette[i]],
+      s=25,
+      alpha=alphaCorrect,
+      edgecolors=edgeColor,
+      linewidth=edgeWidth,
+      marker=markerStylePredicted
+    )
+
+  # Configure axis labels, title, legend, and grid for the predicted-label visualization.
+  ax.set_xlabel(f"{axisLabelPrefix} 1", fontsize=fontSizeAxis)
+  ax.set_ylabel(f"{axisLabelPrefix} 2", fontsize=fontSizeAxis)
+  ax.set_title(f"{figureTitlePrefix} (Colored by Predicted Labels)", fontsize=fontSizeTitle, pad=15)
+  ax.legend(title="Predicted Class", title_fontsize=11, markerscale=2, frameon=True)
+  ax.grid(alpha=0.15, linestyle="--", linewidth=0.3)
+  plt.savefig(
+    outDir / f"{fileNamePrefix}PredictedLabelsEnhanced.{outputFileFormat}",
+    dpi=dpi,
+    bbox_inches="tight"
+  )
+  plt.close()
+
+  # Compute quantitative cluster validity metrics to objectively assess feature space structure if enabled.
+  metrics = None
+  if (enableClusterMetrics):
+    silhouetteAvg = silhouette_score(zTsne, trueIdxSub)
+    dbIndex = davies_bouldin_score(zTsne, trueIdxSub)
+    chScore = calinski_harabasz_score(zTsne, trueIdxSub)
+
+    # Assemble metrics dictionary using CamelCase keys for consistency with manuscript tables.
+    metrics = {
+      "SilhouetteScore"      : float(silhouetteAvg),
+      "DaviesBouldinIndex"   : float(dbIndex),
+      "CalinskiHarabaszScore": float(chScore),
+      "NumSamples"           : int(nSamples),
+      "Perplexity"           : float(perplexityValue)
+    }
+
+    # Print cluster quality metrics to console for immediate review during execution.
+    print(f"\n=== t-SNE Cluster Quality Metrics ===")
+    for k, v in metrics.items():
+      print(f"{k}: {v}")
+
+    # Export metrics to JSON file for inclusion in supplementary materials or automated reporting.
+    with open(outDir / f"{fileNamePrefix}ClusterMetrics.json", "w") as f:
+      json.dump(metrics, f, indent=2)
+
+  # Generate side-by-side comparison figure showing true versus predicted label colorings.
+  fig, axes = plt.subplots(1, 2, figsize=(18, 8))
+
+  # Render left panel with true class labels using circular markers.
+  for i, cls in enumerate(sorted(np.unique(trueIdxSub))):
+    sel = trueIdxSub == cls
+    axes[0].scatter(
+      zTsne[sel, 0], zTsne[sel, 1],
+      label=classNames[i], c=[palette[i]], s=25, alpha=alphaCorrect, edgecolors=edgeColor, linewidth=edgeWidth
+    )
+  axes[0].set_xlabel(f"{axisLabelPrefix} 1", fontsize=fontSizeAxis)
+  axes[0].set_ylabel(f"{axisLabelPrefix} 2", fontsize=fontSizeAxis)
+  axes[0].set_title("(A) True Labels", fontsize=15, fontweight="bold")
+  axes[0].legend(title="Class", title_fontsize=10, fontsize=9, markerscale=2)
+  axes[0].grid(alpha=0.15, linestyle="--", linewidth=0.3)
+
+  # Render right panel with predicted class labels using distinct markers for visual distinction.
+  for i, cls in enumerate(sorted(np.unique(predIdxSub))):
+    sel = predIdxSub == cls
+    axes[1].scatter(
+      zTsne[sel, 0],
+      zTsne[sel, 1],
+      label=classNames[i],
+      c=[palette[i]],
+      s=25,
+      alpha=alphaCorrect,
+      edgecolors=edgeColor,
+      linewidth=edgeWidth,
+      marker=markerStylePredicted
+    )
+  axes[1].set_xlabel(f"{axisLabelPrefix} 1", fontsize=fontSizeAxis)
+  axes[1].set_ylabel(f"{axisLabelPrefix} 2", fontsize=fontSizeAxis)
+  axes[1].set_title("(B) Predicted Labels", fontsize=15, fontweight="bold")
+  axes[1].legend(title="Class", title_fontsize=10, fontsize=9, markerscale=2)
+  axes[1].grid(alpha=0.15, linestyle="--", linewidth=0.3)
+
+  # Add descriptive super-title and annotate with computed cluster quality metrics if available.
+  fig.suptitle(
+    f"{figureTitlePrefix}: True vs. Predicted Labels",
+    fontsize=18, fontweight="bold", y=1.02
+  )
+  if (enableClusterMetrics):
+    metricsText = (
+      f"Silhouette: {metrics['SilhouetteScore']:.3f} | "
+      f"Davies-Bouldin: {metrics['DaviesBouldinIndex']:.3f} | "
+      f"Calinski-Harabasz: {metrics['CalinskiHarabaszScore']:.1f}"
+    )
+    fig.text(
+      0.5, 0.01, metricsText, ha="center", fontsize=12, style="italic",
+      bbox=dict(boxstyle="round", facecolor="lightgray", alpha=0.3)
+    )
+
+  # Save the composite comparison figure with tight layout to prevent label clipping.
+  plt.tight_layout()
+  plt.savefig(
+    outDir / f"{fileNamePrefix}ComparisonTrueVsPredicted.{outputFileFormat}",
+    dpi=dpi,
+    bbox_inches="tight"
+  )
+  plt.close()
+
+  # Highlight misclassified samples to show error patterns in the embedding space if enabled.
+  if (enableMisclassificationHighlight):
+    misclassified = (predIdxSub != trueIdxSub)
+    correct = ~misclassified
+
+    # Create dedicated figure to visualize classification errors with enhanced visual encoding.
+    fig, ax = plt.subplots(figsize=(9, 8))
+
+    # Plot correctly classified samples with reduced opacity to emphasize error regions.
+    for cls in np.unique(trueIdxSub):
+      sel = (trueIdxSub == cls) & correct
+      if (sel.any()):
+        ax.scatter(
+          zTsne[sel, 0],
+          zTsne[sel, 1],
+          c=[palette[cls]],
+          s=20,
+          alpha=alphaCorrect * 0.5,
+          edgecolors="none",
+          marker=markerStyleCorrect,
+          label=f"{classNames[cls]} (correct)"
+        )
+
+    # Plot misclassified samples with prominent markers and black borders for immediate visibility.
+    for trueCls in np.unique(trueIdxSub):
+      for predCls in np.unique(predIdxSub):
+        if (trueCls != predCls):
+          sel = (trueIdxSub == trueCls) & (predIdxSub == predCls)
+          if (sel.any()):
+            ax.scatter(
+              zTsne[sel, 0], zTsne[sel, 1],
+              c=[palette[predCls]],
+              s=60,
+              alpha=alphaError,
+              edgecolors="black",
+              linewidth=1.2,
+              marker=markerStyleError,
+              label=rf"{classNames[trueCls]}$\rightarrow${classNames[predCls]} (error)"
+            )
+
+    # Configure labels, title, and legend for the misclassification visualization.
+    ax.set_xlabel(f"{axisLabelPrefix} 1", fontsize=fontSizeAxis)
+    ax.set_ylabel(f"{axisLabelPrefix} 2", fontsize=fontSizeAxis)
+    ax.set_title(f"{figureTitlePrefix}: Misclassifications Highlighted", fontsize=fontSizeTitle, pad=15)
+    ax.legend(title="Classification Status", title_fontsize=10, fontsize=8, markerscale=1.5, ncol=2)
+    ax.grid(alpha=0.15, linestyle="--", linewidth=0.3)
+    plt.savefig(outDir / f"{fileNamePrefix}Misclassifications.{outputFileFormat}", dpi=dpi, bbox_inches="tight")
+    plt.close()
+
+    # Compile misclassification counts into dictionary for quantitative error pattern analysis.
+    misclassStats = {}
+    for trueCls in np.unique(trueIdxSub):
+      for predCls in np.unique(predIdxSub):
+        if (trueCls != predCls):
+          count = np.sum((trueIdxSub == trueCls) & (predIdxSub == predCls))
+          if (count > 0):
+            misclassStats[f"{classNames[trueCls]}To{classNames[predCls]}"] = int(count)
+
+    # Export misclassification statistics to JSON for supplementary table generation.
+    with open(outDir / f"{fileNamePrefix}MisclassificationCounts.json", "w") as f:
+      json.dump(misclassStats, f, indent=2)
+
+  # Optionally generate interactive Plotly HTML visualization for web-based supplementary materials.
+  if (exportInteractive):
+    try:
+      import plotly.express as px
+      import pandas as pd
+
+      # Assemble DataFrame with t-SNE coordinates, labels, and correctness flag for interactive plotting.
+      dfTsne = pd.DataFrame({
+        "TSNEDimension1": zTsne[:, 0],
+        "TSNEDimension2": zTsne[:, 1],
+        "TrueClass"     : [classNames[int(i)] for i in trueIdxSub],
+        "PredictedClass": [classNames[int(i)] for i in predIdxSub],
+        "IsCorrect"     : predIdxSub == trueIdxSub
+      })
+
+      # Create interactive scatter plot with hover tooltips showing prediction details.
+      figInteractive = px.scatter(
+        dfTsne,
+        x="TSNEDimension1",
+        y="TSNEDimension2",
+        color="TrueClass",
+        hover_data=["PredictedClass", "IsCorrect"],
+        title=f"Interactive {figureTitlePrefix} (Hover to See Prediction)",
+        color_discrete_sequence=[p for p in palette.as_hex()],
+        width=900,
+        height=800
+      )
+      figInteractive.update_traces(marker=dict(size=6, line=dict(width=0.5, color="white")))
+      figInteractive.write_html(outDir / f"{fileNamePrefix}Interactive.html")
+
+      # Confirm successful export of interactive visualization to console.
+      print(f"Interactive t-SNE saved to: {outDir / f'{fileNamePrefix}Interactive.html'}")
+    except ImportError:
+      # Notify user if Plotly dependency is missing for interactive export feature.
+      print("Plotly not installed. Install via: pip install plotly")
+
+  # Return computed metrics dictionary for programmatic access in downstream analysis.
+  return metrics
+
+
+def UMAPFeaturesExplainability(
+  featsSub,
+  labelEncoder,
+  nSamples,
+  outDir,
+  predIdxSub,
+  trueIdxSub,
+  numComponents=2,
+  dpi=720,
+  randomState=42,
+  exportInteractive=False,
+  figureTitlePrefix="UMAP of Features",
+  axisLabelPrefix="UMAP Dimension",
+  fileNamePrefix="UMAPFeatures",
+  colorPaletteName="colorblind",
+  enableClusterMetrics=True,
+  enableMisclassificationHighlight=True,
+  enableCentroidAnnotations=True,
+  markerStyleCorrect="o",
+  markerStylePredicted="^",
+  markerStyleError="X",
+  outputFileFormat="pdf",
+  customClassNames=None,
+  nNeighbors=15,
+  minDist=0.1,
+  metric="euclidean",
+  annotationOffset=(8, -5),
+  fontSizeTitle=16,
+  fontSizeAxis=14,
+  alphaCorrect=0.85,
+  alphaError=0.9,
+  edgeColor="white",
+  edgeWidth=0.3,
+):
+  r'''
+  Create a set of publication-ready UMAP visualizations for feature embeddings and
+  optionally compute cluster quality metrics.
+
+  The function produces several static figures saved to `outDir`:
+    - Basic UMAP colored by true labels
+    - Basic UMAP colored by predicted labels
+    - Enhanced UMAP (true labels) with optional centroid annotations
+    - Enhanced UMAP (predicted labels)
+    - Side-by-side comparison of true vs predicted labels
+    - Misclassification-highlighted view (optional)
+    - Optional interactive Plotly HTML export (if `exportInteractive` and plotly installed)
+
+  Parameters:
+    featsSub (array-like): Feature vectors to embed (n_samples x n_features).
+    labelEncoder (sklearn.preprocessing.LabelEncoder or None): Optional encoder to map
+      integer class indices back to human-readable class names. If None, integer
+      class ids or `customClassNames` are used.
+    nSamples (int): Number of samples in `featsSub` (used for metrics reporting).
+    outDir (pathlib.Path or str): Directory where generated figures and JSON metrics will be saved.
+    predIdxSub (array-like): Predicted class indices for each sample (length nSamples).
+    trueIdxSub (array-like): Ground-truth class indices for each sample (length nSamples).
+    numComponents (int): Dimensionality of the embedding (default: 2).
+    dpi (int): DPI to use when saving figures (default: 720).
+    randomState (int): Random seed controlling UMAP initialization (default: 42).
+    exportInteractive (bool): If True, export an interactive Plotly HTML file.
+    figureTitlePrefix (str): Prefix used in figure titles.
+    axisLabelPrefix (str): Prefix used for axis labels.
+    fileNamePrefix (str): Prefix used for output filenames.
+    colorPaletteName (str): Seaborn palette name for consistent class colors.
+    enableClusterMetrics (bool): If True compute silhouette, Davies-Bouldin and
+      Calinski-Harabasz scores and save them as JSON.
+    enableMisclassificationHighlight (bool): If True generate an additional figure
+      highlighting misclassified samples.
+    enableCentroidAnnotations (bool): If True annotate cluster centroids with class names.
+    markerStyleCorrect (str): Matplotlib marker for correct predictions.
+    markerStylePredicted (str): Matplotlib marker for predicted-label plots.
+    markerStyleError (str): Matplotlib marker for error highlights.
+    outputFileFormat (str): File format used when saving figures (e.g., "pdf", "png").
+    customClassNames (list or None): Optional explicit list of class names matching
+      the sorted unique values in `trueIdxSub`.
+    nNeighbors (int): UMAP `n_neighbors` hyperparameter controlling local connectivity.
+    minDist (float): UMAP `min_dist` hyperparameter controlling embedding tightness.
+    metric (str): Distance metric passed to UMAP (default: "euclidean").
+    annotationOffset (tuple): Offset in points for centroid annotation text (x,y).
+    fontSizeTitle (int): Font size for figure titles.
+    fontSizeAxis (int): Font size for axis labels.
+    alphaCorrect (float): Alpha (opacity) for correctly-classified points.
+    alphaError (float): Alpha (opacity) for error points.
+    edgeColor (str): Edge color for plotted markers.
+    edgeWidth (float): Edge line width for plotted markers.
+
+  Returns:
+    dict or None: If `enableClusterMetrics` is True, returns a dictionary containing computed cluster quality metrics (SilhouetteScore, DaviesBouldinIndex, CalinskiHarabaszScore, NumSamples, NNeighbors, MinDist, Metric). Otherwise returns None.
+
+  Example
+  -------
+  .. code-block:: python
+
+    from HMB.ExplainabilityHelper import UMAPFeaturesExplainability
+
+    metrics = UMAPFeaturesExplainability(
+      featsSub=featuresArray,
+      labelEncoder=le,
+      nSamples=len(featuresArray),
+      outDir=Path("./figures"),
+      predIdxSub=preds,
+      trueIdxSub=labels,
+      exportInteractive=True
+    )
+
+  '''
+
+  import umap as _umap
+  import seaborn as sns
+  if (enableClusterMetrics):
+    from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
+    import json
+
+  # Initialize UMAP with configurable hyperparameters for flexible manifold learning.
+  umap = _umap.UMAP(
+    n_components=numComponents,
+    n_neighbors=nNeighbors,
+    min_dist=minDist,
+    metric=metric,
+    random_state=randomState,
+    n_jobs=-1
+  )
+
+  # Compute the low-dimensional UMAP projection of the input feature vectors.
+  zUmap = umap.fit_transform(featsSub)
+
+  # Determine class names from labelEncoder or custom list or fallback to integer strings.
+  if (customClassNames is not None):
+    classNames = customClassNames
+  elif (labelEncoder is not None):
+    classNames = [
+      str(labelEncoder.inverse_transform([int(cls)])[0])
+      for cls in sorted(np.unique(trueIdxSub))
+    ]
+  else:
+    classNames = [f"Class-{int(cls)}" for cls in sorted(np.unique(trueIdxSub))]
+
+  # Generate basic UMAP plot colored by ground truth labels for initial inspection.
+  plt.figure(figsize=(8, 8))
+  for cls in np.unique(trueIdxSub):
+    sel = trueIdxSub == cls
+    plt.scatter(
+      zUmap[sel, 0],
+      zUmap[sel, 1],
+      label=classNames[int(cls)],
+      s=8
+    )
+  plt.legend(markerscale=3)
+  plt.title(f"{figureTitlePrefix} (Colored by True Label)", fontsize=fontSizeTitle)
+  plt.xlabel(f"{axisLabelPrefix} 1", fontsize=fontSizeAxis)
+  plt.ylabel(f"{axisLabelPrefix} 2", fontsize=fontSizeAxis)
+  plt.savefig(outDir / f"{fileNamePrefix}True.{outputFileFormat}", dpi=dpi, bbox_inches="tight")
+  plt.close()
+
+  # Generate basic UMAP plot colored by model predictions for performance assessment.
+  plt.figure(figsize=(8, 8))
+  for cls in np.unique(predIdxSub):
+    sel = predIdxSub == cls
+    plt.scatter(
+      zUmap[sel, 0],
+      zUmap[sel, 1],
+      label=classNames[int(cls)],
+      s=8
+    )
+  plt.legend(markerscale=3)
+  plt.title(f"{figureTitlePrefix} (Colored by Predicted Label)", fontsize=fontSizeTitle)
+  plt.xlabel(f"{axisLabelPrefix} 1", fontsize=fontSizeAxis)
+  plt.ylabel(f"{axisLabelPrefix} 2", fontsize=fontSizeAxis)
+  plt.savefig(outDir / f"{fileNamePrefix}Predicted.{outputFileFormat}", dpi=dpi, bbox_inches="tight")
+  plt.close()
+
+  # Define colorblind-accessible palette for consistent class representation across figures.
+  palette = sns.color_palette(colorPaletteName, n_colors=len(classNames))
+
+  # Create enhanced UMAP visualization with true labels including optional centroid annotations.
+  fig, ax = plt.subplots(figsize=(9, 8))
+  for i, cls in enumerate(sorted(np.unique(trueIdxSub))):
+    sel = trueIdxSub == cls
+    ax.scatter(
+      zUmap[sel, 0], zUmap[sel, 1],
+      label=classNames[i],
+      c=[palette[i]],
+      s=25,
+      alpha=alphaCorrect,
+      edgecolors=edgeColor,
+      linewidth=edgeWidth
+    )
+
+  # Annotate each cluster with its class label positioned at the centroid if enabled.
+  if (enableCentroidAnnotations):
+    for i, cls in enumerate(sorted(np.unique(trueIdxSub))):
+      sel = trueIdxSub == cls
+      centroid = zUmap[sel].mean(axis=0)
+      ax.annotate(
+        classNames[i],
+        xy=centroid,
+        xytext=annotationOffset,
+        textcoords="offset points",
+        fontsize=9,
+        bbox=dict(boxstyle="round,pad=0.3", facecolor=palette[i], alpha=0.2),
+        arrowprops=dict(arrowstyle="->", color=palette[i], lw=0.8)
+      )
+
+  # Configure axis labels, title, legend, and grid for publication-ready formatting.
+  ax.set_xlabel(f"{axisLabelPrefix} 1", fontsize=fontSizeAxis)
+  ax.set_ylabel(f"{axisLabelPrefix} 2", fontsize=fontSizeAxis)
+  ax.set_title(f"{figureTitlePrefix} (Colored by True Labels)", fontsize=fontSizeTitle, pad=15)
+  ax.legend(title="Class", title_fontsize=11, markerscale=2, frameon=True, shadow=False)
+  ax.grid(alpha=0.15, linestyle="--", linewidth=0.3)
+  plt.savefig(
+    outDir / f"{fileNamePrefix}TrueLabelsEnhanced.{outputFileFormat}",
+    dpi=dpi,
+    bbox_inches="tight"
+  )
+  plt.close()
+
+  # Create enhanced UMAP visualization with predicted labels using distinct marker style.
+  fig, ax = plt.subplots(figsize=(9, 8))
+  for i, cls in enumerate(sorted(np.unique(predIdxSub))):
+    sel = predIdxSub == cls
+    ax.scatter(
+      zUmap[sel, 0], zUmap[sel, 1],
+      label=classNames[i],
+      c=[palette[i]],
+      s=25,
+      alpha=alphaCorrect,
+      edgecolors=edgeColor,
+      linewidth=edgeWidth,
+      marker=markerStylePredicted
+    )
+
+  # Configure axis labels, title, legend, and grid for the predicted-label visualization.
+  ax.set_xlabel(f"{axisLabelPrefix} 1", fontsize=fontSizeAxis)
+  ax.set_ylabel(f"{axisLabelPrefix} 2", fontsize=fontSizeAxis)
+  ax.set_title(f"{figureTitlePrefix} (Colored by Predicted Labels)", fontsize=fontSizeTitle, pad=15)
+  ax.legend(title="Predicted Class", title_fontsize=11, markerscale=2, frameon=True)
+  ax.grid(alpha=0.15, linestyle="--", linewidth=0.3)
+  plt.savefig(
+    outDir / f"{fileNamePrefix}PredictedLabelsEnhanced.{outputFileFormat}",
+    dpi=dpi,
+    bbox_inches="tight"
+  )
+  plt.close()
+
+  # Compute quantitative cluster validity metrics to objectively assess feature space structure if enabled.
+  metrics = None
+  if (enableClusterMetrics):
+    silhouetteAvg = silhouette_score(zUmap, trueIdxSub)
+    dbIndex = davies_bouldin_score(zUmap, trueIdxSub)
+    chScore = calinski_harabasz_score(zUmap, trueIdxSub)
+
+    # Assemble metrics dictionary using CamelCase keys for consistency with manuscript tables.
+    metrics = {
+      "SilhouetteScore"      : float(silhouetteAvg),
+      "DaviesBouldinIndex"   : float(dbIndex),
+      "CalinskiHarabaszScore": float(chScore),
+      "NumSamples"           : int(nSamples),
+      "NNeighbors"           : int(nNeighbors),
+      "MinDist"              : float(minDist),
+      "Metric"               : str(metric)
+    }
+
+    # Print cluster quality metrics to console for immediate review during execution.
+    print(f"\n=== UMAP Cluster Quality Metrics ===")
+    for k, v in metrics.items():
+      print(f"{k}: {v}")
+
+    # Export metrics to JSON file for inclusion in supplementary materials or automated reporting.
+    with open(outDir / f"{fileNamePrefix}ClusterMetrics.json", "w") as f:
+      json.dump(metrics, f, indent=2)
+
+  # Generate side-by-side comparison figure showing true versus predicted label colorings.
+  fig, axes = plt.subplots(1, 2, figsize=(18, 8))
+
+  # Render left panel with true class labels using circular markers.
+  for i, cls in enumerate(sorted(np.unique(trueIdxSub))):
+    sel = trueIdxSub == cls
+    axes[0].scatter(
+      zUmap[sel, 0],
+      zUmap[sel, 1],
+      label=classNames[i],
+      c=[palette[i]],
+      s=25,
+      alpha=alphaCorrect,
+      edgecolors=edgeColor,
+      linewidth=edgeWidth
+    )
+  axes[0].set_xlabel(f"{axisLabelPrefix} 1", fontsize=fontSizeAxis)
+  axes[0].set_ylabel(f"{axisLabelPrefix} 2", fontsize=fontSizeAxis)
+  axes[0].set_title("(A) True Labels", fontsize=15, fontweight="bold")
+  axes[0].legend(title="Class", title_fontsize=10, fontsize=9, markerscale=2)
+  axes[0].grid(alpha=0.15, linestyle="--", linewidth=0.3)
+
+  # Render right panel with predicted class labels using distinct markers for visual distinction.
+  for i, cls in enumerate(sorted(np.unique(predIdxSub))):
+    sel = predIdxSub == cls
+    axes[1].scatter(
+      zUmap[sel, 0],
+      zUmap[sel, 1],
+      label=classNames[i],
+      c=[palette[i]],
+      s=25,
+      alpha=alphaCorrect,
+      edgecolors=edgeColor,
+      linewidth=edgeWidth,
+      marker=markerStylePredicted
+    )
+  axes[1].set_xlabel(f"{axisLabelPrefix} 1", fontsize=fontSizeAxis)
+  axes[1].set_ylabel(f"{axisLabelPrefix} 2", fontsize=fontSizeAxis)
+  axes[1].set_title("(B) Predicted Labels", fontsize=15, fontweight="bold")
+  axes[1].legend(title="Class", title_fontsize=10, fontsize=9, markerscale=2)
+  axes[1].grid(alpha=0.15, linestyle="--", linewidth=0.3)
+
+  # Add descriptive super-title and annotate with computed cluster quality metrics if available.
+  fig.suptitle(
+    f"{figureTitlePrefix}: True vs. Predicted Labels",
+    fontsize=18, fontweight="bold", y=1.02
+  )
+  if (enableClusterMetrics):
+    metricsText = (
+      f"Silhouette: {metrics['SilhouetteScore']:.3f} | "
+      f"Davies-Bouldin: {metrics['DaviesBouldinIndex']:.3f} | "
+      f"Calinski-Harabasz: {metrics['CalinskiHarabaszScore']:.1f}"
+    )
+    fig.text(
+      0.5, 0.01, metricsText, ha="center", fontsize=12, style="italic",
+      bbox=dict(boxstyle="round", facecolor="lightgray", alpha=0.3)
+    )
+
+  # Save the composite comparison figure with tight layout to prevent label clipping.
+  plt.tight_layout()
+  plt.savefig(
+    outDir / f"{fileNamePrefix}ComparisonTrueVsPredicted.{outputFileFormat}",
+    dpi=dpi,
+    bbox_inches="tight"
+  )
+  plt.close()
+
+  # Highlight misclassified samples to show error patterns in the embedding space if enabled.
+  if (enableMisclassificationHighlight):
+    misclassified = (predIdxSub != trueIdxSub)
+    correct = ~misclassified
+
+    # Create dedicated figure to visualize classification errors with enhanced visual encoding.
+    fig, ax = plt.subplots(figsize=(9, 8))
+
+    # Plot correctly classified samples with reduced opacity to emphasize error regions.
+    for cls in np.unique(trueIdxSub):
+      sel = (trueIdxSub == cls) & correct
+      if (sel.any()):
+        ax.scatter(
+          zUmap[sel, 0],
+          zUmap[sel, 1],
+          c=[palette[cls]],
+          s=20,
+          alpha=alphaCorrect * 0.5,
+          edgecolors="none",
+          marker=markerStyleCorrect,
+          label=f"{classNames[cls]} (correct)"
+        )
+
+    # Plot misclassified samples with prominent markers and black borders for immediate visibility.
+    for trueCls in np.unique(trueIdxSub):
+      for predCls in np.unique(predIdxSub):
+        if (trueCls != predCls):
+          sel = (trueIdxSub == trueCls) & (predIdxSub == predCls)
+          if (sel.any()):
+            ax.scatter(
+              zUmap[sel, 0], zUmap[sel, 1],
+              c=[palette[predCls]],
+              s=60,
+              alpha=alphaError,
+              edgecolors="black",
+              linewidth=1.2,
+              marker=markerStyleError,
+              label=rf"{classNames[trueCls]}$\rightarrow${classNames[predCls]} (error)"
+            )
+
+    # Configure labels, title, and legend for the misclassification visualization.
+    ax.set_xlabel(f"{axisLabelPrefix} 1", fontsize=fontSizeAxis)
+    ax.set_ylabel(f"{axisLabelPrefix} 2", fontsize=fontSizeAxis)
+    ax.set_title(f"{figureTitlePrefix}: Misclassifications Highlighted", fontsize=fontSizeTitle, pad=15)
+    ax.legend(title="Classification Status", title_fontsize=10, fontsize=8, markerscale=1.5, ncol=2)
+    ax.grid(alpha=0.15, linestyle="--", linewidth=0.3)
+    plt.savefig(outDir / f"{fileNamePrefix}Misclassifications.{outputFileFormat}", dpi=dpi, bbox_inches="tight")
+    plt.close()
+
+    # Compile misclassification counts into dictionary for quantitative error pattern analysis.
+    misclassStats = {}
+    for trueCls in np.unique(trueIdxSub):
+      for predCls in np.unique(predIdxSub):
+        if (trueCls != predCls):
+          count = np.sum((trueIdxSub == trueCls) & (predIdxSub == predCls))
+          if (count > 0):
+            misclassStats[f"{classNames[trueCls]}To{classNames[predCls]}"] = int(count)
+
+    # Export misclassification statistics to JSON for supplementary table generation.
+    with open(outDir / f"{fileNamePrefix}MisclassificationCounts.json", "w") as f:
+      json.dump(misclassStats, f, indent=2)
+
+  # Optionally generate interactive Plotly HTML visualization for web-based supplementary materials.
+  if (exportInteractive):
+    try:
+      import plotly.express as px
+      import pandas as pd
+
+      # Assemble DataFrame with UMAP coordinates, labels, and correctness flag for interactive plotting.
+      dfUmap = pd.DataFrame({
+        "UMAPDimension1": zUmap[:, 0],
+        "UMAPDimension2": zUmap[:, 1],
+        "TrueClass"     : [classNames[int(i)] for i in trueIdxSub],
+        "PredictedClass": [classNames[int(i)] for i in predIdxSub],
+        "IsCorrect"     : predIdxSub == trueIdxSub
+      })
+
+      # Create interactive scatter plot with hover tooltips showing prediction details.
+      figInteractive = px.scatter(
+        dfUmap,
+        x="UMAPDimension1",
+        y="UMAPDimension2",
+        color="TrueClass",
+        hover_data=["PredictedClass", "IsCorrect"],
+        title=f"Interactive {figureTitlePrefix} (Hover to See Prediction)",
+        color_discrete_sequence=[p for p in palette.as_hex()],
+        width=900,
+        height=800
+      )
+      figInteractive.update_traces(marker=dict(size=6, line=dict(width=0.5, color="white")))
+      figInteractive.write_html(outDir / f"{fileNamePrefix}Interactive.html")
+
+      # Confirm successful export of interactive visualization to console.
+      print(f"Interactive UMAP saved to: {outDir / f'{fileNamePrefix}Interactive.html'}")
+    except ImportError:
+      # Notify user if Plotly dependency is missing for interactive export feature.
+      print("Plotly not installed. Install via: pip install plotly")
+
+  # Return computed metrics dictionary for programmatic access in downstream analysis.
+  return metrics
+
+
+# Compute Grad-CAM heatmap for a single image and target class.
+def TFGradCam(model, imgTensor, classIdx=None, lastConvLayerName=None):
+  '''
+  Compute Grad-CAM heatmap for imgTensor and target class index.
+
+  Parameters:
+    model (tensorflow.keras.Model): Trained Keras model.
+    imgTensor (numpy.ndarray or tf.Tensor): Shape (1,H,W,3) preprocessed input.
+    classIdx (int or None): Target class index; if None uses model prediction.
+    lastConvLayerName (str|None): Specify conv layer name; if None pick last Conv2D.
+
+  Returns.
+    heatmap (2D numpy array): normalized heatmap in [0,1].
+
+  Example
+  -------
+  .. code-block:: python
+
+  from HMB.ExplainabilityHelper import TFGradCam
+
+  model = ...  # Load or build model.
+  img = ...    # Load and preprocess image to shape (1, H, W, 3).
+  heatmap = TFGradCam(model, img, classIdx=2, lastConvLayerName=None)
+  '''
+
+  # Convert to tensor and ensure batch dimension.
+  x = tf.convert_to_tensor(imgTensor, dtype=tf.float32)
+
+  # Find last convolutional 2D layer if name not provided.
+  if (lastConvLayerName is None):
+    lastConv = None
+    for layer in reversed(model.layers):
+      if (isinstance(layer, tf.keras.layers.Conv2D)):
+        lastConv = layer
+        break
+    if (lastConv is None):
+      raise ValueError("TFGradCam: no Conv2D layer found in model.")
+    lastConvLayerName = lastConv.name
+
+  # Build a model that outputs conv layer activations and predictions.
+  convLayer = model.get_layer(lastConvLayerName).output
+  # Use the same input structure as the original model to avoid Keras warnings about input nesting
+  # gradModel = tf.keras.models.Model([model.inputs], [convLayer, model.output])
+  gradModel = tf.keras.models.Model(model.inputs, [convLayer, model.output])
+
+  with tf.GradientTape() as tape:
+    convOutputs, predictions = gradModel(x)
+    if (classIdx is None):
+      classIdx = tf.argmax(predictions[0])
+    classScore = predictions[:, classIdx]
+
+  # Compute gradients of the class score w.r.t conv outputs.
+  grads = tape.gradient(classScore, convOutputs)
+
+  # Compute channel-wise mean of gradients.
+  weights = tf.reduce_mean(grads, axis=(1, 2))
+  convOutputs = convOutputs[0]
+  weights = weights[0]
+
+  # Weighted combination of activations.
+  cam = tf.zeros(shape=convOutputs.shape[:2], dtype=tf.float32)
+  for i in range(int(convOutputs.shape[-1])):
+    cam += weights[i] * convOutputs[:, :, i]
+
+  # Relu and normalize.
+  cam = tf.nn.relu(cam)
+  cam = cam.numpy()
+  if (cam.max() != 0):
+    cam = (cam - cam.min()) / (cam.max() - cam.min())
+  else:
+    cam = np.zeros_like(cam)
+
+  return cam
+
+
+# Save Grad-CAM overlays for a list of sample indices.
+def SaveGradCamsForSamples(
+  model,
+  imgPaths,
+  sampleIndices,
+  outFolder,
+  imgSize=(512, 512),
+  lastConvLayerName=None
+):
+  '''
+  Compute and save Grad-CAM overlays for the provided samples.
+
+  Parameters:
+    model (tensorflow.keras.Model): Trained Keras model.
+    imgPaths (list): List of image file paths in the same order as indices refer to.
+    sampleIndices (array-like): Indices to visualize.
+    outFolder (str): Output folder where overlays will be saved.
+    imgSize (tuple): Size to resize images for model input.
+    lastConvLayerName (str): Optional conv layer to use.
+
+  Example
+  -------
+  .. code-block:: python
+
+    from HMB.ExplainabilityHelper import SaveGradCamsForSamples
+
+    model = ...  # Load or build model.
+    imgPaths = [...]  # List of image file paths.
+    sampleIndices = [0, 5, 10]  # Indices of samples to visualize.
+    outFolder = "GradCAM_Overlays"
+
+    SaveGradCamsForSamples(
+      model,
+      imgPaths,
+      sampleIndices,
+      outFolder,
+      imgSize=(512, 512),
+      lastConvLayerName=None
+    )
+  '''
+
+  from HMB.ImagesHelper import OverlayHeatmapOnImage
+
+  # Input validation.
+  if ((model is None) or (imgPaths is None) or (sampleIndices is None) or (outFolder is None)):
+    raise ValueError("Model, imgPaths, sampleIndices, and outFolder are required.")
+  if (not isinstance(imgPaths, list) or (len(imgPaths) == 0)):
+    raise ValueError("imgPaths must be a non-empty list.")
+  if (not isinstance(outFolder, str) or (len(outFolder.strip()) == 0)):
+    raise ValueError("Invalid output folder.")
+  # Raise if path exists and is a file, or cannot be created.
+  if (os.path.exists(outFolder) and not os.path.isdir(outFolder)):
+    raise ValueError("Output path is not a directory.")
+  try:
+    os.makedirs(outFolder, exist_ok=True)
+  except Exception:
+    raise ValueError("Failed to create output folder.")
+
+  for idx in sampleIndices:
+    imgPath = imgPaths[int(idx)]
+    try:
+      orig = Image.open(imgPath).convert("RGB")
+    except Exception:
+      orig = Image.new("RGB", imgSize, (255, 255, 255))
+
+    # Prepare model input.
+    inp = orig.resize(imgSize)
+    inpArr = np.asarray(inp).astype(np.float32) / 255.0
+    inpBatch = np.expand_dims(inpArr, axis=0)
+
+    # Compute prediction to get predicted class.
+    preds = model(inpBatch, training=False).numpy()
+    predClass = int(np.argmax(preds[0]))
+
+    # Compute Grad-CAM heatmap.
+    try:
+      heatmap = TFGradCam(model, inpBatch, classIdx=predClass, lastConvLayerName=lastConvLayerName)
+    except Exception as e:
+      # If Grad-CAM fails, skip and continue.
+      print(f"[WARN] TFGradCam failed for {imgPath}: {e}.")
+      continue
+
+    # Create and save overlay.
+    overlay = OverlayHeatmapOnImage(orig, heatmap, alpha=0.5)
+
+    outPath = os.path.join(outFolder, f"GradCAM_IDx{idx}_Pred{predClass}.pdf")
+    overlay.save(outPath)
