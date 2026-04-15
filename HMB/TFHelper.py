@@ -1,9 +1,14 @@
-import os
-import pickle
+import os, pickle, patchify
 import numpy as np
 import pandas as pd
-import tensorflow as tf
 from PIL import Image
+import tensorflow as tf
+from tensorflow.keras.models import *
+from tensorflow.keras.layers import *
+from tensorflow.keras.optimizers import *
+from tensorflow.nn import depth_to_space
+from tensorflow.keras.utils import Sequence
+from tensorflow.keras.utils import get_custom_objects
 
 
 def MCDropoutPredictions(model, genObj, steps, T=30):
@@ -1913,3 +1918,794 @@ def StatisticsPretrainedAttentionModelFromDataFrame(
     )
 
   return allHistory
+
+
+def ImageToViTPatches(image, noOfPatches, patchSize):
+  r'''
+  Convert an image to flattened patch embeddings suitable for Vision Transformer input.
+  This function takes a preprocessed image, extracts non-overlapping patches of a specified size,
+  and flattens each patch into a vector. The output is a numpy array of shape (noOfPatches, patchSize*patchSize*3)
+  containing the flattened patch embeddings for each image.
+
+  Parameters:
+    image (numpy.ndarray): A preprocessed image array of shape (height, width, channels) that is compatible with the
+      expected input shape of the Vision Transformer model.
+    noOfPatches (int): The number of patches to extract from the image. This should match the expected number of
+      patches for the Vision Transformer model architecture (e.g., 256 for ViT-Base with 16x16 patches on
+      224x224 images).
+    patchSize (int): The size of each square patch (e.g., 16 for 16x16 patches). The function will extract
+      non-overlapping patches of this size from the image.
+
+  Returns:
+    numpy.ndarray: A numpy array of shape (noOfPatches, patchSize*patchSize*3) containing the flattened patch embeddings for each image. Each row corresponds to a patch, and the columns represent the pixel values of the patch flattened into a vector (patchSize*patchSize*3, where 3 is the number of color channels).
+  '''
+
+  # Extract patches using patchify: returns (gridH, gridW, 1, ph, pw, c).
+  patches = patchify.patchify(image, (patchSize, patchSize, 3), step=patchSize)
+  # Reshape to flat list: (num_patches, patchSize, patchSize, 3).
+  patches = patches.reshape(-1, patchSize, patchSize, 3)
+  # Truncate or pad to expected number of patches.
+  if (len(patches) < noOfPatches):
+    print("Warning: Number of extracted patches is less than the expected number of patches.")
+    # Pad with zeros if insufficient patches (edge case for non-divisible dimensions).
+    padding = np.zeros((noOfPatches - len(patches), patchSize, patchSize, 3))
+    patches = np.concatenate([patches, padding], axis=0)
+  else:
+    patches = patches[:noOfPatches]
+  # Flatten each patch to vector: (noOfPatches, patchSize*patchSize*3).
+  patches = patches.reshape(-1, patchSize * patchSize * 3)
+  return patches
+
+
+class ViTPatchDataGeneratorFromDataFrame(Sequence):
+  r'''
+  Keras Sequence generator for Vision Transformer training using a pandas DataFrame.
+  This generator loads images from file paths specified in a DataFrame, extracts
+  non-overlapping patches, flattens them to embedding vectors, and yields batches
+  compatible with the VisionTransformer model architecture.
+
+  Parameters:
+    dataFrame (pandas.DataFrame): DataFrame containing at least 'image_path' and 'label' columns.
+    inputShape (tuple): Expected input shape of the images (height, width, channels).
+    batchSize (int): Number of samples per batch.
+    classMode (str): "categorical" for one-hot encoded labels, "sparse" for integer labels.
+    noOfPatches (int): Number of patches to extract from each image (default 256).
+    patchSize (int): Size of each square patch (default 16, resulting in 16x16 patches).
+    embedDimension (int): Dimension of the flattened patch embeddings (default 768 for ViT-Base).
+    shuffle (bool): Whether to shuffle the data at the end of each epoch (default False).
+
+  Returns:
+    A batch of data in the form (images, labels) where:
+      - images: A numpy array of shape (batchSize, noOfPatches, embedDimension) containing the flattened patch embeddings for each image in the batch.
+      - labels: A numpy array of shape (batchSize, numClasses) for "categorical" classMode or (batchSize, 1) for "sparse" classMode containing the corresponding labels for each image in the batch.
+  '''
+
+  def __init__(
+    self, dataFrame, inputShape, batchSize, classMode="categorical",
+    noOfPatches=256, patchSize=16, embedDimension=768, shuffle=False,
+  ):
+    # Validate required DataFrame columns.
+    requiredCols = {"image_path", "label"}
+    if (not requiredCols.issubset(dataFrame.columns)):
+      raise ValueError(f"DataFrame must contain columns: {requiredCols}")
+
+    self.dataFrame = dataFrame.reset_index(drop=True)
+    self.inputShape = inputShape
+    self.batchSize = batchSize
+    self.classMode = classMode
+    self.noOfPatches = noOfPatches
+    self.patchSize = patchSize
+    self.embedDimension = embedDimension
+    self.shuffle = shuffle
+
+    # Build class mapping for categorical encoding.
+    self.classes = sorted(dataFrame["label"].unique())
+    self.classIndices = {label: idx for idx, label in enumerate(self.classes)}
+    self.numClasses = len(self.classes)
+    self.yTrue = dataFrame["label"].values
+    self.yTrueIndices = np.array([self.classIndices[label] for label in self.yTrue])
+
+    self.numImages = len(self.dataFrame)
+    self.indices = np.arange(self.numImages)
+
+    # Warn about dropped samples if batch size doesn't divide evenly.
+    remainder = self.numImages % self.batchSize
+    if (remainder != 0):
+      print(
+        f"Warning: {remainder} samples will be dropped per epoch "
+        f"(batchSize={batchSize}, total={self.numImages})"
+      )
+      self.yTrue = self.yTrue[:-remainder]
+      self.yTrueIndices = self.yTrueIndices[:-remainder]
+
+    if (self.shuffle):
+      np.random.shuffle(self.indices)
+
+  def __len__(self):
+    '''Return number of batches per epoch.'''
+    return self.numImages // self.batchSize
+
+  def _image_to_patches(self, image):
+    '''Extract and flatten non-overlapping patches from a preprocessed image.'''
+
+    # Extract patches using patchify: returns (grid_h, grid_w, 1, ph, pw, c).
+    patches = patchify.patchify(image, (self.patchSize, self.patchSize, 3), step=self.patchSize)
+    # Reshape to flat list: (num_patches, patchSize, patchSize, 3)
+    patches = patches.reshape(-1, self.patchSize, self.patchSize, 3)
+    # Truncate or pad to expected number of patches
+    if (len(patches) < self.noOfPatches):
+      # Pad with zeros if insufficient patches (edge case for non-divisible dimensions).
+      padding = np.zeros((self.noOfPatches - len(patches), self.patchSize, self.patchSize, 3))
+      patches = np.concatenate([patches, padding], axis=0)
+    else:
+      patches = patches[:self.noOfPatches]
+    # Flatten each patch to vector: (noOfPatches, patchSize*patchSize*3).
+    return patches.reshape(self.noOfPatches, -1)
+
+  def __getitem__(self, index):
+    '''Generate one batch of data.'''
+    # Select batch indices.
+    batchIndices = self.indices[index * self.batchSize: (index + 1) * self.batchSize]
+
+    # Pre-allocate batch arrays (use empty for slight efficiency gain)
+    images = np.empty((self.batchSize, self.noOfPatches, self.embedDimension), dtype=np.float32)
+
+    if (self.classMode == "categorical"):
+      labels = np.zeros((self.batchSize, self.numClasses), dtype=np.float32)
+    else:
+      labels = np.zeros((self.batchSize, 1), dtype=np.int32)
+
+    for i, idx in enumerate(batchIndices):
+      # Load image path and label from DataFrame.
+      row = self.dataFrame.iloc[idx]
+      imgPath = row["image_path"]
+      label = row["label"]
+
+      # Load and validate image.
+      image = cv2.imread(imgPath)
+      if (image is None):
+        raise ValueError(f"Failed to load image: {imgPath}")
+
+      # Convert BGR (OpenCV default) to RGB for model compatibility.
+      image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+      # Resize to expected input dimensions.
+      image = cv2.resize(
+        image,
+        (self.inputShape[1], self.inputShape[0]),  # (width, height) for cv2.resize.
+        interpolation=cv2.INTER_CUBIC
+      )
+
+      # Extract and flatten patches.
+      patches = self._image_to_patches(image)
+      images[i] = patches
+
+      # Encode label.
+      if (self.classMode == "categorical"):
+        labels[i, self.classIndices[label]] = 1.0
+      else:
+        labels[i, 0] = self.classIndices[label]
+
+    # Normalize pixel values to [0, 1].
+    return images / 255.0, labels
+
+  def on_epoch_end(self):
+    '''Callback invoked at the end of each epoch for shuffling.'''
+    if self.shuffle:
+      np.random.shuffle(self.indices)
+
+  def get_class_indices(self):
+    '''Return the mapping from class names to integer indices.'''
+    return self.classIndices.copy()
+
+
+class ViTPatchDataGeneratorFromFolder(Sequence):
+  r'''
+  Keras Sequence generator for Vision Transformer training using images from a folder structure.
+  This generator loads images from a specified folder structure, extracts non-overlapping patches,
+  flattens them to embedding vectors, and yields batches compatible with the VisionTransformer model architecture.
+
+  Parameters:
+    folder (str): Path to the root folder containing subfolders for each class, with images inside those subfolders.
+    inputShape (tuple): Expected input shape of the images (height, width, channels).
+    batchSize (int): Number of samples per batch.
+    classMode (str): "categorical" for one-hot encoded labels, "sparse" for integer labels.
+    noOfPatches (int): Number of patches to extract from each image (default 256).
+    patchSize (int): Size of each square patch (default 16, resulting in 16x16 patches).
+    embedDimension (int): Dimension of the flattened patch embeddings (default 768 for ViT-Base).
+    shuffle (bool): Whether to shuffle the data at the end of each epoch (default False).
+
+  Returns:
+    A batch of data in the form (images, labels) where:
+      - images: A numpy array of shape (batchSize, noOfPatches, embedDimension) containing the flattened patch embeddings for each image in the batch.
+      - labels: A numpy array of shape (batchSize, numClasses) for "categorical" classMode or (batchSize, 1) for "sparse" classMode containing the corresponding labels for each image in the batch.
+  '''
+
+  def __init__(
+    self, folder, inputShape, batchSize, classMode="categorical",
+    noOfPatches=256, patchSize=16, embedDimension=768, shuffle=False,
+  ):
+    self.folder = folder
+    self.inputShape = inputShape
+    self.batchSize = batchSize
+    self.classMode = classMode
+    self.noOfPatches = noOfPatches
+    self.patchSize = patchSize
+    self.embedDimension = embedDimension
+    self.classes = os.listdir(folder)
+    self.shuffle = shuffle
+
+    self.listOfImages = []
+    self.listOfLabels = []
+
+    for label in os.listdir(folder):
+      labelFolder = os.path.join(folder, label)
+      for image in os.listdir(labelFolder):
+        self.listOfImages.append(os.path.join(labelFolder, image))
+        self.listOfLabels.append(label)
+
+    self.numImages = len(self.listOfImages)
+    self.indices = np.arange(self.numImages)
+    self.classIndices = {label: index for index, label in enumerate(self.classes)}
+
+    np.random.shuffle(self.indices)
+
+  def __len__(self):
+    return self.numImages // self.batchSize
+
+  def __getitem__(self, index):
+    indices = self.indices[index * self.batchSize: (index + 1) * self.batchSize]
+    images = np.zeros((self.batchSize, self.noOfPatches, self.embedDimension))
+    if (self.classMode == "categorical"):
+      labels = np.zeros((self.batchSize, len(self.classIndices)))
+    else:
+      labels = np.zeros((self.batchSize, 1))
+
+    for i, index in enumerate(indices):
+      image = self.listOfImages[index]
+      label = self.listOfLabels[index]
+
+      image = cv2.imread(image)
+      image = cv2.resize(image, (self.inputShape[1], self.inputShape[0]), interpolation=cv2.INTER_CUBIC)
+      patches = ImageToPatches(image, self.noOfPatches, self.patchSize)
+
+      images[i] = patches
+
+      if (self.classMode == "categorical"):
+        labels[i, self.classIndices[label]] = 1
+      else:
+        labels[i] = self.classIndices[label]
+
+    return images / 255.0, labels
+
+  def on_epoch_end(self):
+    if (self.shuffle):
+      np.random.shuffle(self.indices)
+
+  def __iter__(self):
+    for index in range(0, len(self)):
+      yield self.__getitem__(index)
+
+  def __next__(self):
+    return self.__iter__()
+
+
+def Conv2DBlock(
+  inputLayer,  # Input layer.
+  filters,  # Number of filters.
+  kernelSize=3,  # Kernel size.
+  padding="same",  # Padding.
+  strides=(1, 1),  # Stride.
+  kernelInitializer="he_normal",  # Kernel initializer.
+  activation="relu",  # Activation function.
+  applyBatchNorm=False,  # Apply batch normalization.
+  applyActivation=True,  # Apply activation.
+):
+  r'''
+  Shorthand helper to apply a Conv2D followed optionally by BatchNormalization and Activation.
+
+  Parameters:
+    inputLayer (tensorflow.keras.layers.Layer): Input Keras tensor to the convolutional block.
+    filters (int): Number of convolution filters.
+    kernelSize (int or tuple): Convolution kernel size.
+    padding (str): Padding mode, e.g. "same" or "valid".
+    strides (tuple): Stride of the convolution.
+    kernelInitializer (str): Kernel initializer name.
+    activation (str or callable): Activation to apply if applyActivation is True.
+    applyBatchNorm (bool): If True, apply BatchNormalization after convolution.
+    applyActivation (bool): If True, apply the activation after (optional) BatchNorm.
+
+  Returns:
+    tensorflow.keras.layers.Layer: Output Keras tensor after applying the convolutional block with the specified options.
+  '''
+
+  # Apply convolution.
+  conv = Conv2D(
+    filters,  # Number of filters.
+    kernelSize,  # Kernel size.
+    padding=padding,  # Padding.
+    strides=strides,  # Stride.
+    use_bias=True,  # Use bias.
+    kernel_initializer=kernelInitializer,  # Kernel initializer.
+  )(inputLayer)
+
+  # Check if batch normalization is required.
+  if (applyBatchNorm):
+    conv = BatchNormalization()(conv)
+
+  # Check if activation is required.
+  if (applyActivation):
+    conv = Activation(activation)(conv)
+
+  return conv
+
+
+def DropoutBlock(inputLayer, dropoutRatio, dropoutType="spatial"):
+  r'''
+  Apply either spatial or standard dropout according to the requested type.
+
+  Parameters:
+    inputLayer (tensorflow.keras.layers.Layer): Input Keras tensor to the dropout block.
+    dropoutRatio (float): Drop probability in (0, 1]. If 0.0 returns input unchanged.
+    dropoutType (str): One of {"spatial", "feature"}. "spatial" -> SpatialDropout2D, "feature" -> Dropout.
+
+  Returns:
+    tensorflow.keras.layers.Layer: Output Keras tensor after applying the specified dropout. If dropoutRatio is 0.0, returns inputLayer unchanged.
+  '''
+
+  # Apply the requested dropout type if dropoutRatio is greater than 0. Otherwise, return the input layer unchanged.
+  if (dropoutRatio > 0.0):
+    if (dropoutType == "spatial"):
+      # Spatial dropout layer.
+      output = SpatialDropout2D(dropoutRatio)(inputLayer)
+    elif (dropoutType == "feature"):
+      # Dropout layer.
+      output = Dropout(dropoutRatio)(inputLayer)
+    else:
+      output = inputLayer
+  else:
+    output = inputLayer
+  return output
+
+
+def DownSamplingBlock(
+  inputLayer,  # Input layer.
+  filters,  # Number of filters.
+  kernelSize=3,  # Kernel size.
+  padding="same",  # Padding.
+  kernelInitializer="he_normal",  # Kernel initializer.
+  downsmaplingType="maxpooling",  # Downsampling type.
+):
+  r'''
+  Generic downsampling block supporting different strategies.
+
+  Parameters:
+    inputLayer (tensorflow.keras.layers.Layer): input to the downsampling block.
+    filters (int): Number of filters for conv variants (ignored for max-pooling path).
+    kernelSize (int or tuple): Kernel size for convolutional options.
+    padding (str): Padding mode for conv variants.
+    kernelInitializer (str): Kernel initializer for conv variants.
+    downsmaplingType (str): One of {"maxpooling", "stridedconvolution", "dilatedconvolution"}.
+
+  Returns:
+    tensorflow.keras.layers.Layer:  Keras tensor after applying the requested downsampling operation.
+  '''
+
+  # Check if max pooling or strided convolution.
+  if (downsmaplingType == "stridedconvolution"):
+    output = Conv2D(
+      filters,  # Number of filters.
+      kernelSize,  # Kernel size.
+      strides=(2, 2),  # Strides.
+      padding=padding,  # Padding.
+      kernel_initializer=kernelInitializer,  # Kernel initializer.
+    )(inputLayer)
+  elif (downsmaplingType == "dilatedconvolution"):
+    output = Conv2D(
+      filters,  # Number of filters.
+      kernelSize,  # Kernel size.
+      dilation_rate=(2, 2),  # Dilation rate.
+      padding=padding,  # Padding.
+      kernel_initializer=kernelInitializer,  # Kernel initializer.
+    )(inputLayer)
+  else:  # Default is max pooling.
+    output = MaxPooling2D(pool_size=(2, 2))(inputLayer)
+
+  return output
+
+
+class SubpixelConv2D(Layer):
+  r'''
+  Keras Layer implementing sub-pixel convolution upsampling via depth_to_space.
+
+  This layer expects the incoming channel dimension to be divisible by scale^2 and
+  performs TensorFlow's depth_to_space to rearrange depth into spatial dimensions.
+
+  Parameters:
+    scale (int): Upscaling factor (e.g. 2).
+
+  Notes:
+    The layer is registered in Keras custom objects for model (de)serialization.
+  '''
+
+  def __init__(self, scale=2, **kwargs):
+    # Scale is the upscaling ratio, a single integer.
+    self.scale = scale
+    super(SubpixelConv2D, self).__init__(**kwargs)
+
+  def call(self, inputs):
+    # Upscaling is done by depth to space operation.
+    # Sub-pixel convolution is learnable.
+    # See https://arxiv.org/abs/1609.05158
+    return depth_to_space(inputs, self.scale)
+
+  def compute_output_shape(self, inputShape):
+    return (
+      inputShape[0],  # Batch
+      # Height
+      inputShape[1] * self.scale if inputShape[1] else None,
+      # Width
+      inputShape[2] * self.scale if inputShape[2] else None,
+      int(inputShape[3] / (self.scale ** 2))  # Channels
+    )
+
+  def get_config(self):
+    config = super(SubpixelConv2D, self).get_config()
+    config["scale"] = self.scale
+    return config
+
+
+# Register the custom layer so that it can be serialized.
+# See https://www.tensorflow.org/guide/keras/custom_layers_and_models#serializing_custom_objects
+get_custom_objects().update({"SubpixelConv2D": SubpixelConv2D})
+
+
+def UpSamplingBlock(
+  inputLayer,  # Input layer.
+  filters,  # Number of filters.
+  kernelSize=3,  # Kernel size.
+  padding="same",  # Padding.
+  kernelInitializer="he_normal",  # Kernel initializer.
+  upsamplingType="upsampling",  # Upsampling type.
+  activation="relu",  # Activation function.
+  strides=(2, 2),  # Strides for transposed convolution.
+):
+  r'''
+  Flexible upsampling block supporting standard Upsampling2D + Conv, Conv2DTranspose, or Subpixel conv.
+
+  Parameters:
+    inputLayer (tensorflow.keras.layers.Layer): input to the upsampling block.
+    filters (int): Number of filters for conv outputs (for subpixel, `filters*4` is used before depth_to_space).
+    kernelSize (int or tuple): Kernel size for convolutional layers.
+    padding (str): Padding mode for conv variants.
+    kernelInitializer (str): Kernel initializer name.
+    upsamplingType (str): One of {"upsampling", "transposedconvolution", "subpixelconvolution"}.
+    activation (str or callable): Activation applied in certain branches.
+    strides (tuple): Strides for Conv2DTranspose when used.
+
+  Returns:
+    tensorflow.keras.layers.Layer: Keras tensor after applying the requested upsampling operation.
+  '''
+
+  # Check if up sampling or transposed convolution.
+  if (upsamplingType == "transposedconvolution"):
+    # Transposed convolution.
+    output = Conv2DTranspose(
+      filters,  # Number of filters.
+      kernelSize,  # Kernel size.
+      strides=strides,  # Strides.
+      padding=padding,  # Padding.
+      use_bias=True,  # Use bias.
+      kernel_initializer=kernelInitializer,  # Kernel initializer.
+    )(inputLayer)
+  elif (upsamplingType == "subpixelconvolution"):
+    # Subpixel convolution.
+    output = Conv2D(
+      filters * 4,  # Number of filters.
+      kernelSize,  # Kernel size.
+      activation=activation,  # Activation function.
+      padding=padding,  # Padding.
+      use_bias=True,  # Use bias.
+      kernel_initializer=kernelInitializer,  # Kernel initializer.
+    )(inputLayer)
+    output = SubpixelConv2D(scale=2)(output)
+  else:  # Default is upsampling.
+    # Up sampling.
+    output = UpSampling2D(size=(2, 2))(inputLayer)
+    output = Conv2D(
+      filters,  # Number of filters.
+      kernelSize,  # Kernel size.
+      activation=activation,  # Activation function.
+      padding=padding,  # Padding.
+      use_bias=True,  # Use bias.
+      kernel_initializer=kernelInitializer,  # Kernel initializer.
+    )(output)
+
+  return output
+
+
+def AttentionLayer(
+  input1,  # Input 1.
+  input2,  # Input 2.
+  filters,  # Number of filters.
+  kernelSize=1,  # Kernel size.
+  strides=(1, 1),  # Strides.
+  padding="same",  # Padding.
+  kernelInitializer="he_normal",  # Kernel initializer.
+):
+  r'''
+  Lightweight attention gating layer inspired by attention U-Net style blocks.
+
+  This block computes a gating mask between two inputs (e.g., encoder skip and decoder feature maps)
+  by convolving both to a common number of filters, summing, applying ReLU then a 1-channel sigmoid
+  to produce an attention map which is multiplied with `input1`.
+
+  Parameters:
+    input1 (tensorflow.keras.layers.Layer): the tensor to be gated (e.g., skip connection features).
+    input2 (tensorflow.keras.layers.Layer): the gating tensor (e.g., decoder features).
+    filters (int): Number of filters used internally when projecting inputs to the same space.
+    kernelSize (int): Kernel size for internal convolutions.
+    strides (tuple): Stride for internal convolutions.
+    padding (str): Padding mode for internal convolutions.
+    kernelInitializer (str): Kernel initializer for internal convolutions.
+
+  Returns:
+    tensorflow.keras.layers.Layer: The result of applying the attention gating to `input1`, where `input1` is multiplied by the attention mask computed from both inputs. The output has the same shape as `input1` but with its features modulated by the attention mechanism.
+  '''
+
+  configs = {
+    # Kernel size for the internal convolutions that project both inputs to a common feature space.
+    "kernelSize"       : kernelSize,
+    # Padding mode for the internal convolutions (e.g., "same" to preserve spatial dimensions).
+    "padding"          : padding,
+    # Strides for the internal convolutions (e.g., (1, 1) for no spatial downsampling).
+    "strides"          : strides,
+    # Kernel initializer for the internal convolutional layers (e.g., "he_normal" for good initialization in ReLU networks).
+    "kernelInitializer": kernelInitializer,
+    # Whether to apply activation after the internal convolutions (set to False here since we apply ReLU explicitly after summing).
+    "applyActivation"  : False,
+    # Whether to apply batch normalization in the internal convolutions (set to False for simplicity in this attention block).
+    "applyBatchNorm"   : False,
+  }
+
+  # Apply convolution to both inputs.
+  input1Conv = Conv2DBlock(input1, **configs, filters=filters)
+  input2Conv = Conv2DBlock(input2, **configs, filters=filters)
+
+  # Add both inputs.
+  addBoth = add([input1Conv, input2Conv])
+
+  # Apply ReLU activation.
+  f = Activation("relu")(addBoth)
+
+  # Apply convolution to the result.
+  g = Conv2DBlock(f, **configs, filters=1)
+
+  # Apply Sigmoid activation.
+  h = Activation("sigmoid")(g)
+
+  # Multiply the input with the result.
+  result = multiply([input1, h])
+
+  # Return the result.
+  return result
+
+
+def AttentionConcatenate(convLayer, skipConnection):
+  r'''
+  Apply attention gating to the `skipConnection` and concatenate the gated features with `convLayer`.
+
+  Parameters:
+    convLayer (tensorflow.keras.layers.Layer): the decoder/upsampled features.
+    skipConnection (tensorflow.keras.layers.Layer): encoder skip connection to be gated and concatenated.
+
+  Returns:
+    tensorflow.keras.layers.Layer: The result of concatenating `convLayer` with the attention-gated version of `skipConnection`. This allows the model to focus on relevant features from the skip connection when merging with the decoder features.
+  '''
+
+  # Number of filters for the attention layer is typically set to the number of filters in the `convLayer`
+  # to ensure compatibility when applying the attention mechanism.
+  filters = convLayer.get_shape().as_list()[-1]
+  # Apply attention gating to the skip connection using the `convLayer` as the gating signal.
+  # The `AttentionLayer` computes an attention mask that modulates the `skipConnection` features based on
+  # their relevance to the `convLayer` features.
+  attention = AttentionLayer(skipConnection, convLayer, filters)
+  # Concatenate the original `convLayer` features with the attention-gated `skipConnection` features.
+  # This allows the model to combine the decoder features with the most relevant information from the
+  # encoder skip connection, enhancing the feature representation for subsequent layers.
+  attConc = concatenate([convLayer, attention])
+  return attConc
+
+
+def ConcatenateBlock(
+  inputLayer,  # Input layer.
+  forwardLayer,  # Skip layer.
+  concatenateType="concatenate"  # Concatenate type.
+):
+  r'''
+  Concatenate helper that supports plain concatenation or attention-based concatenation.
+
+  Parameters:
+    inputLayer (tensorflow.keras.layers.Layer): typically the upsampled/decoder features.
+    forwardLayer (tensorflow.keras.layers.Layer): the skip/encoder features to merge.
+    concatenateType (str): "concatenate" or "attention".
+
+  Returns:
+    tensorflow.keras.layers.Layer: The result of merging `inputLayer` and `forwardLayer` using the specified concatenation strategy. If "concatenate", it performs a simple concatenation along the channel axis. If "attention", it applies attention gating to `forwardLayer` before concatenating with `inputLayer`, allowing the model to focus on relevant features from the skip connection.
+  '''
+
+  # Check if concatenation or attention.
+  if (concatenateType == "attention"):
+    # Concatenate with attention.
+    output = AttentionConcatenate(inputLayer, forwardLayer)
+  else:  # Default is concatenation.
+    # Concatenate the skip layer and up convolution.
+    output = concatenate([inputLayer, forwardLayer], axis=3)
+
+  return output
+
+
+def DownResidualBlock(
+  inputLayer,  # Input layer.
+  stage=1,  # Stage.
+  activation="relu",  # Activation function.
+  applyActivation=True,  # Apply activation.
+  dropoutRatio=0.0,  # Dropout rate.
+  dropoutType="spatial",  # Dropout type.
+  applyBatchNorm=True,  # Apply batch normalization.
+  kernelInitializer="he_normal",  # Kernel initializer.
+):
+  r'''
+  Residual block for the encoder (downsampling) path.
+
+  The block applies a small stack of convolutional layers (number controlled by `stage`),
+  adds a residual connection to the input, optionally applies activation and dropout, then
+  performs a downsampling convolution to reduce spatial resolution and increase filters.
+
+  Parameters:
+    inputLayer (tensorflow.keras.layers.Layer): input to the residual block.
+    stage (int): Controls number of internal convolutional layers and base filter count (16 * 2^(stage-1)).
+    activation (str or callable): Activation function to use.
+    applyActivation (bool): Whether to apply activation after the residual addition.
+    dropoutRatio (float): Dropout rate applied after residual addition (0.0 disables dropout).
+    dropoutType (str): "spatial" or "feature": type of dropout used when dropoutRatio > 0.
+    applyBatchNorm (bool): Whether to use BatchNormalization in each conv block.
+    kernelInitializer (str): Kernel initializer name for conv layers.
+
+  Returns:
+    tuple: (downsampledOutput, outputBeforeDownSampling)
+      - downsampledOutput: Keras tensor after residual + downsampling conv.
+      - outputBeforeDownSampling: Keras tensor of the residual output prior to downsampling (for skip connections).
+  '''
+
+  conv = inputLayer
+
+  filters = 16 * (2 ** (stage - 1))  # Number of filters.
+  stages = min(stage, 3)  # Number of stages.
+
+  for _ in range(stages):
+    conv = Conv2DBlock(
+      conv,
+      filters,  # Number of filters.
+      kernelSize=5,  # Kernel size.
+      padding="same",  # Padding.
+      strides=(1, 1),  # Stride.
+      kernelInitializer=kernelInitializer,  # Kernel initializer.
+      activation=activation,  # Activation function.
+      applyBatchNorm=applyBatchNorm,  # Apply batch normalization.
+      applyActivation=applyActivation,  # Apply activation.
+    )
+
+  output = add([inputLayer, conv])
+
+  # Check if activation is required.
+  if (applyActivation):
+    output = Activation(activation)(output)
+
+  # Check if dropout is required.
+  if (dropoutRatio > 0.0):
+    output = DropoutBlock(output, dropoutRatio, dropoutType)
+
+  outputBeforeDownSampling = output
+
+  filtersAlt = 16 * (2 ** stage)  # Number of filters.
+
+  # Down sampling.
+  output = Conv2DBlock(
+    output,
+    filtersAlt,  # Number of filters.
+    kernelSize=2,  # Kernel size.
+    padding="same",  # Padding.
+    strides=(2, 2),  # Stride.
+    kernelInitializer=kernelInitializer,  # Kernel initializer.
+    activation=activation,  # Activation function.
+    applyBatchNorm=applyBatchNorm,  # Apply batch normalization.
+    applyActivation=applyActivation,  # Apply activation.
+  )
+
+  return output, outputBeforeDownSampling
+
+
+def UpResidualBlock(
+  inputLayer,  # Input layer.
+  forwardLayer,  # Skip layer.
+  stage=1,  # Stage.
+  activation="relu",  # Activation function.
+  applyActivation=True,  # Apply activation.
+  applyBatchNorm=True,  # Apply batch normalization.
+  kernelInitializer="he_normal",  # Kernel initializer.
+  concatenateType="concatenate",  # Concatenate type.
+):
+  r'''
+  Residual block for the decoder (upsampling) path.
+
+  The block merges the upsampled tensor with a skip connection (either plain concat or attention),
+  applies a small stack of convolutions, adds a residual connection to the upsampled input,
+  and optionally upsamples when `stages > 1`.
+
+  Parameters:
+    inputLayer (tensorflow.keras.layers.Layer): the decoder/upsampled features.
+    forwardLayer (tensorflow.keras.layers.Layer): encoder skip connection to be merged.
+    stage (int): Controls number of internal convolutional layers and base filter count.
+    activation (str or callable): Activation function to use.
+    applyActivation (bool): Whether to apply activation after residual addition.
+    applyBatchNorm (bool): Whether to use BatchNormalization after ConvTranspose/Upsampling.
+    kernelInitializer (str): Kernel initializer for conv layers.
+    concatenateType (str): "concatenate" or "attention" for merging.
+
+  Returns:
+    tensorflow.keras.layers.Layer: Keras tensor after applying the up residual block, which includes merging with the skip connection, convolutional processing, and optional upsampling. The output has enhanced features due to the residual connection and the merged skip features, and is ready for further processing in the decoder path.
+  '''
+
+  filters = 16 * (2 ** stage)  # Number of filters.
+  stages = min(stage + 1, 3)  # Number of stages.
+
+  # Apply concatenation.
+  merge = ConcatenateBlock(inputLayer, forwardLayer, concatenateType)
+
+  conv = merge
+
+  for _ in range(stages):
+    conv = Conv2DBlock(
+      conv,
+      filters,  # Number of filters.
+      kernelSize=5,  # Kernel size.
+      padding="same",  # Padding.
+      strides=(1, 1),  # Stride.
+      kernelInitializer=kernelInitializer,  # Kernel initializer.
+      activation=activation,  # Activation function.
+      applyBatchNorm=applyBatchNorm,  # Apply batch normalization.
+      applyActivation=applyActivation,  # Apply activation.
+    )
+
+  # Add the skip connection.
+  output = add([conv, inputLayer])
+
+  # Check if activation is required.
+  if (applyActivation):
+    # Apply activation function.
+    output = Activation(activation)(output)
+
+  if (stages > 1):
+    filters = 16 * (2 ** (stage - 1))  # Number of filters.
+
+    output = UpSamplingBlock(
+      output,
+      filters,  # Number of filters.
+      kernelSize=2,  # Kernel size.
+      padding="valid",  # Padding.
+      kernelInitializer=kernelInitializer,  # Kernel initializer.
+      strides=(2, 2),  # Strides for transposed convolution.
+      upsamplingType="transposedconvolution",  # Upsampling type.
+      activation=None,  # Activation function.
+    )
+
+    # Check if batch normalization is required.
+    if (applyBatchNorm):
+      output = BatchNormalization()(output)
+
+    # Check if activation is required.
+    if (applyActivation):
+      output = Activation(activation)(output)
+
+  return output

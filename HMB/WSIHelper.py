@@ -1824,7 +1824,7 @@ if (__name__ == "__main__"):
     # Inform the user that the BACH XML example was skipped due to a missing file.
     print(f"Skipping ExtractBACHAnnotationsFromXML example; file not found: {bachXml}.")
 
-  # Define a placeholder path for testing ExtractWSIRegion using an existing slide and a simple region example.
+  # Define a placeholder path for testing `ExtractWSIRegion` using an existing slide and a simple region example.
   regionSlidePath = "PATH/TO/REGION_SLIDE.svs"
   # Construct a sample region dictionary using CamelCase keys expected by the helper functions.
   regionExample = {"Text": "ExampleRegion", "Coords": [(100, 100), (400, 100), (400, 400), (100, 400)]}

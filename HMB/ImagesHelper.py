@@ -9,6 +9,65 @@ from PIL import Image, ImageEnhance, ImageFilter, ImageDraw
 from io import BytesIO  # Import BytesIO for in-memory byte streams.
 
 
+def ReadImage(path, newSize=(256, 256)):
+  r'''
+  Read and preprocess an image from a given path.
+
+  Parameters:
+    path (str): The file path to the image.
+    newSize (tuple): The desired size to resize the image to (default is (256, 256)).
+
+  Returns:
+    numpy.ndarray: The preprocessed image as a NumPy array.
+  '''
+
+  # Decode the path.
+  path = path.decode()
+
+  # Read the image.
+  img = cv2.imread(path, cv2.IMREAD_COLOR)
+
+  # Resize the image.
+  img = cv2.resize(img, newSize)
+
+  # Normalize the image.
+  img = img / 255.0
+
+  # Return the image.
+  return img
+
+
+def ReadMask(path, newSize=(256, 256)):
+  r'''
+  Read and preprocess a mask from a given path.
+
+  Parameters:
+    path (str): The file path to the mask.
+    newSize (tuple): The desired size to resize the mask to (default is (256, 256)).
+
+  Returns:
+    numpy.ndarray: The preprocessed mask as a NumPy array.
+  '''
+  
+  # Decode the path.
+  path = path.decode()
+
+  # Read the mask.
+  mask = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+
+  # Resize the mask.
+  mask = cv2.resize(mask, newSize)
+
+  # Normalize the mask.
+  mask = mask / 255.0
+
+  # Expand the mask dimensions.
+  mask = np.expand_dims(mask, axis=-1)
+
+  # Return the mask.
+  return mask
+
+
 def ReadVolume(caseImgPaths, caseSegPaths, raiseErrors=True):
   r'''
   Read and preprocess a 3D volume from a set of 2D slices and their corresponding segmentation masks.
@@ -1967,6 +2026,7 @@ def ClusteringImageKMeans(sample, kmeans, noChannels=4):
   # Assign grayscale values to each pixel based on its cluster label and reshape to image dimensions.
   grayscaleImage = grayscaleValues[labels].reshape((height, width))
   return grayscaleImage
+
 
 def FitGlobalKMeans(
   heDeformedFolderPath,

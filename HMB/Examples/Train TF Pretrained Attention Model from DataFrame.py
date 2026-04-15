@@ -48,7 +48,7 @@ if (__name__ == "__main__"):
   noOfTrials = 10  # Number of trials to run for training and evaluation.
   dpi = 300  # Set the DPI for saving evaluation results.
   ensureCUDA = True  # Set to True to ensure CUDA is available for training.
-  categories = ["grade0", "grade1", "grade2", "grade3", "grade4"]  # Define the class categories as a list.
+
 
   # Define the dataset base paths using camelCase naming for clarity.
   baseDir = r"/path/to/the/project/Dataset"
@@ -57,6 +57,10 @@ if (__name__ == "__main__"):
     "test" : rf"{baseDir}/Test",
     "val"  : rf"{baseDir}/Validation"
   }
+
+  categories = os.listdir(basePaths["train"])  # Get categories from the training directory structure.
+  # Or define the class categories explicitly as a list if you want to ensure a specific order or subset.
+  # categories = ["grade0", "grade1", "grade2", "grade3", "grade4"]  # Define the class categories as a list.
 
   # Base directory for storing experiment results.
   baseStorageDir = r"/path/to/the/project/Experiments"
