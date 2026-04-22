@@ -3,12 +3,14 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 import tensorflow as tf
+import matplotlib.pyplot as plt
 from tensorflow.keras.models import *
 from tensorflow.keras.layers import *
 from tensorflow.keras.optimizers import *
 from tensorflow.nn import depth_to_space
 from tensorflow.keras.utils import Sequence
 from tensorflow.keras.utils import get_custom_objects
+from tensorflow.keras.backend import clear_session
 
 
 def MCDropoutPredictions(model, genObj, steps, T=30):
@@ -2709,3 +2711,220 @@ def UpResidualBlock(
       output = Activation(activation)(output)
 
   return output
+
+
+def BuildOptimizer(optimizerSpec):
+  r'''
+  Build a Keras optimizer instance from a flexible specification.
+
+  Parameters:
+    optimizerSpec: Can be one of the following:
+      - An instance of a Keras optimizer (e.g., `tf.keras.optimizers.Adam()`). A fresh instance will be created from its config.
+      - A tuple of (optimizerClass, optimizerKwargs) where `optimizerClass` is a Keras optimizer class and `optimizerKwargs` is a dict of keyword arguments to instantiate it.
+      - A Keras optimizer class (e.g., `tf.keras.optimizers.Adam`) which will be instantiated with default parameters.
+      - A callable that returns an instance of a Keras optimizer when called with no arguments.
+
+  Returns:
+    tensorflow.keras.optimizers.Optimizer: A new instance of the specified Keras optimizer.
+  '''
+
+  # Always return a fresh optimizer instance for each trial/model.
+  if (isinstance(optimizerSpec, tf.keras.optimizers.Optimizer)):
+    return optimizerSpec.__class__.from_config(optimizerSpec.get_config())
+
+  if (isinstance(optimizerSpec, tuple) and len(optimizerSpec) == 2):
+    optimizerClass, optimizerKwargs = optimizerSpec
+    return optimizerClass(**optimizerKwargs)
+
+  if (isinstance(optimizerSpec, type) and issubclass(
+    optimizerSpec,
+    tf.keras.optimizers.Optimizer,
+  )):
+    return optimizerSpec()
+
+  if (callable(optimizerSpec)):
+    optimizer = optimizerSpec()
+    if (isinstance(optimizer, tf.keras.optimizers.Optimizer)):
+      return optimizer
+
+  raise ValueError(f"Invalid optimizer specification: {optimizerSpec}")
+
+
+def CompileTrainTFUNetModel(
+  model,
+  trialNo,
+  inputSize,
+  imagesList,
+  masksList,
+  hyperparameters,
+  pretrainedWeights=None,
+  epochs=25,
+  outputFolder=None,
+  keyword=None,
+  testSize=0.25,
+):
+  r'''
+  Compile and train a TFUNet model with the given parameters, and store the results.
+
+  Parameters:
+    model (tf.keras.Model): The TFUNet model instance to be trained.
+    trialNo (int): The trial number for this training run, used for organizing outputs.
+    inputSize (tuple): The expected input size of the model (height, width, channels).
+    imagesList (str): Path to the directory containing input images.
+    masksList (str): Path to the directory containing corresponding segmentation masks.
+    hyperparameters (dict): A dictionary of hyperparameters for training (e.g., optimizer, loss, batchSize).
+    pretrainedWeights (str, optional): Path to pretrained weights to initialize the model, if any.
+    epochs (int): Number of epochs to train the model.
+    outputFolder (str): Path to the folder where training outputs (weights, logs, hyperparameters) will be stored.
+    keyword (str): A keyword to uniquely identify this training run, used in naming output files and directories.
+    testSize (float): Ratio of the dataset to be used as the test set when splitting the data. The remaining will be used for training and validation.
+  '''
+
+  # Create the output directory for the trial.
+  storageDir = os.path.join(outputFolder, keyword)
+  os.makedirs(storageDir, exist_ok=True)
+
+  # Clear the session.
+  clear_session()
+
+  # Load the dataset (split paths).
+  xTrain, xVal, xTest, yTrain, yVal, yTest = LoadData(
+    imagesList,  # Path to the images' directory.
+    masksList,  # Path to the masks' directory.
+    testSize=testSize,  # Ratio of the testing set.
+  )
+
+  batchSize = hyperparameters["batchSize"]
+
+  # Create the training and validation datasets.
+  trainDataset = TFDataset(xTrain, yTrain, batchSize=batchSize)
+  valDataset = TFDataset(xVal, yVal, batchSize=batchSize)
+
+  # Calculate the number of steps per epoch.
+  trainSteps = len(xTrain) // batchSize
+  valSteps = len(xVal) // batchSize
+
+  # Add the remaining samples.
+  if (len(xTrain) % batchSize != 0):
+    trainSteps += 1
+  if (len(xVal) % batchSize != 0):
+    valSteps += 1
+
+  path = os.path.join(storageDir, keyword)
+
+  callbacks = [
+    ModelCheckpoint(
+      f"{path}.weights.h5",
+      save_best_only=True,
+      save_weights_only=True,
+      monitor="val_loss",
+      mode="min",
+      verbose=0,
+    ),
+    EarlyStopping(
+      monitor="val_loss",
+      # Set the minimum change in the monitored quantity
+      # to be considered an improvement.
+      patience=int(epochs * 0.1) + 1,
+      restore_best_weights=True,
+      verbose=0,
+    ),
+    ReduceLROnPlateau(monitor="val_loss", factor=0.1, patience=4),
+    CSVLogger(f"{path}.csv"),
+    TensorBoard(
+      log_dir=os.path.join(storageDir, "Logs"),
+      histogram_freq=1,
+    ),
+  ]
+
+  # Compile the model with a new optimizer instance for this model's variables.
+  optimizer = BuildOptimizer(hyperparameters["optimizer"])
+  model.compile(
+    optimizer=optimizer,  # Optimizer.
+    loss=hyperparameters["loss"],  # Loss function.
+    metrics=metrics,  # Metrics.
+  )
+
+  # Load the pretrained weights if provided.
+  if (pretrainedWeights):
+    model.load_weights(pretrainedWeights)
+
+  # Print the model summary.
+  # model.summary()
+
+  # Train the model.
+  history = model.fit(
+    trainDataset,  # Training data.
+    batch_size=batchSize,  # Batch size.
+    epochs=epochs,  # Epochs.
+    validation_data=valDataset,  # Data for evaluation.
+    steps_per_epoch=trainSteps,  # Number of steps per epoch.
+    validation_steps=valSteps,  # Number of steps per validation.
+    shuffle=True,  # Whether to shuffle the training data before each epoch.
+    callbacks=callbacks,  # List of callbacks.
+    verbose=2,  # Verbosity mode: 0, 1, or 2.
+  )
+
+  trainMetrics = model.evaluate(trainDataset, steps=trainSteps, verbose=0)
+  valMetrics = model.evaluate(valDataset, steps=valSteps, verbose=0)
+
+  print("Train Metrics:", trainMetrics)
+  print("Val Metrics:", valMetrics)
+
+  # Store the hyperparameters.
+  dictToStore = {}
+  for key in hyperparameters.keys():
+    dictToStore[key.capitalize()] = HyperparameterToString(
+      key,
+      hyperparameters[key],
+    )
+  dictToStore["Trial No."] = "Trial " + str(trialNo)
+  dictToStore["Epochs"] = str(epochs)
+  dictToStore["Train Steps"] = str(trainSteps)
+  dictToStore["Val Steps"] = str(valSteps)
+  dictToStore["Pretrained Weights"] = str(pretrainedWeights)
+  dictToStore["Output Folder"] = str(outputFolder)
+  dictToStore["Storage Dir"] = str(storageDir)
+  dictToStore["Keyword"] = str(keyword)
+  dictToStore["Path"] = str(path)
+  dictToStore["Input Size"] = str(inputSize)
+  for i, metric in enumerate(model.metrics_names):
+    dictToStore[metric.capitalize()] = trainMetrics[i]
+    dictToStore["Val " + metric.capitalize()] = valMetrics[i]
+
+  hyperparametersPath = os.path.join(storageDir, "Hyperparameters.csv")
+  if (os.path.exists(hyperparametersPath)):
+    df = pd.read_csv(hyperparametersPath)
+    dfList = df.values.tolist()
+    dfList.append(list(dictToStore.values()))
+    df = pd.DataFrame(dfList, columns=list(dictToStore.keys()))
+  else:
+    df = pd.DataFrame(dictToStore, index=[0])
+  df.to_csv(hyperparametersPath, index=False)
+  # Save hyperparameters and metrics to a JSON file.
+  df.to_json(
+    hyperparametersPath.replace(".csv", ".json"),
+    orient="records",
+    indent=4,
+  )
+
+  # Plot training and validation accuracy values.
+  plt.figure(figsize=(10, 10))
+  metricsNames = ["loss", "accuracy"]
+  for i, metric in enumerate(metricsNames):
+    plt.subplot(2, 1, i + 1)
+    plt.plot(history.history[metric])
+    plt.plot(history.history["val_" + metric])
+    plt.title("Model " + metric)
+    plt.ylabel(metric)
+    plt.xlabel("Epoch")
+    plt.legend(["Train", "Test"], loc="upper left")
+    plt.tight_layout()
+    plt.grid()
+  plt.savefig(
+    f"{path}.pdf",
+    dpi=720,
+    bbox_inches="tight"
+  )
+
+  print("Trial", trialNo, "completed.")

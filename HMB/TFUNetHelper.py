@@ -2430,26 +2430,36 @@ class SegNet(tf.keras.Model):
     self, inputChannels=3, numClasses=2, level=3, encoder="VGG16",
     inputSize=None, useBias=False
   ):
+    # Call parent constructor with a descriptive name.
     super(SegNet, self).__init__(name=f"SegNet_{encoder}_L{level}")
 
     # Validate the decoder starting level is within acceptable range.
     if (level not in [1, 2, 3, 4]):
+      # Raise when level is out of allowed range.
       raise ValueError(f"level must be 1-4, got {level}")
+
     # Validate the requested encoder type is supported.
     if (encoder not in ["VGG16", "ResNet50", "MobileNet", "Vanilla"]):
+      # Raise when encoder type is not recognized.
       raise ValueError(f"Unsupported encoder: {encoder}")
+
     # Validate the number of classes is at least two.
     if (numClasses < 2):
+      # Raise when insufficient output classes are requested.
       raise ValueError(f"numClasses must be >= 2, got {numClasses}")
 
     # Store the decoder start level configuration.
     self.level = level
+
     # Store the encoder type string.
     self.encoderType = encoder
+
     # Store the number of output classes.
     self.numClasses = numClasses
+
     # Store the number of input channels.
     self.inputChannels = inputChannels
+
     # Store whether convolution layers should include a bias term.
     self.useBias = useBias
 
@@ -2457,13 +2467,16 @@ class SegNet(tf.keras.Model):
     if (inputSize is None):
       # Default to dynamic spatial dimensions while preserving channel count.
       self.inputSize = (None, None, inputChannels)
+      # Mark that dynamic shapes are being used.
       self._is_fixed_shape = False
     else:
       # If only H,W provided, append channels to form (H,W,C).
       if (len(inputSize) == 2):
+        # Convert 2-tuple inputSize to full 3-tuple including channels.
         self.inputSize = tuple(inputSize) + (inputChannels,)
       # If full shape provided use it directly.
       elif (len(inputSize) == 3):
+        # Use provided full input size tuple as-is.
         self.inputSize = tuple(inputSize)
       else:
         # Reject invalid inputSize shapes.
@@ -2473,98 +2486,117 @@ class SegNet(tf.keras.Model):
 
     # === Build Model Components: encoder, decoder and head. ===
     # Initialize encoder layers based on selected backbone.
-    self._build_encoder_layers()
+    self.BuildEncoderLayers()
+
     # Initialize decoder layers for the upsampling pathway.
-    self._build_decoder_layers()
+    self.BuildDecoderLayers()
+
     # Initialize the final classification head.
-    self._build_output_head()
+    self.BuildOutputHead()
 
     # Prepare a functional model instance when a fixed input size is requested.
-    self._functional_model = None
+    self.functionalModel = None
+    # If a fixed shape is requested, build a static functional model for efficiency.
     if (self._is_fixed_shape):
-      self._build_functional_model()
+      self.BuildFunctionalModel()
 
-  def _build_encoder_layers(self):
+  def BuildEncoderLayers(self):
     '''Initialize encoder backbone layers based on selected type.'''
 
     # Route to the encoder initializer for the selected backbone.
     if (self.encoderType == "VGG16"):
-      self._init_vgg_encoder()
+      # Initialize VGG encoder layers.
+      self.InitVggEncoder()
     elif (self.encoderType == "ResNet50"):
-      self._init_resnet50_encoder()
+      # Initialize ResNet50 encoder placeholder for lazy building.
+      self.InitResnet50Encoder()
     elif (self.encoderType == "MobileNet"):
-      self._init_mobilenet_encoder()
+      # Initialize MobileNetV2 encoder placeholder for lazy building.
+      self.InitMobilenetEncoder()
     elif (self.encoderType == "Vanilla"):
-      self._init_vanilla_encoder()
+      # Initialize lightweight vanilla encoder.
+      self.InitVanillaEncoder()
 
-  def _init_vgg_encoder(self):
+  def InitVggEncoder(self):
     '''VGG16-style encoder: 4 blocks returning feature levels at strides 2,4,8,16.'''
 
-    def _vgg_block(filters, block_num):
-      layers_list = []
-      reps = 2 if block_num <= 2 else 3
+    # Local helper to create a VGG block returning convolutional layers and a pooling layer.
+    def vggBlock(filters, blockNum):
+      # Container for layers in this block.
+      layersList = []
+      # Decide number of convolutional repetitions in this block.
+      reps = 2 if (blockNum <= 2) else 3
+      # Append convolutional layers for the block.
       for i in range(reps):
-        layers_list.append(
-          tf.keras.layers.Conv2D(filters, (3, 3), activation="relu", padding="same",
-                                 use_bias=self.useBias, name=f"vgg_b{block_num}_c{i + 1}"
-                                 )
+        layersList.append(
+          tf.keras.layers.Conv2D(
+            filters, (3, 3), activation="relu", padding="same",
+            use_bias=self.useBias, name=f"vgg_b{blockNum}_c{i + 1}"
+          )
         )
-      layers_list.append(
-        tf.keras.layers.MaxPooling2D((2, 2), strides=(2, 2), name=f"vgg_b{block_num}_pool")
+      # Append pooling layer for the block.
+      layersList.append(
+        tf.keras.layers.MaxPooling2D((2, 2), strides=(2, 2), name=f"vgg_b{blockNum}_pool")
       )
-      return layers_list
+      # Return the constructed block layers.
+      return layersList
 
-    self.vgg_layers = []
+    # Initialize the container for VGG layers.
+    self.vggLayers = []
     # Populate VGG block layers for each block configuration.
-    for block_num, filters in [(1, 64), (2, 128), (3, 256), (4, 512), (5, 512)]:
-      self.vgg_layers.extend(_vgg_block(filters, block_num))
+    for blockNum, filters in [(1, 64), (2, 128), (3, 256), (4, 512), (5, 512)]:
+      # Extend the VGG layer list with the block's layers.
+      self.vggLayers.extend(vggBlock(filters, blockNum))
 
-  def _init_resnet50_encoder(self):
+  def InitResnet50Encoder(self):
     '''ResNet50 encoder using keras.applications for memory efficiency.'''
 
-    # We'll build this dynamically in _run_encoder to avoid graph duplication
-    self.resnet_base = None
+    # We'll build this dynamically in RunResnetEncoder to avoid graph duplication.
+    self.resnetBase = None
 
-  def _init_mobilenet_encoder(self):
+  def InitMobilenetEncoder(self):
     '''MobileNetV2 encoder using keras.applications for memory efficiency.'''
 
-    self.mb_base = None
+    # Placeholder for the lazily constructed MobileNet base model.
+    self.mobilenetBase = None
 
-  def _init_vanilla_encoder(self):
+  def InitVanillaEncoder(self):
     '''Vanilla encoder with correct channel progression: in→64→128→256→512.'''
 
     # Kernel, padding and pooling configuration for vanilla blocks.
     kernel, pad, pool = 3, 1, 2
     # Container for the vanilla encoder layers.
-    self.vanilla_layers = []
+    self.vanillaLayers = []
 
-    # Block 1: in_ch -> 64
-    # Block 1 layers from input channels to 64 filters.
-    self.vanilla_layers.extend([
+    # Block 1: in_ch -> 64. Add ZeroPadding, Conv, BN, ReLU and Pool.
+    self.vanillaLayers.extend([
       tf.keras.layers.ZeroPadding2D((pad, pad), name="van_pad1"),
       tf.keras.layers.Conv2D(64, (kernel, kernel), padding="valid", use_bias=self.useBias, name="van_conv1"),
       tf.keras.layers.BatchNormalization(name="van_bn1"),
       tf.keras.layers.Activation("relu", name="van_relu1"),
       tf.keras.layers.MaxPooling2D((pool, pool), name="van_pool1"),
     ])
-    # Block 2: 64 -> 128
-    self.vanilla_layers.extend([
+
+    # Block 2: 64 -> 128. Add the corresponding layers.
+    self.vanillaLayers.extend([
       tf.keras.layers.ZeroPadding2D((pad, pad), name="van_pad2"),
       tf.keras.layers.Conv2D(128, (kernel, kernel), padding="valid", use_bias=self.useBias, name="van_conv2"),
       tf.keras.layers.BatchNormalization(name="van_bn2"),
       tf.keras.layers.Activation("relu", name="van_relu2"),
       tf.keras.layers.MaxPooling2D((pool, pool), name="van_pool2"),
     ])
-    # Block 3: 128 -> 256
-    self.vanilla_layers.extend([
+
+    # Block 3: 128 -> 256. Add the corresponding layers.
+    self.vanillaLayers.extend([
       tf.keras.layers.ZeroPadding2D((pad, pad), name="van_pad3"),
       tf.keras.layers.Conv2D(256, (kernel, kernel), padding="valid", use_bias=self.useBias, name="van_conv3"),
       tf.keras.layers.BatchNormalization(name="van_bn3"),
       tf.keras.layers.Activation("relu", name="van_relu3"),
       tf.keras.layers.MaxPooling2D((pool, pool), name="van_pool3"),
     ])
-    # Block 4: 256 -> 512
-    self.vanilla_layers.extend([
+
+    # Block 4: 256 -> 512. Add the corresponding layers.
+    self.vanillaLayers.extend([
       tf.keras.layers.ZeroPadding2D((pad, pad), name="van_pad4"),
       tf.keras.layers.Conv2D(512, (kernel, kernel), padding="valid", use_bias=self.useBias, name="van_conv4"),
       tf.keras.layers.BatchNormalization(name="van_bn4"),
@@ -2572,96 +2604,104 @@ class SegNet(tf.keras.Model):
       tf.keras.layers.MaxPooling2D((pool, pool), name="van_pool4"),
     ])
 
-  def _build_decoder_layers(self):
+  def BuildDecoderLayers(self):
     '''Build decoder layers with unique names to prevent duplication errors.'''
 
-    # Decoder config: (filters, do_upsample) for 5 stages
-    # Only first `level` stages perform upsampling
     # Decoder configuration tuples: (filters, do_upsample) for 5 stages.
-    decoder_stages = [
-      (512, True), (512, True), (256, True), (128, True), (64, False)
-    ]
+    decoderStages = [(512, True), (512, True), (256, True), (128, True), (64, False)]
 
     # Container mapping for decoder layer components.
-    self.dec_layers = {}
+    self.decLayers = {}
     # Iterate over decoder stage configurations and create layers with unique names.
-    for i, (filters, do_upsample) in enumerate(decoder_stages):
+    for i, (filters, doUpsample) in enumerate(decoderStages):
+      # Compose a suffix for unique layer naming.
       suffix = f"_d{i}"
       # Zero padding before the conv for this stage.
-      self.dec_layers[f"pad{suffix}"] = tf.keras.layers.ZeroPadding2D((1, 1), name=f"dec_pad{suffix}")
+      self.decLayers[f"pad{suffix}"] = tf.keras.layers.ZeroPadding2D((1, 1), name=f"dec_pad{suffix}")
       # Convolution for this decoder stage.
-      self.dec_layers[f"conv{suffix}"] = tf.keras.layers.Conv2D(
+      self.decLayers[f"conv{suffix}"] = tf.keras.layers.Conv2D(
         filters, (3, 3), padding="valid", use_bias=self.useBias, name=f"dec_conv{suffix}"
       )
       # Batch normalization for this decoder stage.
-      self.dec_layers[f"bn{suffix}"] = tf.keras.layers.BatchNormalization(name=f"dec_bn{suffix}")
+      self.decLayers[f"bn{suffix}"] = tf.keras.layers.BatchNormalization(name=f"dec_bn{suffix}")
       # ReLU activation for this decoder stage.
-      self.dec_layers[f"relu{suffix}"] = tf.keras.layers.Activation("relu", name=f"dec_relu{suffix}")
+      self.decLayers[f"relu{suffix}"] = tf.keras.layers.Activation("relu", name=f"dec_relu{suffix}")
       # Optional upsampling operator when this stage is configured to upsample.
-      if (do_upsample):
-        self.dec_layers[f"up{suffix}"] = tf.keras.layers.UpSampling2D(
+      if (doUpsample):
+        # Add UpSampling layer when configured to upsample at this stage.
+        self.decLayers[f"up{suffix}"] = tf.keras.layers.UpSampling2D(
           size=(2, 2), interpolation="bilinear", name=f"dec_up{suffix}"
         )
 
-  def _build_output_head(self):
+  def BuildOutputHead(self):
     '''Build final classification head.'''
 
     # Configure output convolution and activation based on number of classes.
     if (self.numClasses > 2):
       # Multi-class classification head with softmax activation.
-      self.out_conv = tf.keras.layers.Conv2D(
-        self.numClasses, (3, 3), padding="same", use_bias=self.useBias, name="out_conv"
+      self.outConv = tf.keras.layers.Conv2D(
+        self.numClasses, (3, 3), padding="same", use_bias=self.useBias, name="outConv"
       )
-      self.out_act = tf.keras.layers.Activation("softmax", name="out_softmax")
+      # Softmax activation for multi-class outputs.
+      self.outAct = tf.keras.layers.Activation("softmax", name="outSoftmax")
     else:
       # Binary segmentation head with sigmoid activation.
-      self.out_conv = tf.keras.layers.Conv2D(
-        1, (3, 3), padding="same", use_bias=self.useBias, name="out_conv"
+      self.outConv = tf.keras.layers.Conv2D(
+        1, (3, 3), padding="same", use_bias=self.useBias, name="outConv"
       )
-      self.out_act = tf.keras.layers.Activation("sigmoid", name="out_sigmoid")
+      # Sigmoid activation for binary outputs.
+      self.outAct = tf.keras.layers.Activation("sigmoid", name="outSigmoid")
 
-  def _run_vgg_encoder(self, x, training=False):
+  def RunVggEncoder(self, x, training=False):
     '''Execute VGG encoder and return 4 feature levels.'''
 
     # Container for collected feature maps at pooling milestones.
     levels = []
     # Counter to track encountered pooling layers.
-    pool_count = 0
+    poolCount = 0
     # Execute each layer in the VGG sequence and collect the first four pooled outputs.
-    for layer in self.vgg_layers:
-      x = layer(x, training=training) if isinstance(layer, tf.keras.layers.BatchNormalization) else layer(x)
+    for layer in self.vggLayers:
+      # Apply layer and pass training flag to `BatchNormalization` layers.
+      x = layer(x, training=training) if (isinstance(layer, tf.keras.layers.BatchNormalization)) else layer(x)
+      # Check for pooling layer by name to capture feature milestones.
       if ("pool" in layer.name):
-        pool_count += 1
-        if (pool_count <= 4):  # Collect first 4 pooling outputs.
+        # Increment pooling counter when a pooling layer is encountered.
+        poolCount += 1
+        # Collect the first four pooling outputs as encoder feature levels.
+        if (poolCount <= 4):
           levels.append(x)
     # Return the collected encoder levels.
     return levels
 
-  def _run_vanilla_encoder(self, x, training=False):
+  def RunVanillaEncoder(self, x, training=False):
     '''Execute Vanilla encoder and return 4 feature levels.'''
 
     # Container for vanilla encoder feature levels.
     levels = []
     # Execute each vanilla layer and collect outputs at pooling layers.
-    for i, layer in enumerate(self.vanilla_layers):
-      x = layer(x, training=training) if isinstance(layer, tf.keras.layers.BatchNormalization) else layer(x)
+    for i, layer in enumerate(self.vanillaLayers):
+      # Apply layer and handle `BatchNormalization` training flag.
+      x = layer(x, training=training) if (isinstance(layer, tf.keras.layers.BatchNormalization)) else layer(x)
+      # Capture outputs at pooling layers.
       if ("pool" in layer.name):
         levels.append(x)
     # Return the collected four levels.
     return levels
 
-  def _run_resnet_encoder(self, x, training=False):
+  def RunResnetEncoder(self, x, training=False):
     '''Execute ResNet50 encoder and return 4 feature levels.'''
 
     # Lazily build a ResNet50 base model on first call to avoid duplicated graphs.
-    if (self.resnet_base is None):
+    if (self.resnetBase is None):
       # Create a Keras Input that reuses the tensor `x` for the base model.
       baseInput = tf.keras.layers.Input(tensor=x)
+      # Instantiate ResNet50 without weights to use as encoder backbone.
       baseModel = tf.keras.applications.ResNet50(
         include_top=False, weights=None, input_tensor=baseInput
       )
       try:
-        level_outputs = [
+        # Preferred intermediate layer names for feature extraction.
+        levelOutputs = [
           baseModel.get_layer("conv1_relu").output,
           baseModel.get_layer("conv2_block3_out").output,
           baseModel.get_layer("conv3_block4_out").output,
@@ -2669,109 +2709,124 @@ class SegNet(tf.keras.Model):
         ]
       except ValueError:
         # Fallback for different Keras versions where layer names vary.
-        level_outputs = [
+        levelOutputs = [
           baseModel.get_layer("pool1").output,
           baseModel.get_layer("conv2_block3_out").output,
           baseModel.get_layer("conv3_block4_out").output,
           baseModel.get_layer("conv4_block6_out").output,
         ]
       # Construct a model that outputs the selected intermediate feature maps.
-      self.resnet_base = tf.keras.models.Model(inputs=baseInput, outputs=level_outputs)
+      self.resnetBase = tf.keras.models.Model(inputs=baseInput, outputs=levelOutputs)
 
     # Execute the ResNet base to obtain encoder levels.
-    return self.resnet_base(x, training=training)
+    return self.resnetBase(x, training=training)
 
-  def _run_mobilenet_encoder(self, x, training=False):
+  def RunMobilenetEncoder(self, x, training=False):
     '''Execute MobileNetV2 encoder and return 4 feature levels.'''
 
     # Lazily build MobileNetV2 base the first time this path is executed.
-    if (self.mb_base is None):
+    if (self.mobilenetBase is None):
+      # Create an Input that reuses the tensor `x` for the base model.
       baseInput = tf.keras.layers.Input(tensor=x)
+      # Instantiate MobileNetV2 without weights as encoder backbone.
       baseModel = tf.keras.applications.MobileNetV2(
         include_top=False, weights=None, input_tensor=baseInput, alpha=1.0
       )
-      layer_names = [
+      # Candidate intermediate layer names for feature extraction.
+      layerNames = [
         "block_1_expand_relu", "block_3_expand_relu",
         "block_6_expand_relu", "block_13_expand_relu"
       ]
       try:
-        level_outputs = [baseModel.get_layer(name).output for name in layer_names]
+        # Collect outputs from named layers when available.
+        levelOutputs = [baseModel.get_layer(name).output for name in layerNames]
       except ValueError:
         # Fallback for alternative layer naming conventions.
-        level_outputs = []
+        levelOutputs = []
         for layer in baseModel.layers:
-          if ("expand_relu" in layer.name and len(level_outputs) < 4):
-            level_outputs.append(layer.output)
+          # Accumulate the first four layers containing 'expand_relu' in their name.
+          if ("expand_relu" in layer.name and len(levelOutputs) < 4):
+            levelOutputs.append(layer.output)
       # Construct a model that returns the chosen intermediate layers.
-      self.mb_base = tf.keras.models.Model(inputs=baseInput, outputs=level_outputs)
+      self.mobilenetBase = tf.keras.models.Model(inputs=baseInput, outputs=levelOutputs)
 
     # Execute MobileNet base to obtain encoder levels.
-    return self.mb_base(x, training=training)
+    return self.mobilenetBase(x, training=training)
 
-  def _run_encoder(self, x, training=False):
+  def RunEncoder(self, x, training=False):
     '''Route to appropriate encoder implementation.'''
 
     # Route to the appropriate encoder runtime method based on selected encoder.
     if (self.encoderType == "VGG16"):
-      return self._run_vgg_encoder(x, training)
+      return self.RunVggEncoder(x, training)
     elif (self.encoderType == "Vanilla"):
-      return self._run_vanilla_encoder(x, training)
+      return self.RunVanillaEncoder(x, training)
     elif (self.encoderType == "ResNet50"):
-      return self._run_resnet_encoder(x, training)
+      return self.RunResnetEncoder(x, training)
     elif (self.encoderType == "MobileNet"):
-      return self._run_mobilenet_encoder(x, training)
+      return self.RunMobilenetEncoder(x, training)
     # Return empty list if encoder type is not recognized (should not happen).
     return []
 
-  def _run_decoder(self, x, training=False):
+  def RunDecoder(self, x, training=False):
     '''Execute decoder pathway from selected level.'''
 
     # Execute the decoder stages sequentially.
-    for i in range(5):  # 5 decoder stages.
+    for i in range(5):
+      # Compose the stage suffix used in layer naming.
       suffix = f"_d{i}"
-      # Apply padding, convolution, batchnorm and activation for this stage.
-      x = self.dec_layers[f"pad{suffix}"](x)
-      x = self.dec_layers[f"conv{suffix}"](x)
-      x = self.dec_layers[f"bn{suffix}"](x, training=training)
-      x = self.dec_layers[f"relu{suffix}"](x)
+      # Apply padding for this decoder stage.
+      x = self.decLayers[f"pad{suffix}"](x)
+      # Apply convolution for this decoder stage.
+      x = self.decLayers[f"conv{suffix}"](x)
+      # Apply batch normalization and pass training flag.
+      x = self.decLayers[f"bn{suffix}"](x, training=training)
+      # Apply activation for this decoder stage.
+      x = self.decLayers[f"relu{suffix}"](x)
 
       # Only upsample for the configured initial `level` stages.
-      if (i < self.level and f"up{suffix}" in self.dec_layers):
-        x = self.dec_layers[f"up{suffix}"](x)
+      if (i < self.level and f"up{suffix}" in self.decLayers):
+        # Perform upsampling when configured for this stage.
+        x = self.decLayers[f"up{suffix}"](x)
     # Return the decoded feature map.
     return x
 
-  def _build_functional_model(self):
+  def BuildFunctionalModel(self):
     '''Build static functional model for fixed input shapes (optimization).'''
 
     # Create a Keras Input for the configured fixed input size.
     inputs = tf.keras.layers.Input(shape=self.inputSize, name="segnet_input")
     # Run the encoder to obtain feature levels.
-    levels = self._run_encoder(inputs, training=False)
+    levels = self.RunEncoder(inputs, training=False)
     # Select the level where the decoder starts (1-indexed -> 0-indexed conversion).
     x = levels[self.level - 1]
     # Run the decoder from the selected level.
-    x = self._run_decoder(x, training=False)
-    # Apply output convolution and activation to obtain final logits/probabilities.
-    x = self.out_conv(x)
-    outputs = self.out_act(x)
+    x = self.RunDecoder(x, training=False)
+    # Apply output convolution to get logits.
+    x = self.outConv(x)
+    # Apply activation to produce probabilities or logits as configured.
+    outputs = self.outAct(x)
     # Construct and store the internal functional Keras model for fixed-shape execution.
-    self._functional_model = tf.keras.models.Model(inputs=inputs, outputs=outputs, name=self.name)
+    self.functionalModel = tf.keras.models.Model(inputs=inputs, outputs=outputs, name=self.name)
 
   def call(self, x, training=False):
     '''Forward pass: route to functional model if fixed shape, else dynamic.'''
 
     # If a fixed-shape functional model exists, route inputs there for execution.
-    if (self._is_fixed_shape and self._functional_model is not None):
-      return self._functional_model(x, training=training)
+    if (self._is_fixed_shape and self.functionalModel is not None):
+      # Execute the prebuilt functional model for fixed shapes.
+      return self.functionalModel(x, training=training)
 
     # Dynamic shape execution path: run encoder, decoder and output head directly.
-    levels = self._run_encoder(x, training=training)
+    levels = self.RunEncoder(x, training=training)
+    # Select decoder input level based on configuration.
     x = levels[self.level - 1]
-    x = self._run_decoder(x, training=training)
-    x = self.out_conv(x)
+    # Run the decoder on the selected encoder level.
+    x = self.RunDecoder(x, training=training)
+    # Apply the output convolution.
+    x = self.outConv(x)
     # Return the activated output tensor.
-    return self.out_act(x)
+    return self.outAct(x)
 
   def build(self, input_shape=None):
     '''Explicitly build model weights (useful for dynamic shapes).'''
@@ -2796,6 +2851,7 @@ class SegNet(tf.keras.Model):
       "inputSize"    : self.inputSize if (self._is_fixed_shape) else None,
       "useBias"      : self.useBias,
     }
+    # Retrieve base class configuration and merge with local config.
     base_config = super().get_config()
     return {**base_config, **config}
 
@@ -2803,6 +2859,7 @@ class SegNet(tf.keras.Model):
   def from_config(cls, config):
     '''Enable model deserialization.'''
 
+    # Reconstruct an instance from the serialized configuration.
     return cls(**config)
 
 
