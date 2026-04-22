@@ -2407,282 +2407,402 @@ class VNet(tf.keras.Model):
 
 class SegNet(tf.keras.Model):
   r'''
-  SegNet architecture for multi-class semantic segmentation.
+  SegNet architecture for multi-class semantic segmentation (Class-based Implementation).
 
   Short summary:
-    Encoder-decoder network that supports VGG16 or Vanilla backbones. The decoder
-    starts from a configurable encoder level and progressively upsamples features
-    through a fixed cascade of convolution-batchnorm blocks.
+    Memory-efficient encoder-decoder network supporting VGG16, ResNet50, 
+    MobileNetV2, or Vanilla backbones. Uses Functional API internally for 
+    optimal graph construction and memory usage.
 
   Parameters:
     inputChannels (int): Number of input image channels. Default 3.
     numClasses (int): Number of output classes. Default 2.
-    level (int): Decoder starting stage (1-4). Higher levels use deeper bottleneck features.
-    encoder (str): Backbone type: "VGG16" or "Vanilla". Default "VGG16".
+    level (int): Decoder starting stage (1-4). Higher levels use deeper features.
+    encoder (str): Backbone type: "VGG16", "ResNet50", "MobileNet", or "Vanilla".
+    inputSize (tuple, optional): Fixed input shape (H, W, C). None = dynamic.
+    useBias (bool): Whether Conv layers use bias. Default False (BN compatible).
 
   Returns:
-    tensorflow.Tensor: Segmentation logits of shape [B, H, W, numClasses].
+    tensorflow.Tensor: Segmentation probabilities [B, H, W, numClasses].
   '''
 
-  def __init__(self, inputChannels=3, numClasses=2, level=3, encoder="VGG16", inputSize=None):
-    super(SegNet, self).__init__()
-    # Store configuration values. If inputSize is provided the internal
-    # functional model will be constructed immediately to fix the input
-    # signature. Otherwise the model accepts dynamic spatial dimensions.
-    self.level = max(1, min(level, 4))
-    self.encoder_type = encoder
+  def __init__(
+    self, inputChannels=3, numClasses=2, level=3, encoder="VGG16",
+    inputSize=None, useBias=False
+  ):
+    super(SegNet, self).__init__(name=f"SegNet_{encoder}_L{level}")
+
+    # Validate the decoder starting level is within acceptable range.
+    if (level not in [1, 2, 3, 4]):
+      raise ValueError(f"level must be 1-4, got {level}")
+    # Validate the requested encoder type is supported.
+    if (encoder not in ["VGG16", "ResNet50", "MobileNet", "Vanilla"]):
+      raise ValueError(f"Unsupported encoder: {encoder}")
+    # Validate the number of classes is at least two.
+    if (numClasses < 2):
+      raise ValueError(f"numClasses must be >= 2, got {numClasses}")
+
+    # Store the decoder start level configuration.
+    self.level = level
+    # Store the encoder type string.
+    self.encoderType = encoder
+    # Store the number of output classes.
     self.numClasses = numClasses
+    # Store the number of input channels.
     self.inputChannels = inputChannels
-    # Normalize inputSize. None means dynamic spatial dims.
+    # Store whether convolution layers should include a bias term.
+    self.useBias = useBias
+
+    # Handle input size specification to decide dynamic vs fixed shapes.
     if (inputSize is None):
+      # Default to dynamic spatial dimensions while preserving channel count.
       self.inputSize = (None, None, inputChannels)
-      self._model = None
+      self._is_fixed_shape = False
     else:
-      self.inputSize = tuple(inputSize)
-      # Build an internal functional model to fix the input signature.
-      self._model = self._build_internal_model()
+      # If only H,W provided, append channels to form (H,W,C).
+      if (len(inputSize) == 2):
+        self.inputSize = tuple(inputSize) + (inputChannels,)
+      # If full shape provided use it directly.
+      elif (len(inputSize) == 3):
+        self.inputSize = tuple(inputSize)
+      else:
+        # Reject invalid inputSize shapes.
+        raise ValueError(f"inputSize must be (H, W) or (H, W, C), got {inputSize}")
+      # Mark that a fixed shape functional model should be built.
+      self._is_fixed_shape = True
 
-    # Initialize encoder pathway based on selected backbone
-    if (encoder == "VGG16"):
+    # === Build Model Components: encoder, decoder and head. ===
+    # Initialize encoder layers based on selected backbone.
+    self._build_encoder_layers()
+    # Initialize decoder layers for the upsampling pathway.
+    self._build_decoder_layers()
+    # Initialize the final classification head.
+    self._build_output_head()
+
+    # Prepare a functional model instance when a fixed input size is requested.
+    self._functional_model = None
+    if (self._is_fixed_shape):
+      self._build_functional_model()
+
+  def _build_encoder_layers(self):
+    '''Initialize encoder backbone layers based on selected type.'''
+
+    # Route to the encoder initializer for the selected backbone.
+    if (self.encoderType == "VGG16"):
       self._init_vgg_encoder()
-    elif (encoder == "ResNet50"):
+    elif (self.encoderType == "ResNet50"):
       self._init_resnet50_encoder()
-    elif (encoder == "MobileNet"):
+    elif (self.encoderType == "MobileNet"):
       self._init_mobilenet_encoder()
-    elif (encoder == "Vanilla"):
+    elif (self.encoderType == "Vanilla"):
       self._init_vanilla_encoder()
-    else:
-      raise ValueError(f"Unsupported SegNet encoder: {encoder}")
-
-    # Decoder pathway - 4 upsampling stages + 1 final conv block to handle levels 1-4
-    self.decBlocks = []
-    self.ups = []
-    # Decoder filter sequence matching original SegNet: 512→512→256→128→64
-    decoder_filters = [512, 512, 256, 128]
-    for i in range(4):
-      self.decBlocks.append(self._make_dec_block(decoder_filters[i]))
-      self.ups.append(tf.keras.layers.UpSampling2D((2, 2)))
-    # Final conv block (no upsampling) for post-upsampling refinement
-    self.decBlocks.append(self._make_dec_block(64))
-
-    # Output head.
-    if (numClasses > 2):
-      self.outConv = tf.keras.layers.Conv2D(numClasses, (3, 3), padding="same")
-      self.outAct = tf.keras.layers.Activation("softmax")
-    else:
-      self.outConv = tf.keras.layers.Conv2D(1, (3, 3), padding="same")
-      self.outAct = tf.keras.layers.Activation("sigmoid")
-
-  def _make_dec_block(self, filters):
-    return tf.keras.Sequential([
-      tf.keras.layers.ZeroPadding2D((1, 1)),
-      tf.keras.layers.Conv2D(filters, (3, 3), padding="valid"),
-      tf.keras.layers.BatchNormalization(),
-      tf.keras.layers.Activation("relu")
-    ])
-
-  def _build_internal_model(self):
-    # Build a small functional model using the configured inputSize so the
-    # SegNet instance has a fixed input signature when requested.
-    inputs = tf.keras.Input(shape=self.inputSize)
-    # Run encoder to collect feature levels using the same encoder blocks.
-    levels = self._run_encoder(inputs, training=False)
-    # Decoder starts from configured level (level 1 = levels[0], level 4 = levels[3]).
-    o = levels[self.level - 1]
-
-    # Number of upsampling stages needed to restore full resolution.
-    upsampleStages = self.level
-    for i in range(upsampleStages):
-      o = self.decBlocks[i](o, training=False)
-      o = self.ups[i](o)
-
-    # Apply final conv block (index = upsampleStages) without upsampling.
-    o = self.decBlocks[upsampleStages](o, training=False)
-
-    # Project to output classes and apply activation.
-    o = self.outConv(o)
-    outputs = self.outAct(o)
-    return tf.keras.Model(inputs=inputs, outputs=outputs)
 
   def _init_vgg_encoder(self):
-    def _vgg_block(filters, block_num):
-      layers = []
-      layers.append(
-        tf.keras.layers.Conv2D(filters, (3, 3), activation="relu", padding="same", name=f"vgg_b{block_num}_c1")
-      )
-      layers.append(
-        tf.keras.layers.Conv2D(filters, (3, 3), activation="relu", padding="same", name=f"vgg_b{block_num}_c2")
-      )
-      if (block_num > 2):
-        layers.append(
-          tf.keras.layers.Conv2D(filters, (3, 3), activation="relu", padding="same", name=f"vgg_b{block_num}_c3")
-        )
-      layers.append(tf.keras.layers.MaxPooling2D((2, 2), strides=(2, 2), name=f"vgg_b{block_num}_pool"))
-      return tf.keras.Sequential(layers)
+    '''VGG16-style encoder: 4 blocks returning feature levels at strides 2,4,8,16.'''
 
-    self.vggB1 = _vgg_block(64, 1)
-    self.vggB2 = _vgg_block(128, 2)
-    self.vggB3 = _vgg_block(256, 3)
-    self.vggB4 = _vgg_block(512, 4)
-    self.vggB5 = _vgg_block(512, 5)
+    def _vgg_block(filters, block_num):
+      layers_list = []
+      reps = 2 if block_num <= 2 else 3
+      for i in range(reps):
+        layers_list.append(
+          layers.Conv2D(filters, (3, 3), activation="relu", padding="same",
+                        use_bias=self.useBias, name=f"vgg_b{block_num}_c{i + 1}")
+        )
+      layers_list.append(
+        layers.MaxPooling2D((2, 2), strides=(2, 2), name=f"vgg_b{block_num}_pool")
+      )
+      return layers_list
+
+    self.vgg_layers = []
+    # Populate VGG block layers for each block configuration.
+    for block_num, filters in [(1, 64), (2, 128), (3, 256), (4, 512), (5, 512)]:
+      self.vgg_layers.extend(_vgg_block(filters, block_num))
 
   def _init_resnet50_encoder(self):
-    # Simplified ResNet50-style encoder blocks (bottleneck pattern)
-    def _conv_bn_relu(x, filters, kernel=1, strides=1, name=None):
-      x = tf.keras.layers.Conv2D(filters, kernel, strides=strides, padding="same", use_bias=False, name=name + "_conv")(
-        x)
-      x = tf.keras.layers.BatchNormalization(name=name + "_bn")(x)
-      return tf.keras.layers.Activation("relu", name=name + "_relu")(x)
+    '''ResNet50 encoder using keras.applications for memory efficiency.'''
 
-    def _identity_block(x, filters, stage, block):
-      f1, f2, f3 = filters
-      prefix = f"res{stage}{block}_"
-      shortcut = x
-      x = _conv_bn_relu(x, f1, 1, name=prefix + "2a")
-      x = _conv_bn_relu(x, f2, 3, name=prefix + "2b")
-      x = tf.keras.layers.Conv2D(f3, 1, name=prefix + "2c")(x)
-      x = tf.keras.layers.BatchNormalization(name=prefix + "2c_bn")(x)
-      x = tf.keras.layers.Add()([x, shortcut])
-      return tf.keras.layers.Activation("relu")(x)
-
-    def _conv_block(x, filters, stage, block, strides=2):
-      f1, f2, f3 = filters
-      prefix = f"res{stage}{block}_"
-      shortcut = _conv_bn_relu(x, f1, 1, strides, name=prefix + "2a")
-      shortcut = _conv_bn_relu(shortcut, f2, 3, name=prefix + "2b")
-      shortcut = tf.keras.layers.Conv2D(f3, 1, name=prefix + "2c")(shortcut)
-      shortcut = tf.keras.layers.BatchNormalization(name=prefix + "2c_bn")(shortcut)
-      res = _conv_bn_relu(x, f1, 1, strides, name=prefix + "1a")
-      res = _conv_bn_relu(res, f2, 3, name=prefix + "1b")
-      res = tf.keras.layers.Conv2D(f3, 1, name=prefix + "1c")(res)
-      res = tf.keras.layers.BatchNormalization(name=prefix + "1c_bn")(res)
-      x = tf.keras.layers.Add()([res, shortcut])
-      return tf.keras.layers.Activation("relu")(x)
-
-    # Build simplified ResNet50 encoder stages
-    self.resnet_stages = []
-    # Stage 1
-    self.resnet_stages.append(tf.keras.Sequential([
-      tf.keras.layers.ZeroPadding2D((3, 3)),
-      tf.keras.layers.Conv2D(64, 7, strides=2, padding="same", use_bias=False),
-      tf.keras.layers.BatchNormalization(),
-      tf.keras.layers.Activation("relu"),
-      tf.keras.layers.MaxPooling2D(3, strides=2)
-    ]))
-    # Stage 2-5 (simplified)
-    for i, (filters, blocks) in enumerate([(64, 3), (128, 4), (256, 6), (512, 3)], start=2):
-      stage_layers = []
-      if (i == 2):
-        stage_layers.append(_conv_block(tf.keras.Input((None, None, 64)), [64, 64, 256], i, "a", strides=1))
-      else:
-        stage_layers.append(
-          _conv_block(tf.keras.Input((None, None, filters // 2)), [filters // 2, filters // 2, filters * 2], i, "a"))
-      for b in range(1, blocks):
-        stage_layers.append(
-          _identity_block(tf.keras.Input((None, None, filters * 2)), [filters // 2, filters // 2, filters * 2], i,
-                          chr(ord("a") + b)))
-      self.resnet_stages.append(tf.keras.Sequential(stage_layers))
+    # We'll build this dynamically in _run_encoder to avoid graph duplication
+    self.resnet_base = None
 
   def _init_mobilenet_encoder(self):
-    def relu6(x):
-      return tf.keras.backend.relu(x, max_value=6)
+    '''MobileNetV2 encoder using keras.applications for memory efficiency.'''
 
-    def _depthwise_block(in_ch, out_ch, strides=1, block_id=1):
-      return tf.keras.Sequential([
-        tf.keras.layers.ZeroPadding2D((1, 1)),
-        tf.keras.layers.DepthwiseConv2D(3, padding="valid", use_bias=False, strides=strides),
-        tf.keras.layers.BatchNormalization(),
-        tf.keras.layers.Activation(relu6),
-        tf.keras.layers.Conv2D(out_ch, 1, padding="same", use_bias=False),
-        tf.keras.layers.BatchNormalization(),
-        tf.keras.layers.Activation(relu6)
-      ])
-
-    self.mb_blocks = [
-      tf.keras.Sequential([  # Initial conv
-        tf.keras.layers.ZeroPadding2D((1, 1)),
-        tf.keras.layers.Conv2D(32, 3, padding="valid", strides=2, use_bias=False),
-        tf.keras.layers.BatchNormalization(),
-        tf.keras.layers.Activation(relu6)
-      ]),
-      _depthwise_block(32, 64, block_id=1),
-      _depthwise_block(64, 128, strides=2, block_id=2),
-      _depthwise_block(128, 128, block_id=3),
-      _depthwise_block(128, 256, strides=2, block_id=4),
-      _depthwise_block(256, 256, block_id=5),
-      _depthwise_block(256, 512, strides=2, block_id=6),
-      *[_depthwise_block(512, 512, block_id=i) for i in range(7, 12)],
-      _depthwise_block(512, 1024, strides=2, block_id=12),
-      _depthwise_block(1024, 1024, block_id=13)
-    ]
+    self.mb_base = None
 
   def _init_vanilla_encoder(self):
-    def vanillaBlock(in_ch, out_ch):
-      return tf.keras.Sequential([
-        tf.keras.layers.ZeroPadding2D((1, 1)),
-        tf.keras.layers.Conv2D(out_ch, 3, padding="valid"),
-        tf.keras.layers.BatchNormalization(),
-        tf.keras.layers.Activation("relu"),
-        tf.keras.layers.MaxPooling2D((2, 2))
-      ])
+    '''Vanilla encoder with correct channel progression: in→64→128→256→512.'''
 
-    self.vanillaBlocks = [
-      vanillaBlock(self.inputChannels, 64),
-      vanillaBlock(64, 128),
-      *[vanillaBlock(256, 256) for _ in range(3)]
+    # Kernel, padding and pooling configuration for vanilla blocks.
+    kernel, pad, pool = 3, 1, 2
+    # Container for the vanilla encoder layers.
+    self.vanilla_layers = []
+
+    # Block 1: in_ch -> 64
+    # Block 1 layers from input channels to 64 filters.
+    self.vanilla_layers.extend([
+      layers.ZeroPadding2D((pad, pad), name="van_pad1"),
+      layers.Conv2D(64, (kernel, kernel), padding="valid", use_bias=self.useBias, name="van_conv1"),
+      layers.BatchNormalization(name="van_bn1"),
+      layers.Activation("relu", name="van_relu1"),
+      layers.MaxPooling2D((pool, pool), name="van_pool1"),
+    ])
+    # Block 2: 64 -> 128
+    self.vanilla_layers.extend([
+      layers.ZeroPadding2D((pad, pad), name="van_pad2"),
+      layers.Conv2D(128, (kernel, kernel), padding="valid", use_bias=self.useBias, name="van_conv2"),
+      layers.BatchNormalization(name="van_bn2"),
+      layers.Activation("relu", name="van_relu2"),
+      layers.MaxPooling2D((pool, pool), name="van_pool2"),
+    ])
+    # Block 3: 128 -> 256
+    self.vanilla_layers.extend([
+      layers.ZeroPadding2D((pad, pad), name="van_pad3"),
+      layers.Conv2D(256, (kernel, kernel), padding="valid", use_bias=self.useBias, name="van_conv3"),
+      layers.BatchNormalization(name="van_bn3"),
+      layers.Activation("relu", name="van_relu3"),
+      layers.MaxPooling2D((pool, pool), name="van_pool3"),
+    ])
+    # Block 4: 256 -> 512
+    self.vanilla_layers.extend([
+      layers.ZeroPadding2D((pad, pad), name="van_pad4"),
+      layers.Conv2D(512, (kernel, kernel), padding="valid", use_bias=self.useBias, name="van_conv4"),
+      layers.BatchNormalization(name="van_bn4"),
+      layers.Activation("relu", name="van_relu4"),
+      layers.MaxPooling2D((pool, pool), name="van_pool4"),
+    ])
+
+  def _build_decoder_layers(self):
+    '''Build decoder layers with unique names to prevent duplication errors.'''
+
+    # Decoder config: (filters, do_upsample) for 5 stages
+    # Only first `level` stages perform upsampling
+    # Decoder configuration tuples: (filters, do_upsample) for 5 stages.
+    decoder_stages = [
+      (512, True), (512, True), (256, True), (128, True), (64, False)
     ]
 
-  def _run_encoder(self, x, training=False):
+    # Container mapping for decoder layer components.
+    self.dec_layers = {}
+    # Iterate over decoder stage configurations and create layers with unique names.
+    for i, (filters, do_upsample) in enumerate(decoder_stages):
+      suffix = f"_d{i}"
+      # Zero padding before the conv for this stage.
+      self.dec_layers[f"pad{suffix}"] = layers.ZeroPadding2D((1, 1), name=f"dec_pad{suffix}")
+      # Convolution for this decoder stage.
+      self.dec_layers[f"conv{suffix}"] = layers.Conv2D(
+        filters, (3, 3), padding="valid", use_bias=self.useBias, name=f"dec_conv{suffix}"
+      )
+      # Batch normalization for this decoder stage.
+      self.dec_layers[f"bn{suffix}"] = layers.BatchNormalization(name=f"dec_bn{suffix}")
+      # ReLU activation for this decoder stage.
+      self.dec_layers[f"relu{suffix}"] = layers.Activation("relu", name=f"dec_relu{suffix}")
+      # Optional upsampling operator when this stage is configured to upsample.
+      if (do_upsample):
+        self.dec_layers[f"up{suffix}"] = layers.UpSampling2D(
+          size=(2, 2), interpolation="bilinear", name=f"dec_up{suffix}"
+        )
+
+  def _build_output_head(self):
+    '''Build final classification head.'''
+
+    # Configure output convolution and activation based on number of classes.
+    if (self.numClasses > 2):
+      # Multi-class classification head with softmax activation.
+      self.out_conv = layers.Conv2D(
+        self.numClasses, (3, 3), padding="same", use_bias=self.useBias, name="out_conv"
+      )
+      self.out_act = layers.Activation("softmax", name="out_softmax")
+    else:
+      # Binary segmentation head with sigmoid activation.
+      self.out_conv = layers.Conv2D(
+        1, (3, 3), padding="same", use_bias=self.useBias, name="out_conv"
+      )
+      self.out_act = layers.Activation("sigmoid", name="out_sigmoid")
+
+  def _run_vgg_encoder(self, x, training=False):
+    '''Execute VGG encoder and return 4 feature levels.'''
+
+    # Container for collected feature maps at pooling milestones.
     levels = []
-    if (self.encoder_type == "VGG16"):
-      x = self.vggB1(x, training=training)
-      levels.append(x)
-      x = self.vggB2(x, training=training)
-      levels.append(x)
-      x = self.vggB3(x, training=training)
-      levels.append(x)
-      x = self.vggB4(x, training=training)
-      levels.append(x)
-      x = self.vggB5(x, training=training)
-      levels.append(x)
-    elif (self.encoder_type == "ResNet50"):
-      for stage in self.resnet_stages:
-        x = stage(x, training=training)
-        levels.append(x)
-    elif (self.encoder_type == "MobileNet"):
-      for blk in self.mb_blocks:
-        x = blk(x, training=training)
-        levels.append(x)
-    elif (self.encoder_type == "Vanilla"):
-      for blk in self.vanillaBlocks:
-        x = blk(x, training=training)
-        levels.append(x)
+    # Counter to track encountered pooling layers.
+    pool_count = 0
+    # Execute each layer in the VGG sequence and collect the first four pooled outputs.
+    for layer in self.vgg_layers:
+      x = layer(x, training=training) if isinstance(layer, layers.BatchNormalization) else layer(x)
+      if ("pool" in layer.name):
+        pool_count += 1
+        if (pool_count <= 4):  # Collect first 4 pooling outputs.
+          levels.append(x)
+    # Return the collected encoder levels.
     return levels
 
+  def _run_vanilla_encoder(self, x, training=False):
+    '''Execute Vanilla encoder and return 4 feature levels.'''
+
+    # Container for vanilla encoder feature levels.
+    levels = []
+    # Execute each vanilla layer and collect outputs at pooling layers.
+    for i, layer in enumerate(self.vanilla_layers):
+      x = layer(x, training=training) if isinstance(layer, layers.BatchNormalization) else layer(x)
+      if ("pool" in layer.name):
+        levels.append(x)
+    # Return the collected four levels.
+    return levels
+
+  def _run_resnet_encoder(self, x, training=False):
+    '''Execute ResNet50 encoder and return 4 feature levels.'''
+
+    # Lazily build a ResNet50 base model on first call to avoid duplicated graphs.
+    if (self.resnet_base is None):
+      # Create a Keras Input that reuses the tensor `x` for the base model.
+      baseInput = layers.Input(tensor=x)
+      baseModel = tf.keras.applications.ResNet50(
+        include_top=False, weights=None, input_tensor=baseInput
+      )
+      try:
+        level_outputs = [
+          baseModel.get_layer("conv1_relu").output,
+          baseModel.get_layer("conv2_block3_out").output,
+          baseModel.get_layer("conv3_block4_out").output,
+          baseModel.get_layer("conv4_block6_out").output,
+        ]
+      except ValueError:
+        # Fallback for different Keras versions where layer names vary.
+        level_outputs = [
+          baseModel.get_layer("pool1").output,
+          baseModel.get_layer("conv2_block3_out").output,
+          baseModel.get_layer("conv3_block4_out").output,
+          baseModel.get_layer("conv4_block6_out").output,
+        ]
+      # Construct a model that outputs the selected intermediate feature maps.
+      self.resnet_base = models.Model(inputs=baseInput, outputs=level_outputs)
+
+    # Execute the ResNet base to obtain encoder levels.
+    return self.resnet_base(x, training=training)
+
+  def _run_mobilenet_encoder(self, x, training=False):
+    '''Execute MobileNetV2 encoder and return 4 feature levels.'''
+
+    # Lazily build MobileNetV2 base the first time this path is executed.
+    if (self.mb_base is None):
+      baseInput = layers.Input(tensor=x)
+      baseModel = tf.keras.applications.MobileNetV2(
+        include_top=False, weights=None, input_tensor=baseInput, alpha=1.0
+      )
+      layer_names = [
+        "block_1_expand_relu", "block_3_expand_relu",
+        "block_6_expand_relu", "block_13_expand_relu"
+      ]
+      try:
+        level_outputs = [baseModel.get_layer(name).output for name in layer_names]
+      except ValueError:
+        # Fallback for alternative layer naming conventions.
+        level_outputs = []
+        for layer in baseModel.layers:
+          if ("expand_relu" in layer.name and len(level_outputs) < 4):
+            level_outputs.append(layer.output)
+      # Construct a model that returns the chosen intermediate layers.
+      self.mb_base = models.Model(inputs=baseInput, outputs=level_outputs)
+
+    # Execute MobileNet base to obtain encoder levels.
+    return self.mb_base(x, training=training)
+
+  def _run_encoder(self, x, training=False):
+    '''Route to appropriate encoder implementation.'''
+
+    # Route to the appropriate encoder runtime method based on selected encoder.
+    if (self.encoderType == "VGG16"):
+      return self._run_vgg_encoder(x, training)
+    elif (self.encoderType == "Vanilla"):
+      return self._run_vanilla_encoder(x, training)
+    elif (self.encoderType == "ResNet50"):
+      return self._run_resnet_encoder(x, training)
+    elif (self.encoderType == "MobileNet"):
+      return self._run_mobilenet_encoder(x, training)
+    # Return empty list if encoder type is not recognized (should not happen).
+    return []
+
+  def _run_decoder(self, x, training=False):
+    '''Execute decoder pathway from selected level.'''
+
+    # Execute the decoder stages sequentially.
+    for i in range(5):  # 5 decoder stages.
+      suffix = f"_d{i}"
+      # Apply padding, convolution, batchnorm and activation for this stage.
+      x = self.dec_layers[f"pad{suffix}"](x)
+      x = self.dec_layers[f"conv{suffix}"](x)
+      x = self.dec_layers[f"bn{suffix}"](x, training=training)
+      x = self.dec_layers[f"relu{suffix}"](x)
+
+      # Only upsample for the configured initial `level` stages.
+      if (i < self.level and f"up{suffix}" in self.dec_layers):
+        x = self.dec_layers[f"up{suffix}"](x)
+    # Return the decoded feature map.
+    return x
+
+  def _build_functional_model(self):
+    '''Build static functional model for fixed input shapes (optimization).'''
+
+    # Create a Keras Input for the configured fixed input size.
+    inputs = layers.Input(shape=self.inputSize, name="segnet_input")
+    # Run the encoder to obtain feature levels.
+    levels = self._run_encoder(inputs, training=False)
+    # Select the level where the decoder starts (1-indexed -> 0-indexed conversion).
+    x = levels[self.level - 1]
+    # Run the decoder from the selected level.
+    x = self._run_decoder(x, training=False)
+    # Apply output convolution and activation to obtain final logits/probabilities.
+    x = self.out_conv(x)
+    outputs = self.out_act(x)
+    # Construct and store the internal functional Keras model for fixed-shape execution.
+    self._functional_model = models.Model(inputs=inputs, outputs=outputs, name=self.name)
+
   def call(self, x, training=False):
-    # If an internal functional model was created (fixed inputSize) forward
-    # through it to respect the declared input signature.
-    if (getattr(self, "_model", None) is not None):
-      return self._model(x, training=training)
+    '''Forward pass: route to functional model if fixed shape, else dynamic.'''
 
-    # Run encoder and collect feature levels for dynamic input shapes.
+    # If a fixed-shape functional model exists, route inputs there for execution.
+    if (self._is_fixed_shape and self._functional_model is not None):
+      return self._functional_model(x, training=training)
+
+    # Dynamic shape execution path: run encoder, decoder and output head directly.
     levels = self._run_encoder(x, training=training)
-    # Decoder starts from configured level (level 1 = levels[0], level 4 = levels[3]).
-    o = levels[self.level - 1]  # Convert to 0-based indexing
+    x = levels[self.level - 1]
+    x = self._run_decoder(x, training=training)
+    x = self.out_conv(x)
+    # Return the activated output tensor.
+    return self.out_act(x)
 
-    # Number of upsampling stages needed to restore full resolution:
-    # levels[0]=H/2 needs 1 upsample, levels[1]=H/4 needs 2, ..., levels[3]=H/16 needs 4.
-    upsampleStages = self.level
-    for i in range(upsampleStages):
-      o = self.decBlocks[i](o, training=training)
-      o = self.ups[i](o)
+  def build(self, input_shape=None):
+    '''Explicitly build model weights (useful for dynamic shapes).'''
 
-    # Apply final conv block (index = upsampleStages) without upsampling.
-    o = self.decBlocks[upsampleStages](o, training=training)
+    # If no input shape was provided use a dynamic 4D shape with known channels.
+    if (input_shape is None):
+      input_shape = (None, None, None, self.inputChannels)
+    # Call the base class build implementation.
+    super().build(input_shape)
+    # Trigger one forward pass with zeros to ensure weights are created.
+    _ = self.call(tf.zeros((1,) + input_shape[1:]), training=False)
 
-    # Project to output classes and apply activation.
-    o = self.outConv(o)
-    return self.outAct(o)
+  def get_config(self):
+    '''Enable model serialization.'''
+
+    # Serialize configuration for model reproduction.
+    config = {
+      "inputChannels": self.inputChannels,
+      "numClasses"   : self.numClasses,
+      "level"        : self.level,
+      "encoder"      : self.encoderType,
+      "inputSize"    : self.inputSize if (self._is_fixed_shape) else None,
+      "useBias"      : self.useBias,
+    }
+    base_config = super().get_config()
+    return {**base_config, **config}
+
+  @classmethod
+  def from_config(cls, config):
+    '''Enable model deserialization.'''
+
+    return cls(**config)
 
 
 def CreateUNet(
