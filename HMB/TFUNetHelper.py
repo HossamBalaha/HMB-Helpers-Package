@@ -2417,7 +2417,6 @@ class SegNet(tf.keras.Model):
   Parameters:
     inputChannels (int): Number of input image channels. Default 3.
     numClasses (int): Number of output classes. Default 2.
-    baseChannels (int): Reserved for API compatibility; unused as SegNet filters are fixed.
     level (int): Decoder starting stage (1-4). Higher levels use deeper bottleneck features.
     encoder (str): Backbone type: "VGG16" or "Vanilla". Default "VGG16".
 
@@ -2425,12 +2424,23 @@ class SegNet(tf.keras.Model):
     tensorflow.Tensor: Segmentation logits of shape [B, H, W, numClasses].
   '''
 
-  def __init__(self, inputChannels=3, numClasses=2, baseChannels=64, level=3, encoder="VGG16"):
+  def __init__(self, inputChannels=3, numClasses=2, level=3, encoder="VGG16", inputSize=None):
     super(SegNet, self).__init__()
+    # Store configuration values. If inputSize is provided the internal
+    # functional model will be constructed immediately to fix the input
+    # signature. Otherwise the model accepts dynamic spatial dimensions.
     self.level = max(1, min(level, 4))
     self.encoder_type = encoder
     self.numClasses = numClasses
     self.inputChannels = inputChannels
+    # Normalize inputSize. None means dynamic spatial dims.
+    if (inputSize is None):
+      self.inputSize = (None, None, inputChannels)
+      self._model = None
+    else:
+      self.inputSize = tuple(inputSize)
+      # Build an internal functional model to fix the input signature.
+      self._model = self._build_internal_model()
 
     # Initialize encoder pathway based on selected backbone
     if (encoder == "VGG16"):
@@ -2445,15 +2455,15 @@ class SegNet(tf.keras.Model):
       raise ValueError(f"Unsupported SegNet encoder: {encoder}")
 
     # Decoder pathway - 4 upsampling stages + 1 final conv block to handle levels 1-4
-    self.dec_blocks = []
+    self.decBlocks = []
     self.ups = []
     # Decoder filter sequence matching original SegNet: 512→512→256→128→64
     decoder_filters = [512, 512, 256, 128]
     for i in range(4):
-      self.dec_blocks.append(self._make_dec_block(decoder_filters[i]))
+      self.decBlocks.append(self._make_dec_block(decoder_filters[i]))
       self.ups.append(tf.keras.layers.UpSampling2D((2, 2)))
     # Final conv block (no upsampling) for post-upsampling refinement
-    self.dec_blocks.append(self._make_dec_block(64))
+    self.decBlocks.append(self._make_dec_block(64))
 
     # Output head.
     if (numClasses > 2):
@@ -2470,6 +2480,29 @@ class SegNet(tf.keras.Model):
       tf.keras.layers.BatchNormalization(),
       tf.keras.layers.Activation("relu")
     ])
+
+  def _build_internal_model(self):
+    # Build a small functional model using the configured inputSize so the
+    # SegNet instance has a fixed input signature when requested.
+    inputs = tf.keras.Input(shape=self.inputSize)
+    # Run encoder to collect feature levels using the same encoder blocks.
+    levels = self._run_encoder(inputs, training=False)
+    # Decoder starts from configured level (level 1 = levels[0], level 4 = levels[3]).
+    o = levels[self.level - 1]
+
+    # Number of upsampling stages needed to restore full resolution.
+    upsampleStages = self.level
+    for i in range(upsampleStages):
+      o = self.decBlocks[i](o, training=False)
+      o = self.ups[i](o)
+
+    # Apply final conv block (index = upsampleStages) without upsampling.
+    o = self.decBlocks[upsampleStages](o, training=False)
+
+    # Project to output classes and apply activation.
+    o = self.outConv(o)
+    outputs = self.outAct(o)
+    return tf.keras.Model(inputs=inputs, outputs=outputs)
 
   def _init_vgg_encoder(self):
     def _vgg_block(filters, block_num):
@@ -2627,20 +2660,25 @@ class SegNet(tf.keras.Model):
     return levels
 
   def call(self, x, training=False):
-    # Run encoder and collect feature levels
+    # If an internal functional model was created (fixed inputSize) forward
+    # through it to respect the declared input signature.
+    if (getattr(self, "_model", None) is not None):
+      return self._model(x, training=training)
+
+    # Run encoder and collect feature levels for dynamic input shapes.
     levels = self._run_encoder(x, training=training)
-    # Decoder starts from configured level (level 1 = levels[0], level 4 = levels[3])
+    # Decoder starts from configured level (level 1 = levels[0], level 4 = levels[3]).
     o = levels[self.level - 1]  # Convert to 0-based indexing
 
     # Number of upsampling stages needed to restore full resolution:
     # levels[0]=H/2 needs 1 upsample, levels[1]=H/4 needs 2, ..., levels[3]=H/16 needs 4.
     upsampleStages = self.level
     for i in range(upsampleStages):
-      o = self.dec_blocks[i](o, training=training)
+      o = self.decBlocks[i](o, training=training)
       o = self.ups[i](o)
 
     # Apply final conv block (index = upsampleStages) without upsampling.
-    o = self.dec_blocks[upsampleStages](o, training=training)
+    o = self.decBlocks[upsampleStages](o, training=training)
 
     # Project to output classes and apply activation.
     o = self.outConv(o)
@@ -2795,9 +2833,9 @@ def CreateUNet(
     return SegNet(
       inputChannels=inputChannels,
       numClasses=numClasses,
-      baseChannels=baseChannels,
       level=segLevel,
-      encoder="VGG16"
+      encoder="VGG16",
+      inputSize=(None, None, inputChannels)
     )
 
   # Default fallback.
@@ -2867,9 +2905,9 @@ def GetUNetModel(modelName: str, inputChannels: int, numClasses: int, baseChanne
     return SegNet(
       inputChannels=inputChannels,
       numClasses=numClasses,
-      baseChannels=baseChannels,
       level=3,
-      encoder="VGG16"
+      encoder="VGG16",
+      inputSize=(None, None, inputChannels)
     )
 
   raise ValueError(f"Unknown model name: {modelName}")
