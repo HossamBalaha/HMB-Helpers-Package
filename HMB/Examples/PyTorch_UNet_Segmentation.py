@@ -5,7 +5,7 @@ if __name__ == "__main__":
 
 # ------------------------------------------------------------------------- #
 
-import os, torch, cv2, argparse
+import os, torch, cv2, argparse, builtins
 import numpy as np
 from tqdm import tqdm
 from typing import Dict
@@ -15,12 +15,12 @@ import torch.optim as optim
 from HMB.PyTorchHelper import GetOptimizer, PyTorchUNetSegmentationModule
 from HMB.DatasetsHelper import CreateSegmentationDataLoaders
 from HMB.Initializations import IgnoreWarnings, DoRandomSeeding
-from HMB.UNetHelper import GetUNetModel
+from HMB.PyTorchUNetHelper import GetUNetModel
 from HMB.Utils import DumpJsonFile
 
 # Ensure all prints flush by default to make logs appear promptly.
 # Save the original built-in print function for delegation.
-_original_print = print
+_original_print = builtins.print
 
 
 # Define a wrapper that sets flush=True when not explicitly provided.
@@ -31,6 +31,8 @@ def print(*args, **kwargs):
   # Delegate to the original print implementation.
   return _original_print(*args, **kwargs)
 
+# Override the built-in print with our wrapper to ensure all prints are flushed immediately.
+builtins.print = print
 
 # Define default hyperparameters dictionary with CamelCase keys.
 # This dictionary uses camelCase variable name to follow project conventions.

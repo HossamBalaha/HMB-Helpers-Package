@@ -1,4 +1,4 @@
-import argparse, os, timm, torch, json
+import argparse, os, timm, torch, json, builtins
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -18,7 +18,7 @@ from HMB.PyTorchModelMemoryProfiler import PyTorchModelMemoryProfiler
 
 # Ensure all prints flush by default to make logs appear promptly.
 # Save the original built-in print function for delegation.
-_original_print = print
+_original_print = builtins.print
 
 
 # Define a wrapper that sets flush=True when not explicitly provided.
@@ -28,6 +28,10 @@ def print(*args, **kwargs):
     kwargs["flush"] = True
   # Delegate to the original print implementation.
   return _original_print(*args, **kwargs)
+
+
+# Override the built-in print with our wrapper to ensure all prints are flushed immediately.
+builtins.print = print
 
 
 # Define a function to parse command line arguments for this statistics analysis script.
@@ -148,8 +152,8 @@ def ValidateArgs(args):
 
   # If explainDatasetDir is provided, it must be a valid directory; also require it if explainMethods are specified.
   if (
-      args.explainDatasetDir and (
-      not os.path.exists(args.explainDatasetDir) or not os.path.isdir(args.explainDatasetDir))
+    args.explainDatasetDir and (
+    not os.path.exists(args.explainDatasetDir) or not os.path.isdir(args.explainDatasetDir))
   ):
     raise FileNotFoundError(f"--explainDatasetDir path does not exist or is not a directory: {args.explainDatasetDir}")
 
@@ -241,20 +245,20 @@ def Main():
   args = ValidateArgs(args)
 
   def ProcessSystem(
-      subsets,
-      predCSVFileFix,
-      baseOutputDir,
-      verbose,
-      actualColName,
-      actualColIDColName,
-      predictionColName,
-      probabilityColName,
-      dpi,
-      explainMethods=None,
-      maxExplainImages=0,
-      explainDatasetDir=None,
-      device="cuda",
-      maxPerturbImages=0,
+    subsets,
+    predCSVFileFix,
+    baseOutputDir,
+    verbose,
+    actualColName,
+    actualColIDColName,
+    predictionColName,
+    probabilityColName,
+    dpi,
+    explainMethods=None,
+    maxExplainImages=0,
+    explainDatasetDir=None,
+    device="cuda",
+    maxPerturbImages=0,
   ):
     trials = [
       el for el in os.listdir(baseOutputDir)

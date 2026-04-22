@@ -1,4 +1,4 @@
-import argparse, splitfolders, os, torch, timm, json
+import argparse, splitfolders, os, torch, timm, json, builtins
 import numpy as np
 import pandas as pd
 import torch.nn as nn
@@ -14,7 +14,7 @@ from HMB.DatasetsHelper import CustomDataset
 
 # Ensure all prints flush by default to make logs appear promptly.
 # Save the original built-in print function for delegation.
-_original_print = print
+_original_print = builtins.print
 
 
 # Define a wrapper that sets flush=True when not explicitly provided.
@@ -24,6 +24,10 @@ def print(*args, **kwargs):
     kwargs["flush"] = True
   # Delegate to the original print implementation.
   return _original_print(*args, **kwargs)
+
+
+# Override the built-in print with our wrapper to ensure all prints are flushed immediately.
+builtins.print = print
 
 
 # Define a function to parse command line arguments for training configuration.

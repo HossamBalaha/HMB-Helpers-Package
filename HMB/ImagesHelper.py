@@ -849,22 +849,54 @@ def MinMaxNormalization(image, mapToUint8=True):
     numpy.ndarray: The normalized image. If mapToUint8 is True, the output will be of type uint8.
   '''
 
+  # If a TensorFlow tensor is provided, perform normalization using TF ops so
+  # this function can be used inside TF graphs (e.g., losses or metrics).
+  try:
+    import tensorflow as tf
+  except Exception:
+    tf = None
+
+  # Handle TensorFlow tensors separately to avoid converting symbolic tensors to NumPy.
+  if ((tf is not None) and (isinstance(image, (tf.Tensor, tf.Variable)) or tf.is_tensor(image))):
+    # Cast to float32 for safe numeric ops.
+    arrTf = tf.cast(image, tf.float32)
+    # Ensure the tensor has at least 2 dimensions.
+    # Use TF ops to compute min/max and avoid numpy conversion during graph execution.
+    minv = tf.reduce_min(arrTf)
+    maxv = tf.reduce_max(arrTf)
+    delta = maxv - minv
+
+    def _zero():
+      return tf.zeros_like(arrTf, dtype=tf.float32)
+
+    def _norm():
+      return (arrTf - minv) / delta
+
+    normSim = tf.cond(tf.equal(delta, 0.0), _zero, _norm)
+
+    if (not mapToUint8):
+      return tf.cast(normSim, tf.float32)
+
+    normSim = normSim * 255.0
+    return tf.cast(tf.clip_by_value(normSim, 0.0, 255.0), tf.uint8)
+
+  # Fallback: NumPy/array path for non-TF inputs (original behaviour).
   arr = np.array(image)
   if (arr.ndim < 2):
     raise ValueError("Invalid image input for MinMaxNormalization: expected 2D/3D array.")
   # Calculate the delta between the maximum and minimum pixel intensities.
   delta = arr.max() - arr.min()
   if (delta == 0):
-    # Degenerate constant image, return safe mapping
+    # Degenerate constant image, return safe mapping.
     normSim = np.zeros_like(arr, dtype=np.float32)
   else:
-    # Normalize the image to range source 0 to 1.
+    # Normalize the image to range 0 to 1.
     normSim = (arr - arr.min()) / float(delta)
 
   if (not mapToUint8):
     return normSim.astype(np.float32)
 
-  # Scale the image to range source 0 to 255.
+  # Scale the image to range 0 to 255.
   normSim = normSim * 255.0
   return normSim.astype(np.uint8)
 

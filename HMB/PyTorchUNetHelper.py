@@ -4,21 +4,22 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 AVAILABLE_UNETS = [
-  "original", "legacy",  # Original UNet architecture with standard convolutional blocks and skip connections.
-  "dynamic",  # Dynamic convolutional blocks that adapt their weights based on the input features.
-  "multiresunet",  # MultiResUNet architecture with multi-resolution blocks for improved feature extraction.
-  "r2unet",  # Recurrent residual convolutional blocks for improved feature representation.
-  "transunet",  # Transformer-based encoder with a UNet-style decoder for capturing long-range dependencies.
-  "cbamunet",  # CBAM integrated into the UNet architecture for enhanced feature representation.
-  "efficientunet",  # EfficientNet-based encoder with a lightweight decoder for efficient segmentation.
-  "residual",  # Residual connections within the encoder and decoder blocks for improved gradient flow.
-  "attention",  # Attention gates for skip connections to focus on relevant features.
-  "mobile",  # Depthwise separable convolutions for lightweight segmentation.
-  "se",  # Squeeze-and-Excitation blocks for channel-wise feature recalibration.
-  "residual_attention",  # Combines residual connections with attention gates for enhanced feature learning.
-  "boundary_aware",  # Two parallel branches for segmentation and boundary detection.
-  "asppunet",  # Incorporates Atrous Spatial Pyramid Pooling (ASPP) in the bottleneck to capture multi-scale context.
-  "denseunet",  # Dense connectivity pattern where each layer receives inputs from all previous layers.
+  "Original", "Legacy",  # Original UNet architecture with standard convolutional blocks and skip connections.
+  "Dynamic",  # Dynamic convolutional blocks that adapt their weights based on the input features.
+  "MultiResUNet",  # MultiResUNet architecture with multi-resolution blocks for improved feature extraction.
+  "R2UNet",  # Recurrent residual convolutional blocks for improved feature representation.
+  "TransUNet",  # Transformer-based encoder with a UNet-style decoder for capturing long-range dependencies.
+  "CBAMUNet",  # CBAM integrated into the UNet architecture for enhanced feature representation.
+  "EfficientUNet",  # EfficientNet-based encoder with a lightweight decoder for efficient segmentation.
+  "Residual",  # Residual connections within the encoder and decoder blocks for improved gradient flow.
+  "Attention",  # Attention gates for skip connections to focus on relevant features.
+  "Mobile",  # Depthwise separable convolutions for lightweight segmentation.
+  "SE",  # Squeeze-and-Excitation blocks for channel-wise feature recalibration.
+  "ResidualAttention",  # Combines residual connections with attention gates for enhanced feature learning.
+  "BoundaryAware",  # Two parallel branches for segmentation and boundary detection.
+  "ASPPUNet",  # Incorporates Atrous Spatial Pyramid Pooling (ASPP) in the bottleneck to capture multi-scale context.
+  "DenseUNet",  # Dense connectivity pattern where each layer receives inputs from all previous layers.
+  "VNet",  # V-Net architecture with residual connections adapted for 2D images in this helper.
 ]
 
 
@@ -27,8 +28,8 @@ AVAILABLE_UNETS = [
 # ---------------------------------------------------- #
 
 def PreparePredTensorToNumpy(
-    predTensor: torch.Tensor,
-    doScale2Image: bool = False,
+  predTensor: torch.Tensor,
+  doScale2Image: bool = False,
 ) -> np.ndarray:
   r'''
   Utility to convert model output tensor after the sigmoid/softmax activation to a numpy array of class indices.
@@ -143,12 +144,12 @@ class ConfigConv(nn.Module):
 
   # Initialize configurable conv block.
   def __init__(
-      self,
-      inChannels: int,
-      outChannels: int,
-      norm: str = "batch",
-      dropout: float = 0.0,
-      residual: bool = False
+    self,
+    inChannels: int,
+    outChannels: int,
+    norm: str = "batch",
+    dropout: float = 0.0,
+    residual: bool = False
   ):
     # Call super initializer.
     super(ConfigConv, self).__init__()
@@ -961,11 +962,6 @@ class SpatialAttn(nn.Module):
     return x * attn
 
 
-# ---------------------------------------------------- #
-# UNets implementations.                               #
-# ---------------------------------------------------- #
-
-
 class UNet(nn.Module):
   r'''
   Standard 2D U-Net architecture.
@@ -992,11 +988,11 @@ class UNet(nn.Module):
 
   # Initialize UNet with input channels and number of classes.
   def __init__(
-      self,
-      inputChannels: int = 3,
-      numClasses: int = 2,
-      baseChannels: int = 64,
-      useConvTranspose2d=True,
+    self,
+    inputChannels: int = 3,
+    numClasses: int = 2,
+    baseChannels: int = 64,
+    useConvTranspose2d=True,
   ):
     # Call super initializer.
     super(UNet, self).__init__()
@@ -2742,8 +2738,8 @@ class TransUNet(nn.Module):
 
   # Initialize TransUNet.
   def __init__(
-      self, inputChannels=3, numClasses=2, baseChannels=64, embedDim=256, numHeads=8, numEncoders=2,
-      useConvTranspose2d=True
+    self, inputChannels=3, numClasses=2, baseChannels=64, embedDim=256, numHeads=8, numEncoders=2,
+    useConvTranspose2d=True
   ):
     # Call super initializer.
     super(TransUNet, self).__init__()
@@ -3045,12 +3041,12 @@ class BoundaryAwareUNet(nn.Module):
 
   # Initialize boundary-aware U-Net.
   def __init__(
-      self,
-      inputChannels=3,
-      numClasses=2,
-      baseChannels=64,
-      useConvTranspose2d=True,
-      boundaryWeight=0.5
+    self,
+    inputChannels=3,
+    numClasses=2,
+    baseChannels=64,
+    useConvTranspose2d=True,
+    boundaryWeight=0.5
   ):
     # Call parent initializer.
     super(BoundaryAwareUNet, self).__init__()
@@ -3180,7 +3176,7 @@ class BoundaryAwareUNet(nn.Module):
       xBoundary = self.boundaryUpsamples[i](xBoundary)
       # Align spatial dimensions when necessary.
       if (xEnc.size(2) != encoderFeatures[-(i + 1)].size(2)) or (
-          xEnc.size(3) != encoderFeatures[-(i + 1)].size(3)
+        xEnc.size(3) != encoderFeatures[-(i + 1)].size(3)
       ):
         # Interpolate standard features to match skip connection.
         xEnc = F.interpolate(
@@ -3194,7 +3190,7 @@ class BoundaryAwareUNet(nn.Module):
         )
       # Align boundary features similarly.
       if (xBoundary.size(2) != boundaryFeatures[-(i + 1)].size(2)) or (
-          xBoundary.size(3) != boundaryFeatures[-(i + 1)].size(3)
+        xBoundary.size(3) != boundaryFeatures[-(i + 1)].size(3)
       ):
         # Interpolate boundary features to match skip connection.
         xBoundary = F.interpolate(
@@ -3251,17 +3247,92 @@ class BoundaryAwareUNet(nn.Module):
     )
 
 
-# Extended factory override to include the newly appended UNet variants.
+class VNet(nn.Module):
+  r'''
+  V-Net style residual encoder-decoder adapted to 2D images.
+
+  Short summary:
+    Simple VNet-like architecture built from the existing ResidualBlock primitive.
+    The module is intentionally compact and follows the same construction
+    patterns as other models in this file (encoder ModuleList, decoder ups and decs).
+
+  Parameters:
+    inputChannels (int): Number of input channels. Default 1.
+    numClasses (int): Number of output classes. Default 1.
+    baseChannels (int): Filters in the first stage. Default 16.
+    noOfLevels (int): Number of encoder levels. Default 5.
+    useConvTranspose2d (bool): Use ConvTranspose2d for learned upsampling when True.
+  '''
+
+  def __init__(
+    self,
+    inputChannels=1,
+    numClasses=1,
+    baseChannels=16,
+    noOfLevels=5,
+    useConvTranspose2d=True,
+  ):
+    super(VNet, self).__init__()
+    # Build encoder
+    self.encs = nn.ModuleList()
+    self.pools = nn.ModuleList()
+    inCh = inputChannels
+    channels = baseChannels
+    for i in range(noOfLevels):
+      self.encs.append(ResidualBlock(inCh, channels))
+      self.pools.append(nn.MaxPool2d(2))
+      inCh = channels
+      channels = channels * 2
+
+    # Center
+    self.center = ResidualBlock(inCh, channels)
+
+    # Decoder
+    self.ups = nn.ModuleList()
+    self.decs = nn.ModuleList()
+    for i in range(noOfLevels):
+      if (useConvTranspose2d):
+        self.ups.append(nn.ConvTranspose2d(channels, channels // 2, kernel_size=2, stride=2))
+      else:
+        self.ups.append(nn.Sequential(nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
+                                      nn.Conv2d(channels, channels // 2, kernel_size=1)))
+      self.decs.append(ResidualBlock(channels, channels // 2))
+      channels = channels // 2
+
+    # Final projection
+    self.finalConv = nn.Conv2d(channels, numClasses, kernel_size=1)
+
+  def forward(self, x):
+    features = []
+    for enc, pool in zip(self.encs, self.pools):
+      x = enc.forward(x)
+      features.append(x)
+      x = pool(x)
+
+    x = self.center.forward(x)
+
+    for up, dec, feat in zip(self.ups, self.decs, reversed(features)):
+      x = up(x)
+      # Align shapes if needed
+      if (x.size(2) != feat.size(2)) or (x.size(3) != feat.size(3)):
+        x = F.interpolate(x, size=(feat.size(2), feat.size(3)), mode="bilinear", align_corners=True)
+      x = torch.cat([x, feat], dim=1)
+      x = dec.forward(x)
+
+    logits = self.finalConv(x)
+    return logits
+
+
 def CreateUNet(
-    inputChannels: int = 3,
-    numClasses: int = 2,
-    baseChannels: int = 64,
-    depth: int = 4,
-    upMode: str = "transpose",
-    norm: str = "batch",
-    dropout: float = 0.0,
-    residual: bool = False,
-    modelType: str = "dynamic",
+  inputChannels: int = 3,
+  numClasses: int = 2,
+  baseChannels: int = 64,
+  depth: int = 4,
+  upMode: str = "transpose",
+  norm: str = "batch",
+  dropout: float = 0.0,
+  residual: bool = False,
+  modelType: str = "dynamic",
 ):
   r'''
   Extended factory that supports a large set of UNet variants by modelType.
@@ -3289,7 +3360,8 @@ def CreateUNet(
   mt = (modelType or "dynamic")
   mtLower = mt.lower()
 
-  if (mtLower not in tuple(AVAILABLE_UNETS)):
+  # Compare against a lower-cased view of AVAILABLE_UNETS to preserve runtime behaviour.
+  if (mtLower not in tuple([s.lower() for s in AVAILABLE_UNETS])):
     print(
       f"Warning: Unrecognized modelType '{modelType}'. Defaulting to 'dynamic' UNet.\n"
       f"Available types: {AVAILABLE_UNETS}"
@@ -3419,6 +3491,16 @@ def CreateUNet(
       useConvTranspose2d=(upMode == "transpose"),
     )
 
+  if (mtLower == "vnet"):
+    # VNet: residual encoder-decoder variant. Use baseChannels as initial filter count.
+    return VNet(
+      inputChannels=inputChannels,
+      numClasses=numClasses,
+      baseChannels=(baseChannels if baseChannels >= 8 else 16),
+      noOfLevels=(depth if depth >= 2 else 5),
+      useConvTranspose2d=(upMode == "transpose"),
+    )
+
   # Default to DynamicUNet as a safe fallback.
   return DynamicUNet(
     inputChannels=inputChannels,
@@ -3492,6 +3574,9 @@ def GetUNetModel(modelName: str, inputChannels: int, numClasses: int, baseChanne
   elif (modelName == "AttentionUNet"):
     # Instantiate and return an AttentionUNet model.
     return AttentionUNet(inputChannels, numClasses, baseChannels)
+  elif (modelName == "VNet"):
+    # Instantiate and return a VNet model.
+    return VNet(inputChannels, numClasses, baseChannels)
   # Raise an error when the model name is not recognized.
   raise ValueError(f"Unknown model name: {modelName}")
 

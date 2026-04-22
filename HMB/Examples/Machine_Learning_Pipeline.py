@@ -5,7 +5,7 @@ if __name__ == "__main__":
 
 # ------------------------------------------------------------------------- #
 
-import os
+import os, builtins
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -20,7 +20,7 @@ from HMB.ExplainabilityHelper import SHAPExplainer
 
 # Ensure all prints flush by default to make logs appear promptly.
 # Save the original built-in print function for delegation.
-_original_print = print
+_original_print = builtins.print
 
 
 # Define a wrapper that sets flush=True when not explicitly provided.
@@ -30,6 +30,9 @@ def print(*args, **kwargs):
     kwargs["flush"] = True
   # Delegate to the original print implementation.
   return _original_print(*args, **kwargs)
+
+# Override the built-in print with our wrapper to ensure all prints are flushed immediately.
+builtins.print = print
 
 
 if (__name__ == "__main__"):

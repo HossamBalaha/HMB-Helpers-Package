@@ -25,7 +25,7 @@ from HMB.Utils import DumpJsonFile, AppendOrCreateNewCSV
 from HMB.PlotsHelper import PlotHeatmap, PlotBarChart, COLORS
 from HMB.DatasetsHelper import CustomDataset
 from HMB.ImagesHelper import *
-from HMB.UNetHelper import PreparePredTensorToNumpy
+from HMB.PyTorchUNetHelper import PreparePredTensorToNumpy
 from HMB import ImageSegmentationMetrics as ISM
 
 
