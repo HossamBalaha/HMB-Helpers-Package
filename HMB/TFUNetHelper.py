@@ -2676,7 +2676,7 @@ class SegNet(tf.keras.Model):
           baseModel.get_layer("conv4_block6_out").output,
         ]
       # Construct a model that outputs the selected intermediate feature maps.
-      self.resnet_base = models.Model(inputs=baseInput, outputs=level_outputs)
+      self.resnet_base = tf.keras.models.Model(inputs=baseInput, outputs=level_outputs)
 
     # Execute the ResNet base to obtain encoder levels.
     return self.resnet_base(x, training=training)
@@ -2703,7 +2703,7 @@ class SegNet(tf.keras.Model):
           if ("expand_relu" in layer.name and len(level_outputs) < 4):
             level_outputs.append(layer.output)
       # Construct a model that returns the chosen intermediate layers.
-      self.mb_base = models.Model(inputs=baseInput, outputs=level_outputs)
+      self.mb_base = tf.keras.models.Model(inputs=baseInput, outputs=level_outputs)
 
     # Execute MobileNet base to obtain encoder levels.
     return self.mb_base(x, training=training)
@@ -2756,7 +2756,7 @@ class SegNet(tf.keras.Model):
     x = self.out_conv(x)
     outputs = self.out_act(x)
     # Construct and store the internal functional Keras model for fixed-shape execution.
-    self._functional_model = models.Model(inputs=inputs, outputs=outputs, name=self.name)
+    self._functional_model = tf.keras.models.Model(inputs=inputs, outputs=outputs, name=self.name)
 
   def call(self, x, training=False):
     '''Forward pass: route to functional model if fixed shape, else dynamic.'''
