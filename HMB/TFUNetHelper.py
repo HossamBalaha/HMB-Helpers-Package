@@ -1067,7 +1067,7 @@ class MobileUNet(tf.keras.Model):
   Attributes:
     enc1..enc4, center: Encoder and bottleneck sequences.
     up1..up4, dec1..dec4: Decoder modules.
-    finalConv (tf.keras.layers.Layer): 1x1 conv for logits.
+    finalConv (tensorflow.keras.layers.Layer): 1x1 conv for logits.
 
   Returns:
     tensorflow.Tensor: Logits tensor of shape [B, H, W, numClasses].
@@ -2505,11 +2505,12 @@ class SegNet(tf.keras.Model):
       reps = 2 if block_num <= 2 else 3
       for i in range(reps):
         layers_list.append(
-          layers.Conv2D(filters, (3, 3), activation="relu", padding="same",
-                        use_bias=self.useBias, name=f"vgg_b{block_num}_c{i + 1}")
+          tf.keras.layers.Conv2D(filters, (3, 3), activation="relu", padding="same",
+                                 use_bias=self.useBias, name=f"vgg_b{block_num}_c{i + 1}"
+                                 )
         )
       layers_list.append(
-        layers.MaxPooling2D((2, 2), strides=(2, 2), name=f"vgg_b{block_num}_pool")
+        tf.keras.layers.MaxPooling2D((2, 2), strides=(2, 2), name=f"vgg_b{block_num}_pool")
       )
       return layers_list
 
@@ -2540,35 +2541,35 @@ class SegNet(tf.keras.Model):
     # Block 1: in_ch -> 64
     # Block 1 layers from input channels to 64 filters.
     self.vanilla_layers.extend([
-      layers.ZeroPadding2D((pad, pad), name="van_pad1"),
-      layers.Conv2D(64, (kernel, kernel), padding="valid", use_bias=self.useBias, name="van_conv1"),
-      layers.BatchNormalization(name="van_bn1"),
-      layers.Activation("relu", name="van_relu1"),
-      layers.MaxPooling2D((pool, pool), name="van_pool1"),
+      tf.keras.layers.ZeroPadding2D((pad, pad), name="van_pad1"),
+      tf.keras.layers.Conv2D(64, (kernel, kernel), padding="valid", use_bias=self.useBias, name="van_conv1"),
+      tf.keras.layers.BatchNormalization(name="van_bn1"),
+      tf.keras.layers.Activation("relu", name="van_relu1"),
+      tf.keras.layers.MaxPooling2D((pool, pool), name="van_pool1"),
     ])
     # Block 2: 64 -> 128
     self.vanilla_layers.extend([
-      layers.ZeroPadding2D((pad, pad), name="van_pad2"),
-      layers.Conv2D(128, (kernel, kernel), padding="valid", use_bias=self.useBias, name="van_conv2"),
-      layers.BatchNormalization(name="van_bn2"),
-      layers.Activation("relu", name="van_relu2"),
-      layers.MaxPooling2D((pool, pool), name="van_pool2"),
+      tf.keras.layers.ZeroPadding2D((pad, pad), name="van_pad2"),
+      tf.keras.layers.Conv2D(128, (kernel, kernel), padding="valid", use_bias=self.useBias, name="van_conv2"),
+      tf.keras.layers.BatchNormalization(name="van_bn2"),
+      tf.keras.layers.Activation("relu", name="van_relu2"),
+      tf.keras.layers.MaxPooling2D((pool, pool), name="van_pool2"),
     ])
     # Block 3: 128 -> 256
     self.vanilla_layers.extend([
-      layers.ZeroPadding2D((pad, pad), name="van_pad3"),
-      layers.Conv2D(256, (kernel, kernel), padding="valid", use_bias=self.useBias, name="van_conv3"),
-      layers.BatchNormalization(name="van_bn3"),
-      layers.Activation("relu", name="van_relu3"),
-      layers.MaxPooling2D((pool, pool), name="van_pool3"),
+      tf.keras.layers.ZeroPadding2D((pad, pad), name="van_pad3"),
+      tf.keras.layers.Conv2D(256, (kernel, kernel), padding="valid", use_bias=self.useBias, name="van_conv3"),
+      tf.keras.layers.BatchNormalization(name="van_bn3"),
+      tf.keras.layers.Activation("relu", name="van_relu3"),
+      tf.keras.layers.MaxPooling2D((pool, pool), name="van_pool3"),
     ])
     # Block 4: 256 -> 512
     self.vanilla_layers.extend([
-      layers.ZeroPadding2D((pad, pad), name="van_pad4"),
-      layers.Conv2D(512, (kernel, kernel), padding="valid", use_bias=self.useBias, name="van_conv4"),
-      layers.BatchNormalization(name="van_bn4"),
-      layers.Activation("relu", name="van_relu4"),
-      layers.MaxPooling2D((pool, pool), name="van_pool4"),
+      tf.keras.layers.ZeroPadding2D((pad, pad), name="van_pad4"),
+      tf.keras.layers.Conv2D(512, (kernel, kernel), padding="valid", use_bias=self.useBias, name="van_conv4"),
+      tf.keras.layers.BatchNormalization(name="van_bn4"),
+      tf.keras.layers.Activation("relu", name="van_relu4"),
+      tf.keras.layers.MaxPooling2D((pool, pool), name="van_pool4"),
     ])
 
   def _build_decoder_layers(self):
@@ -2587,18 +2588,18 @@ class SegNet(tf.keras.Model):
     for i, (filters, do_upsample) in enumerate(decoder_stages):
       suffix = f"_d{i}"
       # Zero padding before the conv for this stage.
-      self.dec_layers[f"pad{suffix}"] = layers.ZeroPadding2D((1, 1), name=f"dec_pad{suffix}")
+      self.dec_layers[f"pad{suffix}"] = tf.keras.layers.ZeroPadding2D((1, 1), name=f"dec_pad{suffix}")
       # Convolution for this decoder stage.
-      self.dec_layers[f"conv{suffix}"] = layers.Conv2D(
+      self.dec_layers[f"conv{suffix}"] = tf.keras.layers.Conv2D(
         filters, (3, 3), padding="valid", use_bias=self.useBias, name=f"dec_conv{suffix}"
       )
       # Batch normalization for this decoder stage.
-      self.dec_layers[f"bn{suffix}"] = layers.BatchNormalization(name=f"dec_bn{suffix}")
+      self.dec_layers[f"bn{suffix}"] = tf.keras.layers.BatchNormalization(name=f"dec_bn{suffix}")
       # ReLU activation for this decoder stage.
-      self.dec_layers[f"relu{suffix}"] = layers.Activation("relu", name=f"dec_relu{suffix}")
+      self.dec_layers[f"relu{suffix}"] = tf.keras.layers.Activation("relu", name=f"dec_relu{suffix}")
       # Optional upsampling operator when this stage is configured to upsample.
       if (do_upsample):
-        self.dec_layers[f"up{suffix}"] = layers.UpSampling2D(
+        self.dec_layers[f"up{suffix}"] = tf.keras.layers.UpSampling2D(
           size=(2, 2), interpolation="bilinear", name=f"dec_up{suffix}"
         )
 
@@ -2608,16 +2609,16 @@ class SegNet(tf.keras.Model):
     # Configure output convolution and activation based on number of classes.
     if (self.numClasses > 2):
       # Multi-class classification head with softmax activation.
-      self.out_conv = layers.Conv2D(
+      self.out_conv = tf.keras.layers.Conv2D(
         self.numClasses, (3, 3), padding="same", use_bias=self.useBias, name="out_conv"
       )
-      self.out_act = layers.Activation("softmax", name="out_softmax")
+      self.out_act = tf.keras.layers.Activation("softmax", name="out_softmax")
     else:
       # Binary segmentation head with sigmoid activation.
-      self.out_conv = layers.Conv2D(
+      self.out_conv = tf.keras.layers.Conv2D(
         1, (3, 3), padding="same", use_bias=self.useBias, name="out_conv"
       )
-      self.out_act = layers.Activation("sigmoid", name="out_sigmoid")
+      self.out_act = tf.keras.layers.Activation("sigmoid", name="out_sigmoid")
 
   def _run_vgg_encoder(self, x, training=False):
     '''Execute VGG encoder and return 4 feature levels.'''
@@ -2628,7 +2629,7 @@ class SegNet(tf.keras.Model):
     pool_count = 0
     # Execute each layer in the VGG sequence and collect the first four pooled outputs.
     for layer in self.vgg_layers:
-      x = layer(x, training=training) if isinstance(layer, layers.BatchNormalization) else layer(x)
+      x = layer(x, training=training) if isinstance(layer, tf.keras.layers.BatchNormalization) else layer(x)
       if ("pool" in layer.name):
         pool_count += 1
         if (pool_count <= 4):  # Collect first 4 pooling outputs.
@@ -2643,7 +2644,7 @@ class SegNet(tf.keras.Model):
     levels = []
     # Execute each vanilla layer and collect outputs at pooling layers.
     for i, layer in enumerate(self.vanilla_layers):
-      x = layer(x, training=training) if isinstance(layer, layers.BatchNormalization) else layer(x)
+      x = layer(x, training=training) if isinstance(layer, tf.keras.layers.BatchNormalization) else layer(x)
       if ("pool" in layer.name):
         levels.append(x)
     # Return the collected four levels.
@@ -2655,7 +2656,7 @@ class SegNet(tf.keras.Model):
     # Lazily build a ResNet50 base model on first call to avoid duplicated graphs.
     if (self.resnet_base is None):
       # Create a Keras Input that reuses the tensor `x` for the base model.
-      baseInput = layers.Input(tensor=x)
+      baseInput = tf.keras.layers.Input(tensor=x)
       baseModel = tf.keras.applications.ResNet50(
         include_top=False, weights=None, input_tensor=baseInput
       )
@@ -2685,7 +2686,7 @@ class SegNet(tf.keras.Model):
 
     # Lazily build MobileNetV2 base the first time this path is executed.
     if (self.mb_base is None):
-      baseInput = layers.Input(tensor=x)
+      baseInput = tf.keras.layers.Input(tensor=x)
       baseModel = tf.keras.applications.MobileNetV2(
         include_top=False, weights=None, input_tensor=baseInput, alpha=1.0
       )
@@ -2744,7 +2745,7 @@ class SegNet(tf.keras.Model):
     '''Build static functional model for fixed input shapes (optimization).'''
 
     # Create a Keras Input for the configured fixed input size.
-    inputs = layers.Input(shape=self.inputSize, name="segnet_input")
+    inputs = tf.keras.layers.Input(shape=self.inputSize, name="segnet_input")
     # Run the encoder to obtain feature levels.
     levels = self._run_encoder(inputs, training=False)
     # Select the level where the decoder starts (1-indexed -> 0-indexed conversion).
