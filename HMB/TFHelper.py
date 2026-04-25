@@ -2750,6 +2750,55 @@ def BuildOptimizer(optimizerSpec):
   raise ValueError(f"Invalid optimizer specification: {optimizerSpec}")
 
 
+def TFDataset(X, y, batchSize=8):
+  r'''
+  Create a TensorFlow dataset from the given data and batch size, with shuffling, parsing, batching, prefetching, and repeating.
+
+  Parameters:
+    X (list or array-like): List of input data (e.g., image paths).
+    y (list or array-like): List of corresponding labels or masks.
+    batchSize (int): Number of samples per batch.
+
+  Returns:
+    tensorflow.data.Dataset: A TensorFlow dataset that yields batches of parsed data, shuffled and prefetched for optimized training. The dataset is set to repeat indefinitely, so it can be used directly in model training loops without needing to specify the number of epochs in the dataset itself.
+  '''
+
+  from HMB.ImagesHelper import ReadImage, ReadMask
+
+  def _TFParse(X, y):
+    # Read the image and mask.
+    image = tf.numpy_function(ReadImage, [X], tf.float64)
+    mask = tf.numpy_function(ReadMask, [y], tf.float64)
+
+    # Set the shape of the images and masks.
+    image.set_shape([image.shape[0], image.shape[1], 3])
+    mask.set_shape([mask.shape[0], mask.shape[1], 1])
+
+    # Return the image and mask.
+    return image, mask
+
+  # Create a TensorFlow dataset.
+  dataset = tf.data.Dataset.from_tensor_slices((X, y))
+
+  # Shuffle the dataset.
+  dataset = dataset.shuffle(buffer_size=batchSize)
+
+  # Parse images and masks.
+  dataset = dataset.map(_TFParse)
+
+  # Batch the dataset.
+  dataset = dataset.batch(batchSize)
+
+  # Prefetch the dataset to optimize training.
+  dataset = dataset.prefetch(1)
+
+  # Repeat the dataset indefinitely.
+  dataset = dataset.repeat()
+
+  # Return the dataset.
+  return dataset
+
+
 def CompileTrainTFUNetModel(
   model,
   trialNo,
@@ -2762,6 +2811,7 @@ def CompileTrainTFUNetModel(
   outputFolder=None,
   keyword=None,
   testSize=0.25,
+  randomState=42,
 ):
   r'''
   Compile and train a TFUNet model with the given parameters, and store the results.
@@ -2778,7 +2828,38 @@ def CompileTrainTFUNetModel(
     outputFolder (str): Path to the folder where training outputs (weights, logs, hyperparameters) will be stored.
     keyword (str): A keyword to uniquely identify this training run, used in naming output files and directories.
     testSize (float): Ratio of the dataset to be used as the test set when splitting the data. The remaining will be used for training and validation.
+    randomState (int): Random state for reproducibility when splitting the dataset.
   '''
+
+  from HMB.ImagesHelper import ReadImage, ReadMask
+  from sklearn.model_selection import train_test_split
+
+  def _LoadData(imagesList, masksList, testSize=0.2):
+    # Split the dataset into training and testing sets.
+    xTrain, xTest, yTrain, yTest = train_test_split(
+      imagesList,  # Images.
+      masksList,  # Masks.
+      test_size=testSize,  # Ratio of the testing set.
+      random_state=randomState,  # Random state.
+    )
+
+    # Split the training set into training and validation sets.
+    xTrain, xVal, yTrain, yVal = train_test_split(
+      xTrain,  # Images.
+      yTrain,  # Masks.
+      test_size=testSize,  # Ratio of the validation set.
+      random_state=randomState,  # Random state.
+    )
+
+    # Return the dataset.
+    return xTrain, xVal, xTest, yTrain, yVal, yTest
+
+  def _HyperparameterToString(key, value):
+    if (key.lower() == "optimizer"):
+      optimizer = BuildOptimizer(value)
+      config = optimizer.get_config()
+      return f"{optimizer.__class__.__name__}({config})"
+    return str(value)
 
   # Create the output directory for the trial.
   storageDir = os.path.join(outputFolder, keyword)
@@ -2788,7 +2869,7 @@ def CompileTrainTFUNetModel(
   clear_session()
 
   # Load the dataset (split paths).
-  xTrain, xVal, xTest, yTrain, yVal, yTest = LoadData(
+  xTrain, xVal, xTest, yTrain, yVal, yTest = _LoadData(
     imagesList,  # Path to the images' directory.
     masksList,  # Path to the masks' directory.
     testSize=testSize,  # Ratio of the testing set.
@@ -2874,7 +2955,7 @@ def CompileTrainTFUNetModel(
   # Store the hyperparameters.
   dictToStore = {}
   for key in hyperparameters.keys():
-    dictToStore[key.capitalize()] = HyperparameterToString(
+    dictToStore[key.capitalize()] = _HyperparameterToString(
       key,
       hyperparameters[key],
     )

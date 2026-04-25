@@ -2288,9 +2288,9 @@ class VNet(tf.keras.Model):
     inputs = tf.keras.Input(shape=self.inputSize)
 
     # Small convolutional helper block used by the builder.
-    def ConvBlock(x, filters, kernel_size=3):
+    def ConvBlock(x, filters, kernelSize=3):
       # Apply a Conv2D layer with specified filters and kernel size.
-      x = tf.keras.layers.Conv2D(filters, kernel_size, padding="same", kernel_initializer=self.kernelInitializer)(x)
+      x = tf.keras.layers.Conv2D(filters, kernelSize, padding="same", kernel_initializer=self.kernelInitializer)(x)
       # Optionally apply batch normalization.
       if (self.applyBatchNorm):
         x = tf.keras.layers.BatchNormalization()(x)
@@ -2301,13 +2301,13 @@ class VNet(tf.keras.Model):
       return x
 
     # Residual block composed of two ConvBlock calls plus a projected shortcut.
-    def ResidualBlock(x, filters, kernel_size=3, dropout=0.0):
+    def ResidualBlock(x, filters, kernelSize=3, dropout=0.0):
       # Preserve the shortcut for residual addition.
       shortcut = x
       # First conv sub-block.
-      out = ConvBlock(x, filters, kernel_size=kernel_size)
+      out = ConvBlock(x, filters, kernelSize=kernelSize)
       # Second conv sub-block.
-      out = ConvBlock(out, filters, kernel_size=kernel_size)
+      out = ConvBlock(out, filters, kernelSize=kernelSize)
       # Project shortcut to requested width using 1x1 conv.
       shortcut = tf.keras.layers.Conv2D(filters, 1, padding="same")(shortcut)
       # Add the residual connection.
@@ -2333,20 +2333,20 @@ class VNet(tf.keras.Model):
         return tf.image.resize(x, (tf.shape(ref)[1], tf.shape(ref)[2]))
 
     # Initial convolutional projection.
-    x = ConvBlock(inputs, 16, kernel_size=5)
+    x = ConvBlock(inputs, 16, kernelSize=5)
     stages = []
     channels = []
     filters = 16
     # Build encoder stages with residual blocks and pooling.
     for _ in range(self.noOfLevels):
-      r = ResidualBlock(x, filters, kernel_size=5, dropout=self.dropoutRatio)
+      r = ResidualBlock(x, filters, kernelSize=5, dropout=self.dropoutRatio)
       stages.append(r)
       channels.append(filters)
       x = tf.keras.layers.MaxPool2D(pool_size=2)(r)
       filters = filters * 2
 
     # Center residual block.
-    x = ResidualBlock(x, filters, kernel_size=3, dropout=self.dropoutRatio)
+    x = ResidualBlock(x, filters, kernelSize=3, dropout=self.dropoutRatio)
 
     # First upsample.
     filters = filters // 2
@@ -2366,7 +2366,7 @@ class VNet(tf.keras.Model):
         x = tf.keras.layers.Conv2D(int(skipCh), 1, padding="same")(x)
         x = tf.keras.layers.Add()([x, skip])
       # Process merged features with a residual block.
-      x = ResidualBlock(x, int(skipCh), kernel_size=3, dropout=self.dropoutRatio)
+      x = ResidualBlock(x, int(skipCh), kernelSize=3, dropout=self.dropoutRatio)
       upFilters = max(1, int(skipCh) // 2)
       x = tf.keras.layers.Conv2DTranspose(upFilters, 2, strides=2, padding="same")(x)
       if (self.applyBatchNorm):
@@ -2384,7 +2384,7 @@ class VNet(tf.keras.Model):
       x = tf.keras.layers.Conv2D(int(channels[0]), 1, padding="same")(x)
       x = tf.keras.layers.Add()([x, lastSkip])
     # Final residual processing after the last merge.
-    x = ResidualBlock(x, int(channels[0]), kernel_size=3, dropout=self.dropoutRatio)
+    x = ResidualBlock(x, int(channels[0]), kernelSize=3, dropout=self.dropoutRatio)
 
     outputs = tf.keras.layers.Conv2D(self.numClasses, (1, 1), use_bias=True)(x)
     outputs = tf.keras.layers.Activation("sigmoid")(outputs)
@@ -2427,8 +2427,13 @@ class SegNet(tf.keras.Model):
   '''
 
   def __init__(
-    self, inputChannels=3, numClasses=2, level=3, encoder="VGG16",
-    inputSize=None, useBias=False
+    self,
+    inputChannels=3,
+    numClasses=2,
+    level=3,
+    encoder="VGG16",
+    inputSize=None,
+    useBias=False
   ):
     # Call parent constructor with a descriptive name.
     super(SegNet, self).__init__(name=f"SegNet_{encoder}_L{level}")

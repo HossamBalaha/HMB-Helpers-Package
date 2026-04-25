@@ -96,7 +96,7 @@ def IsPointInsideContour(point, contour):
     cnt = cnt.reshape((-1, 1, 2))
   # If 'point' is actually a polygon, compute convex intersection area>0 with contour
   if isinstance(point, (list, tuple, np.ndarray)) and not (
-      len(point) == 2 and not isinstance(point[0], (list, tuple, np.ndarray))):
+    len(point) == 2 and not isinstance(point[0], (list, tuple, np.ndarray))):
     poly = np.array(point, dtype=np.float32)
     if poly.ndim == 2 and poly.shape[1] == 2:
       poly = poly.reshape((-1, 1, 2)).astype(np.float32)
@@ -258,8 +258,8 @@ def ConvertToJsonSerializable(obj):
     if (torchModule is not None):
       # Check if obj is a torch device or dtype.
       if (
-          isinstance(obj, torchModule.device) or
-          isinstance(obj, torchModule.dtype)
+        isinstance(obj, torchModule.device) or
+        isinstance(obj, torchModule.dtype)
       ):
         # Return the string representation of the object.
         return str(obj)
@@ -272,8 +272,8 @@ def ConvertToJsonSerializable(obj):
     if (torchModule is not None):
       # Check if obj is a torch Size or a set.
       if (
-          isinstance(obj, torchModule.Size) or
-          isinstance(obj, set)
+        isinstance(obj, torchModule.Size) or
+        isinstance(obj, set)
       ):
         # Return the list representation of the object.
         return list(obj)
@@ -311,8 +311,8 @@ def ConvertToJsonSerializable(obj):
     if (tensorflowModule is not None):
       # Check if obj is a TensorFlow Tensor or Variable.
       if (
-          isinstance(obj, tensorflowModule.Tensor) or
-          isinstance(obj, tensorflowModule.Variable)
+        isinstance(obj, tensorflowModule.Tensor) or
+        isinstance(obj, tensorflowModule.Variable)
       ):
         # Attempt to convert to numpy array.
         try:
@@ -552,10 +552,10 @@ def Hex2RGB(hexColor, isRGBA=False):
 
 
 def AppendOrCreateNewCSV(
-    fileName,  # Path to the CSV file.
-    data,  # Data to append or create.
-    header=None,  # Header for the CSV file.
-    mode="a",  # Mode to open the file (default is append).
+  fileName,  # Path to the CSV file.
+  data,  # Data to append or create.
+  header=None,  # Header for the CSV file.
+  mode="a",  # Mode to open the file (default is append).
 ):
   r'''
   Append data to a CSV file or create a new one if it doesn't exist.
@@ -600,9 +600,9 @@ def AppendOrCreateNewCSV(
 
 # Define the AppendOrCreateNewDataFrameCSV function to append or create a CSV from list or DataFrame.
 def AppendOrCreateNewDataFrameCSV(
-    fileName,  # Path to the CSV file.
-    data,  # Data to append or create; can be a list (of lists/dicts) or a pandas DataFrame.
-    header=None,  # Header for the CSV file; required if creating a new file and data is not a DataFrame with columns.
+  fileName,  # Path to the CSV file.
+  data,  # Data to append or create; can be a list (of lists/dicts) or a pandas DataFrame.
+  header=None,  # Header for the CSV file; required if creating a new file and data is not a DataFrame with columns.
 ):
   r'''
   Append data to a CSV file or create a new one if it doesn't exist.
@@ -862,3 +862,36 @@ def FormatNumericWithDelta(value, baseValue=None, fmt="{:.2f}"):
   sign = "+" if (delta >= 0) else ""
   # Return formatted string including delta sign.
   return f"{fmt.format(value)} ({sign}{delta:.1f}%)"
+
+
+def SafeCall(name, fn, *args, **kwargs):
+  r'''
+  Safely call a function and print its result or any exceptions. It also prints a separator line for clarity.
+
+  Parameters:
+    name (str): Name of the function being called (for reporting).
+    fn (callable): The function to call.
+    *args: Positional arguments to pass to the function.
+    **kwargs: Keyword arguments to pass to the function.
+
+  Returns:
+    The result of the function call if successful, or None if an exception occurred.
+  '''
+
+  # Attempt to execute the target function with provided arguments.
+  try:
+    res = fn(*args, **kwargs)
+    # Print the function name and its returned result.
+    print(f"{name} ->", res)
+    # Print a visual separator line.
+    print("-" * 40)
+    # Return the computed result to the caller.
+    return res
+  # Catch any runtime exceptions during function execution.
+  except Exception as e:
+    # Print the function name and exception details.
+    print(f"{name} raised {type(e).__name__}:", e)
+    # Print a visual separator line.
+    print("-" * 40)
+    # Return None to indicate failure.
+    return None

@@ -5,12 +5,9 @@ import tensorflow as tf
 from tensorflow.keras.metrics import *
 from tensorflow.keras.callbacks import *
 from tensorflow.keras.optimizers import *
-from sklearn.model_selection import train_test_split
 from HMB.TFUNetHelper import VNet, SegNet
-from HMB.ImageSegmentationMetrics import *
-from HMB.TFHelper import BuildOptimizer, CompileTrainTFUNetModel
+from HMB.TFHelper import CompileTrainTFUNetModel
 from HMB.TFSegmentationLosses import *
-from HMB.ImagesHelper import ReadImage, ReadMask
 from HMB.Initializations import (
   IMAGE_SUFFIXES,
   DoRandomSeeding,
@@ -50,73 +47,7 @@ if (gpus):
   except RuntimeError as e:
     print("Error setting visible devices:", e)
 
-
 # ============================================================================================ #
-
-
-def HyperparameterToString(key, value):
-  if (key.lower() == "optimizer"):
-    optimizer = BuildOptimizer(value)
-    config = optimizer.get_config()
-    return f"{optimizer.__class__.__name__}({config})"
-  return str(value)
-
-
-def LoadData(imagesList, masksList, testSize=0.2):
-  # Split the dataset into training and testing sets.
-  xTrain, xTest, yTrain, yTest = train_test_split(
-    imagesList,  # Images.
-    masksList,  # Masks.
-    test_size=testSize,  # Ratio of the testing set.
-    random_state=42  # Random state.
-  )
-
-  # Split the training set into training and validation sets.
-  xTrain, xVal, yTrain, yVal = train_test_split(
-    xTrain,  # Images.
-    yTrain,  # Masks.
-    test_size=testSize,  # Ratio of the validation set.
-    random_state=42  # Random state.
-  )
-
-  # Return the dataset.
-  return xTrain, xVal, xTest, yTrain, yVal, yTest
-
-
-def TFParse(X, y):
-  # Read the image and mask.
-  image = tf.numpy_function(ReadImage, [X], tf.float64)
-  mask = tf.numpy_function(ReadMask, [y], tf.float64)
-
-  # Set the shape of the images and masks.
-  image.set_shape([image.shape[0], image.shape[1], 3])
-  mask.set_shape([mask.shape[0], mask.shape[1], 1])
-
-  # Return the image and mask.
-  return image, mask
-
-
-def TFDataset(X, y, batchSize=8):
-  # Create a TensorFlow dataset.
-  dataset = tf.data.Dataset.from_tensor_slices((X, y))
-
-  # Shuffle the dataset.
-  dataset = dataset.shuffle(buffer_size=batchSize)
-
-  # Parse images and masks.
-  dataset = dataset.map(TFParse)
-
-  # Batch the dataset.
-  dataset = dataset.batch(batchSize)
-
-  # Prefetch the dataset to optimize training.
-  dataset = dataset.prefetch(1)
-
-  # Repeat the dataset indefinitely.
-  dataset = dataset.repeat()
-
-  # Return the dataset.
-  return dataset
 
 
 if __name__ == "__main__":
