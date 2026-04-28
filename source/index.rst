@@ -252,6 +252,7 @@ Next Steps
    WSIHelper
    YOLOHelper
    Examples
+   modules
    FAQ
 
 Getting Help
