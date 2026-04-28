@@ -193,7 +193,7 @@ def EvaluateModel(config):
     kernelInitializer = hyperparams.get("Kernelinitializer", "glorot_normal")
     dropoutRatio = float(hyperparams.get("Dropoutratio", 0.1))
     dropoutType = hyperparams.get("Dropouttype", "spatial")
-    applyBatchNorm = hyperparams.get("Applybatchnorm", True)
+    applyBatchNorm = hyperparams.get("Applybatchnorm", True) in [True, "true", "True", "TRUE"]
     concatenateType = hyperparams.get("Concatenatetype", "concatenate")
     noOfLevels = int(hyperparams.get("Nooflevels", 4))
 
@@ -209,7 +209,7 @@ def EvaluateModel(config):
     )
   elif (modelName == "SegNet"):
     # Extract model hyperparameters from the JSON dictionary or use defaults.
-    level = hyperparams.get("Level", 4)
+    level = int(hyperparams.get("Level", 4))
     encoder = hyperparams.get("Encoder", "VGG16")
 
     # Create a SegNet instance using the same hyperparameters when available.
@@ -217,6 +217,7 @@ def EvaluateModel(config):
       inputSize=inputSize,
       encoder=encoder,
       level=level,
+      numClasses=numClasses,
     )
   else:
     print(f"Unsupported ModelName='{modelName}'. Supported options: 'VNet', 'SegNet'.")

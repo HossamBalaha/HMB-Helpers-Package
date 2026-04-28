@@ -12,10 +12,10 @@ from typing import Dict
 import torch.nn as nn
 from PIL import Image
 import torch.optim as optim
-from HMB.PyTorchHelper import GetOptimizer, PyTorchUNetSegmentationModule
+from HMB.PyTorchHelper import GetOptimizer, PyTorchUNetSegmentationTrainingPipeline
 from HMB.DatasetsHelper import CreateSegmentationDataLoaders
 from HMB.Initializations import IgnoreWarnings, DoRandomSeeding
-from HMB.PyTorchUNetHelper import GetUNetModel
+from HMB.PyTorchUNetModelsZoo import GetUNetModel
 from HMB.Utils import DumpJsonFile
 
 # Ensure all prints flush by default to make logs appear promptly.
@@ -286,7 +286,7 @@ def Run():
   print("Loss function created.")
 
   # Create Trainer instance to run training.
-  segObj = PyTorchUNetSegmentationModule(
+  segObj = PyTorchUNetSegmentationTrainingPipeline(
     model,
     trainLoader,
     valLoader,

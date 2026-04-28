@@ -23,61 +23,6 @@ AVAILABLE_UNETS = [
 ]
 
 
-# ---------------------------------------------------- #
-# Basic utilities for handling model outputs           #
-# ---------------------------------------------------- #
-
-def PreparePredTensorToNumpy(
-  predTensor: torch.Tensor,
-  doScale2Image: bool = False,
-) -> np.ndarray:
-  r'''
-  Utility to convert model output tensor after the sigmoid/softmax activation to a numpy array of class indices.
-  It can be used also with the original mask tensor if it is already in the correct format,
-  as it handles squeezing and type conversion.
-
-  Short summary:
-    Takes the raw output tensor from the model (after activation) and processes it to produce
-    a 2D numpy array of class indices. This involves squeezing unnecessary dimensions,
-    converting boolean masks to integers if needed, and ensuring the final output is in the
-    correct format for evaluation or visualization.
-
-  Parameters:
-    predTensor (torch.Tensor): The raw output tensor from the model after activation, expected to be of shape [B, C, H, W] or [B, 1, H, W].
-    doScale2Image (bool): If True, applies a threshold to convert probabilities to binary mask. Default False.
-
-  Returns:
-    numpy.ndarray: Numpy array of shape [B, H, W] containing class indices.
-  '''
-
-  # Convert the prediction tensor to a numpy array.
-  predNp = predTensor.cpu().numpy()
-
-  # If prediction has a leading channel dimension of size 1, squeeze it away.
-  if (predNp.ndim == 3 and predNp.shape[0] == 1):
-    # Squeeze away the channel dimension when it is singleton.
-    predNp = np.squeeze(predNp, axis=0)
-
-  # Ensure prediction mask is 2D (H,W). If it's boolean/0-1, keep as ints.
-  if (predNp.dtype == np.bool_):
-    # Convert boolean mask to uint8 for compatibility.
-    predMask = predNp.astype(np.uint8)
-  else:
-    # Convert prediction mask to integer labels.
-    predMask = predNp.astype(np.int64)
-
-  if (doScale2Image):
-    # If the prediction is a probability map, apply a threshold to convert to binary mask.
-    predMask = (predMask >= 0.5).astype(np.uint8)
-    predMask *= 255  # Scale binary mask to 0 and 255 for visualization.
-    predMask = predMask.astype(np.uint8)
-
-  return predMask
-
-
-# ---------------------------------------------------- #
-# Basic building blocks for UNet architectures.        #
-# ---------------------------------------------------- #
 
 class DoubleConv(nn.Module):
   r'''

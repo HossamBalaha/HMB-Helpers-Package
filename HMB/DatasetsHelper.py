@@ -1,13 +1,252 @@
-import hashlib, time, json, shutil, os, cv2, torch, math
+import hashlib, time, json, shutil, os, cv2, torch, math, joblib
 import numpy as np
+import pandas as pd
 from pathlib import Path
 from PIL import Image, ImageOps, ImageEnhance
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, OrdinalEncoder, LabelEncoder
 from sklearn.model_selection import train_test_split
 from typing import List, Callable, Optional, Tuple, Union
 from HMB.PlotsHelper import PlotBarChart
 from HMB.Initializations import IMAGE_SUFFIXES
 from HMB.Utils import DumpJsonFile, ReadJsonFile
 from HMB.DataAugmentationHelper import PerformDataAugmentation
+
+
+class TabularPreprocessor:
+  r'''
+  Generic tabular data preprocessor for PyTorch classification pipelines.
+
+  Handles numeric and categorical features, missing value imputation,
+  feature scaling, ordinal encoding, and label encoding. Artifacts can be
+  saved/loaded via joblib for reproducibility across training and inference.
+
+  Parameters:
+    ignoreCategorical (bool): If True, categorical/object columns are completely
+      ignored during fitting and transformation. Only numeric features are processed.
+      Defaults to False.
+
+  Attributes:
+    ignoreCategorical (bool): Flag indicating whether categorical columns are skipped.
+    numericColumns (list): List of detected numeric column names.
+    categoricalColumns (list): List of detected categorical column names (empty if ignored).
+    numericImputer (SimpleImputer): Imputer for numeric columns (fitted on training data).
+    categoricalImputer (SimpleImputer): Imputer for categorical columns (fitted on training data).
+    numericScaler (StandardScaler): Scaler for numeric columns (fitted on training data).
+    categoricalEncoder (OrdinalEncoder): Encoder for categorical columns (fitted on training data).
+    labelEncoder (LabelEncoder): Encoder for target labels (fitted on training data).
+    _featureNames (list): Cached ordered list of feature names used during transformation.
+    _isLoaded (bool): Internal flag indicating whether artifacts were loaded or preprocessor was fitted.
+
+  Notes:
+    - The Fit method detects numeric and categorical columns, fits imputers, scalers, and encoders on the provided DataFrame.
+    - The Transform method applies the fitted transformations to a new DataFrame and returns feature arrays and label vectors suitable for PyTorch models.
+    - The Save and Load methods handle persistence of all artifacts to/from disk using joblib.
+    - The IsLoaded method allows checking whether the preprocessor is ready for transformation (either fitted or loaded).
+    - The GetFeatureNames method provides the ordered list of feature names corresponding to the transformed feature matrix columns.
+    - The ValidateSchema method checks that a new DataFrame contains the expected columns before transformation, raising an error if there are mismatches.
+
+  Example usage:
+  .. code-block:: python
+
+    # Initialize the preprocessor and ignore categorical columns.
+    preprocessor = TabularPreprocessor(ignoreCategorical=True)
+    preprocessor.Fit(trainDf, labelColumn="Label")
+
+    # Transform training, validation, and test DataFrames.
+    XTrain, yTrain = preprocessor.Transform(trainDf, labelColumn="Label")
+    XVal, yVal = preprocessor.Transform(valDf, labelColumn="Label")
+    XTest, yTest = preprocessor.Transform(testDf, labelColumn="Label")
+
+    # Save the preprocessor artifacts for later use.
+    preprocessor.Save("PreprocessorArtifacts")
+  '''
+
+  # Initialize the preprocessor with default attributes.
+  def __init__(self, ignoreCategorical: bool = False):
+    # Track whether categorical columns should be ignored.
+    self.ignoreCategorical = ignoreCategorical
+    # Track numeric and categorical column names.
+    self.numericColumns = []
+    self.categoricalColumns = []
+    # Initialize imputers for missing values.
+    self.numericImputer = None
+    self.categoricalImputer = None
+    # Initialize scalers and encoders.
+    self.numericScaler = None
+    self.categoricalEncoder = None
+    self.labelEncoder = None
+    # Store the final ordered feature names.
+    self._featureNames = []
+    # Track whether artifacts were loaded or fitted.
+    self._isLoaded = False
+
+  # Fit the preprocessor on a training DataFrame.
+  def Fit(self, df: pd.DataFrame, labelColumn: str = None):
+    # Automatically detect numeric columns.
+    self.numericColumns = df.select_dtypes(include=[np.number]).columns.tolist()
+    # Conditionally detect categorical columns based on ignoreCategorical flag.
+    self.categoricalColumns = [] if (self.ignoreCategorical) else df.select_dtypes(
+      include=["object", "category"]).columns.tolist()
+    # Remove label column from feature lists if present.
+    if (labelColumn in self.numericColumns):
+      self.numericColumns.remove(labelColumn)
+    if (labelColumn in self.categoricalColumns):
+      self.categoricalColumns.remove(labelColumn)
+
+    # Fit numeric imputer and scaler when numeric columns exist.
+    if (len(self.numericColumns) > 0):
+      # Use median imputation for robustness to outliers.
+      self.numericImputer = SimpleImputer(strategy="median")
+      self.numericImputer.fit(df[self.numericColumns])
+      # Fit standard scaler on imputed numeric data.
+      self.numericScaler = StandardScaler()
+      self.numericScaler.fit(self.numericImputer.transform(df[self.numericColumns]))
+
+    # Fit categorical imputer and encoder when categorical columns exist and are not ignored.
+    if ((not self.ignoreCategorical) and (len(self.categoricalColumns) > 0)):
+      # Use most frequent value imputation for categorical data.
+      self.categoricalImputer = SimpleImputer(strategy="most_frequent")
+      self.categoricalImputer.fit(df[self.categoricalColumns])
+      # Fit ordinal encoder with safe handling for unseen categories.
+      self.categoricalEncoder = OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1)
+      self.categoricalEncoder.fit(self.categoricalImputer.transform(df[self.categoricalColumns]))
+
+    # Fit label encoder when label column is provided.
+    if (labelColumn is not None):
+      # Create and fit the label encoder on string-converted labels.
+      self.labelEncoder = LabelEncoder()
+      self.labelEncoder.fit(df[labelColumn].astype(str))
+
+    # Build ordered feature name list for downstream consistency.
+    self._featureNames = self.numericColumns.copy()
+    if (len(self.categoricalColumns) > 0):
+      self._featureNames.extend(self.categoricalColumns)
+    # Mark preprocessor as fitted in memory.
+    self._isLoaded = True
+
+  # Transform a DataFrame to numerical arrays suitable for PyTorch models.
+  def Transform(self, df: pd.DataFrame, labelColumn: str = None):
+    # Initialize container for transformed feature parts.
+    xParts = []
+    # Transform numeric features when imputer and scaler are available.
+    if (len(self.numericColumns) > 0 and self.numericImputer is not None):
+      # Copy data to avoid SettingWithCopyWarning.
+      numData = df[self.numericColumns].copy()
+      # Apply median imputation to numeric columns.
+      numData = self.numericImputer.transform(numData)
+      # Apply standard scaling to imputed numeric columns.
+      numData = self.numericScaler.transform(numData)
+      # Append numeric features to output list.
+      xParts.append(numData.astype(np.float32))
+
+    # Transform categorical features when encoder is available and not ignored.
+    if ((not self.ignoreCategorical) and (len(self.categoricalColumns) > 0) and (self.categoricalEncoder is not None)):
+      # Copy data to avoid SettingWithCopyWarning.
+      catData = df[self.categoricalColumns].copy()
+      # Apply most-frequent imputation to categorical columns.
+      catData = self.categoricalImputer.transform(catData)
+      # Apply ordinal encoding to imputed categorical columns.
+      catData = self.categoricalEncoder.transform(catData)
+      # Append categorical features to output list.
+      xParts.append(catData.astype(np.float32))
+
+    # Concatenate feature parts if any features exist.
+    x = np.hstack(xParts) if (xParts) else None
+    # Initialize label array.
+    y = None
+
+    # Transform labels when label column and encoder are provided.
+    if (labelColumn is not None and self.labelEncoder is not None):
+      # Transform string labels to integer indices.
+      y = self.labelEncoder.transform(df[labelColumn].astype(str))
+
+    # Return feature matrix and label vector.
+    return x, y
+
+  # Save the preprocessor artifacts to a specified directory.
+  def Save(self, path: str):
+    # Create the target directory if it does not exist.
+    os.makedirs(path, exist_ok=True)
+    # Save numeric imputer when fitted.
+    if (self.numericImputer is not None):
+      joblib.dump(self.numericImputer, os.path.join(path, "NumericImputer.joblib"))
+    # Save numeric scaler when fitted.
+    if (self.numericScaler is not None):
+      joblib.dump(self.numericScaler, os.path.join(path, "NumericScaler.joblib"))
+    # Save categorical imputer when fitted.
+    if (self.categoricalImputer is not None):
+      joblib.dump(self.categoricalImputer, os.path.join(path, "CategoricalImputer.joblib"))
+    # Save categorical encoder when fitted.
+    if (self.categoricalEncoder is not None):
+      joblib.dump(self.categoricalEncoder, os.path.join(path, "CategoricalEncoder.joblib"))
+    # Save label encoder when fitted.
+    if (self.labelEncoder is not None):
+      joblib.dump(self.labelEncoder, os.path.join(path, "LabelEncoder.joblib"))
+    # Save column metadata for schema validation.
+    joblib.dump(self.numericColumns, os.path.join(path, "NumericColumns.joblib"))
+    joblib.dump(self.categoricalColumns, os.path.join(path, "CategoricalColumns.joblib"))
+    # Save the ignoreCategorical flag for reproducibility.
+    joblib.dump(self.ignoreCategorical, os.path.join(path, "IgnoreCategorical.joblib"))
+    # Mark preprocessor as loaded from disk artifacts.
+    self._isLoaded = True
+
+  # Load the preprocessor artifacts from a specified directory.
+  def Load(self, path: str):
+    # Load numeric imputer when artifact exists.
+    if (os.path.exists(os.path.join(path, "NumericImputer.joblib"))):
+      self.numericImputer = joblib.load(os.path.join(path, "NumericImputer.joblib"))
+    # Load numeric scaler when artifact exists.
+    if (os.path.exists(os.path.join(path, "NumericScaler.joblib"))):
+      self.numericScaler = joblib.load(os.path.join(path, "NumericScaler.joblib"))
+    # Load categorical imputer when artifact exists.
+    if (os.path.exists(os.path.join(path, "CategoricalImputer.joblib"))):
+      self.categoricalImputer = joblib.load(os.path.join(path, "CategoricalImputer.joblib"))
+    # Load categorical encoder when artifact exists.
+    if (os.path.exists(os.path.join(path, "CategoricalEncoder.joblib"))):
+      self.categoricalEncoder = joblib.load(os.path.join(path, "CategoricalEncoder.joblib"))
+    # Load label encoder when artifact exists.
+    if (os.path.exists(os.path.join(path, "LabelEncoder.joblib"))):
+      self.labelEncoder = joblib.load(os.path.join(path, "LabelEncoder.joblib"))
+    # Load numeric columns list when artifact exists.
+    if (os.path.exists(os.path.join(path, "NumericColumns.joblib"))):
+      self.numericColumns = joblib.load(os.path.join(path, "NumericColumns.joblib"))
+    # Load categorical columns list when artifact exists.
+    if (os.path.exists(os.path.join(path, "CategoricalColumns.joblib"))):
+      self.categoricalColumns = joblib.load(os.path.join(path, "CategoricalColumns.joblib"))
+    # Load the ignoreCategorical flag when artifact exists.
+    if (os.path.exists(os.path.join(path, "IgnoreCategorical.joblib"))):
+      self.ignoreCategorical = joblib.load(os.path.join(path, "IgnoreCategorical.joblib"))
+    # Set loaded flag when any core artifact is present.
+    self._isLoaded = os.path.exists(os.path.join(path, "NumericColumns.joblib"))
+
+  # Return whether artifacts were loaded or preprocessor was fitted.
+  def IsLoaded(self) -> bool:
+    # Return the internal loaded state.
+    return bool(self._isLoaded)
+
+  # Return the ordered list of feature names used during transformation.
+  def GetFeatureNames(self):
+    # Return cached feature names if available.
+    if (self._featureNames):
+      return self._featureNames
+    # Fallback: reconstruct from tracked columns to prevent empty-list pandas errors.
+    names = self.numericColumns.copy()
+    if (len(self.categoricalColumns) > 0):
+      names.extend(self.categoricalColumns)
+    return names
+
+  # Validate that a DataFrame contains the expected columns before transformation.
+  def ValidateSchema(self, df: pd.DataFrame) -> bool:
+    # Check for missing numeric columns.
+    missingNumeric = [c for c in self.numericColumns if (c not in df.columns)]
+    # Check for missing categorical columns.
+    missingCategorical = [c for c in self.categoricalColumns if (c not in df.columns)]
+    # Raise error when required columns are missing.
+    if (missingNumeric or missingCategorical):
+      raise ValueError(f"Schema mismatch. Missing columns: {missingNumeric + missingCategorical}")
+    # Return true when schema validation passes.
+    return True
 
 
 class RawImageFolder(object):
@@ -2118,3 +2357,56 @@ def SanitizeArray(inputData):
       col[np.isnan(col)] = fill
   # Return the sanitized two-dimensional array.
   return arr
+
+
+def ReadAndConcatCsv(files: List[str], nrows: int = None) -> pd.DataFrame:
+  r'''
+  Read multiple CSV files into pandas DataFrames, add a "SourceFile" column to each, and concatenate them.
+
+  Parameters:
+    files (List[str]): List of file paths to CSV files to read and concatenate.
+    nrows (int, optional): If provided, limits the number of rows read from each CSV file for testing purposes. Defaults to None (read all rows).
+
+  Returns:
+    pd.DataFrame: A single DataFrame containing the concatenated data from all CSV files, with an additional "SourceFile" column indicating the origin of each row.
+  '''
+
+  # Create an empty list to store individual DataFrames.
+  frames = []
+  # Iterate over provided files and read each into a DataFrame.
+  for file in files:
+    print(f"Reading CSV file: {file} with nrows={nrows}")
+    # Read the CSV file using pandas, optionally limiting rows.
+    df = pd.read_csv(file, nrows=nrows, low_memory=False)
+    # Add a SourceFile column to indicate origin of the rows.
+    df["SourceFile"] = os.path.basename(file)
+    print(f"Read {len(df)} rows and {len(df.columns)} columns from {file}.")
+    # Append the DataFrame to the list.
+    frames.append(df)
+  print(f"Read {len(frames)} DataFrames from CSV files.")
+  print(f"Number of rows in each DataFrame: {[len(df) for df in frames]}")
+  print(f"Number of columns in each DataFrame: {[len(df.columns) for df in frames]}")
+  # Concatenate all DataFrames along rows and reset the index.
+  if (len(frames) > 0):
+    # Concatenate and return the result.
+    return pd.concat(frames, ignore_index=True)
+  # Return empty DataFrame if no frames were read.
+  return pd.DataFrame()
+
+
+def LoadAllCsvs(dataDir: str, nrows: int = None) -> pd.DataFrame:
+  r'''
+  Discover all CSV files in the specified directory, read them into pandas DataFrames, and concatenate them into a single DataFrame.
+
+  Parameters:
+    dataDir (str): The directory to search for CSV files.
+    nrows (int, optional): If provided, limits the number of rows read from each CSV file for testing purposes. Defaults to None (read all rows).
+
+  Returns:
+    pd.DataFrame: A single DataFrame containing the concatenated data from all discovered CSV files, with an additional "SourceFile" column indicating the origin of each row.
+  '''
+  # Discover CSV files in the specified directory.
+  files = DiscoverCsvFiles(dataDir)
+  print(f"Discovered {len(files)} CSV files in {dataDir}.")
+  # Read and concatenate all discovered CSV files.
+  return ReadAndConcatCsv(files, nrows=nrows)

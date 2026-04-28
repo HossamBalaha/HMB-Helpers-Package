@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from sklearn.metrics import confusion_matrix
 from HMB.Initializations import IgnoreWarnings, SeedEverything
 from HMB.PerformanceMetrics import CalculatePerformanceMetrics
-from HMB.PyTorchHelper import GenericEvaluatePredictPlotSubset
+from HMB.PyTorchTrainingPipeline import GenericImageryEvaluatePredictPlotSubset
 
 
 def ExtractYOLOModelSize(modelName: str) -> str:
@@ -515,7 +515,7 @@ def EvaluatePredictPlotSubset(
     return probs.astype(np.float32)
 
   # Delegate all evaluation logic to the generic function.
-  return GenericEvaluatePredictPlotSubset(
+  return GenericImageryEvaluatePredictPlotSubset(
     datasetDir=datasetDir,
     model=YoloPredictFn,  # Pass the YOLO adapter as the generic model callable.
     subset=subset,

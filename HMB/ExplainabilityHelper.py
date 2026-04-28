@@ -1,14 +1,17 @@
-import shap, os, pickle, copy, cv2, torch, time, shutil
+import shap, os, pickle, copy, cv2, torch, time, shutil, torch, warnings
 import numpy as np
 import pandas as pd
 from PIL import Image
 import tensorflow as tf
 from pathlib import Path
 import matplotlib.pyplot as plt
+import torch.nn.functional as F
 from tensorflow.keras.layers import Conv2D
+from typing import List, Optional, Tuple, Any
+from HMB.Initializations import EnsureCUDAAvailable
 
 
-class SHAPExplainer(object):
+class OptunaMLPipelineSHAPExplainer(object):
   r'''
   A class to perform SHAP (SHapley Additive exPlanations) analysis on a trained machine learning model.
 
@@ -4015,8 +4018,7 @@ def TSNEFeaturesExplainability(
   edgeColor="white",
   edgeWidth=0.3,
 ):
-  '''
-
+  r'''
   Create a set of publication-ready t-SNE visualizations for feature embeddings and
   optionally compute cluster quality metrics.
 
@@ -4853,7 +4855,7 @@ def UMAPFeaturesExplainability(
 
 # Compute Grad-CAM heatmap for a single image and target class.
 def TFGradCam(model, imgTensor, classIdx=None, lastConvLayerName=None):
-  '''
+  r'''
   Compute Grad-CAM heatmap for imgTensor and target class index.
 
   Parameters:
@@ -4927,7 +4929,7 @@ def TFGradCam(model, imgTensor, classIdx=None, lastConvLayerName=None):
 
 
 # Save Grad-CAM overlays for a list of sample indices.
-def SaveGradCamsForSamples(
+def SaveTFGradCamsForSamples(
   model,
   imgPaths,
   sampleIndices,
@@ -4935,7 +4937,7 @@ def SaveGradCamsForSamples(
   imgSize=(512, 512),
   lastConvLayerName=None
 ):
-  '''
+  r'''
   Compute and save Grad-CAM overlays for the provided samples.
 
   Parameters:
@@ -5013,3 +5015,589 @@ def SaveGradCamsForSamples(
 
     outPath = os.path.join(outFolder, f"GradCAM_IDx{idx}_Pred{predClass}.pdf")
     overlay.save(outPath)
+
+
+def ModelPredictProba(model: Any, xArray: np.ndarray, device: Optional[str] = None) -> np.ndarray:
+  r'''
+  Compute model probabilities for numpy input X using a PyTorch model.
+
+  Parameters:
+    model (Any): PyTorch model or sklearn-like model with predict_proba.
+    xArray (numpy.ndarray): Input features as numpy array (N, D).
+    device (str | None): Optional device string (e.g., "cuda", "cpu"). If None, uses model device.
+
+  Returns:
+    numpy.ndarray: Probability predictions of shape (N, num_classes).
+  '''
+
+  # Ensure that torch is available.
+  EnsureCUDAAvailable()
+  # Collect model parameters into a list when available.
+  paramsList = list(model.parameters()) if hasattr(model, "parameters") else []
+  # Decide device from model parameters or default to cpu.
+  modelDevice = paramsList[0].device if (
+    (len(paramsList) > 0) and any(getattr(p, "requires_grad", False) for p in paramsList)) else torch.device("cpu")
+  # Use provided device string when supplied.
+  devDevice = torch.device(device) if (device is not None) else modelDevice
+  # Put model into evaluation mode.
+  model.eval()
+  # Disable gradient computation for prediction.
+  with torch.no_grad():
+    # Convert numpy array to torch tensor and move to device.
+    xTensor = torch.from_numpy(xArray).float().to(devDevice)
+    # Obtain logits from the model.
+    logits = model(xTensor)
+    # Convert logits to softmax probabilities.
+    probs = F.softmax(logits, dim=1).cpu().numpy()
+  # Return probability array.
+  return probs
+
+
+def ComputeShapValues(
+  model: Any, backgroundData: np.ndarray, xData: np.ndarray,
+  featureNames: Optional[List[str]] = None, nsamples: int = 100
+) -> Any:
+  r'''
+  Compute SHAP values for a model given a background and inputs.
+
+  Parameters:
+    model (Any): PyTorch model or sklearn-like model.
+    backgroundData (numpy.ndarray): Background dataset for SHAP baseline (N_bg, D).
+    xData (numpy.ndarray): Input data to explain (N, D).
+    featureNames (List[str] | None): Optional list of feature names for plotting.
+    nsamples (int): Number of samples for KernelExplainer fallback (default: 100).
+
+  Returns:
+    Any: SHAP explanation object (shap.Explanation or list of arrays).
+  '''
+
+  # Require shap to be available.
+  if (shap is None):
+    raise ImportError("SHAP is required for ComputeShapValues. Install shap and try again.")
+
+  # Define a prediction function wrapper that returns probabilities for numpy input.
+  def predFunction(x: np.ndarray) -> np.ndarray:
+    # Use sklearn-like predict_proba when available for non-PyTorch models.
+    if (hasattr(model, "predict_proba") and not (torch is not None and isinstance(model, torch.nn.Module))):
+      return model.predict_proba(x)
+    # Otherwise use PyTorch-based probability wrapper.
+    return ModelPredictProba(model, x)
+
+  # Try to instantiate a fast SHAP Explainer when possible.
+  try:
+    # Create shap.Explainer with the background dataset.
+    explainer = shap.Explainer(predFunction, backgroundData, feature_names=featureNames)
+    # Compute SHAP values for the provided inputs.
+    shapResults = explainer(xData)
+    # Return shap explanation object.
+    return shapResults
+  except Exception:
+    # Use KernelExplainer as a slower fallback with a sampled background.
+    bgSample = backgroundData if (backgroundData.shape[0] <= 100) else backgroundData[
+      np.random.choice(backgroundData.shape[0], 100, replace=False)]
+    # Instantiate KernelExplainer.
+    expl = shap.KernelExplainer(predFunction, bgSample)
+    # Compute shap values with the requested number of samples.
+    shapVals = expl.shap_values(xData, nsamples=nsamples)
+    # Return computed values.
+    return shapVals
+
+
+def ShapSummaryPlot(
+  shapValues: Any,
+  featureNames: Optional[List[str]] = None,
+  show: bool = False,
+  savePath: Optional[str] = None
+):
+  r'''
+  Plot a SHAP summary plot and optionally save to disk.
+
+  Parameters:
+    shapValues (Any): SHAP explanation object or values array.
+    featureNames (List[str] | None): Optional list of feature names.
+    show (bool): Whether to display the plot interactively (default: False).
+    savePath (str | None): Optional path to save the figure (default: None).
+  '''
+
+  # Create a new default_rng instance to avoid using the global RNG.
+  rngObj = np.random.default_rng()
+  try:
+    shap.summary_plot(shapValues, feature_names=featureNames, show=show, rng=rngObj)
+  except TypeError:
+    # Fallback when shap.summary_plot does not accept rng parameter.
+    shap.summary_plot(shapValues, feature_names=featureNames, show=show)
+  # Save the figure when a save path is provided.
+  if (savePath is not None):
+    plt.tight_layout()
+    plt.savefig(savePath, bbox_inches="tight")
+    plt.close()  # Close the plot to avoid display if show=False
+
+
+def ExtractAttentionWeights(model: Any, xArray: np.ndarray, layerType: str = "MultiheadAttention") -> List[np.ndarray]:
+  r'''
+  Extract attention weight tensors from transformer-like modules in a model.
+
+  Parameters:
+    model (Any): PyTorch model containing MultiheadAttention or TransformerEncoderLayer modules.
+    xArray (numpy.ndarray): Input array to run a forward pass (shape depends on model).
+    layerType (str): String hint for layer type (default: "MultiheadAttention").
+
+  Returns:
+    List[numpy.ndarray]: List of attention weight arrays extracted from hooks.
+  '''
+
+  # Ensure torch is available.
+  EnsureCUDAAvailable()
+  # Collect modules that appear to be attention layers.
+  attnModules = []
+  # Iterate named modules in the model.
+  for nameModule, moduleObj in model.named_modules():
+    # Check module class name for Multihead-like attention.
+    if (moduleObj.__class__.__name__ == "MultiheadAttention") or (
+      "MultiHeadAttention" in moduleObj.__class__.__name__) or ("Multihead" in moduleObj.__class__.__name__):
+      attnModules.append((nameModule, moduleObj))
+  # If none found, search for TransformerEncoderLayer with self_attn attribute.
+  if (len(attnModules) == 0):
+    for nameModule, moduleObj in model.named_modules():
+      if (moduleObj.__class__.__name__ == "TransformerEncoderLayer") and (hasattr(moduleObj, "self_attn")):
+        attnModules.append((nameModule + ".self_attn", moduleObj.self_attn))
+  # Raise when no attention-like modules were discovered.
+  if (len(attnModules) == 0):
+    raise RuntimeError(
+      "No MultiheadAttention-like modules found to extract weights from. "
+      "Consider modifying the model to expose attention weights or use hooks in the Transformer layers."
+    )
+
+  # Prepare a dictionary to collect attention weight outputs.
+  attnWeightsCollected = {name: [] for (name, _) in attnModules}
+  # Prepare a list for hook handles.
+  hookHandles = []
+
+  # Create a forward hook factory that captures attention weight outputs.
+  def MakeHook(hookName: str):
+    # Define the actual hook function.
+    def Hook(module, inputVals, outputVals):
+      # Output typically contains attn_output and attn_output_weights for nn.MultiheadAttention.
+      if (isinstance(outputVals, tuple) and (len(outputVals) >= 2)):
+        # Select the attention weight tensor.
+        w = outputVals[1]
+        try:
+          # Detach and convert to numpy when possible.
+          attnWeightsCollected[hookName].append(w.detach().cpu().numpy())
+        except Exception:
+          # Fallback to numpy conversion for unknown types.
+          attnWeightsCollected[hookName].append(np.array(w))
+
+    # Return the constructed hook function.
+    return Hook
+
+  # Register hooks on each attention-like module.
+  for (nameModule, moduleObj) in attnModules:
+    hookHandles.append(moduleObj.register_forward_hook(MakeHook(nameModule)))
+
+  # Run a forward pass in evaluation mode to trigger hooks.
+  model.eval()
+  with torch.no_grad():
+    # Convert numpy input to tensor and send to model device.
+    xTensor = torch.from_numpy(xArray).float().to(next(model.parameters()).device)
+    # Execute the model forward pass.
+    _ = model(xTensor)
+
+  # Remove all registered hooks.
+  for h in hookHandles:
+    h.remove()
+
+  # Aggregate collected outputs into a results list.
+  resultsList = []
+  for nameKey in attnWeightsCollected:
+    # Retrieve captured arrays for this module.
+    arrs = attnWeightsCollected[nameKey]
+    # Skip modules that produced no outputs.
+    if (len(arrs) == 0):
+      continue
+    # Concatenate along the batch/forward dimension and append to results.
+    resultsList.append(np.concatenate([np.asarray(a) for a in arrs], axis=0))
+  # Return the collected attention weight arrays.
+  return resultsList
+
+
+def IntegratedGradients(
+  model: Any, inputArray: np.ndarray, targetLabel: int, baseline: Optional[np.ndarray] = None,
+  steps: int = 50, device: Optional[str] = None
+) -> np.ndarray:
+  r'''
+  Compute naive integrated gradients attributions for a model and single input.
+
+  Parameters:
+    model (Any): PyTorch model.
+    inputArray (numpy.ndarray): Single input sample (D,) or (H, W, C) depending on model.
+    targetLabel (int): Target class index for attribution.
+    baseline (numpy.ndarray | None): Baseline input (same shape as inputArray). If None, uses zeros.
+    steps (int): Number of interpolation steps (default: 50).
+    device (str | None): Optional device string.
+
+  Returns:
+    numpy.ndarray: Attribution map of same shape as inputArray.
+  '''
+
+  # Ensure torch is available.
+  EnsureCUDAAvailable()
+  # Put model into evaluation mode.
+  model.eval()
+  # Collect parameters and decide device.
+  paramsList = list(model.parameters()) if hasattr(model, "parameters") else []
+  devDevice = device or (paramsList[0].device if (
+    (len(paramsList) > 0) and any(getattr(p, "requires_grad", False) for p in paramsList)) else torch.device("cpu"))
+  # Convert input numpy array to torch tensor on the selected device.
+  xTensor = torch.from_numpy(inputArray).float().to(devDevice)
+  # Use zeros baseline when none provided.
+  if (baseline is None):
+    baseline = np.zeros_like(inputArray)
+  # Convert baseline to tensor on the selected device.
+  bTensor = torch.from_numpy(baseline).float().to(devDevice)
+
+  # Build a sequence of scaled inputs for numerical integration.
+  scaledInputs = [bTensor + (float(i) / steps) * (xTensor - bTensor) for i in range(1, steps + 1)]
+  # Collect gradients for each scaled input.
+  gradsList = []
+  for inp in scaledInputs:
+    # Ensure batch dimension exists for single example.
+    inp = inp.unsqueeze(0) if (inp.dim() == 1) else inp.unsqueeze(0)
+    # Require gradient for the input.
+    inp.requires_grad = True
+    # Zero gradients in the model.
+    model.zero_grad()
+    # Compute logits for the scaled input.
+    logits = model(inp)
+    # Use the target class logit as the scalar quantity.
+    lossScalar = logits[0, targetLabel]
+    # Backpropagate to compute input gradients.
+    lossScalar.backward(retain_graph=True)
+    # Extract gradient and convert to numpy.
+    gradArray = inp.grad.detach().cpu().numpy()[0]
+    # Append to gradient list.
+    gradsList.append(gradArray)
+  # Average gradients across scaled steps.
+  avgGrads = np.mean(np.array(gradsList), axis=0)
+  # Compute attributions as scaled difference times average gradients.
+  attributions = (xTensor.detach().cpu().numpy() - baseline) * avgGrads
+  # Return attribution array.
+  return attributions
+
+
+def SmoothGrad(
+  model: Any, inputArray: np.ndarray, targetLabel: int, stdevSpread: float = 0.15, nSamples: int = 25,
+  device: Optional[str] = None
+) -> np.ndarray:
+  r'''
+  Compute SmoothGrad by averaging IntegratedGradients on noisy inputs.
+
+  Parameters:
+    model (Any): PyTorch model.
+    inputArray (numpy.ndarray): Single input sample.
+    targetLabel (int): Target class index.
+    stdevSpread (float): Noise standard deviation as fraction of input range (default: 0.15).
+    nSamples (int): Number of noisy samples to average (default: 25).
+    device (str | None): Optional device string.
+
+  Returns:
+    numpy.ndarray: Smoothed attribution map of same shape as inputArray.
+  '''
+
+  # Ensure torch is available.
+  EnsureCUDAAvailable()
+  # Put model into evaluation mode.
+  model.eval()
+  # Prepare numpy input and compute noise standard deviation.
+  xN = inputArray.astype(np.float32)
+  stdev = stdevSpread * (xN.max() - xN.min())
+  # Initialize accumulator for gradients.
+  totalGrad = np.zeros_like(xN, dtype=np.float32)
+  for i in range(nSamples):
+    # Create Gaussian noise for this sample.
+    noise = np.random.normal(0, stdev, size=xN.shape).astype(np.float32)
+    # Create a noisy input instance.
+    noisy = xN + noise
+    # Compute integrated gradients for the noisy input with fewer steps for speed.
+    attr = IntegratedGradients(model, noisy, targetLabel, baseline=None, steps=10, device=device)
+    # Accumulate the attribution.
+    totalGrad += attr
+  # Return the averaged attribution.
+  return totalGrad / nSamples
+
+
+def GradCam1D(
+  model: Any, inputArray: np.ndarray, targetLabel: int, layerName: Optional[str] = None,
+  device: Optional[str] = None
+) -> np.ndarray:
+  r'''
+  Compute a Grad-CAM-like 1D saliency map for convolutional models.
+
+  Parameters:
+    model (Any): PyTorch model containing Conv1d layers.
+    inputArray (numpy.ndarray): 1D input signal (L,) or (C, L).
+    targetLabel (int): Target class index.
+    layerName (str | None): Optional name of target Conv1d layer. If None, uses last Conv1d.
+    device (str | None): Optional device string.
+
+  Returns:
+    numpy.ndarray: 1D saliency map normalized to [0, 1] and resampled to input length.
+  '''
+
+  # Ensure torch is available.
+  EnsureCUDAAvailable()
+  # Put model into evaluation mode.
+  model.eval()
+  # Collect parameters and decide device.
+  paramsList = list(model.parameters()) if hasattr(model, "parameters") else []
+  devDevice = device or (paramsList[0].device if (
+    (len(paramsList) > 0) and any(getattr(p, "requires_grad", False) for p in paramsList)) else torch.device("cpu"))
+
+  # Find the target Conv1d module when a layer name is not provided.
+  targetModule = None
+  if (layerName is not None):
+    # Search for the named module.
+    for nameModule, moduleObj in model.named_modules():
+      if (nameModule == layerName):
+        targetModule = moduleObj
+        break
+  else:
+    # Find the last Conv1d module in the model.
+    for nameModule, moduleObj in model.named_modules():
+      if (torch is not None) and isinstance(moduleObj, torch.nn.Conv1d):
+        targetModule = moduleObj
+  # Raise when no Conv1d module is discovered.
+  if (targetModule is None):
+    raise RuntimeError("No target Conv1d module found for Grad-CAM.")
+
+  # Placeholders for activations and gradients.
+  activations = None
+  gradients = None
+
+  # Forward hook to capture activations.
+  def ForwardHook(module, inputVals, outputVals):
+    nonlocal activations
+    activations = outputVals.detach()
+
+  # Backward hook to capture gradients.
+  def BackwardHook(module, gradIn, gradOut):
+    nonlocal gradients
+    gradients = gradOut[0].detach()
+
+  # Register the hooks.
+  fh = targetModule.register_forward_hook(ForwardHook)
+  bh = targetModule.register_backward_hook(BackwardHook)
+
+  # Convert input to tensor and send to device.
+  xTensor = torch.from_numpy(inputArray).float().unsqueeze(0).to(devDevice)
+  # Compute logits for the input.
+  logits = model(xTensor)
+  # Use the logit for the target class as the score.
+  score = logits[0, targetLabel]
+  # Zero model gradients.
+  model.zero_grad()
+  # Backpropagate the score to populate gradients.
+  score.backward()
+
+  # Remove hooks to avoid side effects.
+  fh.remove()
+  bh.remove()
+
+  # Compute channel-wise weights by averaging gradients across the length dimension.
+  weights = torch.mean(gradients, dim=2, keepdim=True)
+  # Compute the weighted sum of activations across channels.
+  cam = torch.sum(weights * activations, dim=1).squeeze(0)
+  # Apply ReLU to the CAM map.
+  cam = F.relu(cam)
+  # Convert CAM to numpy array.
+  camArray = cam.cpu().numpy()
+  # Resample CAM to the input length using linear interpolation.
+  inLen = inputArray.shape[-1]
+  camResized = np.interp(np.linspace(0, len(camArray) - 1, inLen), np.arange(len(camArray)), camArray)
+  # Normalize the map to [0,1] when possible.
+  if (camResized.max() > 0):
+    camResized = camResized / camResized.max()
+  # Return the normalized CAM.
+  return camResized
+
+
+def FindCounterfactual(
+  model: Any, x0: np.ndarray, targetClass: int, maxIters: int = 200, learningRate: float = 1e-2,
+  lambdaReg: float = 0.01, device: Optional[str] = None
+) -> Tuple[np.ndarray, float]:
+  r'''
+  Find a simple gradient-based counterfactual that changes the model prediction to a target class.
+
+  Parameters:
+    model (Any): PyTorch model.
+    x0 (numpy.ndarray): Original input sample.
+    targetClass (int): Desired target class index.
+    maxIters (int): Maximum optimization iterations (default: 200).
+    learningRate (float): Learning rate for input optimization (default: 1e-2).
+    lambdaReg (float): L2 regularization weight to penalize large changes (default: 0.01).
+    device (str | None): Optional device string.
+
+  Returns:
+    tuple: (counterfactual_input, l2_distance) where counterfactual_input is a numpy array
+           and l2_distance is the Euclidean distance from the original input.
+  '''
+
+  # Ensure torch is available.
+  EnsureCUDAAvailable()
+  # Determine device from model parameters when available.
+  paramsList = list(model.parameters()) if hasattr(model, "parameters") else []
+  devDevice = device or (paramsList[0].device if (
+    (len(paramsList) > 0) and any(getattr(p, "requires_grad", False) for p in paramsList)) else torch.device("cpu"))
+  # Put model into evaluation mode.
+  model.eval()
+  # Create a tensor copy of the input and require gradients.
+  xVar = torch.from_numpy(x0.astype(np.float32)).to(devDevice).clone().requires_grad_(True)
+  # Create an optimizer to modify the input tensor.
+  optAlg = torch.optim.Adam([xVar], lr=learningRate)
+  # Initialize l2 penalty tensor on device.
+  l2Tensor = torch.tensor(0.0).to(devDevice)
+  for i in range(maxIters):
+    # Zero optimizer gradients.
+    optAlg.zero_grad()
+    # Compute logits for the candidate counterfactual.
+    logits = model(xVar.unsqueeze(0))
+    # Compute probability for the target class.
+    prob = F.softmax(logits, dim=1)[0, targetClass]
+    # Compute L2 distance from original input.
+    l2Tensor = torch.norm(xVar - torch.from_numpy(x0).to(devDevice))
+    # Compose loss that encourages target probability and penalizes large changes.
+    loss = -prob + lambdaReg * l2Tensor
+    # Backpropagate the loss.
+    loss.backward()
+    # Take an optimizer step.
+    optAlg.step()
+    # Check if prediction has flipped to the target class.
+    predClass = logits.argmax(dim=1).item()
+    if (predClass == targetClass):
+      # Return the found counterfactual and l2 distance.
+      return xVar.detach().cpu().numpy(), float(l2Tensor.detach().cpu().numpy())
+  # Return the final candidate and its l2 distance when max iterations reached.
+  return xVar.detach().cpu().numpy(), float(l2Tensor.detach().cpu().numpy())
+
+
+def TrainSurrogateTree(model: Any, xArray: np.ndarray, maxDepth: int = 3) -> Tuple[Any, str]:
+  r'''
+  Train a decision tree surrogate model on the predictions of a black-box model.
+
+  Parameters:
+    model (Any): Black-box model (PyTorch or sklearn-like).
+    xArray (numpy.ndarray): Input features (N, D).
+    maxDepth (int): Maximum depth of the decision tree (default: 3).
+
+  Returns:
+    tuple: (trainedDecisionTree, textualRulesString).
+  '''
+
+  from sklearn.tree import DecisionTreeClassifier, export_text
+
+  # Determine labels by querying the black-box model's predict_proba when available.
+  if (hasattr(model, "predict_proba") and not (torch is not None and isinstance(model, torch.nn.Module))):
+    preds = model.predict_proba(xArray)
+    yLabels = np.argmax(preds, axis=1)
+  else:
+    # Use the PyTorch probability wrapper for prediction.
+    probs = ModelPredictProba(model, xArray)
+    yLabels = np.argmax(probs, axis=1)
+  # Instantiate and fit a decision tree classifier.
+  clf = DecisionTreeClassifier(max_depth=maxDepth)
+  clf.fit(xArray, yLabels)
+  # Export textual rules for the trained tree.
+  rulesText = export_text(clf, feature_names=[f"f{i}" for i in range(xArray.shape[1])])
+  # Return the trained classifier and textual rules.
+  return clf, rulesText
+
+
+def ExplanationStability(shapValuesList: List[np.ndarray]) -> float:
+  r'''
+  Compute the stability of explanations as average pairwise Spearman correlation.
+
+  Parameters:
+    shapValuesList (List[numpy.ndarray]): List of explanation arrays (each shape D or flattened).
+
+  Returns:
+    float: Mean pairwise Spearman correlation (1.0 = perfectly stable).
+  '''
+
+  # Import scipy.stats locally to avoid global dependency when unused.
+  import scipy.stats as stats
+  # Flatten each explanation to a 1D vector.
+  arrList = [np.ravel(s) for s in shapValuesList]
+  # Compute the number of explanations.
+  n = len(arrList)
+  # Return perfect stability for fewer than two explanations.
+  if (n < 2):
+    return 1.0
+  # Collect pairwise Spearman correlations.
+  cors = []
+  for i in range(n):
+    for j in range(i + 1, n):
+      try:
+        # Compute Spearman correlation.
+        r, _ = stats.spearmanr(arrList[i], arrList[j])
+      except Exception:
+        # Fallback to zero correlation on error.
+        r = 0.0
+      cors.append(r)
+  # Handle empty correlations list defensively.
+  if (len(cors) == 0):
+    return 0.0
+  # Return mean correlation value.
+  return float(np.mean(cors))
+
+
+def DeletionFaithfulness(
+  model: Any, xSample: np.ndarray, featureImportanceOrder: List[int], steps: int = 10
+) -> Tuple[float, List[float]]:
+  r'''
+  Compute deletion faithfulness by progressively removing top features and measuring prediction drop.
+
+  Parameters:
+    model (Any): PyTorch model or sklearn-like model.
+    xSample (numpy.ndarray): Single input sample (D,).
+    featureImportanceOrder (List[int]): List of feature indices sorted by importance (most important first).
+    steps (int): Number of deletion steps (default: 10).
+
+  Returns:
+    tuple: (normalized_auc, probability_sequence) where normalized_auc is the area under the
+           probability-vs-removal curve normalized by the initial probability, and probability_sequence
+           is the list of probabilities for the original predicted class at each step.
+  '''
+
+  # Initialize probabilities list.
+  probsList = []
+  # Create tiled copies for potential experimentation.
+  _ = np.tile(xSample, (steps + 1, 1)).astype(np.float32)
+  # Compute original probabilities for the original input.
+  origProbs = ModelPredictProba(model, xSample.reshape(1, -1))[0]
+  # Determine the original predicted class.
+  origClass = int(np.argmax(origProbs))
+  # Determine number of features in the input.
+  nFeatures = xSample.shape[0]
+  # Compute how many features to remove at each step.
+  toRemovePerStep = max(1, nFeatures // steps)
+  # Copy the feature importance order into a list.
+  idxOrder = list(featureImportanceOrder)
+  # Create a working copy of the input.
+  current = xSample.copy()
+  # Record the initial probability for the predicted class.
+  probsList.append(float(origProbs[origClass]))
+  for s in range(1, steps + 1):
+    # Determine indices to remove for this step.
+    removeIdx = idxOrder[(s - 1) * toRemovePerStep: s * toRemovePerStep]
+    for idx in removeIdx:
+      # Set removed feature values to baseline zero.
+      current[idx] = 0.0
+    # Query the model for the updated probability.
+    p = ModelPredictProba(model, current.reshape(1, -1))[0]
+    probsList.append(float(p[origClass]))
+  # Construct a normalized x-axis for area computation.
+  xs = np.linspace(0, 1, len(probsList))
+  # Compute trapezoidal area under the probability curve and normalize.
+  aucVal = float(np.trapz(probsList, xs) / (probsList[0] if (probsList[0] != 0) else 1.0))
+  # Return the computed AUC and probabilities sequence.
+  return aucVal, probsList

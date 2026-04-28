@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from unittest.mock import patch, MagicMock
 
-from HMB.ExplainabilityHelper import SHAPExplainer
+from HMB.ExplainabilityHelper import OptunaMLPipelineSHAPExplainer
 
 
 class TestExplainabilityHelper(unittest.TestCase):
@@ -43,7 +43,7 @@ class TestExplainabilityHelper(unittest.TestCase):
       with open(picklePath, "wb") as f:
         f.write(b"dummy")
 
-      expl = SHAPExplainer(
+      expl = OptunaMLPipelineSHAPExplainer(
         baseDir=baseDir,
         experimentFolderName=expName,
         testFilename=testCsv,

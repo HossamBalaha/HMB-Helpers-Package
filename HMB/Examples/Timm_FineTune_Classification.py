@@ -6,10 +6,8 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from HMB.Initializations import IgnoreWarnings, DoRandomSeeding
-from HMB.PyTorchHelper import (
-  TrainEvaluateModel, GetOptimizer, LoadPyTorchDict,
-  GenericEvaluatePredictPlotSubset,
-)
+from HMB.PyTorchHelper import GetOptimizer, LoadPyTorchDict
+from HMB.PyTorchTrainingPipeline import TrainEvaluateClassificationModel, GenericImageryEvaluatePredictPlotSubset
 from HMB.DatasetsHelper import CustomDataset
 
 # Ensure all prints flush by default to make logs appear promptly.
@@ -549,7 +547,7 @@ def MainTrain():
   print(f"Optimizer ({args.optimizer}) created.")
 
   # Call `TrainEvaluateModel` to perform training and evaluation and store the history.
-  history = TrainEvaluateModel(
+  history = TrainEvaluateClassificationModel(
     model=model,  # Model to train and evaluate.
     criterion=criterion,  # Loss function.
     device=device,  # Device to run training and evaluation on (CPU or GPU).
@@ -661,7 +659,7 @@ def MainTest():
     (
       predsCsvPath, weightedMetrics, allPredsIndices, allGtsIndices, allPredsProbs,
       allPredsConfs, predictionsRecords, classNames, cm
-    ) = GenericEvaluatePredictPlotSubset(
+    ) = GenericImageryEvaluatePredictPlotSubset(
       datasetDir=splitFolder,
       model=CreateTimmPredictCallable(model, modelTransform, device, args.imageSize),
       subset=None,

@@ -238,6 +238,53 @@ class FocalLoss(nn.Module):
       return lossTensor
 
 
+class FocalLossAlt(nn.Module):
+  r'''
+  Focal loss for handling class imbalance in binary/multi-class classification.
+
+  Down-weights easy examples and focuses training on hard negatives.
+  Formula: FL(p_t) = -alpha * (1 - p_t)^gamma * log(p_t)
+
+  Parameters:
+    gamma (float): Focusing parameter that down-weights easy examples (typical: 2.0).
+    weight (torch.Tensor or None): Optional per-class weights for imbalance handling.
+    reduction (str): Reduction method: "mean", "sum", or "none".
+  '''
+
+  def __init__(self, gamma: float = 2.0, weight=None, reduction: str = "mean"):
+    # Call superclass constructor.
+    super(FocalLossAlt, self).__init__()
+    # Store focal loss hyperparameters.
+    self.gamma = gamma
+    self.weight = weight
+    self.reduction = reduction
+
+  def forward(self, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+    # Expects inputs: Logits tensor of shape (batch_size, numClasses).
+    # Expects targets: Class indices tensor of shape (batch_size,).
+    # Returns: Loss tensor of shape () or (batch_size,) depending on reduction.
+    # Compute log-probabilities with numerical stability.
+    logProb = F.log_softmax(inputs, dim=1)
+    # Gather log-probabilities for target classes.
+    targetsLong = targets.long()
+    logpt = logProb[torch.arange(targetsLong.size(0), device=targetsLong.device), targetsLong]
+    # Convert to probability for focal weighting.
+    pt = logpt.exp()
+    # Compute focal loss per sample: -(1-pt)^gamma * log(pt).
+    loss = -((1 - pt) ** self.gamma) * logpt
+    # Apply class weights if provided.
+    if (self.weight is not None):
+      weight = self.weight.to(inputs.device) if (self.weight.device != inputs.device) else self.weight
+      perSampleWeight = weight[targetsLong]
+      loss = loss * perSampleWeight
+    # Apply reduction method.
+    if (self.reduction == "mean"):
+      return loss.mean()
+    if (self.reduction == "sum"):
+      return loss.sum()
+    return loss
+
+
 if __name__ == "__main__":
   # Quick smoke tests for the implemented losses.
   # Multi-class example.

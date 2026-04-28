@@ -16,7 +16,7 @@ from HMB.MachineLearningHelper import (
   OptunaTuningClassificationTrials,
   OptunaTuningClassificationTrialsStatistics
 )
-from HMB.ExplainabilityHelper import SHAPExplainer
+from HMB.ExplainabilityHelper import OptunaMLPipelineSHAPExplainer
 
 # Ensure all prints flush by default to make logs appear promptly.
 # Save the original built-in print function for delegation.
@@ -497,7 +497,7 @@ if (__name__ == "__main__"):
       experimentPath = os.path.join(BASE_DIR, f"Optuna_Results_{baseName}")
       csvName = os.path.join(experimentPath, "Optuna Best Params.csv")
 
-      explainer = SHAPExplainer(
+      explainer = OptunaMLPipelineSHAPExplainer(
         baseDir=baseDir,
         experimentFolderName=experimentPath,
         testFilename=file,
