@@ -13,8 +13,35 @@ Prerequisites
 Installation Methods
 --------------------
 
-From GitHub (Recommended)
-~~~~~~~~~~~~~~~~~~~~~~~~~
+From PyPI (Recommended)
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Install the latest released version from PyPI (recommended for most users):
+
+.. code-block:: bash
+
+   pip install hmb-helpers
+
+Install with optional feature groups (examples):
+
+.. code-block:: bash
+
+   # Computer vision & PyTorch
+   pip install "hmb-helpers[cv,pytorch]"
+
+   # NLP & text processing
+   pip install "hmb-helpers[nlp]"
+
+   # PDF handling
+   pip install "hmb-helpers[pdf]"
+
+   # Full installation (all optional dependencies)
+   pip install "hmb-helpers[all]"
+
+For CUDA-enabled PyTorch wheels, install the package then replace the CPU wheels with the CUDA-specific wheels that match your system (see PyTorch instructions below).
+
+From GitHub (Development Version)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Install the latest development version directly from GitHub:
 
@@ -31,7 +58,7 @@ If you plan to modify the package source code:
 
    git clone https://github.com/HossamBalaha/HMB-Helpers-Package.git
    cd HMB-Helpers-Package
-   pip install -e .
+   pip install -e ".[dev]"
 
 Installing Dependencies
 -----------------------
