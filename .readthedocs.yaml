@@ -3,7 +3,7 @@ version: 2
 build:
   os: "ubuntu-22.04"
   tools:
-    python: "3.10"  # 3.8 is EOL; 3.10+ is recommended for stability & newer packages
+    python: "3.10"
 
 sphinx:
   configuration: source/conf.py
@@ -12,4 +12,4 @@ python:
   install:
     - method: pip
       path: .
-    - requirements: requirements.txt
+    - requirements: docs-requirements.txt
