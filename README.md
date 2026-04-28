@@ -1,6 +1,7 @@
 # HMB Helpers Package
 
 [![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
+[![PyPI](https://img.shields.io/pypi/v/hmb-helpers.svg)](https://pypi.org/project/hmb-helpers/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package/blob/main/LICENSE)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C.svg?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![TensorFlow](https://img.shields.io/badge/TensorFlow-2.0%2B-FF6F00.svg?logo=tensorflow&logoColor=white)](https://www.tensorflow.org/)
@@ -51,6 +52,8 @@ Install only core dependencies (`numpy`, `pillow`):
 ```bash
 pip install hmb-helpers
 ```
+
+Package on PyPI: https://pypi.org/project/hmb-helpers/
 
 ### Install with Optional Features
 

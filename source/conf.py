@@ -192,6 +192,10 @@ html_footer = """
 <div style="text-align: center; font-size: 0.9em; color: #666; margin-top: 2em;">
   &copy; 2026 Hossam Magdy Balaha. Licensed under MIT. 
   <a href="https://github.com/HossamBalaha/HMB-Helpers-Package">GitHub</a>
+  &nbsp;|&nbsp;
+  <a href="https://pypi.org/project/hmb-helpers/">
+    <img src="https://img.shields.io/pypi/v/hmb-helpers.svg" alt="PyPI" style="vertical-align:middle;height:20px;">
+  </a>
 </div>
 """
 # -- Miscellaneous -----------------------------------------------------------

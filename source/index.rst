@@ -3,14 +3,20 @@
    :align: center
    :width: 200px
 
-.. |build| image:: _static/build.png
-   :alt: Build Status
-.. |license| image:: _static/license.png
+.. |build| image:: https://img.shields.io/github/last-commit/HossamBalaha/HMB-Helpers-Package
+   :alt: Last Commit
+   :target: https://github.com/HossamBalaha/HMB-Helpers-Package/commits/main
+.. |license| image:: https://img.shields.io/github/license/HossamBalaha/HMB-Helpers-Package
    :alt: License
-.. |python| image:: _static/python.png
-   :alt: Python Version
+   :target: https://github.com/HossamBalaha/HMB-Helpers-Package/blob/main/LICENSE
+.. |python| image:: https://img.shields.io/pypi/pyversions/hmb-helpers
+   :alt: Python versions
+   :target: https://pypi.org/project/hmb-helpers/
+.. |pypi| image:: https://img.shields.io/pypi/v/hmb-helpers.svg
+   :alt: PyPI
+   :target: https://pypi.org/project/hmb-helpers/
 
-|build| |license| |python|
+|build| |license| |python| |pypi|
 
 HMB Documentation
 =================
@@ -43,11 +49,14 @@ Features
 
 Installation
 ------------
-Install the package as described in the :doc:`Installation <Installation>` guide, or run:
+
+Install the package as described in the :doc:`Installation <Installation>` guide.
+
+Quick pip install:
 
 .. code-block:: bash
 
-   pip install git+https://github.com/HossamBalaha/HMB-Helpers-Package.git
+   pip install hmb-helpers
 
 Quickstart
 ----------
@@ -98,7 +107,7 @@ Basic Examples
 
    # Extract all text from PDF.
    text = ReadFullPDF("path/to/document.pdf")
-   print(text[:200])  # Preview first 200 characters
+   print(text[:200])  # Preview first 200 characters.
 
 .. code-block:: text
 

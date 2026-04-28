@@ -13,6 +13,14 @@ Prerequisites
 Installation Methods
 --------------------
 
+.. admonition:: Quick install
+   :class: important
+
+   Recommended quick installs:
+
+   - From PyPI (recommended): ``pip install hmb-helpers`` — https://pypi.org/project/hmb-helpers/
+   - From GitHub (development): ``pip install git+https://github.com/HossamBalaha/HMB-Helpers-Package.git``
+
 From PyPI (Recommended)
 ~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -39,6 +47,8 @@ Install with optional feature groups (examples):
    pip install "hmb-helpers[all]"
 
 For CUDA-enabled PyTorch wheels, install the package then replace the CPU wheels with the CUDA-specific wheels that match your system (see PyTorch instructions below).
+
+Project page on PyPI: https://pypi.org/project/hmb-helpers/
 
 From GitHub (Development Version)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
