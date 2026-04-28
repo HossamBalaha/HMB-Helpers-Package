@@ -1,0 +1,17 @@
+version: 2
+
+# Use the repository's Sphinx configuration (located in the `source/` folder)
+sphinx:
+  configuration: source/conf.py
+
+python:
+  # Choose a stable Python runtime supported by Read the Docs
+  version: "3.8"
+  install:
+    # Install the package (so autodoc can import it) and the declared requirements
+    - method: pip
+      path: .
+    - requirements: requirements.txt
+
+build:
+  image: latest
