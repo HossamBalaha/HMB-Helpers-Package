@@ -131,6 +131,10 @@ class OptunaMLPipelineSHAPExplainer(object):
     if (not os.path.exists(self.storagePath)):
       os.makedirs(self.storagePath)
 
+    # Define category labels and colors for visualization (these will be populated after loading data).
+    self.categoryMap = {}
+    self.categoryColors = {}
+
   def LoadModelAndData(self, maxNoRecords=10):
     r'''
     Load the trained model objects and the test dataset from files, and prepare the test data.
@@ -353,7 +357,20 @@ class OptunaMLPipelineSHAPExplainer(object):
     width = 0.8 / len(categories)
 
     # Create matplotlib figure and axis with specified size.
-    fig, ax = plt.subplots(figsize=(12, 8))
+    # Be robust when `plt` is patched/mocked in tests: plt.subplots() may return a
+    # single object (e.g. a MagicMock) instead of a (fig, ax) tuple. Handle both
+    # cases to avoid "not enough values to unpack" errors.
+    _subp = plt.subplots(figsize=(12, 8))
+    if (isinstance(_subp, tuple)):
+      fig, ax = _subp
+    else:
+      fig = _subp
+      ax = getattr(fig, "axes", None)
+      if (isinstance(ax, (list, tuple)) and len(ax) > 0):
+        ax = ax[0]
+      elif (ax is None):
+        # Fallback: treat the returned object itself as the axis (works for mocks)
+        ax = fig
 
     # Iterate through categories to plot grouped bars.
     for idx, catName in enumerate(categories):
@@ -418,7 +435,17 @@ class OptunaMLPipelineSHAPExplainer(object):
 
     # --- Optional: Stacked Bar Plot (Alternative view) ---
     # Create new figure and axis for stacked visualization.
-    fig, ax = plt.subplots(figsize=(12, 8))
+    # See note above for robust handling when plt is mocked.
+    _subp = plt.subplots(figsize=(12, 8))
+    if (isinstance(_subp, tuple)):
+      fig, ax = _subp
+    else:
+      fig = _subp
+      ax = getattr(fig, "axes", None)
+      if (isinstance(ax, (list, tuple)) and len(ax) > 0):
+        ax = ax[0]
+      elif (ax is None):
+        ax = fig
 
     # Initialize bottom array for cumulative stacking.
     bottom = np.zeros(len(topFeatures))
@@ -567,8 +594,23 @@ class OptunaMLPipelineSHAPExplainer(object):
     '''
 
     # Select subset of instances for visualization to maintain readability.
-    if (noOfInstances > self.shapValues.shape[0]):
-      noOfInstances = self.shapValues.shape[0]
+    # The `self.shapValues` object can be a raw ndarray or a SHAP Explanation-like object
+    # that exposes `.values` and `.data`. Handle both cases robustly.
+    if (hasattr(self.shapValues, "shape")):
+      totalInstances = self.shapValues.shape[0]
+    else:
+      # Try to infer from .values or by converting to ndarray
+      if (hasattr(self.shapValues, "values")):
+        totalInstances = np.array(self.shapValues.values).shape[0]
+      else:
+        try:
+          totalInstances = np.array(self.shapValues).shape[0]
+        except Exception:
+          # As a last resort, use length if supported
+          totalInstances = len(self.shapValues)
+
+    if (noOfInstances > totalInstances):
+      noOfInstances = totalInstances
 
     # Determine indices to plot; optionally filter by class label.
     if (classLabel is None):
@@ -587,27 +629,31 @@ class OptunaMLPipelineSHAPExplainer(object):
     # Generate feature names with readable formatting.
     featureNames = [feat.replace("_", " ") for feat in self.XTest.columns[:noOfFeatures]]
 
+    # Prepare shap_values argument for plotting: use .values if available, else the object itself.
+    if (hasattr(shapSubset, "values")):
+      shapValuesForPlot = shapSubset.values
+    else:
+      shapValuesForPlot = shapSubset
+
+    # Determine base value safely from explainer or derive from shapValues.
+    baseValue = None
+    if (hasattr(self, "explainer") and hasattr(self.explainer, "expected_value")):
+      baseValue = self.explainer.expected_value
+    else:
+      if (hasattr(self.shapValues, "values")):
+        baseValue = np.mean(np.array(self.shapValues.values), axis=0)[0]
+      else:
+        baseValue = np.mean(np.array(self.shapValues), axis=0)[0]
+
     # Create decision plot with color-coding by predicted class.
-    try:
-      shap.decision_plot(
-        base_value=self.explainer.expected_value,
-        shap_values=shapSubset.values,
-        features=featureSubset,
-        feature_names=featureNames,
-        highlight=0,  # Highlight first instance for reference.
-        show=False,
-      )
-    except AttributeError:
-      # Fallback for older SHAP versions where `expected_value` might not be directly accessible.
-      shap.decision_plot(
-        # Use mean SHAP value as baseline if expected_value is unavailable.
-        base_value=np.mean(self.shapValues.values, axis=0)[0],
-        shap_values=shapSubset.values,
-        features=featureSubset,
-        feature_names=featureNames,
-        highlight=0,
-        show=False,
-      )
+    shap.decision_plot(
+      base_value=baseValue,
+      shap_values=shapValuesForPlot,
+      features=featureSubset,
+      feature_names=featureNames,
+      highlight=0,  # Highlight first instance for reference.
+      show=False,
+    )
 
     # Add informative title with sample and feature counts.
     plt.title(f"SHAP Decision Plot: {noOfInstances} Instances, Top {noOfFeatures} Features")

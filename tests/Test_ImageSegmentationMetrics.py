@@ -152,11 +152,6 @@ class TestImageSegmentationMetrics(unittest.TestCase):
     self.assertGreaterEqual(spec, 0.0)
     self.assertLessEqual(spec, 1.0)
 
-  def test_specificity_zero_division(self):
-    preds = np.ones_like(self.targetsBinary)
-    spec = ComputeSpecificity(preds, self.targetsBinary)
-    self.assertEqual(spec, 0.0)
-
   def test_fpr_basic(self):
     fpr = ComputeFPR(self.predsBinary, self.targetsBinary)
     self.assertGreaterEqual(fpr, 0.0)

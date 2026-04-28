@@ -9,7 +9,8 @@ class DiceLoss(nn.Module):
   Dice loss measures the overlap between predicted and ground truth masks.
 
   .. math::
-    \text{Dice}=1-\frac{2 \times |X \cap Y| + \text{smooth}}{|X| + |Y| + \text{smooth}}
+
+    \text{Dice} = 1 - \frac{2 \times |X \cap Y| + \text{smooth}}{|X| + |Y| + \text{smooth}}
 
   Parameters:
     weight (optional): Not used, for compatibility.
@@ -53,6 +54,7 @@ class DiceBCELoss(nn.Module):
   Combines Dice loss and binary cross-entropy loss for improved performance on imbalanced data.
 
   .. math::
+
     \text{Loss} = \text{BCE}(X, Y) + \left[1 - \frac{2 \times |X \cap Y| + \text{smooth}}{|X| + |Y| + \text{smooth}}\right]
 
   Parameters:
@@ -102,6 +104,7 @@ class JaccardLoss(nn.Module):
   Jaccard loss measures the intersection over union between predicted and ground truth masks.
 
   .. math::
+
     \text{Jaccard} = 1 - \frac{|X \cap Y| + \text{smooth}}{|X \cup Y| + \text{smooth}}
 
   Parameters:
@@ -149,6 +152,7 @@ class TverskyLoss(nn.Module):
   Tversky loss generalizes Dice loss by allowing control over penalties for false positives and false negatives.
 
   .. math::
+
     \text{Tversky} = 1 - \frac{|X \cap Y| + \text{smooth}}{|X \cap Y| + \alpha \times |X \setminus Y| + \beta \times |Y \setminus X| + \text{smooth}}
 
   Parameters:
@@ -201,6 +205,7 @@ class FocalLoss(nn.Module):
   Focal loss focuses training on hard examples and addresses class imbalance.
 
   .. math::
+
     \text{Focal}(p_t) = - \alpha \times (1-p_t)^{\gamma} \times \log(p_t)
 
   Parameters:
@@ -266,6 +271,7 @@ class GeneralizedDiceLoss(nn.Module):
   Weights each class inversely to its frequency to address class imbalance.
 
   .. math::
+
     \text{Generalized\ Dice} = 1 - \frac{2 \times \sum_c w_c \sum_i p_{ci} \times g_{ci}}{\sum_c w_c \sum_i (p_{ci} + g_{ci})}
     \quad \text{where} \quad w_c = \frac{1}{(\sum_i g_{ci})^2}
   '''

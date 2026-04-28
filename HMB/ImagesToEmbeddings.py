@@ -10,6 +10,12 @@ from transformers import AutoImageProcessor, AutoModel
 class TransformersEmbeddingModel(object):
   r'''
   A class to extract embeddings from images using pre-trained models from the Hugging Face Transformers library.
+
+  .. math::
+
+    \mathrm{embedding} = \mathrm{model}(I)_{\mathrm{CLS}}
+
+  where the ``CLS`` token (or first token) is used as the image-level embedding.
   '''
 
   def __init__(self, modelName, device):
@@ -104,6 +110,12 @@ def ExtractEmbeddingsTimm(
     datasetFolder = "path/to/dataset"
     outputPickle = "embeddings.pkl"
     ExtractEmbeddingsTimm(datasetFolder, outputPickle)
+
+  Notes
+  -----
+  The function composes a per-image embedding by concatenating the class token and the mean of patch tokens::
+
+    e = [class_token ; mean(patch_tokens)]
   '''
 
   # Set device to CUDA if available, else CPU.

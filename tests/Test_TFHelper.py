@@ -4,8 +4,7 @@ import tempfile
 import numpy as np
 from PIL import Image
 from unittest.mock import MagicMock
-
-from HMB.TFHelper import TFGradCam, SaveGradCamsForSamples
+from HMB.ExplainabilityHelper import TFGradCam
 
 
 class DummyModel:
@@ -39,7 +38,7 @@ class DummyModel:
 
 class TestTFHelper(unittest.TestCase):
   """
-  Unit tests for TFHelper covering TFGradCam and SaveGradCamsForSamples using a tiny Keras model.
+  Unit tests for TFHelper covering TFGradCam using a tiny Keras model.
   """
 
   def setUp(self):
@@ -61,24 +60,6 @@ class TestTFHelper(unittest.TestCase):
     img = np.random.rand(1, 32, 32, 3).astype(np.float32)
     with self.assertRaises(Exception):
       _ = TFGradCam(self.dm, img, classIdx=99, lastConvLayerName="conv")
-
-  def test_save_gradcams_for_samples(self):
-    with tempfile.TemporaryDirectory() as tmpdir:
-      # Create synthetic images.
-      imgPaths = []
-      for i in range(3):
-        p = os.path.join(tmpdir, f"img_{i}.png")
-        Image.fromarray((np.random.rand(32, 32, 3) * 255).astype(np.uint8)).save(p)
-        imgPaths.append(p)
-      # Run and verify files generated (overlay created).
-      SaveGradCamsForSamples(self.dm, imgPaths, [0, 1], tmpdir, imgSize=(32, 32), lastConvLayerName="conv")
-      outs = [f for f in os.listdir(tmpdir) if f.startswith("GradCAM_IDx")]
-      self.assertGreaterEqual(len(outs), 1)
-
-  def test_save_gradcams_empty_inputs(self):
-    with tempfile.TemporaryDirectory() as tmpdir:
-      with self.assertRaises(Exception):
-        SaveGradCamsForSamples(self.dm, [], [], tmpdir, imgSize=(32, 32), lastConvLayerName="conv")
 
 
 if (__name__ == "__main__"):

@@ -6,6 +6,15 @@ def MutualInformation(image1, image2, bins=100):
   r'''
   Compute the mutual information between two images.
 
+  .. math::
+
+    I(X;Y) = H(X) + H(Y) - H(X, Y)
+
+  where:
+    - :math:`H(X)` is the entropy of image X.
+    - :math:`H(Y)` is the entropy of image Y.
+    - :math:`H(X, Y)` is the joint entropy of X and Y.
+
   Parameters:
     image1 (numpy.ndarray or compatible): First input image.
     image2 (numpy.ndarray or compatible): Second input image.
@@ -93,6 +102,14 @@ def MutualInformationColor(image1, image2, bins=100):
   r'''
   Compute the mutual information between two color images by averaging over all channels.
 
+  .. math::
+
+    I_{avg}(X;Y) = \frac{1}{C} \sum_{c=1}^C I(X_c; Y_c)
+
+  where:
+    - :math:`C` is the number of color channels.
+    - :math:`I(X_c; Y_c)` is the mutual information for channel c.
+
   Parameters:
     image1 (numpy.ndarray or compatible): First input color image.
     image2 (numpy.ndarray or compatible): Second input color image.
@@ -124,6 +141,14 @@ def MutualInformationColor(image1, image2, bins=100):
 def NormalizedMutualInformation(image1, image2):
   r'''
   Compute the normalized mutual information (NMI) between two images.
+
+  .. math::
+
+    \text{NMI} = \frac{I(X;Y)}{\sqrt{H(X) \cdot H(Y)}}
+
+  where:
+    - :math:`I(X;Y)` is the mutual information between X and Y.
+    - :math:`H(X)` and :math:`H(Y)` are the entropies of X and Y respectively.
 
   Parameters:
     image1 (numpy.ndarray or compatible): First input image.
@@ -169,6 +194,16 @@ def NormalizedMutualInformation(image1, image2):
 def StructuralSimilarity(image1, image2, winSize=7):
   r'''
   Compute the structural similarity index (SSIM) between two images.
+
+  .. math::
+
+    \text{SSIM}(x, y) = \frac{(2\mu_x\mu_y + C_1)(2\sigma_{xy} + C_2)}{(\mu_x^2 + \mu_y^2 + C_1)(\sigma_x^2 + \sigma_y^2 + C_2)}
+
+  where:
+    - :math:`\mu_x, \mu_y` are the local means.
+    - :math:`\sigma_x^2, \sigma_y^2` are the local variances.
+    - :math:`\sigma_{xy}` is the local covariance.
+    - :math:`C_1, C_2` are small constants to stabilize the division.
 
   Parameters:
     image1 (numpy.ndarray or compatible): First input image.
@@ -225,6 +260,13 @@ def NormalizedCrossCorrelation(image1, image2):
   r'''
   Compute the normalized cross-correlation (NCC) between two images.
 
+  .. math::
+
+    \text{NCC} = \frac{\sum_i (x_i - \bar{x}) (y_i - \bar{y})}{\sqrt{\sum_i (x_i - \bar{x})^2 \; \sum_i (y_i - \bar{y})^2}}
+
+  where:
+    - :math:`\bar{x}` and :math:`\bar{y}` are the mean values of x and y respectively.
+
   Parameters:
     image1 (numpy.ndarray or compatible): First input image.
     image2 (numpy.ndarray or compatible): Second input image.
@@ -272,6 +314,13 @@ def NormalizedCrossCorrelation(image1, image2):
 def HistogramComparison(image1, image2, bins=256, eps=1e-10):
   r'''
   Compute the histogram intersection between two images.
+
+  .. math::
+
+    \text{HistInter}(H_1, H_2) = \frac{\sum_i \min(H_{1,i}, H_{2,i})}{\sum_i H_{1,i}}
+
+  where:
+    - :math:`H_{1,i}` and :math:`H_{2,i}` are the histogram counts for bin i of image1 and image2.
 
   Parameters:
     image1 (numpy.ndarray or compatible): First input image.
@@ -336,6 +385,15 @@ def HistogramComparison(image1, image2, bins=256, eps=1e-10):
 def UniversalQualityIndex(image1, image2):
   r'''
   Compute the universal quality index (UQI) between two images.
+
+  .. math::
+
+    \text{UQI}(x,y) = \frac{4 \, \mathrm{cov}(x,y) \; \mu_x \; \mu_y}{(\sigma_x^2 + \sigma_y^2) (\mu_x^2 + \mu_y^2)}
+
+  where:
+    - :math:`\mu_x, \mu_y` are the means of x and y.
+    - :math:`\sigma_x^2, \sigma_y^2` are the variances of x and y.
+    - :math:`\mathrm{cov}(x,y)` is the covariance of x and y.
 
   Parameters:
     image1 (numpy.ndarray or compatible): First input image.
@@ -412,6 +470,12 @@ def CosineSimilarityImages(image1, image2):
   r'''
   Compute the cosine similarity between two images.
 
+  .. math::
+
+    \mathrm{cosine}(x,y) = \frac{x \cdot y}{\|x\|_2 \; \|y\|_2}
+
+  where the inputs are treated as flattened vectors.
+
   Parameters:
     image1 (numpy.ndarray or compatible): First input image.
     image2 (numpy.ndarray or compatible): Second input image.
@@ -473,6 +537,13 @@ def CosineSimilarityImages(image1, image2):
 def PeakSignalToNoiseRatio(image1, image2, eps=1e-10):
   r'''
   Compute the peak signal-to-noise ratio (PSNR) between two images.
+
+  .. math::
+
+    \mathrm{MSE} = \frac{1}{N} \sum_i (x_i - y_i)^2\\
+    \mathrm{PSNR} = 20 \log_{10}\left( \frac{\mathrm{MAX}_{I}}{\sqrt{\mathrm{MSE}}} \right)
+
+  where :math:`\mathrm{MAX}_{I}` is the maximum possible pixel value of the images (e.g. 255 for uint8).
 
   Parameters:
     image1 (numpy.ndarray or compatible): First input image.
@@ -619,6 +690,12 @@ def MeanSquaredError(image1, image2):
   r'''
   Compute the mean squared error (MSE) between two images.
 
+  .. math::
+
+    \mathrm{MSE}(x,y) = \frac{1}{N} \sum_{i=1}^N (x_i - y_i)^2
+
+  where :math:`N` is the number of pixels (or elements) compared.
+
   Parameters:
     image1 (numpy.ndarray or compatible): First input image.
     image2 (numpy.ndarray or compatible): Second input image.
@@ -659,6 +736,16 @@ def MeanSquaredError(image1, image2):
 def NormalizedMeanSquaredError(image1, image2):
   r'''
   Compute the normalized mean squared error (NMSE) between two images.
+
+  The implementation normalizes each image to zero mean and unit variance before
+  computing the mean squared difference. Formally:
+
+  .. math::
+
+    \tilde{x} = \frac{x - \mu_x}{\sigma_x}, \quad \tilde{y} = \frac{y - \mu_y}{\sigma_y}\\
+    \mathrm{NMSE}(x,y) = \frac{1}{N} \sum_{i=1}^N (\tilde{x}_i - \tilde{y}_i)^2
+
+  where :math:`\mu` and :math:`\sigma` denote mean and standard deviation respectively.
 
   Parameters:
     image1 (numpy.ndarray or compatible): First input image.
@@ -709,6 +796,14 @@ def NormalizedMeanSquaredError(image1, image2):
 def EarthMoversDistance(image1, image2):
   r'''
   Compute the Earth Mover's Distance (EMD) between two images.
+
+  For 1-D distributions the Earth Mover's / Wasserstein-1 distance can be written as:
+
+  .. math::
+
+    W_1(P,Q) = \int_{-\infty}^{\infty} |F_P(t) - F_Q(t)| \, dt
+
+  where :math:`F_P` and :math:`F_Q` are the cumulative distribution functions of the two distributions.
 
   Parameters:
     image1 (numpy.ndarray or compatible): First input image.
@@ -943,6 +1038,12 @@ def HellingerDistance(image1, image2):
   r'''
   Compute the Hellinger distance between two images.
 
+  .. math::
+
+    H(P,Q) = \frac{1}{\sqrt{2}} \left\| \sqrt{P} - \sqrt{Q} \right\|_2
+
+  where :math:`P` and :math:`Q` are the (normalized) histograms / probability distributions.
+
   Parameters:
     image1 (numpy.ndarray or compatible): First input image.
     image2 (numpy.ndarray or compatible): Second input image.
@@ -1012,6 +1113,14 @@ def HellingerDistance(image1, image2):
 def BhattacharyyaDistance(image1, image2):
   r'''
   Compute the Bhattacharyya distance between two images.
+
+  .. math::
+
+    BC = \sum_i \sqrt{p_i q_i}\\
+    D_B = -\ln(BC)
+
+  where :math:`p` and :math:`q` are the normalized histograms of the images and
+  :math:`BC` is the Bhattacharyya coefficient.
 
   Parameters:
     image1 (numpy.ndarray or compatible): First input image.
@@ -1185,6 +1294,13 @@ def KLDivergence(image1, image2, eps=1e-10):
   r'''
   Compute the Kullback-Leibler (KL) divergence between two images.
 
+  .. math::
+
+    D_{\mathrm{KL}}(P \| Q) = \sum_i p_i \log\frac{p_i}{q_i}
+
+  where :math:`p` and :math:`q` are the normalized histograms (probability distributions)
+  of the two images. A small constant :math:`\varepsilon` is added for numerical stability.
+
   Parameters:
     image1 (numpy.ndarray or compatible): First input image.
     image2 (numpy.ndarray or compatible): Second input image.
@@ -1257,6 +1373,19 @@ def KLDivergence(image1, image2, eps=1e-10):
 def GradientMagnitudeSimilarityDeviation(image1, image2, eps=1e-10):
   r'''
   Compute the gradient magnitude similarity deviation (GMSD) between two images.
+
+  The GMS map is computed per-pixel as:
+
+  .. math::
+
+    \mathrm{GMS}(i) = \frac{2\,g_1(i)\,g_2(i)}{g_1(i)^2 + g_2(i)^2 + \varepsilon}
+
+  where :math:`g_1, g_2` are the gradient magnitudes of the two images. The GMSD
+  is the standard deviation of the GMS map:
+
+  .. math::
+
+    \mathrm{GMSD} = \sqrt{\frac{1}{N} \sum_i \big(\mathrm{GMS}(i) - \mu_{\mathrm{GMS}}\big)^2}
 
   Parameters:
     image1 (numpy.ndarray or compatible): First input image.

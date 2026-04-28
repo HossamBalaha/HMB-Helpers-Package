@@ -18,6 +18,10 @@ class VectorsHelper(object):
     r'''
     Compute the Euclidean (L2) length/norm of a vector.
 
+    .. math::
+
+      \|v\|_2 = \sqrt{\sum_i v_i^2}
+
     Parameters:
       vector (array-like): Input vector (list, tuple or NumPy array).
 
@@ -31,6 +35,10 @@ class VectorsHelper(object):
   def DotProduct(self, vector1, vector2):
     r'''
     Compute the dot product between two vectors.
+
+    .. math::
+
+      \langle a, b \rangle = \sum_i a_i b_i
 
     Parameters:
       vector1, vector2 (array-like): Input vectors (same shape required for dot).
@@ -47,6 +55,10 @@ class VectorsHelper(object):
     r'''
     Compute the cross product (only meaningful for 3-dimensional vectors).
 
+    .. math::
+
+      a \times b = [a_2 b_3 - a_3 b_2,\; a_3 b_1 - a_1 b_3,\; a_1 b_2 - a_2 b_1]
+
     Parameters:
       vector1, vector2 (array-like): 3-element vectors.
 
@@ -60,6 +72,10 @@ class VectorsHelper(object):
   def Distance(self, vector1, vector2):
     r'''
     Compute Euclidean distance between two vectors.
+
+    .. math::
+
+      d(a, b) = \|a - b\|_2 = \sqrt{\sum_i (a_i - b_i)^2}
 
     Parameters:
       vector1, vector2 (array-like): Input vectors.
@@ -75,6 +91,10 @@ class VectorsHelper(object):
   def Angle(self, vector1, vector2, mode="rad"):
     r'''
     Compute the angle between two vectors using the arccosine of the normalized dot product.
+
+    .. math::
+
+      \theta(a,b) = \arccos\left(\frac{\langle a, b \rangle}{\|a\|_2 \; \|b\|_2}\right)
 
     Parameters:
       vector1, vector2 (array-like): Input vectors.
@@ -129,6 +149,10 @@ class VectorsHelper(object):
     r'''
     Project vector `v` onto the provided basis vectors.
 
+    .. math::
+
+      c_i = \frac{\langle v, b_i \rangle}{\langle b_i, b_i \rangle} \quad\text{for each basis vector } b_i
+
     Parameters:
       v (array-like): Vector to project.
       basis (list of array-like): Basis vectors to project onto.
@@ -153,6 +177,10 @@ class VectorsHelper(object):
   def CosineSimilarity(self, vector1, vector2):
     r'''
     Compute the cosine similarity between two vectors.
+
+    .. math::
+
+     \text{cosine}(a, b) = \frac{\langle a, b\rangle}{\|a\|_2 \; \|b\|_2}
 
     Parameters:
       vector1 (array-like): First input vector.

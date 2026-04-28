@@ -15,6 +15,15 @@ def CalculatePerformanceMetrics(
   r'''
   Calculate performance metrics from a confusion matrix.
 
+  .. math::
+
+    \text{Precision} = \frac{TP}{TP + FP}\\
+    \text{Recall} = \frac{TP}{TP + FN}\\
+    F_1 = 2 \cdot \frac{\text{Precision} \cdot \text{Recall}}{\text{Precision} + \text{Recall}}\\
+    \text{Accuracy} = \frac{TP + TN}{TP + TN + FP + FN}\\
+    \text{Specificity} = \frac{TN}{TN + FP}\\
+    \text{MCC} = \frac{TP\cdot TN - FP\cdot FN}{\sqrt{(TP+FP)(TP+FN)(TN+FP)(TN+FN)}}
+
   Parameters:
     confMatrix (list or numpy.ndarray): Confusion matrix representing the classification results.
     eps (float): Small value to avoid division by zero. Default is 1e-10.
@@ -22,30 +31,12 @@ def CalculatePerformanceMetrics(
     addPerClass (bool): Whether to include per-class metrics in the output. Default is False.
 
   Returns:
-    dict: A dictionary containing performance metrics including:
-      - True Positives (TP)
-      - False Positives (FP)
-      - False Negatives (FN)
-      - True Negatives (TN)
-      - Macro Precision
-      - Macro Recall
-      - Macro F1
-      - Macro Accuracy
-      - Macro Specificity
-      - Micro Precision
-      - Micro Recall
-      - Micro F1
-      - Micro Accuracy
-      - Micro Specificity
-      - Weights
-      - Weighted Precision
-      - Weighted Recall
-      - Weighted F1
-      - Weighted Accuracy
-      - Weighted Specificity
+    dict: A dictionary containing performance metrics including TP, FP, FN, TN and various
+      macro/micro/weighted averages.
 
   Examples
   --------
+
   .. code-block:: python
 
     import numpy as np
@@ -56,8 +47,7 @@ def CalculatePerformanceMetrics(
     for key, value in metrics.items():
       print(f"{key}: {np.round(value, 4)}")
 
-
-  Another example to use the confusion matrix from sklearn:
+  Another example (using sklearn's confusion_matrix):
 
   .. code-block:: python
 
@@ -296,9 +286,9 @@ def PlotConfusionMatrix(
     \text{Normalized CM}_{i,j} = \frac{CM_{i,j}}{\sum_j CM_{i,j}}
   .. math::
     \text{Precision} = \frac{TP}{TP + FP}
-    \qquad
+  .. math::
     \text{Recall} = \frac{TP}{TP + FN}
-    \qquad
+  .. math::
     \text{Accuracy} = \frac{TP + TN}{TP + TN + FP + FN}
 
   Examples
@@ -320,7 +310,7 @@ def PlotConfusionMatrix(
       figSize=(6, 6),
       colorbar=True,
       display=True,
-      save=False,
+      save=False
     )
   '''
 
@@ -441,6 +431,7 @@ def PlotRegressionResults(
   Returns:
     fig: The matplotlib figure object if returnFig is True, else None.
   '''
+
   yTrue = np.array(yTrue)
   yPred = np.array(yPred)
   residuals = yTrue - yPred
@@ -720,7 +711,7 @@ def PlotPRCCurve(
 
   .. math::
     \text{Precision} = \frac{TP}{TP + FP}
-    \qquad
+  .. math::
     \text{Recall} = \frac{TP}{TP + FN}
   .. math::
     \text{Average Precision} = \int_0^1 \text{Precision}(\text{Recall}) \, d\text{Recall}
@@ -870,8 +861,15 @@ def PlotMultiTrialROCAUC(
     dpi=720,  # DPI for saving the figure.
     addZoomedInset=True,  # Whether to add a zoomed inset for the top-left corner.
 ):
-  '''
+  r'''
   Plot averaged ROC curves across multiple trials with confidence intervals.
+
+  .. math::
+    \text{TPR} = \frac{TP}{TP + FN}
+  .. math::
+    \text{FPR} = \frac{FP}{FP + TN}
+  .. math::
+    \text{AUC} = \int_0^1 \text{TPR}(\text{FPR}) \, d\text{FPR}
 
   Parameters:
     allYTrue (list): List of ground truth arrays from all trials. Each element shape: (nSamples, nClasses) or (nSamples,).
@@ -899,13 +897,6 @@ def PlotMultiTrialROCAUC(
     - This function computes and plots the mean ROC curve across multiple trials for each class.
     - Confidence intervals are calculated using the normal approximation method.
     - The plot includes options for saving, displaying, and customizing appearance.
-
-  .. math::
-    \text{TPR} = \frac{TP}{TP + FN}
-    \qquad
-    \text{FPR} = \frac{FP}{FP + TN}
-  .. math::
-    \text{AUC} = \int_0^1 \text{TPR}(\text{FPR}) \, d\text{FPR}
 
   Examples
   --------
@@ -1199,8 +1190,15 @@ def PlotMultiTrialPRCurve(
     dpi=720,  # DPI for saving the figure.
     addZoomedInset=True,  # Whether to add a zoomed inset for the top-right corner of the PRC plot.
 ):
-  '''
+  r'''
   Plot averaged Precision-Recall curves across multiple trials with confidence intervals.
+
+  .. math::
+    \text{Precision} = \frac{TP}{TP + FP}
+  .. math::
+    \text{Recall} = \frac{TP}{TP + FN}
+  .. math::
+    \text{Average Precision} = \int_0^1 \text{Precision}(\text{Recall}) \, d\text{Recall}
 
   Parameters:
     allYTrue (list): List of ground truth arrays from all trials. Each element shape: (nSamples, nClasses) or (nSamples,).
@@ -1226,13 +1224,6 @@ def PlotMultiTrialPRCurve(
     - This function computes and plots the mean Precision-Recall curve across multiple trials for each class.
     - Confidence intervals are calculated using the normal approximation method.
     - The plot includes options for saving, displaying, and customizing appearance.
-
-  .. math::
-    \text{Precision} = \frac{TP}{TP + FP}
-    \qquad
-    \text{Recall} = \frac{TP}{TP + FN}
-  .. math::
-    \text{Average Precision} = \int_0^1 \text{Precision}(\text{Recall}) \, d\text{Recall}
 
   Examples
   --------

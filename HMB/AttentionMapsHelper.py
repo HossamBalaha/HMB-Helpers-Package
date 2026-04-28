@@ -4,15 +4,15 @@ import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
 from torchvision import transforms
-from transformers import ViTForImageClassification, ViTFeatureExtractor
-from pytorch_grad_cam import GradCAM, HiResCAM, ScoreCAM, GradCAMPlusPlus, AblationCAM, XGradCAM, EigenCAM, FullGrad
+from pytorch_grad_cam import (
+  GradCAM, HiResCAM, ScoreCAM, GradCAMPlusPlus,
+  AblationCAM, XGradCAM, EigenCAM, FullGrad
+)
 from pytorch_grad_cam.utils.image import show_cam_on_image
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
-
 from HMB.PyTorchHelper import LoadPyTorchDict
 
 
-# Wrapper to return logits only.
 class LogitsModelWrapper(torch.nn.Module):
   r'''
   Wrapper for a model to return only logits from the forward pass.
@@ -80,6 +80,8 @@ def HuggingFaceModel(
       stdValues=[0.229, 0.224, 0.225]
     )
   '''
+
+  from transformers import ViTForImageClassification
 
   # Create the model using Hugging Face transformers.
   model = ViTForImageClassification.from_pretrained(

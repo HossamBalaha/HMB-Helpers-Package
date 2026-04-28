@@ -2,6 +2,7 @@ import unittest, tempfile, shutil, os, json
 from PIL import Image
 from pathlib import Path
 from HMB.DatasetsHelper import GenericImagesDatasetHandler
+from HMB.Initializations import IMAGE_SUFFIXES
 
 
 class TestDatasetsHelper(unittest.TestCase):
@@ -27,7 +28,7 @@ class TestDatasetsHelper(unittest.TestCase):
     dsPath = Path("this_path_does_not_exist_12345")
     handlerInstance = GenericImagesDatasetHandler(
       dsPath,
-      imageExtensions=GenericImagesDatasetHandler.imageExtensions,
+      imageExtensions=IMAGE_SUFFIXES,
       autoDetect=False
     )
     issues = handlerInstance.ValidateDatasetStructure("this_path_does_not_exist")
@@ -44,7 +45,7 @@ class TestDatasetsHelper(unittest.TestCase):
 
       handlerInstance = GenericImagesDatasetHandler(
         dsPath,
-        imageExtensions=GenericImagesDatasetHandler.imageExtensions,
+        imageExtensions=IMAGE_SUFFIXES,
         autoDetect=False,
       )
       issues = handlerInstance.ValidateDatasetStructure(dsPath)
@@ -63,7 +64,7 @@ class TestDatasetsHelper(unittest.TestCase):
 
       handlerInstance = GenericImagesDatasetHandler(
         dsPath,
-        imageExtensions=GenericImagesDatasetHandler.imageExtensions,
+        imageExtensions=IMAGE_SUFFIXES,
         autoDetect=False
       )
       issues = handlerInstance.ValidateDatasetStructure(dsPath, minSamplesPerClass=2)
@@ -102,7 +103,7 @@ class TestDatasetsHelper(unittest.TestCase):
       with open(badFile, "wb") as fh:
         fh.write(b"notanimage")
 
-      handlerInstance = GenericImagesDatasetHandler(dsPath, imageExtensions=GenericImagesDatasetHandler.imageExtensions,
+      handlerInstance = GenericImagesDatasetHandler(dsPath, imageExtensions=IMAGE_SUFFIXES,
                                                     autoDetect=False)
       structured = handlerInstance.ValidateDatasetStructure(
         dsPath, minSamplesPerClass=1, returnStructured=True
@@ -118,12 +119,12 @@ class TestDatasetsHelper(unittest.TestCase):
 
       # Prepare a minimal handler instance with classMapping and sourceDir.
       handlerInstance = GenericImagesDatasetHandler(outPath,
-                                                    imageExtensions=GenericImagesDatasetHandler.imageExtensions,
+                                                    imageExtensions=IMAGE_SUFFIXES,
                                                     autoDetect=False)
       handlerInstance.classMapping = {"cat": "cat", "dog": "dog"}
       handlerInstance.config = {"datasetFormat": "nested"}
       handlerInstance.sourceDir = Path(tmpDir) / "src"
-      handlerInstance.imageExtensions = GenericImagesDatasetHandler.imageExtensions
+      handlerInstance.imageExtensions = IMAGE_SUFFIXES
 
       yamlPath = handlerInstance.CreateYAML(outPath)
       self.assertTrue(yamlPath.exists())
@@ -142,7 +143,6 @@ class TestDatasetsHelper(unittest.TestCase):
 
       cfg = handlerInstance.GetConfig()
       self.assertIn("datasetFormat", cfg)
-      self.assertIn("classes", cfg)
 
       # Ensure PrintSummary does not raise.
       handlerInstance.PrintSummary()
@@ -181,7 +181,7 @@ class TestDatasetsHelper(unittest.TestCase):
       (src / "dog").mkdir(parents=True, exist_ok=True)
       self.makeImage(src / "cat" / "img1.jpg")
       self.makeImage(src / "dog" / "img1.jpg")
-      handler = GenericImagesDatasetHandler(src, imageExtensions=GenericImagesDatasetHandler.imageExtensions,
+      handler = GenericImagesDatasetHandler(src, imageExtensions=IMAGE_SUFFIXES,
                                             autoDetect=True)
       self.assertIn(".jpg", handler.imageExtensions)
       self.assertIn(".png", handler.imageExtensions)

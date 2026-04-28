@@ -69,11 +69,11 @@ def IsPointInsideContour(point, contour):
   Check if a point is inside a contour.
 
   .. math::
-      \text{IsPointInsideContour}(point, contour) =
-      \begin{cases}
-      \text{True} & \text{if point is inside contour} \\
-      \text{False} & \text{otherwise}
-      \end{cases}
+    \text{IsPointInsideContour}(point, contour) =
+    \begin{cases}
+    \text{True} & \text{if point is inside contour} \\
+    \text{False} & \text{otherwise}
+    \end{cases}
 
   This function uses OpenCV's pointPolygonTest to determine if a point is inside a given contour.
   It returns True if the point is inside the contour, otherwise it returns False.
@@ -116,11 +116,11 @@ def IsIntersectingWithOtherContours(pointOrPolygon, contours):
   Check if a point intersects with any other contours.
 
   .. math::
-      \text{IsIntersectingWithOtherContours}(point, anListCoords) =
-      \begin{cases}
-      \text{True} & \text{if point intersects with any contour} \\
-      \text{False} & \text{otherwise}
-      \end{cases}
+    \text{IsIntersectingWithOtherContours}(point, anListCoords) =
+    \begin{cases}
+    \text{True} & \text{if point intersects with any contour} \\
+    \text{False} & \text{otherwise}
+    \end{cases}
 
   This function checks if a given point intersects with any contours defined by a list of coordinates.
   It iterates through each set of coordinates in the list and uses the IsPointInsideContour function to check for intersection.

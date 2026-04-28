@@ -1396,10 +1396,10 @@ def PerformDataBalancing(xTrain, yTrain, techniqueStr="SMOTE"):
 
 
 def PerformOutlierDetection(
-    xTrain,
-    techniqueStr="IQR",
-    contamination=0.05,
-    returnMask=False,
+  xTrain,
+  techniqueStr="IQR",
+  contamination=0.05,
+  returnMask=False,
 ):
   r'''
   Detect and optionally remove outliers from training data using the specified technique.
@@ -1523,21 +1523,21 @@ def PerformOutlierDetection(
 
 
 def MachineLearningClassification(
-    datasetFilePath,  # Dataset file name (CSV format).
-    scalerName,  # Name of the scaler to use.
-    modelName,  # Name of the machine learning classification model.
-    fsTechName,  # Feature selection technique name.
-    fsTechRatio=0.2,  # Ratio of features to select.
-    dataBalanceTech=None,  # Data balancing technique to be applied.
-    outlierTech=None,  # Outlier detection technique to be applied.
-    contamination=0.05,  # Proportion of outliers in the data (for outlier detection techniques).
-    testRatio=0.2,  # Ratio of the test data.
-    testFilePath=None,  # Optional test file for evaluation.
-    targetColumn="Class",  # Name of the target column in the dataset.
-    dropFirstColumn=True,  # Whether to drop the first column (usually an index or ID).
-    dropNAColumns=True,  # Whether to drop columns with any null values.
-    encodeCategorical=True,  # Whether to encode categorical features (if any).
-    eps=1e-8,  # Small value to avoid division by zero (if needed).
+  datasetFilePath,  # Dataset file name (CSV format).
+  scalerName,  # Name of the scaler to use.
+  modelName,  # Name of the machine learning classification model.
+  fsTechName,  # Feature selection technique name.
+  fsTechRatio=0.2,  # Ratio of features to select.
+  dataBalanceTech=None,  # Data balancing technique to be applied.
+  outlierTech=None,  # Outlier detection technique to be applied.
+  contamination=0.05,  # Proportion of outliers in the data (for outlier detection techniques).
+  testRatio=0.2,  # Ratio of the test data.
+  testFilePath=None,  # Optional test file for evaluation.
+  targetColumn="Class",  # Name of the target column in the dataset.
+  dropFirstColumn=True,  # Whether to drop the first column (usually an index or ID).
+  dropNAColumns=True,  # Whether to drop columns with any null values.
+  encodeCategorical=True,  # Whether to encode categorical features (if any).
+  eps=1e-8,  # Small value to avoid division by zero (if needed).
 ):
   r'''
   Perform machine learning classification on a dataset with optional scaling,
@@ -1868,17 +1868,17 @@ def MachineLearningClassification(
 
 
 def MachineLearningRegression(
-    datasetFilePath,  # Dataset file name (CSV format).
-    scalerName,  # Name of the scaler to use.
-    modelName,  # Name of the machine learning regression model.
-    fsTechName,  # Feature selection technique name.
-    fsTechRatio=0.2,  # Ratio of features to select.
-    testRatio=0.2,  # Ratio of the test data.
-    testFilePath=None,  # Optional test file for evaluation.
-    targetColumn="Target",  # Name of the target column in the dataset.
-    dropFirstColumn=True,  # Whether to drop the first column (usually an index or ID).
-    dropNAColumns=True,  # Whether to drop columns with any null values.
-    encodeCategorical=True,  # Whether to encode categorical features (if any).
+  datasetFilePath,  # Dataset file name (CSV format).
+  scalerName,  # Name of the scaler to use.
+  modelName,  # Name of the machine learning regression model.
+  fsTechName,  # Feature selection technique name.
+  fsTechRatio=0.2,  # Ratio of features to select.
+  testRatio=0.2,  # Ratio of the test data.
+  testFilePath=None,  # Optional test file for evaluation.
+  targetColumn="Target",  # Name of the target column in the dataset.
+  dropFirstColumn=True,  # Whether to drop the first column (usually an index or ID).
+  dropNAColumns=True,  # Whether to drop columns with any null values.
+  encodeCategorical=True,  # Whether to encode categorical features (if any).
 ):
   r'''
   Perform machine learning regression on a dataset with optional scaling and feature selection.
@@ -2167,30 +2167,30 @@ class OptunaTuningClassification(object):
   '''
 
   def __init__(
-      self,
-      baseDir,  # Base directory where the dataset is stored.
-      scalers,  # List of scalers to be used in the tuning process.
-      models,  # List of machine learning models to be used in the tuning process.
-      fsTechs,  # List of feature selection techniques to be used in the tuning process.
-      fsRatios,  # List of feature selection ratios to be used in the tuning process.
-      dataBalanceTechniques,  # List of data balancing techniques to be used in the tuning process.
-      outliersTechniques,  # List of outlier detection techniques to be used in the tuning process.
-      datasetFilename,  # Name of the dataset file.
-      storageFolderPath,  # Path to the folder where results will be stored.
-      testFilename,  # Name of the test dataset file.
-      testRatio=0.2,  # Ratio of the test data.
-      contamination=0.05,  # Proportion of outliers in the data (for outlier detection techniques).
-      numTrials=100,  # Number of trials for hyperparameter tuning.
-      prefix="Optuna",  # Prefix for the study name and storage files.
-      samplerTech="TPE",  # Sampler technique to be used for hyperparameter tuning.
-      targetColumn="Class",  # Name of the target column in the dataset.
-      dropFirstColumn=True,  # Whether to drop the first column (usually an index or ID).
-      dropNAColumns=True,  # Whether to drop columns with any null values.
-      encodeCategorical=True,  # Whether to encode categorical features (if any).
-      saveFigures=True,  # Whether to save the performance plots.
-      eps=1e-8,  # Small value to avoid division by zero (if needed).
-      loadStudy=True,  # Whether to load an existing study if available.
-      verbose=False,  # Whether to print verbose output.
+    self,
+    baseDir,  # Base directory where the dataset is stored.
+    scalers,  # List of scalers to be used in the tuning process.
+    models,  # List of machine learning models to be used in the tuning process.
+    fsTechs,  # List of feature selection techniques to be used in the tuning process.
+    fsRatios,  # List of feature selection ratios to be used in the tuning process.
+    dataBalanceTechniques,  # List of data balancing techniques to be used in the tuning process.
+    outliersTechniques,  # List of outlier detection techniques to be used in the tuning process.
+    datasetFilename,  # Name of the dataset file.
+    storageFolderPath,  # Path to the folder where results will be stored.
+    testFilename,  # Name of the test dataset file.
+    testRatio=0.2,  # Ratio of the test data.
+    contamination=0.05,  # Proportion of outliers in the data (for outlier detection techniques).
+    numTrials=100,  # Number of trials for hyperparameter tuning.
+    prefix="Optuna",  # Prefix for the study name and storage files.
+    samplerTech="TPE",  # Sampler technique to be used for hyperparameter tuning.
+    targetColumn="Class",  # Name of the target column in the dataset.
+    dropFirstColumn=True,  # Whether to drop the first column (usually an index or ID).
+    dropNAColumns=True,  # Whether to drop columns with any null values.
+    encodeCategorical=True,  # Whether to encode categorical features (if any).
+    saveFigures=True,  # Whether to save the performance plots.
+    eps=1e-8,  # Small value to avoid division by zero (if needed).
+    loadStudy=True,  # Whether to load an existing study if available.
+    verbose=False,  # Whether to print verbose output.
   ):
     r'''
     Initializes the OptunaTuningClassification class with the provided hyperparameters.
@@ -2326,8 +2326,8 @@ class OptunaTuningClassification(object):
       print("OptunaTuningClassification initialized.", flush=True)
 
   def ObjectiveFunction(
-      self,
-      trial,  # Optuna trial object.
+    self,
+    trial,  # Optuna trial object.
   ):
     r'''
     Objective function for Optuna to optimize hyperparameters for machine learning classification.
@@ -2400,8 +2400,8 @@ class OptunaTuningClassification(object):
       if (objects is not None):
         # Save the trained model and scaler objects using pickle.
         with open(
-            os.path.join(self.storageFolderPath, f"{pattern}.p"),
-            "wb",  # Open the file in write-binary mode.
+          os.path.join(self.storageFolderPath, f"{pattern}.p"),
+          "wb",  # Open the file in write-binary mode.
         ) as f:
           pickle.dump(objects, f)  # Save the model and scaler objects.
 
@@ -2567,14 +2567,14 @@ class OptunaTuningClassification(object):
 
 
 def OptunaTuningClassificationTesting(
-    datasetFilePath,
-    experimentPath,
-    storageDir,
-    dpi=720,
-    T=500,
-    plotCounterfactualOutcomes=False,
-    numberOfTopExperiments=1,
-    sortByMetric="Weighted Average",
+  datasetFilePath,
+  experimentPath,
+  storageDir,
+  dpi=720,
+  T=500,
+  plotCounterfactualOutcomes=False,
+  numberOfTopExperiments=1,
+  sortByMetric="Weighted Average",
 ):
   r'''
   Run inference using a saved preprocessing + model objects bundle.
@@ -2827,11 +2827,11 @@ def OptunaTuningClassificationTesting(
       # If a list of values is present for a metric,
       # convert it to a string for better display in the CSV file.
       if (
-          isinstance(pm[k], list) or
-          # isinstance(pm[k], np.ndarray) or
-          # isinstance(pm[k], pd.Series) or
-          isinstance(pm[k], dict) or
-          isinstance(pm[k], tuple)
+        isinstance(pm[k], list) or
+        # isinstance(pm[k], np.ndarray) or
+        # isinstance(pm[k], pd.Series) or
+        isinstance(pm[k], dict) or
+        isinstance(pm[k], tuple)
       ):
         pm[k] = str(pm[k])
     pmDf = pd.DataFrame(pm)
@@ -3137,11 +3137,11 @@ def OptunaTuningClassificationTesting(
       for col in finalHistoryDf.columns
       if (
         not (
-            col.startswith("Macro") or  # Exclude columns that start with "Macro".
-            "Class" in col or  # Exclude columns that contain "Class".
-            col.startswith("Micro") or  # Exclude columns that start with "Micro".
-            col.startswith("Weights") or  # Exclude columns that start with "Weights".
-            "Average" in col  # Exclude columns that contain "Average".
+          col.startswith("Macro") or  # Exclude columns that start with "Macro".
+          "Class" in col or  # Exclude columns that contain "Class".
+          col.startswith("Micro") or  # Exclude columns that start with "Micro".
+          col.startswith("Weights") or  # Exclude columns that start with "Weights".
+          "Average" in col  # Exclude columns that contain "Average".
         )
       )
     ]
@@ -3169,15 +3169,15 @@ def OptunaTuningClassificationTesting(
 
 
 def OptunaTuningClassificationTrials(
-    datasetFilePath,
-    experimentPath,
-    storageDir,
-    noOfTrials=10,
-    dpi=720,
-    T=500,
-    plotCounterfactualOutcomes=False,
-    numberOfTopExperiments=1,
-    sortByMetric="Weighted Average",
+  datasetFilePath,
+  experimentPath,
+  storageDir,
+  noOfTrials=10,
+  dpi=720,
+  T=500,
+  plotCounterfactualOutcomes=False,
+  numberOfTopExperiments=1,
+  sortByMetric="Weighted Average",
 ):
   r'''
   Run multiple trials of inference using a saved preprocessing + model objects bundle with the best parameters
@@ -3350,8 +3350,8 @@ def OptunaTuningClassificationTrials(
       if (objects is not None):
         # Save the trained model and scaler objects using pickle.
         with open(
-            os.path.join(trialStorageDir, f"{pattern}.p"),
-            "wb",  # Open the file in write-binary mode.
+          os.path.join(trialStorageDir, f"{pattern}.p"),
+          "wb",  # Open the file in write-binary mode.
         ) as f:
           pickle.dump(objects, f)  # Save the model and scaler objects.
 
@@ -3386,7 +3386,7 @@ def OptunaTuningClassificationTrials(
       os.makedirs(testStorageDir, exist_ok=True)
       OptunaTuningClassificationTesting(
         datasetFilePath=testFilePath if (
-            testFilePath is not None and os.path.exists(testFilePath)
+          testFilePath is not None and os.path.exists(testFilePath)
         ) else datasetFilePath,
         experimentPath=trialStorageDir,
         storageDir=testStorageDir,
@@ -3465,11 +3465,11 @@ def OptunaTuningClassificationTrials(
     for col in historyDf.columns
     if (
       not (
-          col.startswith("Macro") or  # Exclude columns that start with "Macro".
-          "Class" in col or  # Exclude columns that contain "Class".
-          col.startswith("Micro") or  # Exclude columns that start with "Micro".
-          col.startswith("Weights") or  # Exclude columns that start with "Weights".
-          "Average" in col  # Exclude columns that contain "Average".
+        col.startswith("Macro") or  # Exclude columns that start with "Macro".
+        "Class" in col or  # Exclude columns that contain "Class".
+        col.startswith("Micro") or  # Exclude columns that start with "Micro".
+        col.startswith("Weights") or  # Exclude columns that start with "Weights".
+        "Average" in col  # Exclude columns that contain "Average".
       )
     )
   ]
@@ -3516,12 +3516,12 @@ def OptunaTuningClassificationTrials(
 
 
 def OptunaTuningClassificationTrialsStatistics(
-    trialResultsPath,
-    statisticsStoragePath,
-    dpi=720,
-    plotMetricsIndividual=False,
-    plotMetricsOverall=False,
-    includeAverageInPlots=False,
+  trialResultsPath,
+  statisticsStoragePath,
+  dpi=720,
+  plotMetricsIndividual=False,
+  plotMetricsOverall=False,
+  includeAverageInPlots=False,
 ):
   r'''
   Analyze the results from multiple trials of inference using a saved preprocessing + model objects bundle

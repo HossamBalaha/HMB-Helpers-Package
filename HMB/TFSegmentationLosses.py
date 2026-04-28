@@ -9,7 +9,8 @@ class DiceLoss(tf.keras.losses.Loss):
   Dice loss measures the overlap between predicted and ground truth masks.
 
   .. math::
-    	ext{Dice}=1-\frac{2 \times |X \\cap Y| + \text{smooth}}{|X| + |Y| + \text{smooth}}
+
+    \text{Dice} = 1 - \frac{2 \times |X \cap Y| + \text{smooth}}{|X| + |Y| + \text{smooth}}
 
   Parameters:
     weight (optional): Not used, for compatibility.
@@ -50,7 +51,8 @@ class DiceBCELoss(tf.keras.losses.Loss):
   Combines Dice loss and binary cross-entropy loss for improved performance on imbalanced data.
 
   .. math::
-    	ext{Loss} = \text{BCE}(X, Y) + \left[1 - \frac{2 \times |X \\cap Y| + \text{smooth}}{|X| + |Y| + \text{smooth}}\right]
+
+    \text{Loss} = \text{BCE}(X, Y) + \left[1 - \frac{2 \times |X \cap Y| + \text{smooth}}{|X| + |Y| + \text{smooth}}\right]
 
   Parameters:
     weight (optional): Not used, for compatibility.
@@ -95,7 +97,8 @@ class JaccardLoss(tf.keras.losses.Loss):
   Jaccard loss measures the intersection over union between predicted and ground truth masks.
 
   .. math::
-    	ext{Jaccard} = 1 - \frac{|X \\cap Y| + \text{smooth}}{|X \\cup Y| + \text{smooth}}
+
+    \text{Jaccard} = 1 - \frac{|X \cap Y| + \text{smooth}}{|X \cup Y| + \text{smooth}}
 
   Parameters:
     weight (optional): Not used, for compatibility.
@@ -134,7 +137,8 @@ class TverskyLoss(tf.keras.losses.Loss):
   Tversky loss generalizes Dice loss by allowing control over penalties for false positives and false negatives.
 
   .. math::
-    	ext{Tversky} = 1 - \frac{|X \\cap Y| + \text{smooth}}{|X \\cap Y| + \alpha \times |X \\setminus Y| + \beta \times |Y \\setminus X| + \text{smooth}}
+
+    \text{Tversky} = 1 - \frac{|X \cap Y| + \text{smooth}}{|X \cap Y| + \alpha \times |X \setminus Y| + \beta \times |Y \setminus X| + \text{smooth}}
 
   Parameters:
     alpha (float): Weight for false positives.
@@ -179,7 +183,8 @@ class FocalLoss(tf.keras.losses.Loss):
   Focal loss focuses training on hard examples and addresses class imbalance.
 
   .. math::
-    	ext{Focal}(p_t) = - \alpha \times (1-p_t)^{\gamma} \times \log(p_t)
+
+    \text{Focal}(p_t) = - \alpha \times (1-p_t)^{\gamma} \times \log(p_t)
 
   Parameters:
     alpha (float): Weighting factor for the rare class. Default is 0.25.
@@ -235,7 +240,8 @@ class GeneralizedDiceLoss(tf.keras.losses.Loss):
   Weights each class inversely to its frequency to address class imbalance.
 
   .. math::
-    	ext{Generalized\\ Dice} = 1 - \frac{2 \times \sum_c w_c \sum_i p_{ci} \times g_{ci}}{\sum_c w_c \sum_i (p_{ci} + g_{ci})}
+
+    \text{Generalized\ Dice} = 1 - \frac{2 \times \sum_c w_c \sum_i p_{ci} \times g_{ci}}{\sum_c w_c \sum_i (p_{ci} + g_{ci})}
     \quad \text{where} \quad w_c = \frac{1}{(\sum_i g_{ci})^2}
   '''
 

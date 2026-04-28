@@ -14,10 +14,10 @@ from HMB.Utils import (
   LoadYaml,
   SaveYaml,
   Hex2RGB,
-  GetCmapColors,
   AppendOrCreateNewCSV,
   AppendOrCreateNewDataFrameCSV,
 )
+from HMB.PlotsHelper import GetCmapColors
 
 
 class TestUtils(unittest.TestCase):

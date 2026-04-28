@@ -156,6 +156,10 @@ class GeneralStatisticsHelper(object):
     covariance matrix, or computes the covariance of `data` first when
     isCovariance=False.
 
+    .. math::
+
+      \mathrm{Var}[A X + b] = A \; \mathrm{Var}[X] \; A^{T}
+
     Parameters:
       data (numpy.ndarray or numpy.ndarray-like): Either a covariance matrix (2-D)
         or raw data with samples along axis 0 when isCovariance=False.
@@ -187,6 +191,10 @@ class GeneralStatisticsHelper(object):
 
     Implements E[A*X + b] = A * E[X] + b. If isMean=False the method will
     compute the mean from raw samples first.
+
+    .. math::
+
+      \mathbb{E}[A X + b] = A \; \mathbb{E}[X] + b
 
     Parameters:
       data (numpy.ndarray): Either a mean vector (1-D) or raw samples (2-D) if isMean=False.
@@ -345,6 +353,10 @@ class GeneralStatisticsHelper(object):
     r'''
     Compute the sample covariance matrix of row-wise observations.
 
+    .. math::
+
+      \mathrm{Cov}(X) = \frac{(X - \mu)^{T} (X - \mu)}{N},\quad \mu = \mathrm{RowsMean}(X)
+
     Parameters:
       data (numpy.ndarray): 2-D array with samples along axis 0 (shape: N x D).
 
@@ -360,6 +372,10 @@ class GeneralStatisticsHelper(object):
   def CumulativeDistributionFunction(self, data, bins=10, range=None):
     r'''
     Compute a discrete cumulative distribution function by binning data.
+
+    .. math::
+
+      \mathrm{CDF}(k) = \sum_{i=1}^{k} p_i \quad\text{where } p_i = \frac{\text{hist}_i}{\sum_j \text{hist}_j}
 
     Parameters:
       data (array-like): Input samples.
@@ -418,6 +434,12 @@ class GeneralStatisticsHelper(object):
   def DispersionRatio(self, X):
     r'''
     Compute the dispersion ratio between arithmetic and geometric means.
+
+    .. math::
+
+      \mathrm{AM} = \frac{1}{N} \sum_{i=1}^{N} x_i ,\qquad
+      \mathrm{GM} = \left(\prod_{i=1}^{N} x_i\right)^{1/N},\qquad
+      \mathrm{DispersionRatio} = \frac{\mathrm{AM}}{\mathrm{GM}}
 
     Parameters:
       X (numpy.ndarray): Input 2D array with samples along axis 0.
@@ -532,6 +554,11 @@ class GeneralStatisticsHelper(object):
   def FValueUsingOneWayANOVA(self, X, y):
     r'''
     Compute the one-way ANOVA F statistic for groups defined by `y`.
+
+    .. math::
+
+      F = \frac{\mathrm{MSC}}{\mathrm{MSE}},\quad
+      \mathrm{MSC} = \frac{\mathrm{SSC}}{df_1},\quad \mathrm{MSE} = \frac{\mathrm{SSE}}{df_2}
 
     Parameters:
       X (array-like): Numeric observations (1-D or 2-D flattened to 1-D).
@@ -870,6 +897,10 @@ class GeneralStatisticsHelper(object):
   def RootMeanSquare(self, data, axis=None, keepdims=False):
     r'''
     Compute the root mean square along an axis.
+
+    .. math::
+
+      \mathrm{RMS} = \sqrt{\frac{1}{N}\sum_{i=1}^{N} x_i^2}
 
     Parameters:
       data (array-like): Input data.
@@ -1283,6 +1314,10 @@ class GeneralStatisticsHelper(object):
     r'''
     Compute an approximate independent two-sample t-value between two groups.
 
+    .. math::
+
+      t \approx \frac{|\bar{x} - \bar{y}|}{\sqrt{\frac{s_x^2}{n_x} + \frac{s_y^2}{n_y}}}
+
     Parameters:
       X (array-like): First sample array.
       y (array-like): Second sample array.
@@ -1378,6 +1413,10 @@ class GeneralStatisticsHelper(object):
     r'''
     Compute Z-statistic for difference of two group means (assuming known population std).
 
+    .. math::
+
+      z = \frac{|\bar{x} - \bar{y}| - v}{\sqrt{\frac{\sigma_x^2}{n_x} + \frac{\sigma_y^2}{n_y}}}
+
     Parameters:
       X (array-like): First sample.
       y (array-like): Second sample.
@@ -1436,8 +1475,11 @@ class StatisticalAnalysisFramework(object):
   Automatically selects, runs, and explains applicability of statistical methods.
   The framework is designed to be extensible, allowing for new methods and tests to be added as needed.
 
-  Mermaid diagram of the validation pipeline:
-  flowchart TD
+  Mermaid diagram of the validation pipeline (text representation):
+
+  .. code-block:: text
+
+    flowchart TD
       A["Start: Input Data<br>(baseline, threshold, etc.)"] --> B{Infer Data Structure}
       B -->|1D Array| C1["Set isMultiConfig = False<br>sampleSize = len(data)"]
       B -->|" 2D Array<br>(subjects × configs) "| C2["Set isMultiConfig = True<br>nConfigs = cols<br>sampleSize = rows"]
@@ -1494,43 +1536,43 @@ class StatisticalAnalysisFramework(object):
       L9 --> M
       L10 --> M
       M["Generate Method Assessments:<br>Applied/Not Applied + Reasons"] --> N["Execute Applicable Tests"]
-  %% One-Sample Branch
+      %% One-Sample Branch
       N --> O1{One-Sample Tests?}
       O1 -->|Yes| P1["Run: t-test / Wilcoxon / Sign / Binomial"]
       O1 -->|No| P2["Skip One-Sample Tests"]
-  %% Paired Branch
+      %% Paired Branch
       N --> O2{Paired Tests?}
       O2 -->|Yes| P3["Run: Paired t / Wilcoxon / Permutation /<br>McNemar / TOST"]
       O2 -->|No| P4["Skip Paired Tests"]
-  %% Multi-Config Branch
+      %% Multi-Config Branch
       N --> O3{Multi-Config Tests?}
       O3 -->|Yes| P5["Run: ICC / Friedman / RM-ANOVA /<br>Cochran's Q"]
       O3 -->|No| P6["Skip Multi-Config Tests"]
-  %% Calibration Branch
+      %% Calibration Branch
       N --> O4{Calibration Tests?}
       O4 -->|Yes| P7["Run: CalibrationECE / HosmerLemeshow"]
       O4 -->|No| P8["Skip Calibration Tests"]
-  %% Descriptive Stats
+      %% Descriptive Stats
       N --> O5{Descriptive Stats?}
       O5 -->|Yes| P9["Compute: CV, MAD"]
       O5 -->|No| P10["Skip Descriptive Stats"]
-  %% Effect Size
+      %% Effect Size
       N --> O6{Effect Size?}
       O6 -->|Yes| P11["Compute: Cohen's d / Hedges' g / A12"]
       O6 -->|No| P12["Skip Effect Size"]
-  %% Bootstrap
+      %% Bootstrap
       N --> O7{Bootstrap?}
       O7 -->|Yes| P13["Compute BCa CIs:<br>Mean/Median/Proportion/5th %ile"]
       O7 -->|No| P14["Skip Bootstrap (should not occur)"]
-  %% Tolerance Interval
+      %% Tolerance Interval
       N --> O8{Tolerance Interval?}
       O8 -->|Yes| P15["Compute Bootstrap Approximation"]
       O8 -->|No| P16["Skip Tolerance Interval"]
-  %% Extra Normality Tests
+      %% Extra Normality Tests
       N --> O9{Normality Tests?}
       O9 -->|Yes| P17["Run: Anderson-Darling / Jarque-Bera"]
       O9 -->|No| P18["Skip Extra Normality Tests"]
-  %% Converge all paths
+      %% Converge all paths
       P1 --> Q
       P2 --> Q
       P3 --> Q
@@ -1652,14 +1694,19 @@ class StatisticalAnalysisFramework(object):
   def CheckAssumptions(self):
     r'''
     Check statistical assumptions such as normality and symmetry based on data type and sample size.
+
     For Continuous data:
-      - Normality is assessed using Shapiro-Wilk for n <= 5000, D'Agostino's K^2 for n > 20, and Lilliefors for n > 5000.
-      - Symmetry is assessed via skewness of differences from baseline when a baseline is provided (paired design).
-      - Logs are generated for each test applied or skipped with reasons.
+
+    - Normality is assessed using Shapiro-Wilk for n <= 5000, D'Agostino's K^2 for n > 20, and Lilliefors for n > 5000.
+    - Symmetry is assessed via skewness of differences from baseline when a baseline is provided (paired design).
+    - Logs are generated for each test applied or skipped with reasons.
+
     For Binary data:
-      - Normality is not applicable and set to False.
-      - Symmetry is treated as True by default.
-      - Logs are generated indicating that normality and symmetry checks were skipped for binary data.
+
+    - Normality is not applicable and set to False.
+    - Symmetry is treated as True by default.
+    - Logs are generated indicating that normality and symmetry checks were skipped for binary data.
+
     '''
 
     # Record the sample size n.
@@ -1949,18 +1996,17 @@ class StatisticalAnalysisFramework(object):
   def AssessMethods(self):
     r'''
     Assess each method's applicability and produce a mapping of method names to whether they were applied or
-      skipped, along with human-readable reasons for each decision.
-      - Iterates over the `applicableMethods` dictionary to determine which methods are applied or skipped.
-      - For applied methods, it uses `GetApplyReason` to generate a reason for application and records this in
-          the `methodAssessments` dictionary.
-      - For skipped methods, it uses `GetSkipReason` to generate a reason for skipping and records this in
-          the `methodAssessments` dictionary.
-      - Logs the decision for each method in the execution log for transparency and traceability of the
-          validation process.
-      - The resulting `methodAssessments` dictionary maps each method name to a dictionary containing an
-          "Applied" boolean and a "Reason" string explaining the decision.
-      - This structured assessment allows for clear communication of which methods were used in the analysis and
-          why, as well as which methods were not used and the rationale for their exclusion.
+    skipped, along with human-readable reasons for each decision.
+
+    Key points:
+
+    - Iterates over the ``applicableMethods`` dictionary to determine which methods are applied or skipped.
+    - For applied methods, uses ``GetApplyReason`` to generate a reason and records it in ``methodAssessments``.
+    - For skipped methods, uses ``GetSkipReason`` to generate a reason and records it in ``methodAssessments``.
+    - Logs the decision for each method in the execution log for transparency and traceability.
+    - The resulting ``methodAssessments`` dictionary maps each method name to a dict with keys ``"Applied"`` and ``"Reason"``.
+
+    This structured assessment provides clear communication of which methods were used and why, and which were not used.
     '''
 
     # Initialize the assessments' dictionary.

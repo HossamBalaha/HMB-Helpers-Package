@@ -1773,13 +1773,13 @@ class SegmentationDataset(torch.utils.data.Dataset):
     transforms (Callable|None): Optional callable for data augmentation/transforms.
     imageSize (int): Target size to resize images and masks (square). Default is 256.
     numClasses (int): Number of segmentation classes. Default is 2.
-
-  Methods:
-    __len__(): Returns the number of samples in the dataset.
-    __getitem__(index): Returns the image and mask tensors for the given index.
+  Notes:
+    This dataset implements the standard PyTorch dataset protocol with the
+    usual methods such as ``__len__`` and ``__getitem__`` provided on the
+    instance. Detailed behaviour and return types for these methods are
+    documented in their respective method docstrings below.
   '''
 
-  # Initialize the dataset with lists of image and mask paths, transforms, and target size.
   def __init__(
     self,
     imagePaths: List[str],
@@ -1810,7 +1810,6 @@ class SegmentationDataset(torch.utils.data.Dataset):
     # Store number of segmentation classes.
     self.numClasses = numClasses
 
-  # Return the number of samples in the dataset.
   def __len__(self) -> int:
     r'''
     Return the number of samples available in the dataset.
@@ -1822,7 +1821,6 @@ class SegmentationDataset(torch.utils.data.Dataset):
     # Return the length of the image paths list.
     return len(self.imagePaths)
 
-  # Load an image from disk and return as a numpy array.
   def LoadImage(self, path):
     r'''
     Load an image from disk and return an RGB numpy array.
@@ -1852,7 +1850,6 @@ class SegmentationDataset(torch.utils.data.Dataset):
       # Convert to numpy array and return.
       return np.array(img)
 
-  # Load a mask from disk and return as a numpy array.
   def LoadMask(self, path):
     r'''
     Load a segmentation mask from disk as a 2D numpy array.
@@ -1933,7 +1930,6 @@ class SegmentationDataset(torch.utils.data.Dataset):
 
     return imageTensor, maskTensor
 
-  # Get a single item by index, apply transforms, and return tensors.
   def __getitem__(self, index):
     r'''
     Retrieve the image and mask tensors for a given index.

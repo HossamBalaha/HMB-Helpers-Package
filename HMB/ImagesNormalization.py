@@ -394,6 +394,12 @@ def RGB2OD(img):
   image = np.clip(image, 1e-10, 1.0)  # Use a smaller clipping value for better precision.
 
   # Compute optical density.
+  # Formula:
+  # .. math::
+  #
+  #   OD = -\log\left(\frac{I}{I_{max}}\right)
+  #
+  # where I is the image intensity and I_{max}=255.
   odImage = -np.log(image)
   # Return the image in OD space.
   return odImage
@@ -414,7 +420,12 @@ def OD2RGB(img):
   if (np.any(img < 0)):
     raise ValueError("Input OD values must be non-negative.")
 
-  # Convert OD back to RGB.
+  # Convert OD back to RGB using the inverse transform:
+  # .. math::
+  #
+  #   I = I_{max} \times e^{-OD}
+  #
+  # where I_{max}=255.
   image = np.exp(-img) * 255.0
   image = np.clip(image, 0, 255).astype(np.uint8)  # Clip and convert to uint8.
   # Return the RGB image.
@@ -462,7 +473,10 @@ def NormalizeRows(A):
       numpy.ndarray: Matrix with normalized rows.
   '''
 
-  # Normalize each row.
+  # Normalize each row (L2 normalization):
+  # .. math::
+  #
+  #   \hat{a}_i = \frac{a_i}{\|a_i\|_2}
   aNorm = A / np.linalg.norm(A, axis=1)[:, np.newaxis]  # Normalize each row.
   # Return the normalized matrix.
   return aNorm  # Return the normalized matrix.
@@ -602,7 +616,10 @@ def ApplyReinhard(img, targetMeans, targetStds):
   # I1, I2, I3 = RGB2LAB(imgMod)  # Convert to LAB color space.
   # means, stds = LabSplitMeanStd(imgMod)  # Compute the mean and standard deviation of LAB channels.
 
-  # Normalize L channel.
+  # Normalize L channel using Reinhard transform:
+  # .. math::
+  #
+  #   I' = (I - \mu_{src}) \times \frac{\sigma_{tgt}}{\sigma_{src}} + \mu_{tgt}
   I1 = (L - means[0]) * (targetStds[0] / stds[0]) + targetMeans[0]  # Normalize L channel.
   # Normalize A channel.
   I2 = (A - means[1]) * (targetStds[1] / stds[1]) + targetMeans[1]  # Normalize A channel.

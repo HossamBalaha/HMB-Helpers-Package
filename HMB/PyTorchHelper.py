@@ -743,25 +743,29 @@ def ApplyDynamicQuantizationTorch(modelPath: str, outputPath: str, exampleInput=
   r'''
   Apply dynamic quantization to a PyTorch model checkpoint and save a portable TorchScript file.
 
-  This helper attempts to load a checkpoint from `modelPath`. It supports either:
-    - a dict containing a key like "model" that is a torch.nn.Module or contains a state_dict
-    - a plain torch.nn.Module object saved directly
-    - a state_dict (mapping) paired with a provided model object is NOT supported here
+  This helper attempts to load a checkpoint from ``modelPath``. It supports the following
+  common checkpoint formats:
 
-  The function will try to obtain a live nn.Module to quantize. If only a state_dict is found
-  it will return None because the architecture is not known. When successful the function:
-    - applies torch.quantization.quantize_dynamic to quantize Linear and Embedding modules to qint8
-    - scripts the quantized model with torch.jit.script for portability (or traces using provided exampleInput/inputShape)
-    - saves the scripted module to `outputPath`
+  - a dict containing a key like ``"model"`` that is a ``torch.nn.Module`` or contains a ``state_dict``
+  - a plain ``torch.nn.Module`` object saved directly
+
+  If the checkpoint contains only a ``state_dict`` (mapping) the architecture is not known
+  and quantization cannot be applied by this helper; in that case the function returns ``None``.
+
+  When successful the function will:
+
+  - apply ``torch.quantization.quantize_dynamic`` to quantize Linear and Embedding modules to ``qint8``
+  - convert the quantized model to TorchScript (prefer ``torch.jit.script``; fallback to tracing)
+  - save the scripted module to ``outputPath``
 
   Parameters:
     modelPath (str): Path to the saved checkpoint or model file.
     outputPath (str): Path where the scripted quantized model will be saved.
-    example_input (torch.Tensor, optional): Example input tensor to use for tracing when scripting fails.
-    inputShape (tuple, optional): Alternative to exampleInput; will create a random tensor with this shape for tracing.
+    exampleInput (torch.Tensor, optional): Example input tensor to use for tracing when scripting fails.
+    inputShape (tuple, optional): Alternative to ``exampleInput``; will create a random tensor with this shape for tracing.
 
   Returns:
-    str|None: Returns the outputPath on success, None on failure.
+    str | None: Returns the ``outputPath`` on success, ``None`` on failure.
   '''
 
   # TODO: PyTorchHelper.ApplyDynamicQuantizationTorch TO BE CHECKED.

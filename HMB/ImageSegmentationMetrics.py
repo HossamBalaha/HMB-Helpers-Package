@@ -7,6 +7,7 @@ def ComputeIoU(preds, targets, smooth=1.0, iouType="binary", weight=None):
   Compute the Intersection over Union (IoU) metric.
 
   .. math::
+
     IoU = \frac{|Prediction \cap Ground\ Truth| + smooth}{|Prediction \cup Ground\ Truth| + smooth}
 
   where:
@@ -88,6 +89,7 @@ def ComputeDice(preds, targets, smooth=1.0):
   Compute the Dice coefficient.
 
   .. math::
+
     Dice = \frac{2 \times |Prediction \cap Ground\ Truth| + smooth}{|Prediction| + |Ground\ Truth| + smooth}
 
   where:
@@ -139,6 +141,7 @@ def ComputePixelAccuracy(preds, targets):
   Compute the pixel accuracy metric.
 
   .. math::
+
     Pixel\ Accuracy = \frac{Number\ of\ Correct\ Pixels}{Total\ Number\ of\ Pixels}
 
   where:
@@ -185,6 +188,7 @@ def ComputePrecision(preds, targets):
   Compute the precision metric.
 
   .. math::
+
     Precision = \frac{TP}{TP + FP}
 
   where:
@@ -232,6 +236,7 @@ def ComputeRecall(preds, targets):
   Compute the recall metric.
 
   .. math::
+
     Recall = \frac{TP}{TP + FN}
 
   where:
@@ -279,6 +284,7 @@ def ComputeSpecificity(preds, targets):
   Compute the specificity metric.
 
   .. math::
+
     Specificity = \frac{TN}{TN + FP}
 
   where:
@@ -326,6 +332,7 @@ def ComputeFPR(preds, targets):
   Compute the false positive rate (FPR).
 
   .. math::
+
     FPR = \frac{FP}{FP + TN}
 
   where:
@@ -373,6 +380,7 @@ def ComputeFNR(preds, targets):
   Compute the false negative rate (FNR).
 
   .. math::
+
     FNR = \frac{FN}{FN + TP}
 
   where:
@@ -420,6 +428,7 @@ def ComputeF1Score(preds, targets):
   Compute the F1 score.
 
   .. math::
+
     F1 = \frac{2 \times Precision \times Recall}{Precision + Recall}
 
   where:
@@ -468,6 +477,7 @@ def ComputeMeanAveragePrecision(preds, targets):
   Compute the mean average precision (mAP) for binary masks.
 
   .. math::
+
     mAP = \frac{1}{N} \times \sum_{i=1}^{N} Precision_i
 
   where:
@@ -518,6 +528,7 @@ def ComputeHausdorffDistance(preds, targets):
   Compute the Hausdorff distance between predicted and ground truth masks.
 
   .. math::
+
     H(A, B) = \max\{\sup_{a \in A} \inf_{b \in B} d(a, b), \sup_{b \in B} \inf_{a \in A} d(a, b)\}
 
   where:
@@ -576,6 +587,7 @@ def ComputeBoundaryF1Score(preds, targets, dilationRatio=0.02, eps=1e-7):
   Compute the Boundary F1 Score (BF Score).
 
   .. math::
+
     BF = \frac{2 \times Precision_{boundary} \times Recall_{boundary}}{Precision_{boundary} + Recall_{boundary}}
 
   where:
@@ -644,6 +656,7 @@ def ComputeMatthewsCorrelationCoefficient(preds, targets):
   Compute the Matthews Correlation Coefficient (MCC).
 
   .. math::
+
     MCC = \frac{TP \times TN - FP \times FN}{\sqrt{(TP + FP) \times (TP + FN) \times (TN + FP) \times (TN + FN)}}
 
   where
@@ -702,6 +715,7 @@ def ComputeCohensKappa(preds, targets):
   Compute Cohen's Kappa metric.
 
   .. math::
+
     \kappa = \frac{p_o - p_e}{1 - p_e}
 
   where:
@@ -765,6 +779,7 @@ def ComputeBalancedAccuracy(preds, targets):
   Compute the balanced accuracy metric.
 
   .. math::
+
     Balanced\ Accuracy = \frac{Recall + Specificity}{2}
 
   where:
@@ -808,6 +823,7 @@ def ComputeMeanSurfaceDistance(preds, targets):
   Compute the Mean Surface Distance (MSD) between predicted and ground truth masks.
 
   .. math::
+
     MSD = \frac{1}{|S_P|} \times \sum_{p \in S_P} \min_{q \in S_T} d(p, q)
 
   where:
@@ -866,6 +882,7 @@ def ComputeAverageSymmetricSurfaceDistance(preds, targets):
   Compute the Average Symmetric Surface Distance (ASSD) between predicted and ground truth masks.
 
   .. math::
+
     ASSD = \frac{MSD(P, T) + MSD(T, P)}{2}
 
   where:
@@ -909,6 +926,7 @@ def ComputeVolumetricOverlapError(preds, targets, smooth=1.0):
   Compute the Volumetric Overlap Error (VOE).
 
   .. math::
+
     VOE = 1 - IoU
 
   where:
@@ -950,6 +968,7 @@ def ComputeGlobalConsistencyError(preds, targets):
   Compute the Global Consistency Error (GCE).
 
   .. math::
+
     GCE = \frac{1}{N} \times \sum_{i=1}^{N} \min(E(S_1, S_2, p_i), E(S_2, S_1, p_i))
 
   where:
@@ -999,6 +1018,7 @@ def ComputeTversky(preds, targets, alpha=0.5):
   Compute the Tversky index metric.
 
   .. math::
+
     Tversky = \frac{TP}{TP + \alpha \times FP + (1-\alpha) \times FN}
 
   where:
@@ -1050,6 +1070,7 @@ def ComputeFocalTverskyLoss(preds, targets, alpha=0.5, gamma=np.round(4 / 3.0, 5
   Compute the Focal Tversky index metric.
 
   .. math::
+
     FocalTversky = (1 - Tversky)^{1/\gamma}
 
   where:
@@ -1094,6 +1115,7 @@ def ComputeFocalLoss(preds, targets, beta=0.5, gamma=2.0, eps=1e-7):
   Compute the Focal Loss for binary segmentation.
 
   .. math::
+
     FL = -\beta \times (1 - p)^{\gamma} \times y \times \log(p) - (1 - \beta) \times p^{\gamma} \times (1 - y) \times \log(1 - p)
 
   where:
@@ -1148,6 +1170,7 @@ def ComputeComboLoss(preds, targets, alpha=0.5, beta=0.5, smooth=1.0, eps=1e-7):
   Compute the Combo Loss, combining weighted cross-entropy and Dice loss.
 
   .. math::
+
     ComboLoss = \beta \times CE + (1 - \beta) \times -\log(Dice)
 
   where:
@@ -1203,6 +1226,7 @@ def ComputeTanimotoLoss(preds, targets):
   Compute the Tanimoto Loss for binary segmentation.
 
   .. math::
+
     Tanimoto = 1 - \frac{\sum p t}{\sum p^2 + \sum t^2 - \sum p t}
 
   where:
@@ -1251,6 +1275,7 @@ def ComputeMSELoss(preds, targets):
   Compute the Mean Squared Error (MSE) loss.
 
   .. math::
+
     MSE = \frac{1}{N} \times \sum_{i=1}^N (p_i - t_i)^2
 
   where:
@@ -1291,6 +1316,7 @@ def ComputeBCELoss(preds, targets, smooth=1e-7):
   Compute the Binary Cross-Entropy (BCE) loss.
 
   .. math::
+
     BCE = -\frac{1}{N} \times \sum_{i=1}^N [t_i \times \log(p_i) + (1 - t_i) \times \log(1 - p_i)]
 
   where:

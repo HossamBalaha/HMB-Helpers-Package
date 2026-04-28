@@ -318,6 +318,15 @@ def GetEmptyPercentage(img, shape=(256, 256), inverse=False):
   r'''
   Calculate the percentage of empty (black or white) regions in an image.
 
+  The implementation binarizes the image (Otsu) and computes:
+
+  .. math::
+
+    \mathrm{empty\_ratio}(I) = \frac{\#\{p:\; B(p) = 255\}}{H \times W} \times 100\%
+
+  where :math:`B` is the binarized image and :math:`H, W` are the height and width used
+  for the area calculation.
+
   Parameters:
     img (numpy.ndarray): Input RGB image.
     shape (tuple): Desired shape for calculating the percentage.
@@ -361,6 +370,14 @@ def GetEmptyPercentage(img, shape=(256, 256), inverse=False):
 def GetEmptyPercentageHistogram(img, shape=(256, 256), inverse=False, thresholdLow=10, thresholdHigh=245):
   r'''
   Calculate the percentage of empty (black or white) regions in an image using histogram analysis.
+
+  The method counts near-black and near-white bins and reports their fraction:
+
+  .. math::
+
+    \mathrm{ratio} = \frac{\sum_{i \in \mathrm{black\_bins}} H(i) + \sum_{i \in \mathrm{white\_bins}} H(i)}{H \times W} \times 100\%
+
+  where :math:`H(i)` is the histogram count for bin :math:`i` and :math:`H, W` are the image dimensions.
 
   Parameters:
     img (numpy.ndarray): Input RGB image.
@@ -841,6 +858,18 @@ def MinMaxNormalization(image, mapToUint8=True):
   The pixel values are scaled to the range [0, 255] if mapToUint8 is True,
   otherwise they are scaled to the range [0, 1].
 
+  The normalization performed is:
+
+  .. math::
+
+    x' = \frac{x - \min(x)}{\max(x) - \min(x)}
+
+  and optionally
+
+  .. math::
+
+    x'' = 255 \times x'
+
   Parameters:
     image (numpy.ndarray): Input image.
     mapToUint8 (bool): If True, the output image will be converted to uint8.
@@ -905,11 +934,19 @@ def CalculateCDF(image):
   r'''
   Calculate the cumulative distribution function (CDF) of an image.
 
+  Let :math:`H(i)` be the histogram counts for intensity bin :math:`i`. The CDF is
+
+  .. math::
+
+    CDF(k) = \sum_{i=0}^k H(i)
+
+  and the normalized CDF is :math:`CDF(k) / CDF(\max)`.
+
   Parameters:
     image (numpy.ndarray): Input image.
 
   Returns:
-    tuple: A typle containing:
+    tuple: A tuple containing:
       - cdfNormalized (numpy.ndarray): The normalized CDF of the image.
       - bins (numpy.ndarray): The bin values as integers.
   '''
@@ -1460,6 +1497,19 @@ def ComputeAndPlotDeformationFieldViaFarneback(
   Compute a dense deformation field between two images using Farneback optical flow
   and display a stream plot of the displacement vectors over the source image.
 
+  The computed dense optical flow field ``flow`` has two channels per-pixel:
+
+  .. math::
+
+    flow(x,y) = [u(x,y), v(x,y)]
+
+  where :math:`u` and :math:`v` are horizontal and vertical displacement components.
+  The displacement magnitude is
+
+  .. math::
+
+    \mathrm{mag}(x,y) = \sqrt{u(x,y)^2 + v(x,y)^2}.
+
   Parameters:
     img1 (numpy.ndarray): Source image as a NumPy array.
     img2 (numpy.ndarray): Target image as a NumPy array.
@@ -1659,6 +1709,14 @@ def AddGaussianNoise(img: Image.Image, sigma: float = 10.0, seed: int | None = N
   Add additive Gaussian noise to an image. sigma is the standard deviation of the noise (e.g., 10.0).
   Deterministic when seed is provided.
 
+  The model is:
+
+  .. math::
+
+    I_{noisy} = I + \mathcal{N}(0, \sigma^2)
+
+  applied per-pixel and per-channel.
+
   Parameters:
     img (PIL.Image): Input image.
     sigma (float): Standard deviation of the Gaussian noise.
@@ -1708,6 +1766,12 @@ def AddSpeckleNoise(img: Image.Image, var: float = 0.01, seed: int | None = None
   r'''
   Apply multiplicative speckle noise. var is the variance (e.g., 0.01). Deterministic when seed provided.
 
+  The model is multiplicative noise:
+
+  .. math::
+
+    I_{noisy} = I \times (1 + N), \quad N \sim \mathcal{N}(0, \mathrm{var})
+
   Parameters:
     img (PIL.Image): Input image.
     var (float): Variance of the speckle noise.
@@ -1742,6 +1806,15 @@ def AddSaltPepperNoise(
   r'''
   Apply salt & pepper noise. amount is fraction of pixels to alter (0..1).
   saltVsPepper is fraction of salt vs pepper (0..1). Deterministic when seed provided.
+
+  Fractional model:
+
+  .. math::
+
+    \mathrm{salt} = \mathrm{round}(amount \times saltVsPepper \times H \times W)\\
+    \mathrm{pepper} = \mathrm{round}(amount \times (1 - saltVsPepper) \times H \times W)
+
+  where :math:`H,W` are image height and width.
 
   Parameters:
     img (PIL.Image): Input image.
@@ -1828,6 +1901,14 @@ def ChangeContrast(img: Image.Image, factor: float = 1.2) -> Image.Image:
 def AddShotNoise(img: Image.Image, scale: float = 1.0, seed: int | None = None) -> Image.Image:
   r'''
   Simulate shot (Poisson) noise. Higher scale means more photons and less relative noise.
+
+  Model (per-pixel Poisson sampling):
+
+  .. math::
+
+    C \sim \mathrm{Poisson}(I \times s),\quad I_{noisy} = \frac{C}{s}
+
+  where :math:`s` is the scale factor controlling photon counts.
 
   Parameters:
     img (PIL.Image): Input image.

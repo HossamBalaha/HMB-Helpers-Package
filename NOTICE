@@ -1,0 +1,48 @@
+HMB Helpers Package - Third-Party Notices
+Version: 0.1.0 | Last Updated: 2026-04-28
+
+This distribution (HMB-Helpers-Package) includes and links to a number of third-party
+open-source libraries and resources. Each third-party component is distributed under
+its own license; this NOTICE file summarizes the most prominent components and
+indicates where to find the complete license texts.
+
+Prominent third-party components (non-exhaustive):
+
+- NumPy — BSD-style (https://numpy.org/)
+- SciPy — BSD-style (https://scipy.org/)
+- PyTorch (torch, torchvision, torchaudio) — BSD-style / PyTorch license (https://pytorch.org/)
+- TensorFlow / Keras — Apache License 2.0 (https://www.tensorflow.org/)
+- OpenCV — Apache License 2.0 (https://opencv.org/)
+- scikit-learn — BSD-style (https://scikit-learn.org/)
+- pandas — BSD-style (https://pandas.pydata.org/)
+- Pillow — Historical PIL-style / open-source (https://python-pillow.org/)
+- transformers / huggingface-hub — Apache 2.0 or compatible (https://huggingface.co/)
+- ultralytics (YOLO) — AGPL-3.0 for open-source use; commercial licensing available (https://github.com/ultralytics/ultralytics/blob/main/LICENSE)
+
+This list is illustrative and not exhaustive. The project also depends on many other
+libraries (see `requirements.txt`). For full and authoritative license information for
+each dependency, consult one of the following sources:
+
+1. The package's source distribution or wheel (look for LICENSE, COPYING, NOTICE files inside the package or on PyPI).
+2. The package's repository or project website (links are provided above for major projects).
+3. Installed site-packages: when a package is installed via pip, its license file is usually
+   available in the package directory within your Python environment (e.g., site-packages/<package>/LICENSE).
+4. Use tools such as `pip-licenses` or `pip show --files <package>` to enumerate licenses for installed dependencies.
+   Example: `pip-licenses --format=markdown --with-urls > THIRD_PARTY_LICENSES.md`
+
+Attribution and obligations
+
+Many third-party licenses require that their copyright and license notices be
+retained when redistributing or modifying the software. Where HMB-Helpers-Package
+contains or ships third-party code with such requirements, those license texts are
+included alongside the relevant files, or users are referred to the upstream
+license text as described above.
+
+If you believe a third-party component is missing from this NOTICE or the license
+information is incorrect for a dependency you rely on, please raise an issue in
+the project repository: https://github.com/HossamBalaha/HMB-Helpers-Package
+
+Project license
+
+The HMB-Helpers-Package source code is provided under the MIT License. See the
+`LICENSE` file in the project root for the full text and SPDX identifier.
