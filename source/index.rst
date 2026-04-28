@@ -276,4 +276,4 @@ Useful Links
 License
 -------
 
-This project is licensed under the MIT License - see the `LICENSE file <
+This project is licensed under the MIT License - see the `LICENSE file <https://github.com/HossamBalaha/HMB-Helpers-Package/blob/main/LICENSE>`_.
