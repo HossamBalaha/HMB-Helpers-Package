@@ -6,12 +6,14 @@
 [![TensorFlow](https://img.shields.io/badge/TensorFlow-2.0%2B-FF6F00.svg?logo=tensorflow&logoColor=white)](https://www.tensorflow.org/)
 [![Tests](https://img.shields.io/badge/tests-530%2B%20passing-brightgreen.svg)](tests/)
 [![Code Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen.svg)](tests/)
-[![Documentation](https://img.shields.io/badge/docs-Sphinx-blue.svg)](https://www.sphinx-doc.org/)
+[![Documentation](https://img.shields.io/badge/docs-Sphinx-blue.svg)](https://hmb-helpers-package.readthedocs.io/en/latest/)
+[![Read the Docs](https://readthedocs.org/projects/hmb-helpers-package/badge/?version=latest)](https://hmb-helpers-package.readthedocs.io/en/latest/)
 [![Code Style](https://img.shields.io/badge/code%20style-PEP8-blue.svg)](https://www.python.org/dev/peps/pep-0008/)
 [![Modules](https://img.shields.io/badge/modules-40%2B-orange.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package/tree/main/HMB)
 [![Contributions](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package/blob/main/CONTRIBUTING.md)
 [![Maintenance](https://img.shields.io/badge/maintained-yes-green.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package)
 [![Release](https://img.shields.io/badge/release-v0.1.0-blue.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package/releases)
+[![DOI](https://zenodo.org/badge/DOI:10.5281/zenodo.19860290.svg)](https://doi.org/10.5281/zenodo.19860290)
 
 A comprehensive collection of helper modules for image processing, segmentation, deep learning workflows, text/PDF
 utilities, and scientific computing in PyTorch, TensorFlow, and beyond.
@@ -300,7 +302,8 @@ If you use this package in your work, please:
      title = {HMB-Helpers-Package},
      year = {2026},
      version = {0.1.0},
-     url = {https://github.com/HossamBalaha/HMB-Helpers-Package}
+     url = {https://github.com/HossamBalaha/HMB-Helpers-Package},
+     doi = {10.5281/zenodo.19860290}
    }
 
 ## Support & Contact
