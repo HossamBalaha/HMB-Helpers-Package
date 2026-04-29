@@ -14,8 +14,9 @@ setup(
   long_description_content_type="text/markdown",
   url="https://github.com/HossamBalaha/HMB-Helpers-Package",
   project_urls={
+    "Homepage"     : "https://github.com/HossamBalaha/HMB-Helpers-Package",
     "Bug Tracker"  : "https://github.com/HossamBalaha/HMB-Helpers-Package/issues",
-    "Documentation": "https://github.com/HossamBalaha/HMB-Helpers-Package/tree/main/source",
+    "Documentation": "https://hmb-helpers-package.readthedocs.io/en/latest/",
     "Source Code"  : "https://github.com/HossamBalaha/HMB-Helpers-Package",
   },
   license="MIT",

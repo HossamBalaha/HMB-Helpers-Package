@@ -187,7 +187,7 @@ html_static_path = ["_static"]
 html_logo = "_static/Logo.png"
 # Specify the path to the browser favicon file.
 html_favicon = "_static/Favicons/favicon.ico"
-# Add copyright to HTML footer
+# Add copyright to HTML footer.
 html_footer = """
 <div style="text-align: center; font-size: 0.9em; color: #666; margin-top: 2em;">
   &copy; 2026 Hossam Magdy Balaha. Licensed under MIT. 
@@ -195,6 +195,10 @@ html_footer = """
   &nbsp;|&nbsp;
   <a href="https://pypi.org/project/hmb-helpers/">
     <img src="https://img.shields.io/pypi/v/hmb-helpers.svg" alt="PyPI" style="vertical-align:middle;height:20px;">
+  </a>
+  &nbsp;|&nbsp;
+  <a href="https://hmb-helpers-package.readthedocs.io/en/latest/">
+    <img src="https://readthedocs.org/projects/hmb-helpers-package/badge/?version=latest" alt="Read the Docs" style="vertical-align:middle;height:20px;">
   </a>
 </div>
 """
