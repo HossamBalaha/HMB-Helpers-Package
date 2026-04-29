@@ -3,16 +3,16 @@
    :align: center
    :width: 200px
 
-.. |build| image:: https://img.shields.io/github/last-commit/HossamBalaha/HMB-Helpers-Package
+.. |build| image:: https://img.shields.io/github/last-commit/HossamBalaha/HMB-Helpers-Package.png
    :alt: Last Commit
    :target: https://github.com/HossamBalaha/HMB-Helpers-Package/commits/main
-.. |license| image:: https://img.shields.io/github/license/HossamBalaha/HMB-Helpers-Package
-   :alt: License
-   :target: https://github.com/HossamBalaha/HMB-Helpers-Package/blob/main/LICENSE
-.. |python| image:: https://img.shields.io/pypi/pyversions/hmb-helpers
+.. |license| image:: https://img.shields.io/github/license/HossamBalaha/HMB-Helpers-Package.png
+   :alt: MIT License
+   :target: https://opensource.org/licenses/MIT
+.. |python| image:: https://img.shields.io/pypi/pyversions/hmb-helpers.png
    :alt: Python versions
    :target: https://pypi.org/project/hmb-helpers/
-.. |pypi| image:: https://img.shields.io/pypi/v/hmb-helpers.svg
+.. |pypi| image:: https://img.shields.io/pypi/v/hmb-helpers.png
    :alt: PyPI
    :target: https://pypi.org/project/hmb-helpers/
 
@@ -286,4 +286,4 @@ Useful Links
 License
 -------
 
-This project is licensed under the MIT License - see the `LICENSE file <https://github.com/HossamBalaha/HMB-Helpers-Package/blob/main/LICENSE>`_.
+This project is licensed under the MIT License. See the `LICENSE file <https://github.com/HossamBalaha/HMB-Helpers-Package/blob/main/LICENSE>`_ or the official MIT terms at `Open Source Initiative <https://opensource.org/licenses/MIT>`_.
