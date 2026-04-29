@@ -196,7 +196,7 @@ Common Pitfalls & Tips
    .. code-block:: python
 
       from pathlib import Path
-      img_path = Path("data") / "images" / "sample.png"
+      imgPath = Path("data") / "images" / "sample.png"
 
 .. note::
    **Memory management**: For large images or WSIs, process in chunks or use ``ExtractRandomTilesFromImages`` to avoid OOM errors.
