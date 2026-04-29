@@ -282,6 +282,7 @@ Useful Links
 - `GitHub Repository <https://github.com/HossamBalaha/HMB-Helpers-Package.git>`_
 - `API Reference <modules.html>`_
 - `Contact & Support <mailto:h3ossam@gmail.com>`_
+- `Zenodo record <https://zenodo.org/records/19860290>`_
 
 License
 -------
