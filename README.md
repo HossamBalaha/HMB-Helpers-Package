@@ -268,7 +268,12 @@ Current test status: **530+ tests passing**
 
 ## Contributing
 
-Contributions are welcome! Please follow these steps:
+Contributions are welcome! See `CONTRIBUTING.md` in the repository root for full contributor
+guidelines (development setup, testing, linting, PR checklist):
+
+- https://github.com/HossamBalaha/HMB-Helpers-Package/blob/main/CONTRIBUTING.md
+
+Quick summary:
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
@@ -276,16 +281,19 @@ Contributions are welcome! Please follow these steps:
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-### Development Guidelines
+### Development Guidelines (short)
 
-- Write comprehensive docstrings for all functions and classes
+- Write comprehensive docstrings for public functions and classes
 - Add unit tests for new functionality
-- Follow PEP 8 style guidelines
-- Update documentation when adding new features
-- Ensure all tests pass before submitting PR
+- Follow PEP 8 style guidelines and run `black`/`flake8`/`mypy`
+- Update documentation when adding or changing features
+- Ensure all tests pass before submitting a PR
 
-See `CONTRIBUTING.md` in the repository root for more detailed contribution
-guidelines (if present): https://github.com/HossamBalaha/HMB-Helpers-Package/blob/main/CONTRIBUTING.md
+### Changelog
+
+All notable changes are recorded in `CHANGELOG.md` in the repository root. See:
+
+- https://github.com/HossamBalaha/HMB-Helpers-Package/blob/main/CHANGELOG.md
 
 ## Citation & License
 
@@ -300,29 +308,29 @@ If you use this package in your research, please cite the relevant modules as de
 If you use this package in your work, please:
 
 1. Include a copy of the LICENSE file with any distribution
-   2. Credit the author in documentation or publications:
-      ```bibtex
-      @software{balaha_hmb_helpers_2026_010,
-        author    = {Balaha, Hossam Magdy},
-        title     = {HMB-Helpers-Package: HMB-Helpers-Package v0.1.0},
-        year      = {2026},
-        publisher = {GitHub},
-        month     = apr,
-        version   = {v0.1.0},
-        url       = {https://github.com/HossamBalaha/HMB-Helpers-Package}
-      }
-
-      @software{hossam_magdy_balaha_2026_19860290,
-        author    = {Hossam Magdy Balaha},
-        title     = {HossamBalaha/HMB-Helpers-Package: HMB-Helpers-Package v0.1.0},
-        month     = apr,
-        year      = 2026,
-        publisher = {Zenodo},
-        version   = {v0.1.0},
-        doi       = {10.5281/zenodo.19860290},
-        url       = {https://doi.org/10.5281/zenodo.19860290},
-      }
-       ```
+    2. Credit the author in documentation or publications:
+       ```bibtex
+       @software{balaha_hmb_helpers_2026_010,
+         author    = {Balaha, Hossam Magdy},
+         title     = {HMB-Helpers-Package: HMB-Helpers-Package v0.1.0},
+         year      = {2026},
+         publisher = {GitHub},
+         month     = apr,
+         version   = {v0.1.0},
+         url       = {https://github.com/HossamBalaha/HMB-Helpers-Package}
+       }
+ 
+       @software{hossam_magdy_balaha_2026_19860290,
+         author    = {Hossam Magdy Balaha},
+         title     = {HossamBalaha/HMB-Helpers-Package: HMB-Helpers-Package v0.1.0},
+         month     = apr,
+         year      = 2026,
+         publisher = {Zenodo},
+         version   = {v0.1.0},
+         doi       = {10.5281/zenodo.19860290},
+         url       = {https://doi.org/10.5281/zenodo.19860290},
+       }
+        ```
 
 ## Support & Contact
 
