@@ -6,7 +6,7 @@
 .. |build| image:: https://img.shields.io/github/last-commit/HossamBalaha/HMB-Helpers-Package.png
    :alt: Last Commit
    :target: https://github.com/HossamBalaha/HMB-Helpers-Package/commits/main
-.. |license| image:: https://img.shields.io/github/license/HossamBalaha/HMB-Helpers-Package.png
+.. |license| image:: https://img.shields.io/badge/license-MIT-green.png
    :alt: MIT License
    :target: https://opensource.org/licenses/MIT
 .. |python| image:: https://img.shields.io/pypi/pyversions/hmb-helpers.png
