@@ -308,29 +308,29 @@ If you use this package in your research, please cite the relevant modules as de
 If you use this package in your work, please:
 
 1. Include a copy of the LICENSE file with any distribution
-    2. Credit the author in documentation or publications:
-       ```bibtex
-       @software{balaha_hmb_helpers_2026_010,
-         author    = {Balaha, Hossam Magdy},
-         title     = {HMB-Helpers-Package: HMB-Helpers-Package v0.1.0},
-         year      = {2026},
-         publisher = {GitHub},
-         month     = apr,
-         version   = {v0.1.0},
-         url       = {https://github.com/HossamBalaha/HMB-Helpers-Package}
-       }
+2. Credit the author in documentation or publications:
+   ```bibtex
+   @software{balaha_hmb_helpers_2026_010,
+     author    = {Balaha, Hossam Magdy},
+     title     = {HMB-Helpers-Package: HMB-Helpers-Package v0.1.0},
+     year      = {2026},
+     publisher = {GitHub},
+     month     = apr,
+     version   = {v0.1.0},
+     url       = {https://github.com/HossamBalaha/HMB-Helpers-Package}
+   }
  
-       @software{hossam_magdy_balaha_2026_19860290,
-         author    = {Hossam Magdy Balaha},
-         title     = {HossamBalaha/HMB-Helpers-Package: HMB-Helpers-Package v0.1.0},
-         month     = apr,
-         year      = 2026,
-         publisher = {Zenodo},
-         version   = {v0.1.0},
-         doi       = {10.5281/zenodo.19860290},
-         url       = {https://doi.org/10.5281/zenodo.19860290},
-       }
-        ```
+   @software{hossam_magdy_balaha_2026_19860290,
+     author    = {Hossam Magdy Balaha},
+     title     = {HossamBalaha/HMB-Helpers-Package: HMB-Helpers-Package v0.1.0},
+     month     = apr,
+     year      = 2026,
+     publisher = {Zenodo},
+     version   = {v0.1.0},
+     doi       = {10.5281/zenodo.19860290},
+     url       = {https://doi.org/10.5281/zenodo.19860290},
+   }
+    ```
 
 ## Support & Contact
 
