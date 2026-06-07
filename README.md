@@ -317,15 +317,15 @@ If you use this package in your work, please:
      url       = {https://github.com/HossamBalaha/HMB-Helpers-Package}
    }
  
-   @software{hossam_magdy_balaha_2026_19860290,
+   @software{hossam_magdy_balaha_2026_20577120,
      author    = {Hossam Magdy Balaha},
-     title     = {HossamBalaha/HMB-Helpers-Package: HMB-Helpers-Package v0.1.0},
-     month     = apr,
+     title     = {HossamBalaha/HMB-Helpers-Package: HMB-Helpers-Package v0.2.0},
+     month     = june,
      year      = 2026,
      publisher = {Zenodo},
-     version   = {v0.1.0},
-     doi       = {10.5281/zenodo.19860290},
-     url       = {https://doi.org/10.5281/zenodo.19860290},
+     version   = {v0.2.0},
+     doi       = {10.5281/zenodo.20577120},
+     url       = {https://doi.org/10.5281/zenodo.20577120},
    }
     ```
 
