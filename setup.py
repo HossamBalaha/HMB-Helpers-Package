@@ -67,7 +67,7 @@ setup(
     "numpy>=1.26.4,<2",
     "pillow>=12.2.0",
     "pyyaml>=6.0.3",
-    "pandas>=3.0.2",
+    "pandas>=2.3.3",
     "matplotlib>=3.9",
     "tqdm>=4.67.3",
     "scikit-learn>=1.8.0",
@@ -219,7 +219,7 @@ setup(
       # installs when users request the `all` extra. Install those frameworks
       # using the dedicated extras or the official installers (see README).
       "scipy>=1.17.1",
-      "pandas>=3.0.2",
+      "pandas>=2.3.3",
       "scikit-learn>=1.8.0",
       "scikit-image>=0.26.0",
       "opencv-python>=4.13.0.92",
