@@ -70,7 +70,7 @@ setup(
     "pandas>=2.3.3",
     "matplotlib>=3.9",
     "tqdm>=4.67.3",
-    "scikit-learn>=1.8.0",
+    "scikit-learn>=1.7.2",
   ],
 
   # ✅ Optional feature groups
@@ -220,7 +220,7 @@ setup(
       # using the dedicated extras or the official installers (see README).
       "scipy>=1.17.1",
       "pandas>=2.3.3",
-      "scikit-learn>=1.8.0",
+      "scikit-learn>=1.7.2",
       "scikit-image>=0.26.0",
       "opencv-python>=4.13.0.92",
       "opencv-contrib-python>=4.13.0.92",
