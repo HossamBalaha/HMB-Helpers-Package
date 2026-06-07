@@ -1,159 +1,202 @@
+# Import setuptools helper for packaging functions.
 from setuptools import setup, find_packages
+# Import Path helper for reading long description file.
 from pathlib import Path
 
+# Compute the project root directory for reading files.
 this_directory = Path(__file__).parent
+# Read the long description from README.md to be used on PyPI.
 long_description = (this_directory / "README.md").read_text(encoding="utf-8")
 
+# Invoke setup() to declare package metadata and installation options.
 setup(
+  # Distribution name used on PyPI.
   name="hmb-helpers",
-  version="0.1.0",
+  # Current package version.
+  version="0.2.0",
+  # Author's display name.
   author="Hossam Magdy Balaha",
+  # Author contact email.
   author_email="h3ossam@gmail.com",
+  # Short description of the package.
   description="A comprehensive suite of helper modules for image processing, text generation, PDF handling, and ML workflows.",
+  # Long description content loaded from the README file.
   long_description=long_description,
+  # MIME type of the long description.
   long_description_content_type="text/markdown",
+  # Project homepage URL.
   url="https://github.com/HossamBalaha/HMB-Helpers-Package",
+  # Additional project-related URLs.
   project_urls={
     "Homepage"     : "https://github.com/HossamBalaha/HMB-Helpers-Package",
     "Bug Tracker"  : "https://github.com/HossamBalaha/HMB-Helpers-Package/issues",
     "Documentation": "https://hmb-helpers-package.readthedocs.io/en/latest/",
     "Source Code"  : "https://github.com/HossamBalaha/HMB-Helpers-Package",
   },
+  # License identifier for the package.
   license="MIT",
+  # Files that contain license text to be included in the distribution.
   license_files=["LICENSE"],
-  packages=find_packages(exclude=["tests", "tests.*", "HMB.Examples", "HMB.Examples.*"]),
-  package_data={"HMB": ["py.typed"]},
+  # Packages to include in the distribution.
+  # Include all packages under the project. The examples folder is distributed as
+  # package data (so users installing from PyPI will get the example scripts).
+  packages=find_packages(exclude=["tests", "tests.*"]),
+  # Additional package data to include. We explicitly add several glob patterns
+  # under the `HMB` package so example scripts, wrappers and README appear in
+  # built distributions (wheels and sdists).
+  package_data={
+    "HMB": [
+      "py.typed",
+      "Examples/*.md",
+      "Examples/*.py",
+      "Examples/*.json",
+      "Examples/*/*",
+      "Examples/*/*/*",
+    ]
+  },
+  # Include package data defined in MANIFEST.in as well.
   include_package_data=True,
+  # Do not install the package as a zipped egg.
   zip_safe=False,
+  # Minimum supported Python version.
   python_requires=">=3.8",
 
-  # ✅ Minimal core: only what's needed for basic imports
+  # ✅ Minimal core: only what's needed for basic imports.
   install_requires=[
-    "numpy<2",
-    "pillow>=9.0.0",
+    # Updated minima to match the pinned development environment in requirements.txt.
+    "numpy>=1.26.4,<2",
+    "pillow>=12.2.0",
+    "pyyaml>=6.0.3",
+    "pandas>=3.0.2",
+    "matplotlib>=3.9",
+    "tqdm>=4.67.3",
+    "scikit-learn>=1.8.0",
   ],
 
   # ✅ Optional feature groups
   extras_require={
-    # Core scientific stack
+    # Core scientific stack.
     "scientific"  : [
-      "scipy>=1.7.0",
-      "pandas>=1.3.0",
-      "scikit-learn>=1.0.0",
-      "scikit-image>=0.19.0",
+      "scipy>=1.17.1",
+      "scikit-image>=0.26.0",
     ],
 
-    # Image processing & computer vision
+    # Image processing & computer vision.
     "cv"          : [
-      "opencv-python>=4.5.0",
-      "opencv-contrib-python>=4.5.0",
-      "imagehash>=4.2.0",
-      "brisque>=0.0.17",
-      "simpleitk>=2.0.0",
-      "PyWavelets>=1.1.0",
-      "pyvips>=2.1.0",
-      "patchify>=0.2.0",
+      "opencv-python>=4.13.0.92",
+      "opencv-python-headless>=4.13.0.92",
+      "opencv-contrib-python>=4.13.0.92",
+      "imagehash>=4.3.2",
+      "brisque>=0.2.0",
+      "simpleitk>=2.5.4",
+      "PyWavelets>=1.9.0",
+      "pyvips>=3.1.1",
+      "patchify>=0.2.3",
+      "av>=17.0.1",
     ],
 
-    # Deep learning frameworks (CPU defaults; users install CUDA separately)
+    # Deep learning frameworks (CPU defaults; users install CUDA separately).
     "pytorch"     : [
-      "torch>=2.0.0",
-      "torchvision>=0.15.0",
-      "torchaudio>=2.0.0",
+      # Use non-platform-suffixed minima; CUDA-specific wheels should be installed
+      # by users from the appropriate extra index (requirements.txt keeps pinned dev pins).
+      "torch>=2.7.1",
+      "torchvision>=0.22.1",
+      "torchaudio>=2.7.1",
     ],
     "tensorflow"  : [
       "tensorflow>=2.12.0",
+      "tensorboard>=2.12.0",
       "keras>=2.12.0",
-      "tf-keras>=2.12.0",
+      "tf-keras>=2.21.0",
     ],
 
-    # Vision models & pretrained weights
-    "timm"        : ["timm>=0.9.0"],
-    "transformers": ["transformers>=4.30.0", "sentence-transformers>=2.2.0"],
+    # Vision models & pretrained weights.
+    "timm"        : ["timm>=1.0.26"],
+    "transformers": ["transformers>=5.8.0", "sentence-transformers>=5.4.1"],
     "ultralytics" : ["ultralytics>=8.0.0"],
 
-    # Medical imaging & WSI
+    # Medical imaging & WSI.
     "medical"     : [
-      "pydicom>=2.3.0",
-      "nibabel>=5.0.0",
-      "openslide-python>=1.1.2",
+      "pydicom>=3.0.2",
+      "nibabel>=5.4.2",
+      "openslide-python>=1.4.3",
+      "openslide-bin>=4.0.0.13",
     ],
 
-    # PDF handling
+    # PDF handling.
     "pdf"         : [
-      "PyMuPDF>=1.22.0",
-      "PyPDF2>=3.0.0",
-      "tabula-py>=2.7.0",
-      "jpype1>=1.4.0",
+      "PyMuPDF>=1.27.2.3",
+      "PyPDF2>=3.0.1",
+      "tabula-py>=2.10.0",
+      "jpype1>=1.7.1",
     ],
 
-    # NLP & text processing
+    # NLP & text processing.
     "nlp"         : [
-      "nltk>=3.8.0",
-      "spacy>=3.5.0",
-      "textblob>=0.17.0",
-      "gensim>=4.3.0",
-      "qalsadi>=0.4.0",
+      "nltk>=3.9.4",
+      "spacy>=3.8.14",
+      "textblob>=0.20.0",
+      "gensim>=4.4.0",
+      "qalsadi>=0.5.1",
       "langdetect>=1.0.9",
-      "gtts>=2.3.0",
-      "wordcloud>=1.9.0",
-      "emoji>=2.0.0",
-      "contractions>=0.1.0",
-      "textstat>=0.7.0",
-      "rouge>=1.0.0",
+      "gtts>=2.5.4",
+      "wordcloud>=1.9.6",
+      "emoji>=2.15.0",
+      "contractions>=0.1.73",
+      "textstat>=0.7.13",
+      "rouge>=1.0.1",
     ],
 
-    # Audio processing
+    # Audio processing.
     "audio"       : [
-      "librosa>=0.10.0",
-      "spafe>=0.3.0",
-      "praat-parselmouth>=0.4.0",
+      "librosa>=0.11.0",
+      "spafe>=0.3.3",
+      "praat-parselmouth>=0.4.7",
     ],
 
-    # Classical ML & optimization
+    # Classical ML & optimization.
     "ml"          : [
-      "xgboost>=1.7.0",
-      "catboost>=1.2.0",
+      "xgboost>=3.2.0",
+      "catboost>=1.2.10",
       "lightgbm>=4.0.0",
-      "imbalanced-learn>=0.11.0",
-      "optuna>=3.0.0",
-      "keras-tuner>=1.3.0",
-      "libsvm-official>=3.30.0",
-      "spams-bin>=2.6.0",
-      "skfeature-chappers>=1.0.0",
+      "imbalanced-learn>=0.14.1",
+      "optuna>=4.8.0",
+      "keras-tuner>=1.4.8",
+      "libsvm-official>=3.37.0",
+      "spams-bin>=2.6.13",
+      "skfeature-chappers>=1.1.0",
     ],
 
-    # Visualization & plotting
+    # Visualization & plotting.
     "plotting"    : [
-      "matplotlib>=3.7.0",
-      "seaborn>=0.12.0",
-      "plotly>=5.15.0",
-      "kaleido>=0.2.0",
-      "ptitprince>=0.2.0",
-      "squarify>=0.4.0",
+      "seaborn>=0.13.2",
+      "plotly>=6.7.0",
+      "kaleido>=1.3.0",
+      "ptitprince>=0.3.1",
+      "squarify>=0.4.4",
     ],
 
-    # Utilities & compression
+    # Utilities & compression.
     "utils"       : [
-      "tqdm>=4.65.0",
-      "sympy>=1.11.0",
-      "shapely>=2.0.0",
-      "trimesh>=3.0.0",
-      "pyglet>=1.5.0",
-      "split-folders>=0.5.0",
+      "sympy>=1.14.0",
+      "shapely>=2.1.2",
+      "trimesh>=4.12.2",
+      "pyglet>=2.1.14",
+      "split-folders>=0.6.1",
       "gputil>=1.4.0",
-      "shutup>=0.2.0",
-      "py7zr>=0.20.0",
-      "rarfile>=4.0.0",
-      "albumentations>=1.3.0",
-      "shap>=0.42.0",
-      "grad-cam>=1.4.0",
-      "statsmodels>=0.14.0",
-      "medmnist>=3.0.0",
-      "huggingface-hub>=0.16.0",
+      "shutup>=0.3.0",
+      "py7zr>=1.1.0",
+      "rarfile>=4.2",
+      "albumentations>=2.0.8",
+      "shap>=0.51.0",
+      "grad-cam>=1.5.5",
+      "statsmodels>=0.14.6",
+      "medmnist>=3.0.2",
+      "huggingface-hub>=1.14.0",
+      "codecarbon>=3.2.6",
     ],
 
-    # Development & testing
+    # Development & testing.
     "dev"         : [
       "pytest>=7.0.0",
       "sphinx>=4.0.0",
@@ -162,90 +205,90 @@ setup(
       "mypy>=1.0.0",
     ],
 
-    # Documentation building
+    # Documentation building.
     "docs"        : [
       "sphinx>=4.0.0",
       "sphinx-rtd-theme>=1.0.0",
       "myst-parser>=0.18.0",
     ],
 
-    # ✅ Install everything (for full environment setup)
+    # ✅ Install everything (for full environment setup).
     "all"         : [
-      "scipy>=1.7.0",
-      "pandas>=1.3.0",
-      "scikit-learn>=1.0.0",
-      "scikit-image>=0.19.0",
-      "opencv-python>=4.5.0",
-      "opencv-contrib-python>=4.5.0",
-      "imagehash>=4.2.0",
-      "brisque>=0.0.17",
-      "simpleitk>=2.0.0",
-      "PyWavelets>=1.1.0",
-      "pyvips>=2.1.0",
-      "patchify>=0.2.0",
-      "torch>=2.0.0",
-      "torchvision>=0.15.0",
-      "torchaudio>=2.0.0",
-      "tensorflow>=2.12.0",
-      "keras>=2.12.0",
-      "tf-keras>=2.12.0",
-      "timm>=0.9.0",
-      "transformers>=4.30.0",
-      "sentence-transformers>=2.2.0",
-      "ultralytics>=8.0.0",
-      "pydicom>=2.3.0",
-      "nibabel>=5.0.0",
-      "openslide-python>=1.1.2",
-      "PyMuPDF>=1.22.0",
-      "PyPDF2>=3.0.0",
-      "tabula-py>=2.7.0",
-      "jpype1>=1.4.0",
-      "nltk>=3.8.0",
-      "spacy>=3.5.0",
-      "textblob>=0.17.0",
-      "gensim>=4.3.0",
-      "qalsadi>=0.4.0",
+      # Note: heavy framework packages (torch, tensorflow, keras, tensorboard, etc.)
+      # are intentionally NOT included here to avoid large, platform-specific
+      # installs when users request the `all` extra. Install those frameworks
+      # using the dedicated extras or the official installers (see README).
+      "scipy>=1.17.1",
+      "pandas>=3.0.2",
+      "scikit-learn>=1.8.0",
+      "scikit-image>=0.26.0",
+      "opencv-python>=4.13.0.92",
+      "opencv-contrib-python>=4.13.0.92",
+      "imagehash>=4.3.2",
+      "brisque>=0.2.0",
+      "simpleitk>=2.5.4",
+      "PyWavelets>=1.9.0",
+      "pyvips>=3.1.1",
+      "patchify>=0.2.3",
+      "timm>=1.0.26",
+      "transformers>=5.8.0",
+      "sentence-transformers>=5.4.1",
+      "ultralytics>=8.4.47",
+      "pydicom>=3.0.2",
+      "nibabel>=5.4.2",
+      "openslide-python>=1.4.3",
+      "PyMuPDF>=1.27.2.3",
+      "PyPDF2>=3.0.1",
+      "tabula-py>=2.10.0",
+      "jpype1>=1.7.1",
+      "nltk>=3.9.4",
+      "spacy>=3.8.14",
+      "textblob>=0.20.0",
+      "gensim>=4.4.0",
+      "qalsadi>=0.5.1",
       "langdetect>=1.0.9",
-      "gtts>=2.3.0",
-      "wordcloud>=1.9.0",
-      "emoji>=2.0.0",
-      "contractions>=0.1.0",
-      "textstat>=0.7.0",
-      "rouge>=1.0.0",
-      "librosa>=0.10.0",
-      "spafe>=0.3.0",
-      "praat-parselmouth>=0.4.0",
-      "xgboost>=1.7.0",
-      "catboost>=1.2.0",
+      "gtts>=2.5.4",
+      "wordcloud>=1.9.6",
+      "emoji>=2.15.0",
+      "contractions>=0.1.73",
+      "textstat>=0.7.13",
+      "rouge>=1.0.1",
+      "librosa>=0.11.0",
+      "spafe>=0.3.3",
+      "praat-parselmouth>=0.4.7",
+      "xgboost>=3.2.0",
+      "catboost>=1.2.10",
       "lightgbm>=4.0.0",
-      "imbalanced-learn>=0.11.0",
-      "optuna>=3.0.0",
-      "keras-tuner>=1.3.0",
-      "libsvm-official>=3.30.0",
-      "spams-bin>=2.6.0",
-      "skfeature-chappers>=1.0.0",
-      "matplotlib>=3.7.0",
-      "seaborn>=0.12.0",
-      "plotly>=5.15.0",
-      "kaleido>=0.2.0",
-      "ptitprince>=0.2.0",
-      "squarify>=0.4.0",
-      "tqdm>=4.65.0",
-      "sympy>=1.11.0",
-      "shapely>=2.0.0",
-      "trimesh>=3.0.0",
-      "pyglet>=1.5.0",
-      "split-folders>=0.5.0",
+      "imbalanced-learn>=0.14.1",
+      "optuna>=4.8.0",
+      "keras-tuner>=1.4.8",
+      "libsvm-official>=3.37.0",
+      "spams-bin>=2.6.13",
+      "skfeature-chappers>=1.1.0",
+      "matplotlib>=3.9",
+      "seaborn>=0.13.2",
+      "plotly>=6.7.0",
+      "kaleido>=1.3.0",
+      "ptitprince>=0.3.1",
+      "squarify>=0.4.4",
+      "tqdm>=4.67.3",
+      "sympy>=1.14.0",
+      "shapely>=2.1.2",
+      "trimesh>=4.12.2",
+      "pyglet>=2.1.14",
+      "split-folders>=0.6.1",
       "gputil>=1.4.0",
-      "shutup>=0.2.0",
-      "py7zr>=0.20.0",
-      "rarfile>=4.0.0",
-      "albumentations>=1.3.0",
-      "shap>=0.42.0",
-      "grad-cam>=1.4.0",
-      "statsmodels>=0.14.0",
-      "medmnist>=3.0.0",
-      "huggingface-hub>=0.16.0",
+      "shutup>=0.3.0",
+      "py7zr>=1.1.0",
+      "rarfile>=4.2",
+      "albumentations>=2.0.8",
+      "shap>=0.51.0",
+      "grad-cam>=1.5.5",
+      "statsmodels>=0.14.6",
+      "medmnist>=3.0.2",
+      "huggingface-hub>=1.14.0",
+      "codecarbon>=3.2.6",
+      "av>=17.0.1",
     ],
   },
 

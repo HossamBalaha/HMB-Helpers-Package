@@ -21,14 +21,16 @@
 HMB Documentation
 =================
 
-**Version:** 0.1.0 — see the full changelog and contribution guidelines:
+**Version:** 0.2.0 — see the full changelog and contribution guidelines:
 
 - `CHANGELOG.md <https://github.com/HossamBalaha/HMB-Helpers-Package/blob/main/CHANGELOG.md>`_
 - `CONTRIBUTING.md <https://github.com/HossamBalaha/HMB-Helpers-Package/blob/main/CONTRIBUTING.md>`_
 
 Welcome to the **HMB Helpers Package** documentation!
 
-The HMB package provides a comprehensive suite of helper modules for image processing, text generation, PDF handling, performance metrics, and more. It is designed to accelerate research and development workflows in machine learning, computer vision, and natural language processing.
+The HMB package provides a comprehensive suite of helper modules for image processing, text generation, PDF handling,
+performance metrics, and more. It is designed to accelerate research and development workflows in machine learning,
+computer vision, and natural language processing.
 
 .. note::
    This documentation covers all modules and utilities included in the HMB package.
@@ -69,7 +71,7 @@ Prerequisites
 Before running examples, ensure you have:
 
 - Python 3.8+ installed
-- Required dependencies: ``pip install -r requirements.txt``
+- Required dependencies: ``pip install -r requirements.txt`` (see `Installation <Installation.html>`_ for core minima)
 - Optional: GPU support for PyTorch/TensorFlow examples (see `Installation <Installation.html>`_)
 
 .. tip::
@@ -78,6 +80,9 @@ Before running examples, ensure you have:
    .. code-block:: bash
 
       pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+.. note::
+   The documentation and packaging intentionally keep the `all` extra from installing heavy frameworks (PyTorch/TensorFlow/Keras/tensorboard) so users can install the framework builds that match their platform and device. Use the `pytorch` or `tensorflow` extras or the official framework installers for platform-specific wheels.
 
 Basic Examples
 ~~~~~~~~~~~~~~

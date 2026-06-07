@@ -9,10 +9,10 @@
 #SBATCH --error="/Jobs/Statistics_Analysis_Ablations_Error_%j.log"
 
 # Path to the Python script
-SCRIPT="/path/to/Statistics_Analysis_Ablations.py"
+SCRIPT="/path/to/Timm_Statistics_Analysis_Ablations.py"
 
 # Base experiments directory containing system subfolders
-BASE_EXP_DIR="/home/hmbala01/BC-Group/Experiments"
+BASE_EXP_DIR="/path/to/base/experiments/directory"
 # Prediction CSV file fix substring used to identify per-trial prediction CSVs
 PRED_CSV_FIX="_Predictions_"
 # Subsets to process (space separated)
@@ -26,7 +26,7 @@ PROBABILITY_COL_NAME="probabilities"
 # Verbose flag (1 to enable)
 VERBOSE=1
 # DPI for saving figures
-DPI=1080
+DPI=300
 # Explainability methods to analyze (space separated, e.g. "GradCAM")
 EXPLAIN_METHODS=("gradcam" "gradcampp" "layercam" "integratedgradients")
 # Max number of images for the explainability analysis (set to a positive integer or leave empty for no limit)
@@ -36,7 +36,7 @@ EXPLAIN_DATASET_DIR="/path/to/dataset/subset/for/explainability"
 # Device to use for analysis (e.g., "cuda" or "cpu")
 DEVICE="cuda"
 # Perturbation max number of images (set to a positive integer or leave empty for no limit)
-MAX_PERTURB_IMAGES=
+MAX_PERTURB_IMAGES=10
 
 # Optionally loop over different base experiment directories or systems
 BASE_DIRS=("${BASE_EXP_DIR}")

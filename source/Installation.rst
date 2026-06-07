@@ -34,16 +34,20 @@ Install with optional feature groups (examples):
 
 .. code-block:: bash
 
-   # Computer vision & PyTorch
+   # Computer vision & PyTorch.
    pip install "hmb-helpers[cv,pytorch]"
 
-   # NLP & text processing
+   # NLP & text processing.
    pip install "hmb-helpers[nlp]"
 
-   # PDF handling
+   # PDF handling.
    pip install "hmb-helpers[pdf]"
 
-   # Full installation (all optional dependencies)
+   # Full installation (most optional dependencies)
+   # Note: The `all` extra installs most optional dependencies but intentionally
+   # excludes large, platform- and device-specific frameworks (PyTorch, TensorFlow,
+   # Keras and related runtime packages). Install those frameworks separately
+   # using the dedicated extras below or via the framework's official installer.
    pip install "hmb-helpers[all]"
 
 For CUDA-enabled PyTorch wheels, install the package then replace the CPU wheels with the CUDA-specific wheels that match your system (see PyTorch instructions below).
@@ -78,6 +82,16 @@ Core dependencies are listed in ``requirements.txt``. Install them with:
 .. code-block:: bash
 
    pip install -r requirements.txt
+
+The core runtime dependencies (also reflected in `setup.py`) include recent minima such as:
+
+- numpy>=1.26.4,<2
+- pillow>=12.2.0
+- pyyaml>=6.0.3
+- pandas>=3.0.2
+- matplotlib>=3.9
+- tqdm>=4.67.3
+- scikit-learn>=1.8.0
 
 Optional Dependencies
 ~~~~~~~~~~~~~~~~~~~~~
@@ -116,7 +130,8 @@ Install optional feature groups via extras:
    # Visualization & plotting
    pip install "hmb-helpers[plotting]"
 
-   # All optional dependencies (large install)
+   # All optional dependencies (most; excludes heavy frameworks)
+   # Note: `all` omits PyTorch/TensorFlow/Keras to avoid accidental large/platform-specific installs.
    pip install "hmb-helpers[all]"
 
 Download required NLTK data after installing the ``nlp`` extra:
@@ -155,7 +170,7 @@ The ``pytorch`` extra installs CPU-compatible PyTorch wheels by default. For GPU
    For step-by-step guidance tailored to your operating system, package manager, and CUDA version, visit the official PyTorch installation selector: https://pytorch.org/get-started/locally/
 
 .. note::
-   TensorFlow GPU support requires separate installation. See https://www.tensorflow.org/install for platform-specific instructions.Verifying Installation
+   TensorFlow GPU support requires separate installation. See https://www.tensorflow.org/install for platform-specific instructions.
 
 Verifying Installation
 ----------------------
@@ -165,7 +180,7 @@ After installation, verify the package and optional features:
 .. code-block:: python
 
    import HMB
-   print(f"Package version: {HMB.__version__}")  # Should print: 0.1.0
+   print(f"Package version: {HMB.__version__}")  # Should print: 0.2.0
 
    # Test core functionality.
    from HMB.ImagesHelper import GetEmptyPercentage

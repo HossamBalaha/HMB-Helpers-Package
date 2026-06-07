@@ -1,0 +1,49 @@
+{
+  "BatchSize": 16384,
+  "NumEpochs": 500,
+  "TrainFraction": 0.80,
+  "ValFraction": 0.1,
+  "TestFraction": 0.1,
+  "LearningRate": 0.001,
+  "NumericScaler": "Standard",
+  "Device": "cuda",
+  "Models": [
+    "TabTransformerModel",
+    "VAEClassifier",
+    "ContrastiveClassifier"
+  ],
+  "Loss": "Focal",
+  "FocalGamma": 2.0,
+  "EarlyStopPatience": 50,
+  "MaxRows": null,
+  "Explain": true,
+  "ExplainBackground": 2000,
+  "ExplainSamples": 5000,
+  "PlotHistoryPerEpoch": true,
+  "PlotFontSize": 16,
+  "PlotDPI": 720,
+  "FontSize": 15,
+  "DisplayPlot": false,
+  "PlotFigSize": [
+    10,
+    5
+  ],
+  "PlotSmooth": true,
+  "PlotSmoothFactor": 0.6,
+  "Heavy": true,
+  "ComputeECE": true,
+  "ExportFailureCases": true,
+  "Eps": 1e-10,
+  "SaveArtifacts": true,
+  "MaxSamplesToEval": null,
+  "EvalBatchSize": 64,
+  "IgnoreCategorical": true,
+  "EvalFigSize": [
+    10,
+    10
+  ],
+  "UseAmp": true,
+  "PlotMetricsIndividual": true,
+  "RemoveAverageFromStats": true,
+  "FusedModelName": "FusedModel"
+}

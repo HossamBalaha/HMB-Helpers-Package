@@ -1,16 +1,18 @@
-import hashlib, time, json, shutil, os, cv2, torch, math, joblib
+import hashlib, time, json, shutil, os, cv2, torch, math, joblib, av
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from PIL import Image, ImageOps, ImageEnhance
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import StandardScaler, OrdinalEncoder, LabelEncoder
+from PIL import Image, ImageOps, ImageEnhance
 from sklearn.model_selection import train_test_split
 from typing import List, Callable, Optional, Tuple, Union
-from HMB.PlotsHelper import PlotBarChart
-from HMB.Initializations import IMAGE_SUFFIXES
+from sklearn.preprocessing import StandardScaler, OrdinalEncoder, LabelEncoder
 from HMB.Utils import DumpJsonFile, ReadJsonFile
+from HMB.PyTorchHelper import PyTorchVideoTransforms
+from HMB.MachineLearningHelper import GetScalerObject
+from HMB.Initializations import IMAGE_SUFFIXES, VIDEO_SUFFIXES
 from HMB.DataAugmentationHelper import PerformDataAugmentation
+from HMB.PlotsHelper import PlotBarChart, PlotClassDistribution
 
 
 class TabularPreprocessor:
@@ -25,6 +27,7 @@ class TabularPreprocessor:
     ignoreCategorical (bool): If True, categorical/object columns are completely
       ignored during fitting and transformation. Only numeric features are processed.
       Defaults to False.
+    numericScaler (str|object|None): Specifies the scaler to apply to numeric features.
 
   Attributes:
     ignoreCategorical (bool): Flag indicating whether categorical columns are skipped.
@@ -32,7 +35,9 @@ class TabularPreprocessor:
     categoricalColumns (list): List of detected categorical column names (empty if ignored).
     numericImputer (SimpleImputer): Imputer for numeric columns (fitted on training data).
     categoricalImputer (SimpleImputer): Imputer for categorical columns (fitted on training data).
-    numericScaler (StandardScaler): Scaler for numeric columns (fitted on training data).
+    numericScaler (sklearn-like estimator or None): Scaler for numeric columns (fitted on training data).
+      Can be None to disable scaling. The scaler may be a StandardScaler, MinMaxScaler,
+      RobustScaler or any object implementing fit/transform.
     categoricalEncoder (OrdinalEncoder): Encoder for categorical columns (fitted on training data).
     labelEncoder (LabelEncoder): Encoder for target labels (fitted on training data).
     _featureNames (list): Cached ordered list of feature names used during transformation.
@@ -50,20 +55,20 @@ class TabularPreprocessor:
   .. code-block:: python
 
     # Initialize the preprocessor and ignore categorical columns.
-    preprocessor = TabularPreprocessor(ignoreCategorical=True)
+    preprocessor = TabularPreprocessor(ignoreCategorical=True, numericScaler="Standard")
     preprocessor.Fit(trainDf, labelColumn="Label")
 
     # Transform training, validation, and test DataFrames.
-    XTrain, yTrain = preprocessor.Transform(trainDf, labelColumn="Label")
-    XVal, yVal = preprocessor.Transform(valDf, labelColumn="Label")
-    XTest, yTest = preprocessor.Transform(testDf, labelColumn="Label")
+    xTrain, yTrain = preprocessor.Transform(trainDf, labelColumn="Label")
+    xVal, yVal = preprocessor.Transform(valDf, labelColumn="Label")
+    xTest, yTest = preprocessor.Transform(testDf, labelColumn="Label")
 
     # Save the preprocessor artifacts for later use.
     preprocessor.Save("PreprocessorArtifacts")
   '''
 
   # Initialize the preprocessor with default attributes.
-  def __init__(self, ignoreCategorical: bool = False):
+  def __init__(self, ignoreCategorical: bool = False, numericScaler: object = "Standard"):
     # Track whether categorical columns should be ignored.
     self.ignoreCategorical = ignoreCategorical
     # Track numeric and categorical column names.
@@ -72,7 +77,11 @@ class TabularPreprocessor:
     # Initialize imputers for missing values.
     self.numericImputer = None
     self.categoricalImputer = None
-    # Initialize scalers and encoders.
+    # Initialize scaler selection and encoders.
+    # `numericScaler` parameter can be one of the listed in `GetScalerObject`
+    # or a custom scaler instance, or None to disable scaling.
+    self.numericScalerSpec = numericScaler
+    # `numericScaler` will hold the fitted scaler instance (or `None` if disabled).
     self.numericScaler = None
     self.categoricalEncoder = None
     self.labelEncoder = None
@@ -99,9 +108,26 @@ class TabularPreprocessor:
       # Use median imputation for robustness to outliers.
       self.numericImputer = SimpleImputer(strategy="median")
       self.numericImputer.fit(df[self.numericColumns])
-      # Fit standard scaler on imputed numeric data.
-      self.numericScaler = StandardScaler()
-      self.numericScaler.fit(self.numericImputer.transform(df[self.numericColumns]))
+      # Configure and fit the numeric scaler according to the provided spec.
+      try:
+        spec = self.numericScalerSpec
+        # If user explicitly disabled scaling by passing None, keep scaler None.
+        if (spec is None):
+          self.numericScaler = None
+        # If spec is a string, map common choices to sklearn scalers.
+        elif (isinstance(spec, str)):
+          # This function should return a fitted scaler instance based on the string spec.
+          self.numericScaler = GetScalerObject(spec)
+        else:
+          # Assume the user passed a scaler-like object (with fit/transform).
+          self.numericScaler = spec
+
+        # Fit the scaler when it is enabled (not None).
+        if (self.numericScaler is not None):
+          self.numericScaler.fit(self.numericImputer.transform(df[self.numericColumns]))
+      except Exception:
+        # On any failure configuring/scaling, fall back to no scaler to avoid breaking Fit.
+        self.numericScaler = None
 
     # Fit categorical imputer and encoder when categorical columns exist and are not ignored.
     if ((not self.ignoreCategorical) and (len(self.categoricalColumns) > 0)):
@@ -135,8 +161,9 @@ class TabularPreprocessor:
       numData = df[self.numericColumns].copy()
       # Apply median imputation to numeric columns.
       numData = self.numericImputer.transform(numData)
-      # Apply standard scaling to imputed numeric columns.
-      numData = self.numericScaler.transform(numData)
+      # Apply scaling to imputed numeric columns only when a scaler is configured.
+      if (self.numericScaler is not None):
+        numData = self.numericScaler.transform(numData)
       # Append numeric features to output list.
       xParts.append(numData.astype(np.float32))
 
@@ -951,6 +978,10 @@ class GenericImagesDatasetHandler(object):
     r'''
     Plot a bar chart of the class distribution in the dataset.
 
+    This method prefers to use the centralized `PlotClassDistribution` utility from `PlotsHelper` when available,
+    which creates a more polished and informative plot. If that utility is not available or fails, it falls back
+    to a simpler bar chart implementation.
+
     Parameters:
       fileName (str): Path to save the plot PDF. Default: "ClassDistribution.pdf".
       title (str): Title of the plot. Default: "Class Distribution".
@@ -970,25 +1001,49 @@ class GenericImagesDatasetHandler(object):
     counts = self.config.get("totalClassCounts", {})
     counts = [counts.get(className, 0) for className in classNames]
 
-    # Delegate plotting to the shared PlotBarChart utility to avoid redundancy.
+    # Prefer the centralized PlotClassDistribution utility in PlotsHelper when available.
     try:
-      PlotBarChart(
-        values=counts,
-        labels=classNames,
+      # Build an expanded labels array by repeating each class name according to its count.
+      labelsExpanded = []
+      for name, cnt in zip(classNames, counts):
+        labelsExpanded.extend([name] * int(cnt))
+      outPath = Path(fileName) if (fileName is not None) else Path("ClassDistribution.pdf")
+      PlotClassDistribution(
+        labelsExpanded,
+        outPath=outPath,
         title=title,
-        ylabel="Number of Images",
-        save=save,
-        fileName=fileName,
         dpi=dpi,
+        exportPng=save,
+        save=save,
         display=display,
-        annotate=True,
-        annotateFormat="{:.0f}",  # Format as integer counts.
+        colormap="viridis",
         fontSize=fontSize,
-        rotation=45,
-        returnFig=False,
       )
     except Exception as e:
-      print(f"Warning: could not generate class distribution plot: {e}", flush=True)
+      print(
+        f"Warning: could not generate class distribution plot with `PlotClassDistribution` utility: {e}",
+        flush=True
+      )
+
+      # Fallback to the older bar chart utility when the new plot helper fails.
+      try:
+        PlotBarChart(
+          values=counts,
+          labels=classNames,
+          title=title,
+          ylabel="Number of Images",
+          save=save,
+          fileName=fileName,
+          dpi=dpi,
+          display=display,
+          annotate=True,
+          annotateFormat="{:.0f}",  # Format as integer counts.
+          fontSize=fontSize,
+          rotation=45,
+          returnFig=False,
+        )
+      except Exception as e2:
+        print(f"Warning: could not generate class distribution plot: {e} / {e2}", flush=True)
 
   def PrintSummary(self):
     r'''
@@ -1656,7 +1711,7 @@ names: {classNameDict}
     print("Balancing complete.", flush=True)
 
 
-class CustomDataset(torch.utils.data.Dataset):
+class PyTorchCustomDataset(torch.utils.data.Dataset):
   r'''
   PyTorch dataset for image classification tasks, loading images from a directory
   structure where each class has its own subfolder.
@@ -1761,7 +1816,7 @@ class CustomDataset(torch.utils.data.Dataset):
     return self.samples
 
 
-class SegmentationDataset(torch.utils.data.Dataset):
+class PyTorchSegmentationDataset(torch.utils.data.Dataset):
   r'''
   PyTorch Dataset class for image segmentation tasks. Loads images and
   corresponding masks from provided file paths, applies optional transformations,
@@ -2057,6 +2112,300 @@ class SegmentationDataset(torch.utils.data.Dataset):
     return stats
 
 
+# Define the generic dataset class for video classification tasks.
+class PyTorchVideoClassificationDataset(torch.utils.data.Dataset):
+  r'''
+  Generic dataset class for loading video files with class labels.
+
+  Expected directory structure:
+    rootDir/
+      split/  # e.g., "train", "val", "test"
+        class1/
+          video1.mp4
+          video2.mp4
+        class2/
+          video3.mp4
+          video4.mp4
+
+  Each video file is read and processed into a tensor, and the corresponding class label is
+  returned as an integer.
+  The dataset supports configurable frame sampling and optional transformations.
+
+  Key features:
+    - Configurable root directory and dataset split.
+    - Automatic discovery of video files based on class subdirectories.
+    - Mapping of class names to numeric labels.
+    - Robust video reading with PyAV and safe handling of edge cases (e.g., empty videos).
+    - Optional transformation pipeline for data augmentation or preprocessing.
+  '''
+
+  # Initialize the dataset with directory paths and processing parameters.
+  def __init__(
+    self,
+    rootDir: str,
+    split: str,
+    transform: Optional[PyTorchVideoTransforms] = None,
+    numFrames: int = None,
+    sampleRate: int = None,
+    classNames: List[str] = None,
+    fileExtensions: Tuple[str, ...] = None
+  ) -> None:
+    r'''
+    Initialize the dataset.
+
+    Parameters:
+      rootDir: Root directory containing train/val/test splits.
+      split: Dataset split name.
+      transform: Optional video transformation pipeline.
+      numFrames: Number of frames to sample per video.
+      sampleRate: Frame sampling rate.
+      classNames: List of expected class directory names.
+      fileExtensions: Tuple of supported video file extensions.
+    '''
+
+    # Store the root directory path for dataset access.
+    self.rootDir = rootDir
+    # Store the current dataset split identifier.
+    self.split = split
+    # Store the optional transformation pipeline reference.
+    self.transform = transform
+    # Set the target frame count using configuration fallbacks.
+    self.numFrames = numFrames
+    # Set the frame sampling rate using configuration fallbacks.
+    self.sampleRate = sampleRate
+    # Set the class names list using configuration fallbacks.
+    self.classNames = classNames
+
+    self._ResolveClasses()
+
+    # Set the supported file extensions using default values.
+    self.fileExtensions = fileExtensions or tuple(VIDEO_SUFFIXES)
+    # Build a dictionary mapping class names to numeric identifiers.
+    self.labelToId = {
+      labelName: labelIndex
+      for labelIndex, labelName in enumerate(self.classNames)
+    }
+    # Build a dictionary mapping numeric identifiers to class names.
+    self.idToLabel = {
+      labelIndex: labelName
+      for labelName, labelIndex in self.labelToId.items()
+    }
+    # Initialize the list for storing discovered video file paths.
+    self.videoPaths = []
+    # Initialize the list for storing corresponding numeric labels.
+    self.labels = []
+    # Execute the directory scanning method to populate sample lists.
+    self._LoadVideoList()
+    # Validate that the dataset discovery process yielded valid samples.
+    if (len(self.videoPaths) == 0):
+      # Generate a detailed diagnostic error message for debugging.
+      self._HandleEmptyDatasetError()
+
+  def _ResolveClasses(self):
+    r'''
+    Resolve class names from directory structure if not provided.
+    This method checks if the classNames list was provided during initialization. If it is None,
+    it attempts to discover class names by listing subdirectories within the specified dataset split folder.
+    If the split directory does not exist or contains no subdirectories, it raises a ValueError with a clear
+    message indicating the issue. This allows for flexibility in dataset organization while ensuring that
+    the class names are properly set for subsequent processing steps. By resolving class names dynamically,
+    the dataset can adapt to different directory structures without requiring hardcoded class lists, as
+    long as the expected folder organization is maintained.
+    '''
+
+    if (self.classNames is None):
+      # Find the split directory and list subdirectories as class names if not provided.
+      splitPath = os.path.join(self.rootDir, self.split)
+      if (os.path.exists(splitPath) and os.path.isdir(splitPath)):
+        self.classNames = [
+          entry for entry in os.listdir(splitPath)
+          if os.path.isdir(os.path.join(splitPath, entry))
+        ]
+      else:
+        self.classNames = []
+    if (self.classNames is None or len(self.classNames) == 0):
+      raise ValueError(
+        f"No class directories found in split path '{os.path.join(self.rootDir, self.split)}'. "
+        f"Please provide classNames or ensure the directory structure is correct."
+      )
+
+  # Scan the filesystem and populate internal lists with video metadata.
+  def _LoadVideoList(self) -> None:
+    r'''
+    Scan directory and build list of video paths with labels.
+    This method iterates through the expected class subdirectories within the specified dataset split,
+    checks for the presence of valid video files based on configured extensions, and populates the
+    internal lists of video paths and corresponding numeric labels. It also handles cases where
+    directories may be missing or empty without crashing, allowing for a comprehensive error message
+    to be generated later if no valid samples are found.
+    '''
+
+    # Construct the absolute path to the current split directory.
+    splitPath = os.path.join(self.rootDir, self.split)
+    # Iterate through each expected class directory name.
+    for className in self.classNames:
+      # Construct the absolute path to the specific class subdirectory.
+      classDir = os.path.join(splitPath, className)
+      # Verify that the class directory actually exists on the filesystem.
+      if (not os.path.exists(classDir)):
+        continue
+      # Retrieve all entries contained within the class directory.
+      for fileName in os.listdir(classDir):
+        # Check if the current entry matches any supported video extension.
+        if (any(fileName.lower().endswith(ext) for ext in self.fileExtensions)):
+          # Construct the complete absolute path to the valid video file.
+          fullPath = os.path.join(classDir, fileName)
+          # Append the valid video path to the internal tracking list.
+          self.videoPaths.append(fullPath)
+          # Append the corresponding numeric class identifier to the label list.
+          self.labels.append(self.labelToId[className])
+
+  # Decode a video file and return a uniformly sampled frame array.
+  def _ReadVideo(self, videoPath: str) -> np.ndarray:
+    r'''
+    Read video frames using PyAV with safe sampling fallbacks.
+    This method uses the PyAV library to decode video frames from the specified file path.
+    It collects frames into a list, ensuring that it does not exceed the maximum required
+    count based on the configured number of frames and sampling rate.
+    If no frames are successfully decoded, it returns a placeholder array of zeros.
+    When sampling frames, it checks if the total decoded frame count is sufficient to perform
+    uniform sampling; if not, it simply returns all available frames without attempting to sample
+    beyond the existing count. This approach ensures robustness against videos of varying lengths
+    and potential decoding issues.
+
+    Parameters:
+      videoPath: Path to the video file to be decoded.
+    '''
+
+    # Initialize an empty list to store decoded frame arrays.
+    frameList = []
+    # Open the video container for sequential frame decoding operations.
+    with av.open(videoPath) as container:
+      # Iterate through each decoded frame from the video stream.
+      for frame in container.decode(video=0):
+        # Convert the PyAV frame object to an RGB numpy array.
+        imageArray = frame.to_rgb().to_ndarray()
+        # Append the converted array to the frame collection list.
+        frameList.append(imageArray)
+        # Terminate the decoding loop once the maximum required count is reached.
+        if (len(frameList) >= self.numFrames * self.sampleRate):
+          break
+    # Generate a placeholder array if the video decoding yielded zero frames.
+    if (len(frameList) == 0):
+      return np.zeros((self.numFrames, 224, 224, 3), dtype=np.uint8)
+    # Calculate sampling indices safely when video length exceeds frame requirement.
+    if (len(frameList) >= self.numFrames):
+      sampledIndices = np.linspace(0, len(frameList) - 1, self.numFrames, dtype=int)
+    else:
+      sampledIndices = np.arange(len(frameList))
+    # Extract frames from the collection using the computed index array.
+    selectedFrames = [frameList[i] for i in sampledIndices]
+    # Stack the selected frame arrays into a single unified tensor array.
+    return np.stack(selectedFrames, axis=0)
+
+  # Return the total count of available video samples in the dataset.
+  def __len__(self) -> int:
+    r'''
+    Return total number of video samples.
+    This method simply returns the length of the internal list that tracks all discovered video file paths,
+    which corresponds to the total number of valid samples available for loading and processing.
+    It relies on the assumption that the _LoadVideoList method has been executed successfully during
+    initialization to populate this list with valid entries. If no valid videos were found, this method
+    would return zero, which is handled by the error checking logic in the constructor.
+    '''
+
+    # Calculate and return the length of the stored video path list.
+    return len(self.videoPaths)
+
+  # Retrieve and process a single video sample by its integer index.
+  def __getitem__(self, sampleIndex: int) -> dict:
+    r'''
+    Load and preprocess a single video sample.
+    This method retrieves the file path and corresponding label for the requested sample index,
+    decodes the video into a sequence of frames, applies any specified transformations, and constructs
+    a standardized output dictionary containing the processed video tensor, numeric label, and
+    original file path.
+    It ensures that the video data is returned in a format suitable for model ingestion, with pixel
+    values normalized and dimensions ordered correctly.
+    The method also handles the case where no transformations
+    are provided by applying a default conversion and normalization process to the raw video array.
+
+    Parameters:
+      sampleIndex: Integer index of the video sample to retrieve.
+    '''
+
+    # Retrieve the file system path for the requested sample index.
+    currentPath = self.videoPaths[sampleIndex]
+    # Retrieve the numeric class label for the requested sample index.
+    currentLabel = self.labels[sampleIndex]
+    # Decode the target video file into a sequence of frame arrays.
+    videoArray = self._ReadVideo(currentPath)
+    # Apply the external transformation pipeline if one was provided.
+    if (self.transform is not None):
+      processedTensor = self.transform(videoArray)
+    else:
+      # Convert the raw array to a floating point tensor and scale pixel intensity.
+      processedTensor = torch.from_numpy(videoArray).float() / 255.0
+      # Reorder the tensor dimensions to match the expected channel-first layout.
+      processedTensor = processedTensor.permute(3, 0, 1, 2)
+    # Construct and return the standardized output dictionary.
+    return {
+      # Store the processed video tensor for model ingestion.
+      "PixelValues": processedTensor,
+      # Store the numeric label wrapped in a PyTorch tensor.
+      "Labels"     : torch.tensor(currentLabel, dtype=torch.long),
+      # Store the original file path for debugging or logging purposes.
+      "VideoPath"  : currentPath
+    }
+
+  # Generate a comprehensive error message when dataset discovery fails.
+  def _HandleEmptyDatasetError(self) -> None:
+    r'''
+    Raise a diagnostic error when no valid videos are found.
+    This method constructs a detailed error message that includes the expected directory structure,
+    the results of checks for the existence of class subdirectories, and the count of valid video
+    files found in each class folder. The message is designed to guide the user in verifying their dataset
+    root path and ensuring that their directory structure matches the expected class names. By providing
+    this level of diagnostic information, the method helps users quickly identify and resolve issues related
+    to dataset organization, missing folders, or incorrect file naming conventions that may be preventing the
+    discovery of valid video samples.
+    '''
+
+    # Construct the absolute path to the expected split directory.
+    splitPath = os.path.join(self.rootDir, self.split)
+    # Initialize a list to accumulate diagnostic status strings.
+    diagnosticChecks = []
+    # Iterate through each expected class name to verify filesystem structure.
+    for className in self.classNames:
+      # Construct the absolute path to the specific class folder.
+      classDir = os.path.join(splitPath, className)
+      # Check whether the directory currently exists on the filesystem.
+      directoryExists = os.path.exists(classDir)
+      validFileCount = 0
+      # Attempt to count valid video files if the directory is present.
+      if (directoryExists):
+        try:
+          # Count entries matching the configured video extensions.
+          validFileCount = len([
+            fileEntry for fileEntry in os.listdir(classDir)
+            if (any(fileEntry.lower().endswith(ext) for ext in self.fileExtensions))
+          ])
+        except Exception:
+          # Assign zero to the count if filesystem access fails.
+          validFileCount = 0
+      # Format the diagnostic status for the current class directory.
+      diagnosticChecks.append(f"{className}: exists={directoryExists}, files={validFileCount}")
+    # Construct the complete error message with embedded diagnostics.
+    errorMessage = (
+      f"No video files found for split '{self.split}' in '{splitPath}'. "
+      f"Checked class folders: {diagnosticChecks}. "
+      f"Please verify the dataset root path and ensure your directory structure matches the "
+      f"expected class names: {self.classNames}"
+    )
+    # Raise a value error containing the constructed diagnostic message.
+    raise ValueError(errorMessage)
+
+
 def CreateSegmentationDataLoaders(
   dataDir: str,
   imageSize: int = 256,
@@ -2123,21 +2472,21 @@ def CreateSegmentationDataLoaders(
   valImages = imageFiles[split:]
   valMasks = maskFiles[split:]
   # Create dataset instances for train and validation.
-  trainDataset = SegmentationDataset(
+  trainDataset = PyTorchSegmentationDataset(
     trainImages,
     trainMasks,
     transforms=None,
     imageSize=imageSize,
     numClasses=numClasses
   )
-  valDataset = SegmentationDataset(
+  valDataset = PyTorchSegmentationDataset(
     valImages,
     valMasks,
     transforms=None,
     imageSize=imageSize,
     numClasses=numClasses
   )
-  allDataset = SegmentationDataset(
+  allDataset = PyTorchSegmentationDataset(
     imageFiles,
     maskFiles,
     transforms=None,
@@ -2361,7 +2710,8 @@ def ReadAndConcatCsv(files: List[str], nrows: int = None) -> pd.DataFrame:
 
   Parameters:
     files (List[str]): List of file paths to CSV files to read and concatenate.
-    nrows (int, optional): If provided, limits the number of rows read from each CSV file for testing purposes. Defaults to None (read all rows).
+    nrows (int, optional): If provided, limits the number of rows read from each CSV file for testing purposes.
+      Defaults to None (read all rows).
 
   Returns:
     pd.DataFrame: A single DataFrame containing the concatenated data from all CSV files, with an additional "SourceFile" column indicating the origin of each row.
@@ -2392,17 +2742,39 @@ def ReadAndConcatCsv(files: List[str], nrows: int = None) -> pd.DataFrame:
 
 def LoadAllCsvs(dataDir: str, nrows: int = None) -> pd.DataFrame:
   r'''
-  Discover all CSV files in the specified directory, read them into pandas DataFrames, and concatenate them into a single DataFrame.
+  Discover all CSV files in the specified directory, read them into pandas DataFrames, and concatenate
+  them into a single DataFrame.
 
   Parameters:
     dataDir (str): The directory to search for CSV files.
-    nrows (int, optional): If provided, limits the number of rows read from each CSV file for testing purposes. Defaults to None (read all rows).
+    nrows (int, optional): If provided, limits the number of rows read from each CSV file for testing purposes.
+      Defaults to None (read all rows).
 
   Returns:
     pd.DataFrame: A single DataFrame containing the concatenated data from all discovered CSV files, with an additional "SourceFile" column indicating the origin of each row.
   '''
+
   # Discover CSV files in the specified directory.
   files = DiscoverCsvFiles(dataDir)
   print(f"Discovered {len(files)} CSV files in {dataDir}.")
   # Read and concatenate all discovered CSV files.
   return ReadAndConcatCsv(files, nrows=nrows)
+
+
+if __name__ == "__main__":
+  # Example usage:
+  dataset = PyTorchVideoClassificationDataset(
+    rootDir=r"path/to/dataset/root",
+    split="train",
+    transform=None,
+    numFrames=16,
+    sampleRate=2
+  )
+  print(f"Total samples: {len(dataset)}")
+  print("Testing sample retrieval...")
+  sample = dataset[0]
+  print(f"Sample keys: {sample.keys()}")
+  print(f"PixelValues shape: {sample['PixelValues'].shape}")
+  print(f"Label: {sample['Labels']}")
+  print(f"Video path: {sample['VideoPath']}")
+  print("`VideoClassificationDataset` test completed successfully.")

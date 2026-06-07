@@ -1,13 +1,15 @@
 # HMB Helpers Package
 
 [![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
-[![PyPI](https://img.shields.io/pypi/v/hmb-helpers.svg)](https://pypi.org/project/hmb-helpers/)
+[![PyPI](https://img.shields.io/pypi/v/hmb-helpers?label=PyPI)](https://pypi.org/project/hmb-helpers/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package/blob/main/LICENSE)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C.svg?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![TensorFlow](https://img.shields.io/badge/TensorFlow-2.0%2B-FF6F00.svg?logo=tensorflow&logoColor=white)](https://www.tensorflow.org/)
-[![Tests](https://img.shields.io/badge/tests-530%2B%20passing-brightgreen.svg)](tests/)
-[![Code Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-530%2B%20passing-brightgreen.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package/blob/main/tests/)
+[![Code Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package/blob/main/tests/)
+[![Examples](https://img.shields.io/badge/examples-ready-brightgreen.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package/tree/main/HMB/Examples)
 [![Documentation](https://img.shields.io/badge/docs-Sphinx-blue.svg)](https://hmb-helpers-package.readthedocs.io/en/latest/)
+[![Docs Status](https://img.shields.io/badge/docs-built-green.svg)](https://hmb-helpers-package.readthedocs.io/en/latest/)
 [![Read the Docs](https://readthedocs.org/projects/hmb-helpers-package/badge/?version=latest)](https://hmb-helpers-package.readthedocs.io/en/latest/)
 [![Code Style](https://img.shields.io/badge/code%20style-PEP8-blue.svg)](https://www.python.org/dev/peps/pep-0008/)
 [![Modules](https://img.shields.io/badge/modules-40%2B-orange.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package/tree/main/HMB)
@@ -60,16 +62,20 @@ Package on PyPI: https://pypi.org/project/hmb-helpers/
 Add only the features you need:
 
 ```bash
-# Computer vision & PyTorch
+# Computer vision & PyTorch.
 pip install "hmb-helpers[cv,pytorch]"
 
-# NLP & text processing
+# NLP & text processing.
 pip install "hmb-helpers[nlp]"
 
-# PDF handling
+# PDF handling.
 pip install "hmb-helpers[pdf]"
 
-# Full installation (all optional dependencies)
+# Full installation (most optional dependencies)
+# Note: The `all` extra installs most optional dependencies but intentionally
+# excludes large, platform- and device-specific frameworks (PyTorch, TensorFlow,
+# Keras and related runtime packages). Install those frameworks separately
+# using the dedicated extras below or via the framework's official installer.
 pip install "hmb-helpers[all]"
 ```
 
@@ -100,8 +106,13 @@ Or use the [official PyTorch installer](https://pytorch.org/get-started/locally/
 
 ### Core Dependencies (Always Installed)
 
-- `numpy<2`: Numerical computing
-- `pillow>=9.0.0`: Image I/O and basic processing
+- `numpy>=1.26.4,<2`: Numerical computing
+- `pillow>=12.2.0`: Image I/O and basic processing
+- `pyyaml>=6.0.3`: YAML parsing for configuration and dataset helper utilities
+- `pandas>=3.0.2`: Tabular data handling used across multiple helpers
+- `matplotlib>=3.9`: Basic plotting utilities used by helpers and examples
+- `tqdm>=4.67.3`: Progress bars used in many processing functions
+- `scikit-learn>=1.8.0`: Common ML utilities (encoders, imputers, scalers) used by preprocessors
 
 ### Optional Feature Groups
 
@@ -121,54 +132,61 @@ Install only what you need via extras:
 | **Visualization**    | `[plotting]`   | matplotlib, seaborn, plotly               |
 | **Utilities**        | `[utils]`      | tqdm, albumentations, shap, trimesh       |
 
-See `requirements.txt` for exact version pins used in development.
+See `requirements.txt` for exact version pins used in development. Note that
+`pip install "hmb-helpers[all]"` purposefully omits PyTorch/TensorFlow/Keras
+so that users can install the appropriate platform-specific (CPU/CUDA) wheels
+via the framework vendor instructions or by selecting the framework extras
+explicitly (for example `pip install "hmb-helpers[pytorch]"`).
 
 ## Features & Modules
 
 ### Core Modules
 
-- **AgentsHelper**: AI agent orchestration and interaction utilities.
-- **ArabicTextHelper**: Specialized tools for Arabic text processing and analysis.
-- **AttentionMapsHelper**: Tools for generating and visualizing attention maps in deep learning models.
-- **AudioHelper**: Audio processing, feature extraction, and manipulation utilities.
-- **CompressionsHelper**: Data compression and decompression utilities.
-- **DataAugmentationHelper**: Image and data augmentation pipelines.
-- **DatasetsHelper**: Utilities to detect, prepare, and validate image classification datasets (train/val/test layouts).
-- **EmbeddingsToTextHelper**: Convert between embeddings and text representations for NLP tasks.
-- **ExplainabilityHelper**: Model explainability and interpretability (e.g., SHAP analysis).
-- **HandCraftedFeatures**: Feature extraction utilities for images and tabular data.
-- **ImagesComparisonMetrics**: Image comparison metrics (SSIM, PSNR, MSE, etc.).
-- **ImageSegmentationMetrics**: Segmentation evaluation metrics (IoU, Dice, pixel accuracy).
-- **ImagesHelper**: Comprehensive image loading, saving, resizing, cropping, and manipulation.
-- **ImagesNormalization**: Image normalization, standardization, and color space conversion.
-- **ImagesToEmbeddings**: Extract embeddings from images using timm and transformers models.
-- **Initializations**: Model and layer initialization helpers for deep learning frameworks.
-- **MachineLearningHelper**: ML workflow helpers (data splitting, cross-validation, model selection).
-- **MetaheuristicsHelper**: Metaheuristic optimization algorithms (e.g., MRFO).
-- **PDFHelper**: PDF reading, extraction, manipulation, and annotation.
-- **PerformanceMetrics**: Comprehensive performance metrics for classification and regression.
-- **PlotsHelper**: Plotting and visualization helpers (wrappers around matplotlib/seaborn utilities).
-- **PyTorchClassificationLosses**: Custom classification loss functions for PyTorch.
-- **PyTorchHelper**: PyTorch utilities for models, tensors, device management, and checkpointing.
-- **PyTorchModelMemoryProfiler**: Utilities to profile PyTorch model memory usage.
-- **PyTorchSegmentationLosses**: Custom segmentation losses (Dice, BCE, DiceBCE, Focal, Tversky, IoU).
-- **PyTorchTabularModelsZoo**: Collection of tabular model utilities and reference architectures.
-- **PyTorchTrainingPipeline**: Training pipeline helpers for PyTorch experiments (data loaders, trainers, schedulers).
-- **PyTorchUNetModelsZoo**: UNet architecture implementations and utilities for PyTorch.
-- **StatisticalAnalysisHelper**: Statistical analysis and data exploration tools.
-- **StringsHelper**: String manipulation and text processing utilities.
-- **TextGenerationMetrics**: Metrics for text generation models (ROUGE, BLEU, METEOR).
-- **TextHelper**: Text normalization, cleaning, tokenization, and NLP utilities.
-- **TFAttentionBlocks**: TensorFlow/Keras attention mechanism implementations.
-- **TFHelper**: TensorFlow/Keras utilities and helpers (Grad-CAM, etc.).
-- **TFSegmentationLosses**: TensorFlow/Keras segmentation loss implementations.
-- **TFUNetHelper**: TensorFlow/Keras UNet-related helpers and utilities.
-- **Utils**: Miscellaneous utilities for file I/O, configuration, and data handling.
-- **VectorsHelper**: Vector operations and geometric computations.
-- **VideosHelper**: Video processing and frame extraction utilities.
-- **VotingHelper**: Ensemble voting methods for machine learning.
-- **WSIHelper**: Whole Slide Image (WSI) processing for digital pathology.
-- **YOLOHelper**: YOLO model training and inference utilities.
+[//]: # (Make a numbered list of the modules with brief descriptions. Use the actual module names as they appear in the codebase.)
+
+1. **AgentsHelper**: AI agent orchestration and interaction utilities.
+1. **ArabicTextHelper**: Specialized tools for Arabic text processing and analysis.
+1. **AttentionMapsHelper**: Tools for generating and visualizing attention maps in deep learning models.
+1. **AudioHelper**: Audio processing, feature extraction, and manipulation utilities.
+1. **CompressionsHelper**: Data compression and decompression utilities.
+1. **DataAugmentationHelper**: Image and data augmentation pipelines.
+1. **DatasetsHelper**: Utilities to detect, prepare, and validate image classification datasets (train/val/test
+   layouts).
+1. **EmbeddingsToTextHelper**: Convert between embeddings and text representations for NLP tasks.
+1. **ExplainabilityHelper**: Model explainability and interpretability (e.g., SHAP analysis).
+1. **HandCraftedFeatures**: Feature extraction utilities for images and tabular data.
+1. **ImagesComparisonMetrics**: Image comparison metrics (SSIM, PSNR, MSE, etc.).
+1. **ImageSegmentationMetrics**: Segmentation evaluation metrics (IoU, Dice, pixel accuracy).
+1. **ImagesHelper**: Comprehensive image loading, saving, resizing, cropping, and manipulation.
+1. **ImagesNormalization**: Image normalization, standardization, and color space conversion.
+1. **ImagesToEmbeddings**: Extract embeddings from images using timm and transformers models.
+1. **Initializations**: Model and layer initialization helpers for deep learning frameworks.
+1. **MachineLearningHelper**: ML workflow helpers (data splitting, cross-validation, model selection).
+1. **MetaheuristicsHelper**: Metaheuristic optimization algorithms (e.g., MRFO).
+1. **PDFHelper**: PDF reading, extraction, manipulation, and annotation.
+1. **PerformanceMetrics**: Comprehensive performance metrics for classification and regression.
+1. **PlotsHelper**: Plotting and visualization helpers (wrappers around matplotlib/seaborn utilities).
+1. **PyTorchClassificationLosses**: Custom classification loss functions for PyTorch.
+1. **PyTorchHelper**: PyTorch utilities for models, tensors, device management, and checkpointing.
+1. **PyTorchModelMemoryProfiler**: Utilities to profile PyTorch model memory usage.
+1. **PyTorchSegmentationLosses**: Custom segmentation losses (Dice, BCE, DiceBCE, Focal, Tversky, IoU).
+1. **PyTorchTabularModelsZoo**: Collection of tabular model utilities and reference architectures.
+1. **PyTorchTrainingPipeline**: Training pipeline helpers for PyTorch experiments (data loaders, trainers, schedulers).
+1. **PyTorchUNetModelsZoo**: UNet architecture implementations and utilities for PyTorch.
+1. **StatisticalAnalysisHelper**: Statistical analysis and data exploration tools.
+1. **StringsHelper**: String manipulation and text processing utilities.
+1. **TextGenerationMetrics**: Metrics for text generation models (ROUGE, BLEU, METEOR).
+1. **TextHelper**: Text normalization, cleaning, tokenization, and NLP utilities.
+1. **TFAttentionBlocks**: TensorFlow/Keras attention mechanism implementations.
+1. **TFHelper**: TensorFlow/Keras utilities and helpers (Grad-CAM, etc.).
+1. **TFSegmentationLosses**: TensorFlow/Keras segmentation loss implementations.
+1. **TFUNetHelper**: TensorFlow/Keras UNet-related helpers and utilities.
+1. **Utils**: Miscellaneous utilities for file I/O, configuration, and data handling.
+1. **VectorsHelper**: Vector operations and geometric computations.
+1. **VideosHelper**: Video processing and frame extraction utilities.
+1. **VotingHelper**: Ensemble voting methods for machine learning.
+1. **WSIHelper**: Whole Slide Image (WSI) processing for digital pathology.
+1. **YOLOHelper**: YOLO model training and inference utilities.
 
 ## Documentation
 
@@ -181,42 +199,21 @@ cd source
 make html
 ```
 
-On Windows (cmd.exe) there is a helper `make.bat` at the project root which wraps `sphinx-build`:
+## Examples
 
-```bat
-call make.bat html
-```
+All example scripts, detailed usage, CLI tables and troubleshooting tips live in the examples README:
 
-Or view the source documentation files in the `source/` directory:
+- `HMB/Examples/README.md` — beginner-friendly guide with per-script descriptions, example run commands, and
+  compact CLI tables (recommended starting point).
 
-- Each module has a corresponding `.rst` file with detailed API documentation
-- Examples and usage patterns are included in module docstrings
-- Complete API reference available at `build/html/index.html`
+Quick pointers:
 
-Examples
---------
+- Examples and helper scripts are located under `HMB/Examples`.
+- Platform wrappers (Windows): `HMB/Examples/BAT Files/` — run with `call` from the repository root.
+- Platform wrappers (POSIX): `HMB/Examples/SH Files/` — run with `bash`.
 
-The repository includes several example Python scripts under `HMB/Examples` and
-platform-specific wrapper scripts grouped under `HMB/Examples/BAT Files` and
-`HMB/Examples/SH Files`. There is no single top-level `run_examples` script; use
-the per-example wrapper that matches your platform.
-
-Common examples (see `HMB/Examples` for the full list):
-
-- `PyTorch_UNet_Segmentation.py`
-- `TF_UNet_Training.py`
-- `TF_UNet_EvalPredict.py`
-- `Timm_FineTune_Classification.py`
-- `Timm_Statistics_Analysis_Ablations.py`
-- `Train TF Pretrained Attention Model from DataFrame.py`
-- `Explain TF Pretrained Attention Model from DataFrame.py`
-- `Machine_Learning_Pipeline.py`
-
-Run a Windows wrapper from the repository root (cmd.exe), for example:
-
-```bat
-call "HMB\Examples\BAT Files\Timm_Statistics_Analysis_Ablations.bat"
-```
+If you want a short list of commonly used examples, open `HMB/Examples/README.md` — it contains a curated list and
+copyable run commands for each script.
 
 Or run the equivalent POSIX wrapper (bash):
 
@@ -310,13 +307,13 @@ If you use this package in your work, please:
 1. Include a copy of the LICENSE file with any distribution
 2. Credit the author in documentation or publications:
    ```bibtex
-   @software{balaha_hmb_helpers_2026_010,
+   @software{balaha_hmb_helpers_2026_020,
      author    = {Balaha, Hossam Magdy},
-     title     = {HMB-Helpers-Package: HMB-Helpers-Package v0.1.0},
+     title     = {HMB-Helpers-Package: HMB-Helpers-Package v0.2.0},
      year      = {2026},
      publisher = {GitHub},
      month     = apr,
-     version   = {v0.1.0},
+     version   = {v0.2.0},
      url       = {https://github.com/HossamBalaha/HMB-Helpers-Package}
    }
  

@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import torch.nn.functional as F
 from tensorflow.keras.layers import Conv2D
 from typing import List, Optional, Tuple, Any
+from HMB.Utils import SafeTrapz
+from HMB.PlotsHelper import SaveMatplotlibFigure
 from HMB.Initializations import EnsureCUDAAvailable
 
 
@@ -424,14 +426,8 @@ class OptunaMLPipelineSHAPExplainer(object):
             ha="center", va="bottom", fontsize=10, color="black"
           )
 
-    # Adjust layout to prevent label clipping.
-    plt.tight_layout()
-    # Save grouped bar plot as high-resolution PNG file.
-    plt.savefig(f"{self.storagePath}/SHAP_Comparative_Bar_Grouped.png", dpi=self.dpi, bbox_inches="tight")
-    # Save grouped bar plot as vector PDF file.
-    plt.savefig(f"{self.storagePath}/SHAP_Comparative_Bar_Grouped.pdf", dpi=self.dpi, bbox_inches="tight")
-    # Close figure to free memory resources.
-    plt.close()
+    # Adjust layout to prevent label clipping and save using helper.
+    SaveMatplotlibFigure(f"{self.storagePath}/SHAP_Comparative_Bar_Grouped", fig=plt.gcf(), dpi=self.dpi)
 
     # --- Optional: Stacked Bar Plot (Alternative view) ---
     # Create new figure and axis for stacked visualization.
@@ -487,14 +483,8 @@ class OptunaMLPipelineSHAPExplainer(object):
     # Place grid lines behind elements in stacked plot.
     ax.set_axisbelow(True)
 
-    # Adjust layout for stacked plot.
-    plt.tight_layout()
-    # Save stacked bar plot as PNG.
-    plt.savefig(f"{self.storagePath}/SHAP_Comparative_Bar_Stacked.png", dpi=self.dpi, bbox_inches="tight")
-    # Save stacked bar plot as PDF.
-    plt.savefig(f"{self.storagePath}/SHAP_Comparative_Bar_Stacked.pdf", dpi=self.dpi, bbox_inches="tight")
-    # Close stacked plot figure.
-    plt.close()
+    # Adjust layout for stacked plot and save using helper.
+    SaveMatplotlibFigure(f"{self.storagePath}/SHAP_Comparative_Bar_Stacked", fig=plt.gcf(), dpi=self.dpi)
 
     # Print confirmation message with storage path.
     print(f"Comparative SHAP bar plots saved to {self.storagePath}")
@@ -523,10 +513,7 @@ class OptunaMLPipelineSHAPExplainer(object):
         interaction_index="auto",
         show=False,
       )
-      plt.tight_layout()
-      plt.savefig(f"{self.storagePath}/SHAP_Dependence_{feat}.pdf", dpi=self.dpi, bbox_inches="tight")
-      plt.savefig(f"{self.storagePath}/SHAP_Dependence_{feat}.png", dpi=self.dpi, bbox_inches="tight")
-      plt.close()
+      SaveMatplotlibFigure(f"{self.storagePath}/SHAP_Dependence_{feat}", fig=plt.gcf(), dpi=self.dpi)
 
   def VisualizeClassStratifiedBeeswarm(self, noOfFeatures=15):
     r'''
@@ -550,10 +537,7 @@ class OptunaMLPipelineSHAPExplainer(object):
 
       shap.plots.beeswarm(tempShap[:200, :noOfFeatures], show=False, max_display=noOfFeatures)
       plt.title(f"SHAP Beeswarm: {catName} Cases (n={mask.sum()})")
-      plt.tight_layout()
-      plt.savefig(f"{self.storagePath}/SHAP_Beeswarm{catName}.png", dpi=self.dpi, bbox_inches="tight")
-      plt.savefig(f"{self.storagePath}/SHAP_Beeswarm{catName}.pdf", dpi=self.dpi, bbox_inches="tight")
-      plt.close()
+      SaveMatplotlibFigure(f"{self.storagePath}/SHAP_Beeswarm{catName}", fig=plt.gcf(), dpi=self.dpi)
 
   def VisualizeErrorAnalysis(self, maxErrors=5):
     r'''
@@ -574,10 +558,7 @@ class OptunaMLPipelineSHAPExplainer(object):
     for idx in errorIndices:
       shap.plots.waterfall(self.shapValues[idx, :10], show=False)
       plt.title(f"Error Analysis: Instance {idx}\nTrue: {self.yTest.iloc[idx]}, Pred: {self.yPredDecoded[idx]}")
-      plt.tight_layout()
-      plt.savefig(f"{self.storagePath}/SHAP_Error{idx}.png", dpi=self.dpi, bbox_inches="tight")
-      plt.savefig(f"{self.storagePath}/SHAP_Error{idx}.pdf", dpi=self.dpi, bbox_inches="tight")
-      plt.close()
+      SaveMatplotlibFigure(f"{self.storagePath}/SHAP_Error{idx}", fig=plt.gcf(), dpi=self.dpi)
 
   def VisualizeDecisionPlot(self, noOfInstances=500, noOfFeatures=20, classLabel=None):
     r'''
@@ -665,11 +646,8 @@ class OptunaMLPipelineSHAPExplainer(object):
         handles.append(plt.Line2D([0], [0], color=self.categoryColors.get(catName, None), lw=4, label=catName))
       plt.legend(handles=handles, title="Predicted Class", bbox_to_anchor=(1.05, 1), loc="upper left")
 
-    # Adjust layout and save with high resolution.
-    plt.tight_layout()
-    plt.savefig(f"{self.storagePath}/SHAP_Decision_Plot.png", dpi=self.dpi, bbox_inches="tight")
-    plt.savefig(f"{self.storagePath}/SHAP_Decision_Plot.pdf", dpi=self.dpi, bbox_inches="tight")
-    plt.close()
+    # Adjust layout and save using helper.
+    SaveMatplotlibFigure(f"{self.storagePath}/SHAP_Decision_Plot", fig=plt.gcf(), dpi=self.dpi)
 
   def VisualizeExplanations(
     self,
@@ -690,7 +668,8 @@ class OptunaMLPipelineSHAPExplainer(object):
 
     Parameters:
       instanceIndex (int, optional): Index of the specific instance to explain. If None, a random index is chosen.
-      categoryToExplain (int | str, optional): The class label for reference in plots (e.g., 0 for Negative Label = 0). If "all", plots are generated for all classes.
+      categoryToExplain (int | str, optional): The class label for reference in plots (e.g., 0 for Negative Label = 0).
+        If "all", plots are generated for all classes.
       noOfRecords (int, optional): Number of records to consider for summary/scatter plots.
       noOfFeatures (int, optional): Number of top features to display in plots.
 
@@ -727,10 +706,7 @@ class OptunaMLPipelineSHAPExplainer(object):
       f"True Label: {self.yTest.iloc[instanceIndex]} and "
       f"Predicted Label: {self.yPredDecoded[instanceIndex]}"
     )
-    plt.tight_layout()  # Adjust layout to eliminate wasted space.
-    plt.savefig(f"{self.storagePath}/SHAPWaterfallPlot_{instanceIndex}.png", dpi=self.dpi, bbox_inches="tight")
-    plt.savefig(f"{self.storagePath}/SHAPWaterfallPlot_{instanceIndex}.pdf", dpi=self.dpi, bbox_inches="tight")
-    plt.close()  # Close the plot to free up memory.
+    SaveMatplotlibFigure(f"{self.storagePath}/SHAPWaterfallPlot_{instanceIndex}", fig=plt.gcf(), dpi=self.dpi)
 
     # --- Force Plot ---
     # Visualize the force plot for the specific instance's prediction.
@@ -747,10 +723,7 @@ class OptunaMLPipelineSHAPExplainer(object):
       f"True Label: {self.yTest.iloc[instanceIndex]} and "
       f"Predicted Label: {self.yPredDecoded[instanceIndex]}"
     )
-    plt.tight_layout()  # Adjust layout.
-    plt.savefig(f"{self.storagePath}/SHAP_Force_Plot_{instanceIndex}.png", dpi=self.dpi, bbox_inches="tight")
-    plt.savefig(f"{self.storagePath}/SHAP_Force_Plot_{instanceIndex}.pdf", dpi=self.dpi, bbox_inches="tight")
-    plt.close()  # Close the plot.
+    SaveMatplotlibFigure(f"{self.storagePath}/SHAP_Force_Plot_{instanceIndex}", fig=plt.gcf(), dpi=self.dpi)
 
     # --- Bar Plot (Global Feature Importance) ---
     # Visualize the global feature importance using a bar plot.
@@ -762,14 +735,8 @@ class OptunaMLPipelineSHAPExplainer(object):
 
     # Set the title for the global feature importance bar plot.
     plt.title("SHAP Bar Plot (Global Feature Importance)")
-    # Adjust layout.
-    plt.tight_layout()
-    # Save the bar plot as a PNG image.
-    plt.savefig(f"{self.storagePath}/SHAP_Bar_Plot_Global.png", dpi=self.dpi, bbox_inches="tight")
-    # Save the bar plot as a PDF document.
-    plt.savefig(f"{self.storagePath}/SHAP_Bar_Plot_Global.pdf", dpi=self.dpi, bbox_inches="tight")
-    # Close the plot.
-    plt.close()
+    # Adjust layout and save using helper.
+    SaveMatplotlibFigure(f"{self.storagePath}/SHAP_Bar_Plot_Global", fig=plt.gcf(), dpi=self.dpi)
 
     self.VisualizeComparativeFeatureImportance(noOfFeatures=noOfFeatures)
     self.VisualizeDependenceWithAnnotations()
@@ -787,14 +754,8 @@ class OptunaMLPipelineSHAPExplainer(object):
 
     # Set the title for the beeswarm plot.
     plt.title("SHAP Beeswarm Plot (Global Feature Importance)")
-    # Adjust layout.
-    plt.tight_layout()
-    # Save the beeswarm plot as a PNG image.
-    plt.savefig(f"{self.storagePath}/SHAP_Beeswarm_Plot_Global.png", dpi=self.dpi, bbox_inches="tight")
-    # Save the beeswarm plot as a PDF document.
-    plt.savefig(f"{self.storagePath}/SHAP_Beeswarm_Plot_Global.pdf", dpi=self.dpi, bbox_inches="tight")
-    # Close the plot.
-    plt.close()
+    # Adjust layout and save using helper.
+    SaveMatplotlibFigure(f"{self.storagePath}/SHAP_Beeswarm_Plot_Global", fig=plt.gcf(), dpi=self.dpi)
 
     # --- Scatter and Summary Plots ---
     if (categoryToExplain == "all"):
@@ -844,10 +805,7 @@ class OptunaMLPipelineSHAPExplainer(object):
         f"SHAP Scatter Plot for the Test Set with "
         f"Reference Class {cat}"
       )
-      plt.tight_layout()  # Adjust layout.
-      plt.savefig(f"{self.storagePath}/SHAP_Scatter_Plot_{cat}.png", dpi=self.dpi, bbox_inches="tight")
-      plt.savefig(f"{self.storagePath}/SHAP_Scatter_Plot_{cat}.pdf", dpi=self.dpi, bbox_inches="tight")
-      plt.close()  # Close the plot.
+      SaveMatplotlibFigure(f"{self.storagePath}/SHAP_Scatter_Plot_{cat}", fig=plt.gcf(), dpi=self.dpi)
 
       # --- Summary Plot ---
       # Visualize the summary plot for the test set.
@@ -871,10 +829,7 @@ class OptunaMLPipelineSHAPExplainer(object):
         f"SHAP Summary Plot for the Test Set with "
         f"Reference Class {cat}"
       )
-      plt.tight_layout()  # Adjust layout.
-      plt.savefig(f"{self.storagePath}/SHAP_Summary_Plot_{cat}.png", dpi=self.dpi, bbox_inches="tight")
-      plt.savefig(f"{self.storagePath}/SHAP_Summary_Plot_{cat}.pdf", dpi=self.dpi, bbox_inches="tight")
-      plt.close()  # Close the plot.
+      SaveMatplotlibFigure(f"{self.storagePath}/SHAP_Summary_Plot_{cat}", fig=plt.gcf(), dpi=self.dpi)
 
     print(f"SHAP visualizations saved to the {self.storagePath} directory.")
 
@@ -4080,11 +4035,11 @@ def TSNEFeaturesExplainability(
   Parameters:
     featsSub (array-like): Feature vectors to embed (n_samples x n_features).
     labelEncoder (sklearn.preprocessing.LabelEncoder or None): Optional encoder to map
-        integer class indices back to human-readable class names. If None, integer
-        class ids or `customClassNames` are used.
+      integer class indices back to human-readable class names. If None, integer
+      class ids or `customClassNames` are used.
     nSamples (int): Number of samples in `featsSub` (used for metrics and adaptive params).
     outDir (pathlib.Path or str): Directory where generated figures and JSON metrics
-        will be saved.
+      will be saved.
     predIdxSub (array-like): Predicted class indices for each sample (length nSamples).
     trueIdxSub (array-like): Ground-truth class indices for each sample (length nSamples).
     numComponents (int): Dimensionality of the embedding (default: 2).
@@ -4096,9 +4051,9 @@ def TSNEFeaturesExplainability(
     fileNamePrefix (str): Prefix used for output filenames.
     colorPaletteName (str): Seaborn palette name for consistent class colors.
     enableClusterMetrics (bool): If True compute silhouette, Davies-Bouldin and
-        Calinski-Harabasz scores and save them as JSON.
+      Calinski-Harabasz scores and save them as JSON.
     enableMisclassificationHighlight (bool): If True generate an additional figure
-        highlighting misclassified samples.
+      highlighting misclassified samples.
     enableCentroidAnnotations (bool): If True annotate cluster centroids with class names.
     markerStyleCorrect (str): Matplotlib marker for correct predictions.
     markerStylePredicted (str): Matplotlib marker for predicted-label plots.
@@ -4178,7 +4133,11 @@ def TSNEFeaturesExplainability(
   plt.title(f"{figureTitlePrefix} (Colored by True Label)", fontsize=fontSizeTitle)
   plt.xlabel(f"{axisLabelPrefix} 1", fontsize=fontSizeAxis)
   plt.ylabel(f"{axisLabelPrefix} 2", fontsize=fontSizeAxis)
-  plt.savefig(outDir / f"{fileNamePrefix}True.{outputFileFormat}", dpi=dpi, bbox_inches="tight")
+  SaveMatplotlibFigure(
+    outDir / f"{fileNamePrefix}True", fig=plt.gcf(), dpi=dpi,
+    exportPdf=(outputFileFormat.lower() in ["pdf", "svg"]),
+    exportPng=(outputFileFormat.lower() in ["png", "jpg", "jpeg"])
+  )
   plt.close()
 
   # Generate basic t-SNE plot colored by model predictions for performance assessment.
@@ -4195,7 +4154,11 @@ def TSNEFeaturesExplainability(
   plt.title(f"{figureTitlePrefix} (Colored by Predicted Label)", fontsize=fontSizeTitle)
   plt.xlabel(f"{axisLabelPrefix} 1", fontsize=fontSizeAxis)
   plt.ylabel(f"{axisLabelPrefix} 2", fontsize=fontSizeAxis)
-  plt.savefig(outDir / f"{fileNamePrefix}Predicted.{outputFileFormat}", dpi=dpi, bbox_inches="tight")
+  SaveMatplotlibFigure(
+    outDir / f"{fileNamePrefix}Predicted", fig=plt.gcf(), dpi=dpi,
+    exportPdf=(outputFileFormat.lower() in ["pdf", "svg"]),
+    exportPng=(outputFileFormat.lower() in ["png", "jpg", "jpeg"])
+  )
   plt.close()
 
   # Define colorblind-accessible palette for consistent class representation across figures.
@@ -4236,10 +4199,11 @@ def TSNEFeaturesExplainability(
   ax.set_title(f"{figureTitlePrefix} (Colored by True Labels)", fontsize=fontSizeTitle, pad=15)
   ax.legend(title="Class", title_fontsize=11, markerscale=2, frameon=True, shadow=False)
   ax.grid(alpha=0.15, linestyle="--", linewidth=0.3)
-  plt.savefig(
-    outDir / f"{fileNamePrefix}TrueLabelsEnhanced.{outputFileFormat}",
-    dpi=dpi,
-    bbox_inches="tight"
+  SaveMatplotlibFigure(
+    outDir / f"{fileNamePrefix}TrueLabelsEnhanced",
+    fig=plt.gcf(), dpi=dpi,
+    exportPdf=(outputFileFormat.lower() in ["pdf", "svg"]),
+    exportPng=(outputFileFormat.lower() in ["png", "jpg", "jpeg"])
   )
   plt.close()
 
@@ -4264,10 +4228,10 @@ def TSNEFeaturesExplainability(
   ax.set_title(f"{figureTitlePrefix} (Colored by Predicted Labels)", fontsize=fontSizeTitle, pad=15)
   ax.legend(title="Predicted Class", title_fontsize=11, markerscale=2, frameon=True)
   ax.grid(alpha=0.15, linestyle="--", linewidth=0.3)
-  plt.savefig(
-    outDir / f"{fileNamePrefix}PredictedLabelsEnhanced.{outputFileFormat}",
-    dpi=dpi,
-    bbox_inches="tight"
+  SaveMatplotlibFigure(
+    outDir / f"{fileNamePrefix}PredictedLabelsEnhanced", fig=plt.gcf(), dpi=dpi,
+    exportPdf=(outputFileFormat.lower() in ["pdf", "svg"]),
+    exportPng=True
   )
   plt.close()
 
@@ -4350,10 +4314,9 @@ def TSNEFeaturesExplainability(
 
   # Save the composite comparison figure with tight layout to prevent label clipping.
   plt.tight_layout()
-  plt.savefig(
-    outDir / f"{fileNamePrefix}ComparisonTrueVsPredicted.{outputFileFormat}",
-    dpi=dpi,
-    bbox_inches="tight"
+  SaveMatplotlibFigure(
+    outDir / f"{fileNamePrefix}ComparisonTrueVsPredicted", fig=plt.gcf(), dpi=dpi,
+    exportPdf=(outputFileFormat.lower() in ["pdf", "svg"]), exportPng=True
   )
   plt.close()
 
@@ -4403,7 +4366,11 @@ def TSNEFeaturesExplainability(
     ax.set_title(f"{figureTitlePrefix}: Misclassifications Highlighted", fontsize=fontSizeTitle, pad=15)
     ax.legend(title="Classification Status", title_fontsize=10, fontsize=8, markerscale=1.5, ncol=2)
     ax.grid(alpha=0.15, linestyle="--", linewidth=0.3)
-    plt.savefig(outDir / f"{fileNamePrefix}Misclassifications.{outputFileFormat}", dpi=dpi, bbox_inches="tight")
+    SaveMatplotlibFigure(
+      outDir / f"{fileNamePrefix}Misclassifications", fig=plt.gcf(), dpi=dpi,
+      exportPdf=(outputFileFormat.lower() in ["pdf", "svg"]),
+      exportPng=True
+    )
     plt.close()
 
     # Compile misclassification counts into dictionary for quantitative error pattern analysis.
@@ -4610,7 +4577,10 @@ def UMAPFeaturesExplainability(
   plt.title(f"{figureTitlePrefix} (Colored by True Label)", fontsize=fontSizeTitle)
   plt.xlabel(f"{axisLabelPrefix} 1", fontsize=fontSizeAxis)
   plt.ylabel(f"{axisLabelPrefix} 2", fontsize=fontSizeAxis)
-  plt.savefig(outDir / f"{fileNamePrefix}True.{outputFileFormat}", dpi=dpi, bbox_inches="tight")
+  SaveMatplotlibFigure(
+    outDir / f"{fileNamePrefix}True", fig=plt.gcf(), dpi=dpi,
+    exportPdf=(outputFileFormat.lower() in ["pdf", "svg"]), exportPng=True
+  )
   plt.close()
 
   # Generate basic UMAP plot colored by model predictions for performance assessment.
@@ -4627,7 +4597,10 @@ def UMAPFeaturesExplainability(
   plt.title(f"{figureTitlePrefix} (Colored by Predicted Label)", fontsize=fontSizeTitle)
   plt.xlabel(f"{axisLabelPrefix} 1", fontsize=fontSizeAxis)
   plt.ylabel(f"{axisLabelPrefix} 2", fontsize=fontSizeAxis)
-  plt.savefig(outDir / f"{fileNamePrefix}Predicted.{outputFileFormat}", dpi=dpi, bbox_inches="tight")
+  SaveMatplotlibFigure(
+    outDir / f"{fileNamePrefix}Predicted", fig=plt.gcf(), dpi=dpi,
+    exportPdf=(outputFileFormat.lower() in ["pdf", "svg"]), exportPng=True
+  )
   plt.close()
 
   # Define colorblind-accessible palette for consistent class representation across figures.
@@ -4668,10 +4641,9 @@ def UMAPFeaturesExplainability(
   ax.set_title(f"{figureTitlePrefix} (Colored by True Labels)", fontsize=fontSizeTitle, pad=15)
   ax.legend(title="Class", title_fontsize=11, markerscale=2, frameon=True, shadow=False)
   ax.grid(alpha=0.15, linestyle="--", linewidth=0.3)
-  plt.savefig(
-    outDir / f"{fileNamePrefix}TrueLabelsEnhanced.{outputFileFormat}",
-    dpi=dpi,
-    bbox_inches="tight"
+  SaveMatplotlibFigure(
+    outDir / f"{fileNamePrefix}TrueLabelsEnhanced", fig=plt.gcf(), dpi=dpi,
+    exportPdf=(outputFileFormat.lower() in ["pdf", "svg"]), exportPng=True
   )
   plt.close()
 
@@ -4696,10 +4668,9 @@ def UMAPFeaturesExplainability(
   ax.set_title(f"{figureTitlePrefix} (Colored by Predicted Labels)", fontsize=fontSizeTitle, pad=15)
   ax.legend(title="Predicted Class", title_fontsize=11, markerscale=2, frameon=True)
   ax.grid(alpha=0.15, linestyle="--", linewidth=0.3)
-  plt.savefig(
-    outDir / f"{fileNamePrefix}PredictedLabelsEnhanced.{outputFileFormat}",
-    dpi=dpi,
-    bbox_inches="tight"
+  SaveMatplotlibFigure(
+    outDir / f"{fileNamePrefix}PredictedLabelsEnhanced", fig=plt.gcf(), dpi=dpi,
+    exportPdf=(outputFileFormat.lower() in ["pdf", "svg"]), exportPng=True
   )
   plt.close()
 
@@ -4790,10 +4761,9 @@ def UMAPFeaturesExplainability(
 
   # Save the composite comparison figure with tight layout to prevent label clipping.
   plt.tight_layout()
-  plt.savefig(
-    outDir / f"{fileNamePrefix}ComparisonTrueVsPredicted.{outputFileFormat}",
-    dpi=dpi,
-    bbox_inches="tight"
+  SaveMatplotlibFigure(
+    outDir / f"{fileNamePrefix}ComparisonTrueVsPredicted", fig=plt.gcf(), dpi=dpi,
+    exportPdf=(outputFileFormat.lower() in ["pdf", "svg"]), exportPng=True
   )
   plt.close()
 
@@ -4843,7 +4813,10 @@ def UMAPFeaturesExplainability(
     ax.set_title(f"{figureTitlePrefix}: Misclassifications Highlighted", fontsize=fontSizeTitle, pad=15)
     ax.legend(title="Classification Status", title_fontsize=10, fontsize=8, markerscale=1.5, ncol=2)
     ax.grid(alpha=0.15, linestyle="--", linewidth=0.3)
-    plt.savefig(outDir / f"{fileNamePrefix}Misclassifications.{outputFileFormat}", dpi=dpi, bbox_inches="tight")
+    SaveMatplotlibFigure(
+      outDir / f"{fileNamePrefix}Misclassifications", fig=plt.gcf(), dpi=dpi,
+      exportPdf=(outputFileFormat.lower() in ["pdf", "svg"]), exportPng=True
+    )
     plt.close()
 
     # Compile misclassification counts into dictionary for quantitative error pattern analysis.
@@ -4900,7 +4873,12 @@ def UMAPFeaturesExplainability(
 
 
 # Compute Grad-CAM heatmap for a single image and target class.
-def TFGradCam(model, imgTensor, classIdx=None, lastConvLayerName=None):
+def TFGradCam(
+  model,
+  imgTensor,
+  classIdx=None,
+  lastConvLayerName=None
+):
   r'''
   Compute Grad-CAM heatmap for imgTensor and target class index.
 
@@ -4917,11 +4895,11 @@ def TFGradCam(model, imgTensor, classIdx=None, lastConvLayerName=None):
   -------
   .. code-block:: python
 
-  from HMB.ExplainabilityHelper import TFGradCam
+    from HMB.ExplainabilityHelper import TFGradCam
 
-  model = ...  # Load or build model.
-  img = ...    # Load and preprocess image to shape (1, H, W, 3).
-  heatmap = TFGradCam(model, img, classIdx=2, lastConvLayerName=None)
+    model = ...  # Load or build model.
+    img = ...    # Load and preprocess image to shape (1, H, W, 3).
+    heatmap = TFGradCam(model, img, classIdx=2, lastConvLayerName=None)
   '''
 
   # Convert to tensor and ensure batch dimension.
@@ -5153,7 +5131,8 @@ def ShapSummaryPlot(
   shapValues: Any,
   featureNames: Optional[List[str]] = None,
   show: bool = False,
-  savePath: Optional[str] = None
+  savePath: Optional[str] = None,
+  dpi=720,
 ):
   r'''
   Plot a SHAP summary plot and optionally save to disk.
@@ -5163,20 +5142,101 @@ def ShapSummaryPlot(
     featureNames (List[str] | None): Optional list of feature names.
     show (bool): Whether to display the plot interactively (default: False).
     savePath (str | None): Optional path to save the figure (default: None).
+    dpi (int): Dots per inch for saved figure resolution (default: 720).
   '''
 
   # Create a new default_rng instance to avoid using the global RNG.
   rngObj = np.random.default_rng()
+
+  # Helper to save the current figure using the centralized helper and always
+  # ensure both PDF and PNG siblings are exported where possible.
+  def _SaveBase(name_base: str):
+    try:
+      SaveMatplotlibFigure(name_base, fig=plt.gcf(), dpi=dpi, exportPdf=True, exportPng=True)
+    except Exception:
+      # Best-effort save: try minimal save without specifying extras.
+      try:
+        SaveMatplotlibFigure(name_base, fig=plt.gcf())
+      except Exception:
+        pass
+
+  # Try summary plot first (preferred global view).
   try:
     shap.summary_plot(shapValues, feature_names=featureNames, show=show, rng=rngObj)
   except TypeError:
     # Fallback when shap.summary_plot does not accept rng parameter.
     shap.summary_plot(shapValues, feature_names=featureNames, show=show)
-  # Save the figure when a save path is provided.
+
+  # Save the main summary plot (base name without extension so both PDF and PNG are created).
   if (savePath is not None):
-    plt.tight_layout()
-    plt.savefig(savePath, bbox_inches="tight")
-    plt.close()  # Close the plot to avoid display if show=False
+    base = os.path.splitext(str(savePath))[0]
+    _SaveBase(base + "_Summary")
+    plt.close()
+
+    # Attempt to create and save several commonly useful SHAP visualizations that users expect.
+    # Each plotting call is guarded to avoid failing the whole pipeline if a particular plot errors.
+    try:
+      # Beeswarm (global distribution of feature impacts)
+      shap.plots.beeswarm(shapValues, max_display=20, show=False)
+      _SaveBase(base + "_Beeswarm")
+      plt.close()
+    except Exception as ex:
+      print(f"[WARN] Failed to create SHAP beeswarm plot: {ex}")
+
+    try:
+      # Bar (mean absolute importance)
+      shap.plots.bar(shapValues, max_display=20, show=False)
+      _SaveBase(base + "_Bar")
+      plt.close()
+    except Exception as ex:
+      print(f"[WARN] Failed to create SHAP bar plot: {ex}")
+
+    try:
+      # Scatter (feature vs SHAP value) - may be heavy for large datasets, use subset behaviour inside SHAP.
+      shap.plots.scatter(shapValues, show=False)
+      _SaveBase(base + "_Scatter")
+      plt.close()
+    except Exception as ex:
+      print(f"[WARN] Failed to create SHAP scatter plot: {ex}")
+
+    try:
+      # Decision plot for a subset of instances (up to 50) when available.
+      # Prepare shap_values and data if the object exposes .values / .data.
+      if (hasattr(shapValues, "values") and hasattr(shapValues, "data")):
+        nInst = min(50, int(np.array(shapValues.values).shape[0]))
+        shap.decision_plot(
+          getattr(shapValues, "base_values", None) or None,
+          shapValues.values[:nInst],
+          features=(shapValues.data[:nInst] if (hasattr(shapValues, "data")) else None),
+          show=False
+        )
+      else:
+        # Generic fallback: try decision_plot directly
+        shap.decision_plot(None, shapValues, show=False)
+      _SaveBase(base + "_Decision")
+      plt.close()
+    except Exception as ex:
+      print(f"[WARN] Failed to create SHAP decision plot: {ex}")
+
+    try:
+      # Dependence plots for the top 3 features by mean |SHAP| when feature names are available.
+      if (featureNames is None and hasattr(shapValues, "data")):
+        featureNames = list(range(np.array(shapValues.values).shape[1]))
+      try:
+        meanAbs = np.abs(shapValues.values).mean(0)
+        topIdx = np.argsort(meanAbs)[-3:][::-1]
+      except Exception:
+        topIdx = None
+      if (topIdx is not None):
+        for i in topIdx:
+          try:
+            shap.dependence_plot(int(i), shapValues.values, shapValues.data, interaction_index="auto", show=False)
+            _SaveBase(f"{base}_Dependence_{i}")
+            plt.close()
+          except Exception:
+            continue
+    except Exception as ex:
+      print(f"[WARN] Failed to create SHAP dependence plots: {ex}")
 
 
 def ExtractAttentionWeights(model: Any, xArray: np.ndarray, layerType: str = "MultiheadAttention") -> List[np.ndarray]:
@@ -5644,6 +5704,6 @@ def DeletionFaithfulness(
   # Construct a normalized x-axis for area computation.
   xs = np.linspace(0, 1, len(probsList))
   # Compute trapezoidal area under the probability curve and normalize.
-  aucVal = float(np.trapz(probsList, xs) / (probsList[0] if (probsList[0] != 0) else 1.0))
+  aucVal = float(SafeTrapz(probsList, xs) / (probsList[0] if (probsList[0] != 0) else 1.0))
   # Return the computed AUC and probabilities sequence.
   return aucVal, probsList

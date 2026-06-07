@@ -2,17 +2,19 @@ import os, timm, torch, copy, time, json, hashlib, csv
 import numpy as np
 import torch.nn as nn
 from PIL import Image
-import matplotlib.pyplot as plt
 from pathlib import Path
 from collections import Counter
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple, Union
-from torch.amp import autocast, GradScaler
+import matplotlib.pyplot as plt
 import torch.nn.functional as F
-from HMB.PerformanceMetrics import PlotConfusionMatrix, ComputeBrierScore
-from HMB.Utils import DumpJsonFile, AppendOrCreateNewCSV
-from HMB.PlotsHelper import PlotHeatmap, PlotBarChart, COLORS
+import torchvision.transforms as T
+from datetime import datetime, timezone
+from torch.amp import autocast, GradScaler
+import torchvision.transforms.functional as Fv
+from typing import Any, Dict, List, Optional, Tuple, Union
 from HMB.ImagesHelper import *
+from HMB.PlotsHelper import PlotHeatmap, PlotBarChart, COLORS
+from HMB.Utils import DumpJsonFile, AppendOrCreateNewCSV, SafeTrapz
+from HMB.PerformanceMetrics import PlotConfusionMatrix, ComputeBrierScore
 
 
 def GetParamCount(model, restrictGrad=True, formatMillions=True):
@@ -1034,7 +1036,11 @@ def EvaluateModelOnPerturbations(
   )
 
   results["ClassNames"] = classNames
-  baselineAcc = weightedMetrics["Weighted Accuracy"]
+  baselineAcc = (
+    weightedMetrics["Weighted Accuracy"]
+    if ("Weighted Accuracy" in weightedMetrics)
+    else weightedMetrics["Accuracy"]
+  )
   baselineEce = weightedMetrics["ECE"]
   duration = weightedMetrics["Total Evaluation Time (s)"]
   confmat = cm.tolist() if (isinstance(cm, np.ndarray)) else cm
@@ -1104,7 +1110,11 @@ def EvaluateModelOnPerturbations(
         preprocessFn=preprocessFn,
       )
 
-      accuracy = _weightedMetrics["Weighted Accuracy"]
+      accuracy = (
+        _weightedMetrics["Weighted Accuracy"]
+        if ("Weighted Accuracy" in _weightedMetrics)
+        else _weightedMetrics["Accuracy"]
+      )
       duration = _weightedMetrics["Total Evaluation Time (s)"]
       ece = _weightedMetrics["ECE"]
       confmat = _cm.tolist() if isinstance(_cm, np.ndarray) else _cm
@@ -1232,7 +1242,7 @@ def EvaluateModelOnPerturbations(
           classwiseDrops[cls] = float(np.mean(drops))
 
     if (len(sev) >= 2):
-      auc = float(np.trapz(accs, x=sev))
+      auc = float(SafeTrapz(accs, x=sev))
       maxArea = (max(sev) - min(sev)) * (baseline if (baseline > 0) else 1.0)
       normAuc = auc / maxArea if maxArea > 0 else 0.0
     else:
@@ -2145,3 +2155,257 @@ def PreparePredTensorToNumpy(
     predMask = predMask.astype(np.uint8)
 
   return predMask
+
+
+class PyTorchVideoTransforms:
+  r'''
+  Composable video transformation pipeline.
+  This class applies a series of transformations to video data, including resizing, random cropping,
+  horizontal flipping, and normalization. The transformations are designed to be consistent across all
+  frames in a video sequence, ensuring that the temporal coherence of the video is maintained.
+  The class also includes a static method for collating individual samples into batches for use with
+  PyTorch's DataLoader.
+  It also provides a method to visualize the transformed video frames in a grid format, which can be useful
+  for debugging and verification of the transformations applied to the video data.
+  '''
+
+  # Initialize the transformation pipeline with specified parameters.
+  def __init__(
+    self,
+    isTrain: bool = True,
+    mean: Optional[tuple] = None,
+    std: Optional[tuple] = None,
+    targetSize: Optional[tuple] = None
+  ) -> None:
+    r'''
+    Initialize transformation pipeline.
+
+    Parameters:
+      isTrain: Whether to apply training augmentations. Default is True.
+      mean: Normalization mean values per channel. Default is ImageNet mean (0.485, 0.456, 0.406).
+      std: Normalization std values per channel. Default is ImageNet std (0.229, 0.224, 0.225).
+      targetSize: Target (height, width) for resizing. Default is (224, 224).
+    '''
+
+    # Assign the training mode flag to the instance variable.
+    self.isTrain = isTrain
+    # Set the normalization mean values using default ImageNet statistics.
+    self.mean = mean or (0.485, 0.456, 0.406)
+    # Set the normalization standard deviation values using default ImageNet statistics.
+    self.std = std or (0.229, 0.224, 0.225)
+    # Determine the target spatial dimensions from the configuration object.
+    self.targetSize = targetSize or (224, 224)  # Default target size (height, width).
+
+    # Execute the transformation pipeline on the provided video array.
+
+  def __call__(self, inputVideo: np.ndarray) -> torch.Tensor:
+    r'''
+    Apply transformation pipeline to video.
+    It takes an input video as a numpy array, applies resizing, random cropping, horizontal flipping, and normalization
+    to each frame in the video sequence. The transformations are applied consistently across all frames to maintain
+    temporal coherence. The output is a normalized tensor ready for input into a video model.
+
+    Parameters:
+      inputVideo: Input video array of shape (T, H, W, C).
+
+    Returns:
+      Transformed tensor of shape (C, T, H, W).
+    '''
+
+    # Convert the numpy array to a torch tensor and adjust the channel dimension.
+    videoTensor = torch.from_numpy(inputVideo).permute(0, 3, 1, 2).float() / 255.0
+    # Resize each frame in the video sequence to the target dimensions.
+    videoTensor = torch.stack([
+      # Apply resizing operation to each individual frame.
+      Fv.resize(frame, self.targetSize, antialias=True)
+      for frame in videoTensor
+    ])
+    # Apply training-specific data augmentations only during training mode.
+    if (self.isTrain):
+      # Generate a random probability to decide on horizontal flipping.
+      if (torch.rand(1) > 0.5):
+        # Apply horizontal flipping consistently across all video frames.
+        videoTensor = torch.stack([
+          # Flip each frame horizontally along the vertical axis.
+          Fv.hflip(frame)
+          for frame in videoTensor
+        ])
+      # Calculate the spatial dimensions for the random crop operation.
+      outputSize = min(self.targetSize)
+      # Determine the cropping parameters for the first frame.
+      cropI, cropJ, cropH, cropW = T.RandomCrop.get_params(
+        videoTensor[0], (outputSize, outputSize)
+      )
+      # Apply the identical crop to every frame in the sequence.
+      videoTensor = torch.stack([
+        # Crop each frame using the generated coordinates.
+        Fv.crop(frame, cropI, cropJ, cropH, cropW)
+        for frame in videoTensor
+      ])
+    # Normalize each channel using the specified mean and standard deviation.
+    for channelTensor, channelMean, channelStd in zip(videoTensor, self.mean, self.std):
+      # Subtract the mean and divide by the standard deviation in place.
+      channelTensor.sub_(channelMean).div_(channelStd)
+    # Reorder the tensor dimensions to match the expected channel-first format.
+    videoTensor = videoTensor.permute(1, 0, 2, 3)
+    # Return the fully processed video tensor for model ingestion.
+    return videoTensor
+
+  # Reverse the normalization and channel reordering to restore the original format.
+  def InverseTransform(self, inputTensor: torch.Tensor) -> np.ndarray:
+    r'''
+    Convert a normalized tensor back to a standard numpy array.
+
+    Parameters:
+      inputTensor: Normalized tensor of shape (C, T, H, W) or (B, C, T, H, W).
+
+    Returns:
+      Denormalized numpy array of shape (T, H, W, C) with values in [0, 255].
+    '''
+
+    # Create a clone to prevent modification of the original tensor.
+    denormTensor = inputTensor.clone().detach()
+    # Permute dimensions back to (T, C, H, W) for single videos
+    # or (B, T, C, H, W) for batches.
+    if (denormTensor.dim() == 4):
+      denormTensor = denormTensor.permute(1, 2, 3, 0)
+    elif (denormTensor.dim() == 5):
+      denormTensor = denormTensor.permute(0, 2, 3, 4, 1)
+    # Initialize the mean and standard deviation tensors for denormalization.
+    meanTensor = torch.tensor(self.mean).view(1, 3, 1, 1)
+    stdTensor = torch.tensor(self.std).view(1, 3, 1, 1)
+    # Expand mean and standard deviation tensors to match the video tensor dimensions.
+    meanTensor = meanTensor.expand_as(denormTensor)
+    stdTensor = stdTensor.expand_as(denormTensor)
+    # Reverse the normalization formula to recover original pixel values.
+    denormTensor = denormTensor * stdTensor + meanTensor
+    # Scale the pixel values from the range [0, 1] to [0, 255].
+    denormTensor = denormTensor * 255.0
+    # Clamp the values to ensure they remain within the valid byte range.
+    denormTensor = denormTensor.clamp(0, 255)
+    # Convert the tensor to a numpy array with unsigned 8-bit integers.
+    resultArray = denormTensor.cpu().numpy().astype(np.uint8)
+    # Return the fully denormalized numpy array for visualization or saving.
+    return resultArray
+
+  # Collate individual samples into a single batched dictionary.
+  @staticmethod
+  def CollateFn(sampleBatch: list) -> dict:
+    r'''
+    Collate function for DataLoader.
+    It stacks the pixel value tensors and label tensors from a list of sample
+    dictionaries into a single batched dictionary.
+
+    Parameters:
+      sampleBatch: List of sample dictionaries.
+
+    Returns:
+      Batched dictionary with stacked tensors.
+    '''
+
+    # Stack the pixel value tensors from each sample in the batch.
+    pixelValues = torch.stack([
+      # Extract pixel values from the current sample dictionary.
+      currentSample["PixelValues"]
+      for currentSample in sampleBatch
+    ])
+    # Reorder dimensions if the tensor shape matches the expected five-dimensional layout.
+    if (pixelValues.dim() == 5 and pixelValues.shape[1] <= 3):
+      # Permute dimensions to align with frames-first video model expectations.
+      pixelValues = pixelValues.permute(0, 2, 1, 3, 4)
+    # Stack the label tensors from each sample in the batch.
+    labelValues = torch.stack([
+      # Extract labels from the current sample dictionary.
+      currentSample["Labels"]
+      for currentSample in sampleBatch
+    ])
+    # Return the batched dictionary containing pixel values and labels.
+    return {
+      # Batched tensor of shape (B, C, T, H, W) or (B, T, C, H, W) depending on the input format.
+      "PixelValues": pixelValues,
+      # Batched tensor of shape (B, num_classes) containing the labels for each sample in the batch.
+      "Labels"     : labelValues,
+    }
+
+  # Generate a visual grid of frames from a processed video tensor.
+  @staticmethod
+  def VisualizeVideo(inputTensor: torch.Tensor, savePath: Optional[str] = None) -> None:
+    r'''
+    Display or save a grid of video frames for inspection.
+    It takes a video tensor, converts it to a numpy array if necessary, and visualizes the frames in a
+    grid layout using matplotlib.
+
+    Parameters:
+      inputTensor: Video tensor of shape (C, T, H, W) or numpy array (T, H, W, C).
+      savePath: Optional file path to save the generated visualization image.
+    '''
+
+    # Convert the tensor to a numpy array if necessary.
+    if (isinstance(inputTensor, torch.Tensor)):
+      visualArray = inputTensor.clone().detach().cpu().numpy()
+      # Permute the tensor to match the expected (T, H, W, C) layout.
+      visualArray = np.transpose(visualArray, (1, 2, 3, 0))
+    else:
+      visualArray = inputTensor
+    # If the data are floats and outside the [0,1] display range, assume
+    # they are normalized (e.g. ImageNet mean/std) and attempt to denormalize
+    # so matplotlib.imshow doesn't clip the images. We use ImageNet
+    # statistics as a sensible default.
+    if (isinstance(visualArray, np.ndarray) and visualArray.dtype.kind == 'f'):
+      vmin = float(np.nanmin(visualArray))
+      vmax = float(np.nanmax(visualArray))
+      if (vmin < 0.0 or vmax > 1.0):
+        try:
+          mean = np.array((0.485, 0.456, 0.406), dtype=visualArray.dtype)
+          std = np.array((0.229, 0.224, 0.225), dtype=visualArray.dtype)
+          # visualArray shape is (T, H, W, C)
+          visualArray = (visualArray * std.reshape(1, 1, 1, 3) + mean.reshape(1, 1, 1, 3))
+          visualArray = np.clip(visualArray, 0.0, 1.0)
+        except Exception:
+          # If denormalization fails for any reason, fall back to clipping
+          visualArray = np.clip(visualArray, 0.0, 1.0)
+    # Calculate the number of frames for grid layout.
+    frameCount = visualArray.shape[0]
+    # Determine the grid rows and columns for optimal display.
+    numRows = int(np.ceil(np.sqrt(frameCount)))
+    numCols = int(np.ceil(frameCount / numRows))
+    # Initialize the matplotlib figure and axis objects.
+    fig, axisArray = plt.subplots(numRows, numCols, figsize=(15, 10))
+    # Flatten the axis array for easier iteration.
+    axisArray = axisArray.flatten()
+    # Iterate through each frame in the video sequence.
+    for frameIndex in range(frameCount):
+      # Display the current frame on the corresponding subplot axis.
+      axisArray[frameIndex].imshow(visualArray[frameIndex])
+      # Disable axis ticks and labels for cleaner visualization.
+      axisArray[frameIndex].axis("off")
+      # Set the title of the subplot to indicate the frame index.
+      axisArray[frameIndex].set_title("Frame " + str(frameIndex))
+    # Hide any unused subplots in the grid.
+    for remainingIndex in range(frameCount, len(axisArray)):
+      axisArray[remainingIndex].axis("off")
+    # Adjust the spacing between subplots for optimal presentation.
+    plt.tight_layout()
+    # Check if a save path was provided for file export.
+    if (savePath is not None):
+      # Save the generated figure to the specified file path.
+      fig.savefig(savePath, dpi=300, bbox_inches="tight")
+    else:
+      # Display the interactive plot window for user inspection.
+      plt.show()
+    # Close the matplotlib figure to free up memory.
+    plt.close(fig)
+
+
+# Execute the script only when it is run directly as the main module.
+if (__name__ == "__main__"):
+  # Instantiate the transformation pipeline with training mode enabled.
+  videoTransforms = PyTorchVideoTransforms(isTrain=True, targetSize=(256, 256))
+  # Create a dummy video array with shape (T, H, W, C) for testing purposes.
+  dummyVideo = np.random.randint(0, 256, (10, 480, 640, 3), dtype=np.uint8)
+  # Apply the transformation pipeline to the dummy video data.
+  transformedVideo = videoTransforms(dummyVideo)
+  # Print the resulting shape of the transformed video tensor.
+  print(transformedVideo.shape)
+  # Generate a visual grid of the transformed video frames for verification.
+  PyTorchVideoTransforms.VisualizeVideo(transformedVideo)

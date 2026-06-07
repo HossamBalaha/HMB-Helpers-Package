@@ -1,14 +1,15 @@
-import argparse, splitfolders, os, torch, timm, json, builtins
+import argparse, splitfolders, os, torch, timm, builtins
 import numpy as np
 import pandas as pd
 import torch.nn as nn
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from HMB.Initializations import IgnoreWarnings, DoRandomSeeding
+from HMB.Utils import DumpJsonFile
 from HMB.PyTorchHelper import GetOptimizer, LoadPyTorchDict
+from HMB.Initializations import IgnoreWarnings, DoRandomSeeding
 from HMB.PyTorchTrainingPipeline import TrainEvaluateClassificationModel, GenericImageryEvaluatePredictPlotSubset
-from HMB.DatasetsHelper import CustomDataset
+from HMB.DatasetsHelper import PyTorchCustomDataset
 
 # Ensure all prints flush by default to make logs appear promptly.
 # Save the original built-in print function for delegation.
@@ -213,6 +214,7 @@ def ValidateArgs(args):
   settings (for example falling back to CPU if CUDA isn't available).
   Returns the (possibly modified) args object.
   '''
+
   # Ensure dataDir is a string and not empty.
   if (not isinstance(args.dataDir, str) or not args.dataDir):
     # Raise an informative error when dataDir is invalid.
@@ -385,7 +387,11 @@ def ValidateArgs(args):
 
 
 # Create data loaders using timm's data configuration helpers.
-def CreateTimmDataLoaders(args, splitTrainFolder=None, splitValFolder=None):
+def CreateTimmDataLoaders(
+  args,
+  splitTrainFolder=None,
+  splitValFolder=None
+):
   # Create a timm model instance to query its data configuration.
   model = timm.create_model(args.modelName, pretrained=True)
   # Resolve the model-specific data configuration from timm.
@@ -397,17 +403,17 @@ def CreateTimmDataLoaders(args, splitTrainFolder=None, splitValFolder=None):
 
   if (splitTrainFolder is None):
     # Create the training dataset using the project's CustomDataset wrapper.
-    trainDataset = CustomDataset(os.path.join(args.dataDir + " Split", "train"), transform=trainTransforms)
+    trainDataset = PyTorchCustomDataset(os.path.join(args.dataDir + " Split", "train"), transform=trainTransforms)
   else:
     # Create the training dataset directly from the data directory.
-    trainDataset = CustomDataset(splitTrainFolder, transform=trainTransforms)
+    trainDataset = PyTorchCustomDataset(splitTrainFolder, transform=trainTransforms)
 
   if (splitValFolder is None):
     # Create the validation dataset using the project's CustomDataset wrapper.
-    valDataset = CustomDataset(os.path.join(args.dataDir + " Split", "val"), transform=valTransforms)
+    valDataset = PyTorchCustomDataset(os.path.join(args.dataDir + " Split", "val"), transform=valTransforms)
   else:
     # Create the validation dataset directly from the data directory.
-    valDataset = CustomDataset(splitValFolder, transform=valTransforms)
+    valDataset = PyTorchCustomDataset(splitValFolder, transform=valTransforms)
 
   if (args.verbose):
     print(
@@ -423,7 +429,10 @@ def CreateTimmDataLoaders(args, splitTrainFolder=None, splitValFolder=None):
     print(f"Example validation transform pipeline: {valTransforms}")
     print("Classes:", trainDataset.classes)
     print("Class to index mapping:", trainDataset.classToIdx)
-    print(f"First 5 samples in training dataset: {[trainDataset[i][1] for i in range(min(5, len(trainDataset)))]}")
+    print(
+      f"First 5 samples in training dataset: "
+      f"{[trainDataset[i][1] for i in range(min(5, len(trainDataset)))]}"
+    )
 
   # Create the DataLoader for the training dataset with shuffling enabled.
   trainLoader = DataLoader(
@@ -499,8 +508,7 @@ def MainTrain():
 
   # Save the training configuration arguments to a JSON file in the output directory for future reference.
   argsJsonPath = os.path.join(args.outputDir, "TrainingArgs.json")
-  with open(argsJsonPath, "w") as f:
-    json.dump(vars(args), f, indent=4)
+  DumpJsonFile(argsJsonPath, vars(args))
 
   # Select the device for computation and wrap it in a torch.device.
   device = torch.device(args.device)
@@ -585,7 +593,11 @@ def MainTrain():
 def CreateTimmPredictCallable(model, transform, device, imageSize):
   '''Return a callable(imageNp, imagePath=None, trueClassName=None) -> 1D numpy prob vector.'''
 
-  def PredictCallable(img, imagePath=None, trueClassName=None):
+  def PredictCallable(
+    img,
+    imagePath=None,
+    trueClassName=None
+  ):
     # Convert the input HWC numpy image to a PIL Image for transformation.
     # Resize the image to the expected input size for the model using the provided transform.
     from PIL import Image
@@ -608,7 +620,32 @@ def MainTest():
   # Create the model and load the best checkpoint.
   model = CreateModel(args)
 
-  bestModelPath = os.path.join(args.outputDir, "BestModel.pth")
+  # Load all checkpoints and find the best one based on the specified criterion (val_loss, val_accuracy, or both).
+  allCheckpoints = [
+    file
+    for file in os.listdir(args.outputDir)
+    if (file.endswith(".pt") or file.endswith(".pth"))
+  ]
+  # Filter checkpoints to find the best model based on the specified judgeBy criterion.
+  checkpointsMetrics = [
+    file.split("_Metric_")[1].split(".pt")[0]
+    for file in allCheckpoints
+  ]
+  if (len(checkpointsMetrics) == 0):
+    raise ValueError(f"No checkpoints found in output directory: {args.outputDir}")
+  elif (len(checkpointsMetrics) == 1):
+    print(f"Only one checkpoint found. Using: {allCheckpoints[0]}")
+    bestIndex = 0
+    fileToSelect = allCheckpoints[bestIndex]
+    print(f"Best checkpoint based on {args.judgeBy}: {fileToSelect}")
+  else:
+    # Convert to float for comparison and find the index of the best checkpoint.
+    checkpointsMetrics = [float(metric) for metric in checkpointsMetrics]
+    bestIndex = checkpointsMetrics.index(max(checkpointsMetrics))
+    fileToSelect = allCheckpoints[bestIndex]
+    print(f"Best checkpoint based on {args.judgeBy}: {fileToSelect}")
+
+  bestModelPath = os.path.join(args.outputDir, fileToSelect)
   stateDict = LoadPyTorchDict(bestModelPath, device=args.device)
 
   # isEMA = args.useEma

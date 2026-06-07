@@ -10,7 +10,7 @@ Quick Pointers
 - **Example scripts**: ``HMB/Examples``.
 - **Documentation source**: ``source/`` (build with Sphinx into ``build/html``).
 - **Tests**: Run via ``tests/run_tests.py`` (see README for examples).
-- **Package version**: 0.1.0 (`Changelog <https://github.com/HossamBalaha/HMB-Helpers-Package/releases>`_).
+- **Package version**: 0.2.0 (`Changelog <https://github.com/HossamBalaha/HMB-Helpers-Package/releases>`_).
 
 General
 -------
@@ -29,7 +29,9 @@ General
 
 **Q:** Where are the project requirements listed?
 
-**A:** See ``requirements.txt`` at the repository root. Some optional examples may require additional packages (e.g., ``timm``, ``torchvision``, ``seaborn``, ``scikit-learn``, ``nltk``, ``spacy``, ``transformers``, ``openslide``, ``tabula-py``).
+**A:** See ``requirements.txt`` at the repository root. The development `requirements.txt` contains exact pinned versions used for testing. Note: the package `all` extra intentionally omits large, platform-specific frameworks (PyTorch, TensorFlow, Keras, tensorboard) so users can install the appropriate CPU/CUDA builds separately.
+
+Some optional examples may require additional packages (e.g., ``timm``, ``torchvision``, ``seaborn``, ``scikit-learn``, ``nltk``, ``spacy``, ``transformers``, ``openslide``, ``tabula-py``).
 
 **Q:** What image and data formats are supported?
 
@@ -64,7 +66,7 @@ For development (editable install):
 
 **Q:** How do I choose CPU vs GPU (CUDA) builds of PyTorch?
 
-**A:** The repository's ``requirements.txt`` may include an extra index URL for specific CUDA wheels and pins ``torch``/``torchvision``/``torchaudio`` to CUDA builds (e.g., ``+cu128``). If you don't have matching CUDA drivers or prefer CPU-only:
+**A:** The repository's ``requirements.txt`` may include an extra index URL for specific CUDA wheels and pins ``torch``/``torchvision``/``torchaudio`` to CUDA builds (e.g., ``+cu128``). Note that the package `all` extra does not install PyTorch — install the ``pytorch`` extra or follow the official PyTorch installer for CPU vs GPU choices. If you don't have matching CUDA drivers or prefer CPU-only:
 
   - Install CPU wheels explicitly: ``pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu``
   - Or remove the extra index from ``requirements.txt`` and install packages compatible with your platform.
@@ -406,7 +408,7 @@ Licensing & Citation
      author = {Balaha, Hossam Magdy},
      title = {HMB-Helpers-Package},
      year = {2026},
-     version = {0.1.0},
+     version = {0.2.0},
      url = {https://github.com/HossamBalaha/HMB-Helpers-Package}
    }
 

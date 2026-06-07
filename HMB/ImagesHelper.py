@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt  # Import matplotlib for plotting.
 # Import specific modules from PIL for image enhancements and drawing.
 from PIL import Image, ImageEnhance, ImageFilter, ImageDraw
 from io import BytesIO  # Import BytesIO for in-memory byte streams.
+from HMB.Utils import fprint  # Import custom print function from HMB utilities.
 
 
 def ReadImage(path, newSize=(256, 256)):
@@ -48,7 +49,7 @@ def ReadMask(path, newSize=(256, 256)):
   Returns:
     numpy.ndarray: The preprocessed mask as a NumPy array.
   '''
-  
+
   # Decode the path.
   path = path.decode()
 
@@ -335,6 +336,10 @@ def GetEmptyPercentage(img, shape=(256, 256), inverse=False):
   Returns:
     float: Ratio of empty regions to the total area.
   '''
+
+  # If the image of type Image.Image, convert it to a NumPy array.
+  if (isinstance(img, Image.Image)):
+    img = np.array(img.copy())
 
   # Convert the input image to grayscale.
   if (len(img.shape) == 2):
@@ -801,7 +806,7 @@ def CheckIfPNGImageIsNotTruncated(imgPath):
         return False
       return True
   except Exception as e:
-    print(f"Error reading PNG file: {e}")
+    fprint(f"Error reading PNG file: {e}")
     return False
 
 
@@ -820,9 +825,9 @@ def FixTruncatedPNGImage(imgPath):
     with open(imgPath, "ab") as f:
       # Append the PNG end chunk.
       f.write(b"\x00\x00\x00\x00IEND\xaeB`\x82")
-      print(f"Fixed truncated PNG image: {imgPath}")
+      fprint(f"Fixed truncated PNG image: {imgPath}")
   except Exception as e:
-    print(f"Error fixing truncated PNG image: {e}")
+    fprint(f"Error fixing truncated PNG image: {e}")
 
 
 def LoadDicom(filePath, useVOILUT=True):
@@ -2127,7 +2132,8 @@ def ClusteringImageKMeans(sample, kmeans, noChannels=4):
   '''
 
   # Reshape the image to a 2D array of pixels and their color values, then predict cluster labels.
-  pixelValues = np.array(sample.copy()).reshape(-1, noChannels)
+  pixelValues = np.array(sample.copy())
+  pixelValues = pixelValues.reshape((-1, noChannels))  # Reshape to (numPixels, numChannels).
   # Sort pixel values to ensure consistent ordering for KMeans prediction.
   pixelValues.sort()
   # Predict cluster labels for each pixel using the pre-fitted KMeans model.
@@ -2171,6 +2177,7 @@ def FitGlobalKMeans(
     sklearn.cluster.KMeans: Fitted KMeans model.
   '''
 
+  import tqdm  # Import tqdm for progress bar.
   from sklearn.cluster import MiniBatchKMeans
   from HMB.Utils import WritePickleFile
 
@@ -2185,19 +2192,23 @@ def FitGlobalKMeans(
       img = img.resize(targetSize)
       imgNp = np.array(img)
       if (noChannels is not None):
-        pixels = imgNp.reshape(-1, noChannels)
+        if (imgNp.shape[2] < noChannels):
+          raise ValueError(f"Image {file} has fewer channels ({imgNp.shape[2]}) than expected ({noChannels}).")
+        pixels = imgNp[:, :, :noChannels].reshape(-1, noChannels)
       else:
-        pixels = imgNp.reshape(-1, imgNp.shape[-1])
+        pixels = imgNp.reshape(-1, imgNp.shape[2])
       if (sampleSize and pixels.shape[0] > sampleSize):
         idx = np.random.choice(pixels.shape[0], sampleSize, replace=False)
         pixels = pixels[idx]
       allPixels.append(pixels)
     except Exception as e:
       if (verbose):
-        print(f"Error processing file {file}: {e}", flush=True)
+        fprint(f"Error processing file {file}: {e}")
       continue
   # Stack all collected pixel data into a single array for KMeans fitting.
   allPixels = np.vstack(allPixels)
+  if (verbose):
+    fprint(f"Collected {allPixels.shape[0]} pixels for KMeans fitting.")
   # Initialize the MiniBatchKMeans model with specified parameters for efficient clustering on large datasets.
   kmeans = MiniBatchKMeans(
     n_clusters=numClusters,  # Number of clusters.
@@ -2205,8 +2216,12 @@ def FitGlobalKMeans(
     n_init=nInit,  # Number of initializations to run.
     batch_size=batchSize,  # Use mini-batches for efficiency.
   )  # Initialize MiniBatchKMeans.
+  if (verbose):
+    fprint(f"Fitting KMeans on {allPixels.shape[0]} pixels...")
   # Fit the KMeans model on the collected pixel data.
   kmeans.fit(allPixels)
+  if (verbose):
+    fprint("KMeans fitting completed.")
   # Save the fitted KMeans model to a file.
   WritePickleFile(modelPath, kmeans)
   return kmeans

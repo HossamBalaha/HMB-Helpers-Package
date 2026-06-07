@@ -1598,17 +1598,33 @@ def SummaryTable(image1, image2):
   return scores
 
 
-def IsSimilarityAccepted(image1, image2):
+def IsSimilarityAccepted(
+  image1, image2,
+  miThreshold=0.35,
+  cosSimThreshold=0.75,
+  pHashThreshold=20,
+  strict=True,
+):
   r'''
   Determine if two images are similar based on Mutual Information, Cosine Similarity, and Perceptual Hash.
 
   Parameters:
     image1 (numpy.ndarray or compatible): First input image.
     image2 (numpy.ndarray or compatible): Second input image.
+    miThreshold (float): Threshold for Mutual Information (default: 0.35).
+    cosSimThreshold (float): Threshold for Cosine Similarity (default: 0.75).
+    pHashThreshold (int): Threshold for Perceptual Hash Hamming distance (default: 20).
+    strict (bool): If True, all conditions must be met; if False, at least one condition must be met (default: True).
 
   Returns:
     tuple: (bool, str) indicating if the images are similar and a summary string.
   '''
+
+  # If the inputs are of type PIL.Image, convert them to NumPy arrays for processing.
+  if (isinstance(image1, PIL.Image.Image)):
+    image1 = np.array(image1.copy())
+  if (isinstance(image2, PIL.Image.Image)):
+    image2 = np.array(image2.copy())
 
   scores = SummaryTable(image1, image2)
   mi = scores["MI (U)"]
@@ -1616,8 +1632,21 @@ def IsSimilarityAccepted(image1, image2):
   pHash = scores["pHash (D)"]
 
   s = f"Mutual Information: {mi:.4f}\nCosine Similarity: {cosSim:.4f}\nPerceptual Hash: {pHash:.4f}"
-  if (mi >= 0.35 and cosSim >= 0.75 and pHash <= 20):
-    return True, s
+  cond1 = mi >= miThreshold
+  cond2 = cosSim >= cosSimThreshold
+  cond3 = pHash <= pHashThreshold
+  countOfConditionsMet = sum([cond1, cond2, cond3])
+  s += f"\nConditions Met: {countOfConditionsMet}/3"
+
+  if (strict):
+    if (cond1 and cond2 and cond3):
+      return True, s
+  else:
+    if (countOfConditionsMet >= 1):
+      return True, s
+
+  # if (mi >= 0.35 and cosSim >= 0.75 and pHash <= 20):
+  #   return True, s
   return False, s
 
 

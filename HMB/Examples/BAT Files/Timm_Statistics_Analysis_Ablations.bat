@@ -5,10 +5,10 @@ REM Edit the variables below to suit your environment before running.
 setlocal enabledelayedexpansion
 
 :: Path to the Python script (edit as needed)
-set "SCRIPT=Statistics_Analysis_Ablations.py"
+set "SCRIPT=C:\path\to\Timm_Statistics_Analysis_Ablations.py"
 
 :: Base experiments directory containing system subfolders (edit or add more below)
-set "BASE_EXP_DIR=C:\path\to\Experiments"
+set "BASE_EXP_DIR=C:\path\to\base\experiments\directory"
 :: To specify multiple base dirs, set BASE_DIRS to a space-separated list of quoted paths, e.g.:
 :: set "BASE_DIRS=""C:\Path With Spaces\Exp1" "D:\OtherExp"""
 set "BASE_DIRS="%BASE_EXP_DIR%""
@@ -30,17 +30,17 @@ set "PROBABILITY_COL_NAME=probabilities"
 set "VERBOSE=1"
 
 :: DPI for saving figures
-set "DPI=1080"
+set "DPI=300"
 
 :: Explainability methods to analyze (space separated, e.g. "gradcam")
 set "EXPLAIN_METHODS=gradcam gradcampp layercam integratedgradients"
 :: Max number of images for the explainability analysis (set to a positive integer or 0 for none)
 set "MAX_EXPLAIN_IMAGES=10"
 :: Dataset/subset directory path for the explainability analysis (if needed, otherwise can be left empty)
-set "EXPLAIN_DATASET_DIR=/path/to/dataset/subset/for/explainability"
+set "EXPLAIN_DATASET_DIR=C:\path\to\dataset\subset\for\explainability
 
 :: Perturbation max number of images (set to a positive integer or leave empty for no limit)
-set "MAX_PERTURB_IMAGES="
+set "MAX_PERTURB_IMAGES=10"
 
 :: Device to use for the analysis (e.g., "cuda" or "cpu")
 set "DEVICE=cuda"

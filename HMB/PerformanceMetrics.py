@@ -1,16 +1,18 @@
+import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from typing import List
 from collections import Counter
-from HMB.PlotsHelper import GetCmapColors, GetRandomCMAPalette
+from HMB.Utils import SafeTrapz
+from HMB.PlotsHelper import GetCmapColors, GetRandomCMAPalette, SaveMatplotlibFigure
 
 
 def CalculatePerformanceMetrics(
-    confMatrix,  # Confusion matrix (2D list or numpy array).
-    eps=1e-10,  # Small value to avoid division by zero.
-    addWeightedAverage=False,  # Whether to include weighted averages in the output.
-    addPerClass=False,  # Whether to include per-class metrics in the output.
+  confMatrix,  # Confusion matrix (2D list or numpy array).
+  eps=1e-10,  # Small value to avoid division by zero.
+  addWeightedAverage=False,  # Whether to include weighted averages in the output.
+  addPerClass=False,  # Whether to include per-class metrics in the output.
 ):
   r'''
   Calculate performance metrics from a confusion matrix.
@@ -133,9 +135,9 @@ def CalculatePerformanceMetrics(
   accuracy = np.mean(TP + TN) / np.sum(confMatrix)
   specificity = np.mean(TN / (TN + FP))
   bac = 0.5 * (recall + specificity)
-  mcc = (TP * TN - FP * FN) / np.sqrt((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN))
+  mcc = np.mean((TP * TN - FP * FN) / np.sqrt((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN)))
   youden = recall + specificity - 1
-  yule = (TP * TN - FP * FN) / (TP * TN + FP * FN)
+  yule = np.mean((TP * TN - FP * FN) / (TP * TN + FP * FN))
 
   # Add macro metrics to the dictionary.
   metrics.update({
@@ -166,8 +168,12 @@ def CalculatePerformanceMetrics(
   accuracy = np.sum(TP + TN) / np.sum(TP + TN + FP + FN)
   specificity = np.sum(TN) / np.sum(TN + FP)
   bac = 0.5 * (recall + specificity)
-  mcc = (np.sum(TP) * np.sum(TN) - np.sum(FP) * np.sum(FN)) / np.sqrt(
-    (np.sum(TP) + np.sum(FP)) * (np.sum(TP) + np.sum(FN)) * (np.sum(TN) + np.sum(FP)) * (np.sum(TN) + np.sum(FN)))
+  mcc = (
+    (np.sum(TP) * np.sum(TN) - np.sum(FP) * np.sum(FN)) /
+    np.sqrt(
+      (np.sum(TP) + np.sum(FP)) * (np.sum(TP) + np.sum(FN)) * (np.sum(TN) + np.sum(FP)) * (np.sum(TN) + np.sum(FN))
+    )
+  )
   youden = recall + specificity - 1
   yule = (np.sum(TP) * np.sum(TN) - np.sum(FP) * np.sum(FN)) / (np.sum(TP) * np.sum(TN) + np.sum(FP) * np.sum(FN))
 
@@ -238,21 +244,21 @@ def CalculatePerformanceMetrics(
 
 
 def PlotConfusionMatrix(
-    cm,  # Confusion matrix (2D list or numpy array).
-    classes,  # List of class labels.
-    normalize=False,  # Whether to normalize the confusion matrix.
-    roundDigits=3,  # Number of decimal places to round normalized values.
-    title="Confusion Matrix",  # Title of the plot.
-    cmap=plt.cm.Blues,  # Colormap for the plot.
-    display=True,  # Whether to display the plot.
-    save=False,  # Whether to save the plot.
-    fileName="ConfusionMatrix.pdf",  # File name to save the plot.
-    fontSize=15,  # Font size for labels and annotations.
-    annotate=True,  # Whether to annotate cells with values.
-    figSize=(8, 8),  # Figure size in inches.
-    colorbar=True,  # Whether to show colorbar.
-    returnFig=False,  # Whether to return the figure object.
-    dpi=720,  # DPI for saving the figure.
+  cm,  # Confusion matrix (2D list or numpy array).
+  classes,  # List of class labels.
+  normalize=False,  # Whether to normalize the confusion matrix.
+  roundDigits=3,  # Number of decimal places to round normalized values.
+  title="Confusion Matrix",  # Title of the plot.
+  cmap=plt.cm.Blues,  # Colormap for the plot.
+  display=True,  # Whether to display the plot.
+  save=False,  # Whether to save the plot.
+  fileName="ConfusionMatrix.pdf",  # File name to save the plot.
+  fontSize=15,  # Font size for labels and annotations.
+  annotate=True,  # Whether to annotate cells with values.
+  figSize=(8, 8),  # Figure size in inches.
+  colorbar=True,  # Whether to show colorbar.
+  returnFig=False,  # Whether to return the figure object.
+  dpi=720,  # DPI for saving the figure.
 ):
   r'''
   Plot a confusion matrix with options for normalization, annotation, saving, and display.
@@ -380,15 +386,15 @@ def PlotConfusionMatrix(
     # Hide the grid for the confusion matrix.
     plt.grid(False)
 
-    # Save the plot if requested.
-    if (save):  # Save the plot.
-      ext = fileName.split(".")[-1]
-      if (ext.lower() == "pdf"):
-        try:
-          fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
-        except Exception as e:
-          print(f"Error saving plot: {e}")
-      fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+    # Save the plot if requested using centralized helper.
+    if (save):
+      try:
+        SaveMatplotlibFigure(
+          os.path.splitext(str(fileName))[0], fig=fig, dpi=dpi,
+          show=False, exportPdf=True, exportPng=True,
+        )
+      except Exception as e:
+        print(f"Error saving plot: {e}")
 
     # Display the plot if requested.
     if (display):  # Display the plot.
@@ -402,16 +408,16 @@ def PlotConfusionMatrix(
 
 
 def PlotRegressionResults(
-    yTrue,
-    yPred,
-    title="Regression Results",
-    fontSize=14,
-    figsize=(10, 5),
-    display=True,
-    save=False,
-    fileName="RegressionResults.pdf",
-    dpi=720,
-    returnFig=False,
+  yTrue,
+  yPred,
+  title="Regression Results",
+  fontSize=14,
+  figsize=(10, 5),
+  display=True,
+  save=False,
+  fileName="RegressionResults.pdf",
+  dpi=720,
+  returnFig=False,
 ):
   r'''
   Plot regression results: predicted vs. true values and residuals.
@@ -472,7 +478,15 @@ def PlotRegressionResults(
   plt.tight_layout(rect=[0, 0, 1, 0.95])
 
   if (save and fileName):
-    plt.savefig(fileName, dpi=dpi)
+    try:
+      ext = os.path.splitext(str(fileName))[1].lower()
+    except Exception:
+      ext = ""
+    SaveMatplotlibFigure(
+      os.path.splitext(str(fileName))[0], fig=fig, dpi=dpi,
+      exportPdf=(ext in (".pdf", ".svg")),
+      exportPng=(ext in (".png", ".jpg", ".jpeg"))
+    )
   if (display):
     plt.show()
 
@@ -485,22 +499,22 @@ def PlotRegressionResults(
 
 
 def PlotROCAUCCurve(
-    yTrue,  # True labels (one-hot or binary).
-    yPred,  # Predicted labels (one-hot or binary).
-    classes,  # List of class names.
-    areProbabilities=False,  # Whether yPred are probabilities.
-    title="ROC Curve & AUC",  # Plot title.
-    figSize=(5, 5),  # Figure size.
-    cmap=None,  # Colormap for ROC curves.
-    display=True,  # Display the plot.
-    save=False,  # Save the plot.
-    fileName="ROC_AUC.pdf",  # File name.
-    fontSize=15,  # Font size.
-    plotDiagonal=True,  # Plot diagonal reference line.
-    annotateAUC=True,  # Annotate AUC value on plot.
-    showLegend=True,  # Show legend.
-    returnFig=False,  # Return figure object.
-    dpi=720,  # DPI for saving the figure.
+  yTrue,  # True labels (one-hot or binary).
+  yPred,  # Predicted labels (one-hot or binary).
+  classes,  # List of class names.
+  areProbabilities=False,  # Whether yPred are probabilities.
+  title="ROC Curve & AUC",  # Plot title.
+  figSize=(5, 5),  # Figure size.
+  cmap=None,  # Colormap for ROC curves.
+  display=True,  # Display the plot.
+  save=False,  # Save the plot.
+  fileName="ROC_AUC.pdf",  # File name.
+  fontSize=15,  # Font size.
+  plotDiagonal=True,  # Plot diagonal reference line.
+  annotateAUC=True,  # Annotate AUC value on plot.
+  showLegend=True,  # Show legend.
+  returnFig=False,  # Return figure object.
+  dpi=720,  # DPI for saving the figure.
 ):
   r'''
   Plot ROC curves and calculate AUC for each class, with options for annotation, saving, and display.
@@ -643,15 +657,15 @@ def PlotROCAUCCurve(
     # Tight the layout to ignore wasted spaces.
     plt.tight_layout()
 
-    # Save the plot if requested.
-    if (save):  # Save the plot.
-      ext = fileName.split(".")[-1]
-      if (ext.lower() == "pdf"):
-        try:
-          fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
-        except Exception as e:
-          print(f"Error saving plot: {e}")
-      fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+    # Save the plot if requested using centralized helper.
+    if (save):
+      try:
+        SaveMatplotlibFigure(
+          os.path.splitext(str(fileName))[0], fig=fig, dpi=dpi,
+          show=False, exportPdf=True, exportPng=True
+        )
+      except Exception as e:
+        print(f"Error saving plot: {e}")
 
     if (display):
       # Display the plot if requested.
@@ -665,21 +679,21 @@ def PlotROCAUCCurve(
 
 
 def PlotPRCCurve(
-    yTrue,  # True labels (one-hot or binary).
-    yPred,  # Predicted labels (one-hot or binary).
-    classes,  # List of class names.
-    areProbabilities=False,  # Whether yPred are probabilities.
-    title="PRC Curve",  # Plot title.
-    figSize=(5, 5),  # Figure size.
-    cmap=None,  # Colormap for PRC curves.
-    display=True,  # Display the plot.
-    save=False,  # Save the plot.
-    fileName="PRC.pdf",  # File name.
-    fontSize=15,  # Font size.
-    annotateAvg=True,  # Annotate average precision value on plot.
-    showLegend=True,  # Show legend.
-    returnFig=False,  # Return figure object.
-    dpi=720,  # DPI for saving the figure.
+  yTrue,  # True labels (one-hot or binary).
+  yPred,  # Predicted labels (one-hot or binary).
+  classes,  # List of class names.
+  areProbabilities=False,  # Whether yPred are probabilities.
+  title="PRC Curve",  # Plot title.
+  figSize=(5, 5),  # Figure size.
+  cmap=None,  # Colormap for PRC curves.
+  display=True,  # Display the plot.
+  save=False,  # Save the plot.
+  fileName="PRC.pdf",  # File name.
+  fontSize=15,  # Font size.
+  annotateAvg=True,  # Annotate average precision value on plot.
+  showLegend=True,  # Show legend.
+  returnFig=False,  # Return figure object.
+  dpi=720,  # DPI for saving the figure.
 ):
   r'''
   Plot Precision-Recall curves (PRC) and calculate average precision for each class, with options for annotation, saving, and display.
@@ -821,15 +835,15 @@ def PlotPRCCurve(
     # Tight the layout to ignore wasted spaces.
     plt.tight_layout()
 
-    # Save the plot if requested.
-    if (save):  # Save the plot.
-      ext = fileName.split(".")[-1]
-      if (ext.lower() == "pdf"):
-        try:
-          fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
-        except Exception as e:
-          print(f"Error saving plot: {e}")
-      fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+    # Save the plot if requested using centralized helper.
+    if (save):
+      try:
+        SaveMatplotlibFigure(
+          os.path.splitext(str(fileName))[0], fig=fig, dpi=dpi,
+          show=False, exportPdf=True, exportPng=True
+        )
+      except Exception as e:
+        print(f"Error saving plot: {e}")
 
     if (display):
       # Display the plot if requested.
@@ -843,23 +857,23 @@ def PlotPRCCurve(
 
 
 def PlotMultiTrialROCAUC(
-    allYTrue,  # List of true labels arrays from all trials (list of arrays).
-    allYPred,  # List of predicted probabilities from all trials (list of arrays).
-    classes,  # List of class names.
-    confidenceLevel=0.95,  # Confidence level for CI (default 95%).
-    which="CI",  # Method for confidence intervals: "CI" for confidence intervals, "SD" for standard deviation.
-    title="Multi-Trial ROC Curve with Confidence Intervals",  # Plot title.
-    figSize=(8, 8),  # Figure size.
-    cmap=None,  # Colormap for ROC curves.
-    display=True,  # Display the plot.
-    save=False,  # Save the plot.
-    fileName="MultiTrial_ROC_AUC.pdf",  # File name.
-    fontSize=15,  # Font size.
-    plotDiagonal=True,  # Plot diagonal reference line.
-    showLegend=True,  # Show legend.
-    returnFig=False,  # Return figure object.
-    dpi=720,  # DPI for saving the figure.
-    addZoomedInset=True,  # Whether to add a zoomed inset for the top-left corner.
+  allYTrue,  # List of true labels arrays from all trials (list of arrays).
+  allYPred,  # List of predicted probabilities from all trials (list of arrays).
+  classes,  # List of class names.
+  confidenceLevel=0.95,  # Confidence level for CI (default 95%).
+  which="CI",  # Method for confidence intervals: "CI" for confidence intervals, "SD" for standard deviation.
+  title="Multi-Trial ROC Curve with Confidence Intervals",  # Plot title.
+  figSize=(8, 8),  # Figure size.
+  cmap=None,  # Colormap for ROC curves.
+  display=True,  # Display the plot.
+  save=False,  # Save the plot.
+  fileName="MultiTrial_ROC_AUC.pdf",  # File name.
+  fontSize=15,  # Font size.
+  plotDiagonal=True,  # Plot diagonal reference line.
+  showLegend=True,  # Show legend.
+  returnFig=False,  # Return figure object.
+  dpi=720,  # DPI for saving the figure.
+  addZoomedInset=True,  # Whether to add a zoomed inset for the top-left corner.
 ):
   r'''
   Plot averaged ROC curves across multiple trials with confidence intervals.
@@ -956,15 +970,20 @@ def PlotMultiTrialROCAUC(
   assert which in ["CI", "SD"], "Parameter 'which' must be either 'CI' or 'SD'."
 
   # Convert to numpy arrays.
-  # Check if allYTrue is just a single array (not a list of arrays), and if so, repeat it to match the length of allYPred.
+  # Check if allYTrue is just a single array (not a list of arrays),
+  # and if so, repeat it to match the length of `allYPred`.
   if (isinstance(allYTrue, np.ndarray)):
     allYTrue = [allYTrue] * len(allYPred)
+    print("Warning: `allYTrue` is a single array, repeating it for each trial in allYPred.")
   elif (isinstance(allYTrue, list) and len(allYTrue) == 1 and isinstance(allYTrue[0], np.ndarray)):
     allYTrue = allYTrue * len(allYPred)
-  elif (isinstance(allYTrue, list) and np.ndim(allYTrue[0]) == 1):
+    print("Warning: `allYTrue` is a list with one array, repeating it for each trial in allYPred.")
+  elif (isinstance(allYTrue, list) and np.ndim(allYTrue[0]) == 1 and isinstance(allYTrue[0], np.ndarray)):
     allYTrue = allYTrue * len(allYPred)
+    print("Warning: `allYTrue` is a list of 1D arrays, repeating it for each trial in allYPred.")
 
   allYPred = [np.array(yp) for yp in allYPred]
+  allYTrue = [np.array(yt) for yt in allYTrue]
 
   numClasses = len(classes)
   numTrials = len(allYTrue)
@@ -1013,11 +1032,35 @@ def PlotMultiTrialROCAUC(
       else:
         yPredClass = yPred[:, classIdx]  # Get predictions for this class.
 
-      # Calculate ROC curve.
-      fpr, tpr, _ = roc_curve(yTrueBinary, yPredClass)
+      # Ensure predictions are float and validate inputs (remove NaN/Inf).
+      yPredClass = yPredClass.astype(np.float32)
+      finiteMask = np.isfinite(yPredClass) & np.isfinite(yTrueBinary)
+      if (not np.any(finiteMask)):
+        print(f"[PlotMultiTrialROCAUC] Trial {trialIdx} class {classIdx}: all scores are non-finite. Skipping trial.")
+        continue
+      if (finiteMask.sum() != len(finiteMask)):
+        nRemoved = len(finiteMask) - finiteMask.sum()
+        print(
+          f"[PlotMultiTrialROCAUC] Trial {trialIdx} class {classIdx}: "
+          f"removing {nRemoved} NaN/Inf samples before ROC computation."
+        )
+        yPredClass = yPredClass[finiteMask]
+        yTrueBinary = yTrueBinary[finiteMask]
 
-      # Calculate AUC.
-      rocAuc = auc(fpr, tpr)
+      # Calculate ROC curve and AUC with error handling (sklearn raises if only one class present).
+      try:
+        fpr, tpr, _ = roc_curve(yTrueBinary, yPredClass)
+        rocAuc = auc(fpr, tpr)
+      except Exception as e:
+        print(
+          f"[PlotMultiTrialROCAUC] Trial {trialIdx} class {classIdx}: error computing ROC/AUC: {e}. Skipping trial.")
+        continue
+
+      # Guard against empty arrays returned by roc_curve.
+      if (fpr.size == 0 or tpr.size == 0):
+        print(f"[PlotMultiTrialROCAUC] Trial {trialIdx} class {classIdx}: empty fpr/tpr returned. Skipping trial.")
+        continue
+
       aucs.append(rocAuc)
 
       # Interpolate TPR at common FPR values.
@@ -1059,15 +1102,22 @@ def PlotMultiTrialROCAUC(
       labelPlot = f"{className} (AUC={meanAuc:.3f} ± {stdAuc:.3f} SD)"
       labelFill = f"{className} ± 1 SD"
 
-    # Store results.
+    # Initialize the results dictionary entry for the current class.
     resultsDict[className] = {
-      "meanAuc"   : meanAuc,
-      "stdAuc"    : stdAuc,
-      "aucCiLower": aucLower,
-      "aucCiUpper": aucUpper,
-      "meanTpr"   : meanTpr,
-      "tprCiLower": tprLower,
-      "tprCiUpper": tprUpper,
+      # Store the mean area under the curve metric.
+      "MeanAuc"   : meanAuc,
+      # Store the standard deviation of the area under the curve metric.
+      "StdAuc"    : stdAuc,
+      # Store the lower bound of the confidence interval.
+      "AucCiLower": aucLower,
+      # Store the upper bound of the confidence interval.
+      "AucCiUpper": aucUpper,
+      # Store the mean true positive rate array.
+      "MeanTpr"   : meanTpr,
+      # Store the lower bound of the true positive rate interval.
+      "TprCiLower": tprLower,
+      # Store the upper bound of the true positive rate interval.
+      "TprCiUpper": tprUpper,
     }
 
     # Plot mean ROC curve.
@@ -1116,46 +1166,203 @@ def PlotMultiTrialROCAUC(
   # Tight layout.
   plt.tight_layout()
 
+  # Evaluate the parameter to determine if a zoomed inset is required.
   if (addZoomedInset):
-    # Add a small plot on the plot for a zoomed-in view of the top-left corner.
-    axInset = fig.add_axes([0.2, 0.2, 0.25, 0.25])  # [left, bottom, width, height].
+    # Define the TPR threshold for identifying high-performance regions.
+    tprThreshold = 0.8
+    # Initialize containers for FPR and TPR values meeting the threshold.
+    candidateFprs = []
+    candidateTprs = []
+    # Iterate through each class to collect high-TPR data points.
     for classIdx in range(numClasses):
-      className = classes[classIdx]
-      meanTpr = resultsDict[className]["meanTpr"]
-      tprLower = resultsDict[className]["tprCiLower"]
-      tprUpper = resultsDict[className]["tprCiUpper"]
+      # Retrieve the mean TPR array for the current class.
+      meanTpr = resultsDict[classes[classIdx]]["MeanTpr"]
+      # Create a boolean mask for TPR values exceeding the threshold.
+      mask = meanTpr >= tprThreshold
+      # Append valid FPR and TPR values to the candidate lists.
+      if (np.any(mask)):
+        candidateFprs.append(meanFPR[mask])
+        candidateTprs.append(meanTpr[mask])
+    # Define the default fallback boundaries for the inset axes.
+    defaultFprLower = 0.0
+    defaultFprUpper = 0.2
+    defaultTprLower = 0.8
+    defaultTprUpper = 1.0
+    # Assign default values if no candidate data was collected.
+    if (len(candidateFprs) == 0):
+      zoomFprLower = defaultFprLower
+      zoomFprUpper = defaultFprUpper
+      zoomTprLower = defaultTprLower
+      zoomTprUpper = defaultTprUpper
+    else:
+      # Concatenate all candidate FPR and TPR arrays.
+      allFprs = np.concatenate(candidateFprs)
+      allTprs = np.concatenate(candidateTprs)
+      # Calculate adaptive margins based on data spread.
+      marginFpr = max(0.02, (allFprs.max() - allFprs.min()) * 0.1)
+      marginTpr = max(0.02, (allTprs.max() - allTprs.min()) * 0.1)
+      # Compute the lower and upper FPR bounds with margin clamping.
+      zoomFprLower = max(0.0, allFprs.min() - marginFpr)
+      zoomFprUpper = min(1.0, allFprs.max() + marginFpr)
+      # Compute the lower and upper TPR bounds with margin clamping.
+      zoomTprLower = max(0.0, allTprs.min() - marginTpr)
+      zoomTprUpper = min(1.05, allTprs.max() + marginTpr)
+      # Ensure minimum inset width for visibility.
+      if ((zoomFprUpper - zoomFprLower) < 0.02):
+        zoomFprUpper = min(1.0, zoomFprLower + 0.2)
+      # Limit maximum inset width to avoid full-axis coverage.
+      maxInsetFprWidth = 0.25
+      if ((zoomFprUpper - zoomFprLower) > maxInsetFprWidth):
+        fprCenter = float(np.median(allFprs))
+        zoomFprLower = max(0.0, fprCenter - maxInsetFprWidth / 2.0)
+        zoomFprUpper = min(1.0, fprCenter + maxInsetFprWidth / 2.0)
+    # Define the fixed dimensions for the inset axes.
+    insetWidth = 0.25
+    insetHeight = 0.25
+    # Attempt to compute optimal inset placement avoiding overlaps.
+    try:
+      # Retrieve the current main axes object.
+      ax = plt.gca()
+      # Attempt to obtain the figure renderer for coordinate transformations.
+      try:
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+      except Exception:
+        renderer = None
 
-      axInset.plot(
-        meanFPR,
-        meanTpr,
-        color=colors[classIdx],
-        linewidth=2,
-      )
-      axInset.fill_between(
-        meanFPR,
-        tprLower,
-        tprUpper,
-        color=colors[classIdx],
-        alpha=0.2,
-      )
+      # Define a helper function to convert data coordinates to axes coordinates.
+      def _ConvertDataToAxes(dataX, dataY):
+        # Transform data coordinates to display coordinates.
+        displayCoords = ax.transData.transform((dataX, dataY))
+        # Transform display coordinates to axes coordinates.
+        return ax.transAxes.inverted().transform(displayCoords)
+
+      # Convert the zoom region boundaries to axes coordinates.
+      axesZoomLowerLeft = _ConvertDataToAxes(zoomFprLower, zoomTprLower)
+      axesZoomUpperRight = _ConvertDataToAxes(zoomFprUpper, zoomTprUpper)
+      zoomAxesX0 = min(axesZoomLowerLeft[0], axesZoomUpperRight[0])
+      zoomAxesX1 = max(axesZoomLowerLeft[0], axesZoomUpperRight[0])
+      zoomAxesY0 = min(axesZoomLowerLeft[1], axesZoomUpperRight[1])
+      zoomAxesY1 = max(axesZoomLowerLeft[1], axesZoomUpperRight[1])
+      # Attempt to retrieve the legend bounding box if visible.
+      legendBbox = None
+      legend = ax.get_legend() if (hasattr(ax, "get_legend")) else None
+      if (legend is not None and legend.get_visible() and renderer is not None):
+        try:
+          legendWindow = legend.get_window_extent(renderer)
+          legendAxesCoords = ax.transAxes.inverted().transform(legendWindow.get_points())
+          legendBbox = (
+            min(legendAxesCoords[:, 0]),
+            max(legendAxesCoords[:, 0]),
+            min(legendAxesCoords[:, 1]),
+            max(legendAxesCoords[:, 1])
+          )
+        except Exception:
+          legendBbox = None
+      # Define candidate positions for inset placement in axes coordinates.
+      candidatePositions = [
+        (0.01, 0.74),
+        (0.74, 0.74),
+        (0.01, 0.01),
+        (0.74, 0.01)
+      ]
+
+      # Define a helper function to compute overlap area between two rectangles.
+      def _ComputeOverlapArea(
+        rectLeft, rectBottom, rectWidth, rectHeight,
+        otherX0, otherX1, otherY0, otherY1
+      ):
+        rectX0 = rectLeft
+        rectX1 = rectLeft + rectWidth
+        rectY0 = rectBottom
+        rectY1 = rectBottom + rectHeight
+        intersectX0 = max(rectX0, otherX0)
+        intersectX1 = min(rectX1, otherX1)
+        intersectY0 = max(rectY0, otherY0)
+        intersectY1 = min(rectY1, otherY1)
+        if (intersectX1 <= intersectX0 or intersectY1 <= intersectY0):
+          return 0.0
+        return (intersectX1 - intersectX0) * (intersectY1 - intersectY0)
+
+      # Initialize variables to track the best placement candidate.
+      bestPosition = None
+      bestScore = float("inf")
+      # Evaluate each candidate position for minimal overlap.
+      for candLeft, candBottom in candidatePositions:
+        candLeftClamped = min(max(0.0, candLeft), 1.0 - insetWidth)
+        candBottomClamped = min(max(0.0, candBottom), 1.0 - insetHeight)
+        overlapWithZoom = _ComputeOverlapArea(
+          candLeftClamped, candBottomClamped, insetWidth, insetHeight,
+          zoomAxesX0, zoomAxesX1, zoomAxesY0, zoomAxesY1
+        )
+        overlapWithLegend = 0.0
+        if (legendBbox is not None):
+          lbX0, lbX1, lbY0, lbY1 = legendBbox
+          overlapWithLegend = _ComputeOverlapArea(
+            candLeftClamped, candBottomClamped, insetWidth, insetHeight,
+            lbX0, lbX1, lbY0, lbY1
+          )
+        score = overlapWithZoom + 10.0 * overlapWithLegend
+        zoomCenterX = 0.5 * (zoomAxesX0 + zoomAxesX1)
+        zoomCenterY = 0.5 * (zoomAxesY0 + zoomAxesY1)
+        candCenterX = candLeftClamped + insetWidth / 2.0
+        candCenterY = candBottomClamped + insetHeight / 2.0
+        distance = np.hypot(candCenterX - zoomCenterX, candCenterY - zoomCenterY)
+        score -= 0.01 * distance
+        if (score < bestScore):
+          bestScore = score
+          bestPosition = (candLeftClamped, candBottomClamped)
+      # Assign the optimal inset position or fallback to default.
+      if (bestPosition is None):
+        insetLeft = 0.15
+        insetBottom = 0.60
+      else:
+        insetLeft, insetBottom = bestPosition
+      # Create the inset axes at the computed position.
+      axInset = fig.add_axes([insetLeft, insetBottom, insetWidth, insetHeight])
+    except Exception:
+      # Fallback to a fixed inset position if dynamic placement fails.
+      insetLeft = 0.15
+      insetBottom = 0.60
+      axInset = fig.add_axes([insetLeft, insetBottom, insetWidth, insetHeight])
+    # Iterate through each class to render curves in the inset.
+    for classIdx in range(numClasses):
+      # Retrieve the mean TPR values for the current class.
+      meanTpr = resultsDict[classes[classIdx]]["MeanTpr"]
+      # Retrieve the lower confidence bound for the current class.
+      tprLower = resultsDict[classes[classIdx]]["TprCiLower"]
+      # Retrieve the upper confidence bound for the current class.
+      tprUpper = resultsDict[classes[classIdx]]["TprCiUpper"]
+      # Render the mean true positive rate curve in the inset.
+      axInset.plot(meanFPR, meanTpr, color=colors[classIdx], linewidth=2)
+      # Render the confidence interval region in the inset.
+      axInset.fill_between(meanFPR, tprLower, tprUpper, color=colors[classIdx], alpha=0.2)
+    # Plot the diagonal reference line inside the inset.
     axInset.plot([0, 1], [0, 1], "k--", linewidth=1)
-    axInset.set_xlim(0.0, 0.2)
-    axInset.set_ylim(0.8, 1.0)
-    axInset.set_title("Zoomed In", fontsize=fontSize * 0.75)
-    axInset.set_xlabel("FPR", fontsize=fontSize * 0.6)
-    axInset.set_ylabel("TPR", fontsize=fontSize * 0.6)
+    # Apply the dynamically computed FPR limits to the inset horizontal axis.
+    axInset.set_xlim(zoomFprLower, zoomFprUpper)
+    # Apply the dynamically computed TPR limits to the inset vertical axis.
+    axInset.set_ylim(zoomTprLower, zoomTprUpper)
+    # Assign a title to the inset plot.
+    axInset.set_title("ZoomedIn", fontsize=fontSize * 0.75)
+    # Assign a horizontal axis label to the inset plot.
+    axInset.set_xlabel("Fpr", fontsize=fontSize * 0.6)
+    # Assign a vertical axis label to the inset plot.
+    axInset.set_ylabel("Tpr", fontsize=fontSize * 0.6)
+    # Configure the tick label font size for both axes.
     axInset.tick_params(axis="both", which="major", labelsize=fontSize * 0.5)
+    # Activate the grid display for the inset plot.
     axInset.grid(True, alpha=0.3)
 
-  # Save if requested.
+  # Save if requested using centralized helper.
   if (save):
-    ext = fileName.split(".")[-1]
-    if (ext.lower() == "pdf"):
-      try:
-        fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
-      except Exception as e:
-        print(f"Error saving plot: {e}")
-    fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+    try:
+      SaveMatplotlibFigure(
+        os.path.splitext(str(fileName))[0], fig=fig, dpi=dpi,
+        show=False, exportPdf=True, exportPng=True
+      )
+    except Exception as e:
+      print(f"Error saving plot: {e}")
 
   # Display if requested.
   if (display):
@@ -1173,22 +1380,22 @@ def PlotMultiTrialROCAUC(
 
 
 def PlotMultiTrialPRCurve(
-    allYTrue,  # List of true labels arrays from all trials.
-    allYPred,  # List of predicted probabilities from all trials.
-    classes,  # List of class names.
-    confidenceLevel=0.95,  # Confidence level for CI.
-    which="CI",  # Method for confidence intervals: "CI" for confidence intervals, "SD" for standard deviation.
-    title="Multi-Trial Precision-Recall Curve with Confidence Intervals",
-    figSize=(8, 8),  # Figure size in inches.
-    cmap=None,  # Colormap for different classes.
-    display=True,  # Whether to display the plot.
-    save=False,  # Whether to save the plot.
-    fileName="MultiTrial_PRC.pdf",  # File name for saving.
-    fontSize=15,  # Font size for labels and annotations.
-    showLegend=True,  # Whether to show legend.
-    returnFig=False,  # Whether to return the matplotlib figure object.
-    dpi=720,  # DPI for saving the figure.
-    addZoomedInset=True,  # Whether to add a zoomed inset for the top-right corner of the PRC plot.
+  allYTrue,  # List of true labels arrays from all trials.
+  allYPred,  # List of predicted probabilities from all trials.
+  classes,  # List of class names.
+  confidenceLevel=0.95,  # Confidence level for CI.
+  which="CI",  # Method for confidence intervals: "CI" for confidence intervals, "SD" for standard deviation.
+  title="Multi-Trial Precision-Recall Curve with Confidence Intervals",
+  figSize=(8, 8),  # Figure size in inches.
+  cmap=None,  # Colormap for different classes.
+  display=True,  # Whether to display the plot.
+  save=False,  # Whether to save the plot.
+  fileName="MultiTrial_PRC.pdf",  # File name for saving.
+  fontSize=15,  # Font size for labels and annotations.
+  showLegend=True,  # Whether to show legend.
+  returnFig=False,  # Whether to return the matplotlib figure object.
+  dpi=720,  # DPI for saving the figure.
+  addZoomedInset=True,  # Whether to add a zoomed inset for the top-right corner of the PRC plot.
 ):
   r'''
   Plot averaged Precision-Recall curves across multiple trials with confidence intervals.
@@ -1282,15 +1489,20 @@ def PlotMultiTrialPRCurve(
   assert which in ["CI", "SD"], "Parameter 'which' must be either 'CI' or 'SD'."
 
   # Convert to numpy arrays.
-  # Check if allYTrue is just a single array (not a list of arrays), and if so, repeat it to match the length of allYPred.
+  # Check if allYTrue is just a single array (not a list of arrays),
+  # and if so, repeat it to match the length of `allYPred`.
   if (isinstance(allYTrue, np.ndarray)):
     allYTrue = [allYTrue] * len(allYPred)
+    print("Warning: `allYTrue` is a single array, repeating it for each trial in allYPred.")
   elif (isinstance(allYTrue, list) and len(allYTrue) == 1 and isinstance(allYTrue[0], np.ndarray)):
     allYTrue = allYTrue * len(allYPred)
-  elif (isinstance(allYTrue, list) and np.ndim(allYTrue[0]) == 1):
+    print("Warning: `allYTrue` is a list with one array, repeating it for each trial in allYPred.")
+  elif (isinstance(allYTrue, list) and np.ndim(allYTrue[0]) == 1 and isinstance(allYTrue[0], np.ndarray)):
     allYTrue = allYTrue * len(allYPred)
+    print("Warning: `allYTrue` is a list of 1D arrays, repeating it for each trial in allYPred.")
 
   allYPred = [np.array(yp) for yp in allYPred]
+  allYTrue = [np.array(yt) for yt in allYTrue]
 
   numClasses = len(classes)
   numTrials = len(allYTrue)
@@ -1337,15 +1549,46 @@ def PlotMultiTrialPRCurve(
       else:
         yPredClass = yPred[:, classIdx]  # Get predictions for this class.
 
-      # Calculate PR curve.
-      precision, recall, _ = precision_recall_curve(yTrueBinary, yPredClass)
+      yPredClass = yPredClass.astype(np.float32)
 
-      # Calculate Average Precision.
-      ap = average_precision_score(yTrueBinary, yPredClass)
+      # Validate inputs: remove NaN / Inf entries before calling sklearn routines.
+      # sklearn.metrics.precision_recall_curve raises ValueError if y_score contains NaN/Inf.
+      finiteMask = np.isfinite(yPredClass) & np.isfinite(yTrueBinary)
+      if (not np.any(finiteMask)):
+        # Nothing to compute for this trial/class — skip it.
+        print(f"[PlotMultiTrialPRCurve] Trial {trialIdx} class {classIdx}: all scores are non-finite. Skipping trial.")
+        continue
+      if (finiteMask.sum() != len(finiteMask)):
+        # Warn and filter out non-finite samples.
+        nRemoved = len(finiteMask) - finiteMask.sum()
+        print(
+          f"[PlotMultiTrialPRCurve] Trial {trialIdx} class {classIdx}: "
+          f"removing {nRemoved} NaN/Inf samples before PR computation."
+        )
+        yPredClass = yPredClass[finiteMask]
+        yTrueBinary = yTrueBinary[finiteMask]
+
+      # Compute PR curve and average precision, but guard against sklearn errors.
+      try:
+        precision, recall, _ = precision_recall_curve(yTrueBinary, yPredClass)
+        ap = average_precision_score(yTrueBinary, yPredClass)
+      except Exception as e:
+        # If sklearn fails for any reason (e.g., degenerate labels), skip this trial.
+        print(
+          f"[PlotMultiTrialPRCurve] Trial {trialIdx} class {classIdx}: error computing PR curve: {e}. Skipping trial.")
+        continue
+
+      # Append results.
       aps.append(ap)
 
       # Interpolate precision at common recall values.
-      # Reverse for interpolation (recall is decreasing).
+      # Reverse for interpolation (recall is decreasing). Ensure arrays are non-empty.
+      if (recall.size == 0 or precision.size == 0):
+        print(
+          f"[PlotMultiTrialPRCurve] Trial {trialIdx} class {classIdx}: "
+          f"empty precision/recall returned. Skipping trial."
+        )
+        continue
       interpPrecision = np.interp(meanRecall[::-1], recall[::-1], precision[::-1])[::-1]
       precisions.append(interpPrecision)
 
@@ -1438,45 +1681,201 @@ def PlotMultiTrialPRCurve(
   # Tight layout.
   plt.tight_layout()
 
+  # Evaluate the parameter to determine if a zoomed inset is required.
   if (addZoomedInset):
-    # Add a small plot on the plot for a zoomed-in view of the top-right corner.
-    axInset = fig.add_axes([0.5, 0.5, 0.25, 0.25])  # [left, bottom, width, height].
+    # Define the precision threshold for identifying high-performance regions.
+    precisionThreshold = 0.8
+    # Initialize containers for recall and precision values meeting the threshold.
+    candidateRecalls = []
+    candidatePrecisions = []
+    # Iterate through each class to collect high-precision data points.
     for classIdx in range(numClasses):
-      className = classes[classIdx]
-      meanPrecision = resultsDict[className]["meanPrecision"]
-      precisionLower = resultsDict[className]["precisionCiLower"]
-      precisionUpper = resultsDict[className]["precisionCiUpper"]
+      # Retrieve the mean precision array for the current class.
+      meanPrecision = resultsDict[classes[classIdx]]["meanPrecision"]
+      # Create a boolean mask for precision values exceeding the threshold.
+      mask = meanPrecision >= precisionThreshold
+      # Append valid recall and precision values to the candidate lists.
+      if (np.any(mask)):
+        candidateRecalls.append(meanRecall[mask])
+        candidatePrecisions.append(meanPrecision[mask])
+    # Define the default fallback boundaries for the inset axes.
+    defaultRecallLower = 0.8
+    defaultRecallUpper = 1.0
+    defaultPrecisionLower = 0.8
+    defaultPrecisionUpper = 1.0
+    # Assign default values if no candidate data was collected.
+    if (len(candidateRecalls) == 0):
+      zoomRecallLower = defaultRecallLower
+      zoomRecallUpper = defaultRecallUpper
+      zoomPrecisionLower = defaultPrecisionLower
+      zoomPrecisionUpper = defaultPrecisionUpper
+    else:
+      # Concatenate all candidate recall and precision arrays.
+      allRecalls = np.concatenate(candidateRecalls)
+      allPrecisions = np.concatenate(candidatePrecisions)
+      # Calculate adaptive margins based on data spread.
+      marginRecall = max(0.02, (allRecalls.max() - allRecalls.min()) * 0.1)
+      marginPrecision = max(0.02, (allPrecisions.max() - allPrecisions.min()) * 0.1)
+      # Compute the lower and upper recall bounds with margin clamping.
+      zoomRecallLower = max(0.0, allRecalls.min() - marginRecall)
+      zoomRecallUpper = min(1.0, allRecalls.max() + marginRecall)
+      # Compute the lower and upper precision bounds with margin clamping.
+      zoomPrecisionLower = max(0.0, allPrecisions.min() - marginPrecision)
+      zoomPrecisionUpper = min(1.05, allPrecisions.max() + marginPrecision)
+      # Ensure minimum inset width for visibility.
+      if ((zoomRecallUpper - zoomRecallLower) < 0.02):
+        zoomRecallLower = max(0.0, zoomRecallUpper - 0.2)
+      # Limit maximum inset width to avoid full-axis coverage.
+      maxInsetRecallWidth = 0.25
+      if ((zoomRecallUpper - zoomRecallLower) > maxInsetRecallWidth):
+        recallCenter = float(np.median(allRecalls))
+        zoomRecallLower = max(0.0, recallCenter - maxInsetRecallWidth / 2.0)
+        zoomRecallUpper = min(1.0, recallCenter + maxInsetRecallWidth / 2.0)
+    # Define the fixed dimensions for the inset axes.
+    insetWidth = 0.25
+    insetHeight = 0.25
+    # Attempt to compute optimal inset placement avoiding overlaps.
+    try:
+      # Retrieve the current main axes object.
+      ax = plt.gca()
+      # Attempt to obtain the figure renderer for coordinate transformations.
+      try:
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+      except Exception:
+        renderer = None
 
-      axInset.plot(
-        meanRecall,
-        meanPrecision,
-        color=colors[classIdx],
-        linewidth=2,
-      )
-      axInset.fill_between(
-        meanRecall,
-        precisionLower,
-        precisionUpper,
-        color=colors[classIdx],
-        alpha=0.2,
-      )
-    axInset.set_xlim(0.8, 1.0)
-    axInset.set_ylim(0.8, 1.05)
-    axInset.set_title("Zoomed In", fontsize=fontSize * 0.75)
+      # Define a helper function to convert data coordinates to axes coordinates.
+      def _ConvertDataToAxes(dataX, dataY):
+        # Transform data coordinates to display coordinates.
+        displayCoords = ax.transData.transform((dataX, dataY))
+        # Transform display coordinates to axes coordinates.
+        return ax.transAxes.inverted().transform(displayCoords)
+
+      # Convert the zoom region boundaries to axes coordinates.
+      axesZoomLowerLeft = _ConvertDataToAxes(zoomRecallLower, zoomPrecisionLower)
+      axesZoomUpperRight = _ConvertDataToAxes(zoomRecallUpper, zoomPrecisionUpper)
+      zoomAxesX0 = min(axesZoomLowerLeft[0], axesZoomUpperRight[0])
+      zoomAxesX1 = max(axesZoomLowerLeft[0], axesZoomUpperRight[0])
+      zoomAxesY0 = min(axesZoomLowerLeft[1], axesZoomUpperRight[1])
+      zoomAxesY1 = max(axesZoomLowerLeft[1], axesZoomUpperRight[1])
+      # Attempt to retrieve the legend bounding box if visible.
+      legendBbox = None
+      legend = ax.get_legend() if (hasattr(ax, "get_legend")) else None
+      if (legend is not None and legend.get_visible() and renderer is not None):
+        try:
+          legendWindow = legend.get_window_extent(renderer)
+          legendAxesCoords = ax.transAxes.inverted().transform(legendWindow.get_points())
+          legendBbox = (
+            min(legendAxesCoords[:, 0]),
+            max(legendAxesCoords[:, 0]),
+            min(legendAxesCoords[:, 1]),
+            max(legendAxesCoords[:, 1])
+          )
+        except Exception:
+          legendBbox = None
+      # Define candidate positions for inset placement in axes coordinates.
+      candidatePositions = [
+        (0.01, 0.74),
+        (0.74, 0.74),
+        (0.01, 0.01),
+        (0.74, 0.01)
+      ]
+
+      # Define a helper function to compute overlap area between two rectangles.
+      def _ComputeOverlapArea(
+        rectLeft, rectBottom, rectWidth, rectHeight,
+        otherX0, otherX1, otherY0, otherY1
+      ):
+        rectX0 = rectLeft
+        rectX1 = rectLeft + rectWidth
+        rectY0 = rectBottom
+        rectY1 = rectBottom + rectHeight
+        intersectX0 = max(rectX0, otherX0)
+        intersectX1 = min(rectX1, otherX1)
+        intersectY0 = max(rectY0, otherY0)
+        intersectY1 = min(rectY1, otherY1)
+        if (intersectX1 <= intersectX0 or intersectY1 <= intersectY0):
+          return 0.0
+        return (intersectX1 - intersectX0) * (intersectY1 - intersectY0)
+
+      # Initialize variables to track the best placement candidate.
+      bestPosition = None
+      bestScore = float("inf")
+      # Evaluate each candidate position for minimal overlap.
+      for candLeft, candBottom in candidatePositions:
+        candLeftClamped = min(max(0.0, candLeft), 1.0 - insetWidth)
+        candBottomClamped = min(max(0.0, candBottom), 1.0 - insetHeight)
+        overlapWithZoom = _ComputeOverlapArea(
+          candLeftClamped, candBottomClamped, insetWidth, insetHeight,
+          zoomAxesX0, zoomAxesX1, zoomAxesY0, zoomAxesY1
+        )
+        overlapWithLegend = 0.0
+        if (legendBbox is not None):
+          lbX0, lbX1, lbY0, lbY1 = legendBbox
+          overlapWithLegend = _ComputeOverlapArea(
+            candLeftClamped, candBottomClamped, insetWidth, insetHeight,
+            lbX0, lbX1, lbY0, lbY1
+          )
+        score = overlapWithZoom + 10.0 * overlapWithLegend
+        zoomCenterX = 0.5 * (zoomAxesX0 + zoomAxesX1)
+        zoomCenterY = 0.5 * (zoomAxesY0 + zoomAxesY1)
+        candCenterX = candLeftClamped + insetWidth / 2.0
+        candCenterY = candBottomClamped + insetHeight / 2.0
+        distance = np.hypot(candCenterX - zoomCenterX, candCenterY - zoomCenterY)
+        score -= 0.01 * distance
+        if (score < bestScore):
+          bestScore = score
+          bestPosition = (candLeftClamped, candBottomClamped)
+      # Assign the optimal inset position or fallback to default.
+      if (bestPosition is None):
+        insetLeft = 0.01
+        insetBottom = 0.01
+      else:
+        insetLeft, insetBottom = bestPosition
+      # Create the inset axes at the computed position.
+      axInset = fig.add_axes([insetLeft, insetBottom, insetWidth, insetHeight])
+    except Exception:
+      # Fallback to a fixed inset position if dynamic placement fails.
+      insetLeft = 0.15
+      insetBottom = 0.60
+      axInset = fig.add_axes([insetLeft, insetBottom, insetWidth, insetHeight])
+    # Iterate through each class to render curves in the inset.
+    for classIdx in range(numClasses):
+      # Retrieve the mean precision values for the current class.
+      meanPrecision = resultsDict[classes[classIdx]]["meanPrecision"]
+      # Retrieve the lower confidence bound for the current class.
+      precisionLower = resultsDict[classes[classIdx]]["precisionCiLower"]
+      # Retrieve the upper confidence bound for the current class.
+      precisionUpper = resultsDict[classes[classIdx]]["precisionCiUpper"]
+      # Render the mean precision-recall curve in the inset.
+      axInset.plot(meanRecall, meanPrecision, color=colors[classIdx], linewidth=2)
+      # Render the confidence interval region in the inset.
+      axInset.fill_between(meanRecall, precisionLower, precisionUpper, color=colors[classIdx], alpha=0.2)
+    # Apply the dynamically computed recall limits to the inset horizontal axis.
+    axInset.set_xlim(zoomRecallLower, zoomRecallUpper)
+    # Apply the dynamically computed precision limits to the inset vertical axis.
+    axInset.set_ylim(zoomPrecisionLower, zoomPrecisionUpper)
+    # Assign a title to the inset plot.
+    axInset.set_title("ZoomedIn", fontsize=fontSize * 0.75)
+    # Assign a horizontal axis label to the inset plot.
     axInset.set_xlabel("Recall", fontsize=fontSize * 0.6)
+    # Assign a vertical axis label to the inset plot.
     axInset.set_ylabel("Precision", fontsize=fontSize * 0.6)
+    # Configure the tick label font size for both axes.
     axInset.tick_params(axis="both", which="major", labelsize=fontSize * 0.5)
+    # Activate the grid display for the inset plot.
     axInset.grid(True, alpha=0.3)
 
-  # Save if requested.
+  # Save if requested using centralized helper.
   if (save):
-    ext = fileName.split(".")[-1]
-    if (ext.lower() == "pdf"):
-      try:
-        fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
-      except Exception as e:
-        print(f"Error saving plot: {e}")
-    fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+    try:
+      SaveMatplotlibFigure(
+        os.path.splitext(str(fileName))[0], fig=fig, dpi=dpi,
+        show=False, exportPdf=True, exportPng=True
+      )
+    except Exception as e:
+      print(f"Error saving plot: {e}")
 
   # Display if requested.
   if (display):
@@ -1494,19 +1893,19 @@ def PlotMultiTrialPRCurve(
 
 
 def PlotCounterfactualOutcomes(
-    X,
-    classifier,
-    treatmentCol=None,
-    lowVal=None,
-    highVal=None,
-    classNames=None,
-    title="Counterfactual Outcome Distributions",
-    save=False,
-    fileName="CounterfactualOutcomePlot.pdf",
-    display=True,
-    returnPreds=False,
-    fontSize=12,
-    dpi=720,
+  X,
+  classifier,
+  treatmentCol=None,
+  lowVal=None,
+  highVal=None,
+  classNames=None,
+  title="Counterfactual Outcome Distributions",
+  save=False,
+  fileName="CounterfactualOutcomePlot.pdf",
+  display=True,
+  returnPreds=False,
+  fontSize=12,
+  dpi=720,
 ):
   r'''
   Plot counterfactual outcome distributions for two treatment scenarios using a histogram.
@@ -1658,13 +2057,14 @@ def PlotCounterfactualOutcomes(
 
     # Save the plot if requested.
     if (save):  # Save the plot.
-      ext = fileName.split(".")[-1]
-      if (ext.lower() == "pdf"):
-        try:
-          plt.savefig(fileName, dpi=dpi, bbox_inches="tight")
-        except Exception as e:
-          print(f"Error saving plot: {e}")
-      plt.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+      try:
+        ext = os.path.splitext(str(fileName))[1].lower()
+      except Exception:
+        ext = ""
+      SaveMatplotlibFigure(
+        os.path.splitext(str(fileName))[0], fig=plt.gcf(), dpi=dpi,
+        exportPdf=(ext in (".pdf", ".svg")), exportPng=True
+      )
 
     if (display):
       plt.show()  # Show plot if requested.
@@ -1679,19 +2079,19 @@ def PlotCounterfactualOutcomes(
 
 
 def PlotInteractionEffect(
-    X,
-    classifier,
-    feature1,
-    feature2,
-    gridSize=30,
-    title="Interaction Effect Plot",
-    save=False,
-    fileName="InteractionEffectPlot.pdf",
-    display=True,
-    fontSize=12,
-    plotType="surface",  # or "contour"
-    backend="matplotlib",  # or "plotly"
-    dpi=720,
+  X,
+  classifier,
+  feature1,
+  feature2,
+  gridSize=30,
+  title="Interaction Effect Plot",
+  save=False,
+  fileName="InteractionEffectPlot.pdf",
+  display=True,
+  fontSize=12,
+  plotType="surface",  # or "contour"
+  backend="matplotlib",  # or "plotly"
+  dpi=720,
 ):
   r'''
   Plot the interaction effect between two features on the predicted outcome using a 3D surface or contour plot.
@@ -1838,15 +2238,15 @@ def PlotInteractionEffect(
       plt.suptitle(title, fontsize=fontSize + 4)  # Set overall title if provided.
       plt.subplots_adjust(top=0.9)  # Adjust the top to fit the suptitle.
 
-    # Save the plot if requested.
-    if (save):  # Save the plot.
-      ext = fileName.split(".")[-1]
-      if (ext.lower() == "pdf"):
-        try:
-          fig.savefig(fileName, dpi=dpi, bbox_inches="tight")
-        except Exception as e:
-          print(f"Error saving plot: {e}")
-      fig.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+    # Save the plot if requested using centralized helper.
+    if (save):
+      try:
+        SaveMatplotlibFigure(
+          os.path.splitext(str(fileName))[0], fig=fig, dpi=dpi,
+          show=False, exportPdf=True, exportPng=True
+        )
+      except Exception as e:
+        print(f"Error saving plot: {e}")
 
     # Show the plot if requested.
     if (display):
@@ -1908,21 +2308,21 @@ def PlotInteractionEffect(
 
 
 def PlotCalibrationCurveFromModel(
-    classifier,
-    X,
-    y,
-    classNames=None,
-    nBins=10,
-    strategy="uniform",
-    title="Calibration Curve",
-    save=False,
-    fileName="CalibrationCurve.pdf",
-    display=True,
-    fontSize=12,
-    plotHistogram=False,
-    returnFig=False,
-    cmap=None,
-    dpi=720,
+  classifier,
+  X,
+  y,
+  classNames=None,
+  nBins=10,
+  strategy="uniform",
+  title="Calibration Curve",
+  save=False,
+  fileName="CalibrationCurve.pdf",
+  display=True,
+  fontSize=12,
+  plotHistogram=False,
+  returnFig=False,
+  cmap=None,
+  dpi=720,
 ):
   r'''
   Plot calibration curves to evaluate how well predicted probabilities align with observed outcomes.
@@ -2116,18 +2516,18 @@ def PlotCalibrationCurveFromModel(
 
 
 def PlotCalibrationCurve(
-    probs,
-    labels,
-    nBins=10,
-    title="Calibration Curve",
-    fontSize=14,
-    figSize=(6, 6),
-    display=True,
-    save=False,
-    fileName="CalibrationCurve.pdf",
-    dpi=720,
-    returnFig=False,
-    color="blue",
+  probs,
+  labels,
+  nBins=10,
+  title="Calibration Curve",
+  fontSize=14,
+  figSize=(6, 6),
+  display=True,
+  save=False,
+  fileName="CalibrationCurve.pdf",
+  dpi=720,
+  returnFig=False,
+  color="blue",
 ):
   r'''
   Plot calibration curve given predicted probabilities and true labels.
@@ -2222,13 +2622,14 @@ def PlotCalibrationCurve(
 
     # Save the plot if requested.
     if (save):
-      ext = fileName.split(".")[-1]
-      if (ext.lower() == "pdf"):
-        try:
-          plt.savefig(fileName, dpi=dpi, bbox_inches="tight")
-        except Exception as e:
-          print(f"Error saving plot: {e}")
-      plt.savefig(fileName.replace(f".{ext}", ".png"), dpi=dpi, bbox_inches="tight")
+      try:
+        ext = os.path.splitext(str(fileName))[1].lower()
+      except Exception:
+        ext = ""
+      SaveMatplotlibFigure(
+        os.path.splitext(str(fileName))[0], fig=plt.gcf(), dpi=dpi,
+        exportPdf=(ext in (".pdf", ".svg")), exportPng=True
+      )
 
     # Display the plot if requested.
     if (display):
@@ -2244,18 +2645,18 @@ def PlotCalibrationCurve(
 
 
 def PlotTopKAccuracyCurve(
-    probs,
-    labels,
-    maxK=10,
-    title="Top-k Accuracy Curve",
-    figSize=(6, 6),
-    save=False,
-    fileName="TopKAccuracyCurve.pdf",
-    display=True,
-    fontSize=12,
-    returnFig=False,
-    dpi=720,
-    color="blue",
+  probs,
+  labels,
+  maxK=10,
+  title="Top-k Accuracy Curve",
+  figSize=(6, 6),
+  save=False,
+  fileName="TopKAccuracyCurve.pdf",
+  display=True,
+  fontSize=12,
+  returnFig=False,
+  dpi=720,
+  color="blue",
 ):
   r'''
   Plot Top-k accuracy curve given predicted probabilities and true labels.
@@ -2308,6 +2709,8 @@ def PlotTopKAccuracyCurve(
   '''
 
   labels = np.asarray(labels)
+  probs = np.asarray(probs)
+
   N, C = probs.shape
   ks = list(range(1, min(maxK, C) + 1))
 
@@ -2351,21 +2754,21 @@ def PlotTopKAccuracyCurve(
 
 
 def HistoryPlotter(
-    history,  # Dictionary containing training history.
-    title,  # Title of the plot.
-    metrics=("loss",),  # Tuple or list of metrics to plot.
-    xLabel="Epochs",  # Label for x-axis.
-    fontSize=14,  # Font size for labels and title.
-    save=False,  # Whether to save the plot.
-    savePath=None,  # Path to save the plot.
-    dpi=720,  # DPI for saving the figure.
-    colors=None,  # Optional dict of colors for each metric.
-    labels=None,  # Optional dict of labels for each metric.
-    display=True,  # Whether to display the plot.
-    figSize=(10, 5),  # Figure size.
-    returnFig=False,  # Whether to return the figure object.
-    smooth=True,  # Whether to apply smoothing to the curves.
-    smoothFactor=0.6,  # Smoothing factor for curves (0 to 1).
+  history,  # Dictionary containing training history.
+  title,  # Title of the plot.
+  metrics=("loss",),  # Tuple or list of metrics to plot.
+  xLabel="Epochs",  # Label for x-axis.
+  fontSize=14,  # Font size for labels and title.
+  save=False,  # Whether to save the plot.
+  savePath=None,  # Path to save the plot.
+  dpi=720,  # DPI for saving the figure.
+  colors=None,  # Optional dict of colors for each metric.
+  labels=None,  # Optional dict of labels for each metric.
+  display=True,  # Whether to display the plot.
+  figSize=(10, 5),  # Figure size.
+  returnFig=False,  # Whether to return the figure object.
+  smooth=True,  # Whether to apply smoothing to the curves.
+  smoothFactor=0.6,  # Smoothing factor for curves (0 to 1).
 ):
   r'''
   Plot training history metrics (e.g., loss, accuracy) for train and validation sets.
@@ -2525,22 +2928,22 @@ def HistoryPlotter(
 
 
 def PlotMetricCurve(
-    dataToPlot,  # Data to plot.
-    xData=None,  # X-axis data.
-    title="Metric Curve",  # Title of the plot.
-    xLabel="X",  # X-axis label.
-    yLabel="Y",  # Y-axis label.
-    fontSize=15,  # Font size.
-    xTicks=None,  # X-axis ticks.
-    yTicks=None,  # Y-axis ticks.
-    xTicksRotation=0,  # X-axis ticks rotation.
-    yTicksRotation=0,  # Y-axis ticks rotation.
-    save=False,  # Whether to save the plot.
-    savePath=None,  # Path to save the plot.
-    dpi=720,  # DPI for saving the figure.
-    display=True,  # Whether to display the plot.
-    figSize=(5, 5),  # Figure size.
-    returnFig=False,  # Whether to return the figure object.
+  dataToPlot,  # Data to plot.
+  xData=None,  # X-axis data.
+  title="Metric Curve",  # Title of the plot.
+  xLabel="X",  # X-axis label.
+  yLabel="Y",  # Y-axis label.
+  fontSize=15,  # Font size.
+  xTicks=None,  # X-axis ticks.
+  yTicks=None,  # Y-axis ticks.
+  xTicksRotation=0,  # X-axis ticks rotation.
+  yTicksRotation=0,  # Y-axis ticks rotation.
+  save=False,  # Whether to save the plot.
+  savePath=None,  # Path to save the plot.
+  dpi=720,  # DPI for saving the figure.
+  display=True,  # Whether to display the plot.
+  figSize=(5, 5),  # Figure size.
+  returnFig=False,  # Whether to return the figure object.
 ):
   r'''
   Plot a metric curve given data and optional x-axis values.
@@ -2624,18 +3027,18 @@ def PlotMetricCurve(
 
 
 def PlotCumulativeGainLiftChart(
-    yTrue,
-    yScores,
-    posLabel=1,
-    title="Cumulative Gain & Lift Chart",
-    classNames=None,
-    figsize=(10, 5),
-    fontSize=14,
-    display=True,
-    save=False,
-    fileName="CumulativeGainLiftChart.pdf",
-    dpi=720,
-    returnFig=False,
+  yTrue,
+  yScores,
+  posLabel=1,
+  title="Cumulative Gain & Lift Chart",
+  classNames=None,
+  figsize=(10, 5),
+  fontSize=14,
+  display=True,
+  save=False,
+  fileName="CumulativeGainLiftChart.pdf",
+  dpi=720,
+  returnFig=False,
 ):
   r'''
   Plot Cumulative Gain and Lift charts to visualize model effectiveness for ranking tasks.
@@ -2761,18 +3164,18 @@ def PlotCumulativeGainLiftChart(
 
 
 def PlotErrorAnalysis(
-    yTrue,
-    yPred,
-    X=None,
-    classNames=None,
-    maxExamples=5,
-    fontSize=12,
-    figsize=(14, 10),
-    display=True,
-    save=False,
-    fileName="ErrorAnalysis.pdf",
-    dpi=720,
-    returnFig=False,
+  yTrue,
+  yPred,
+  X=None,
+  classNames=None,
+  maxExamples=5,
+  fontSize=12,
+  figsize=(14, 10),
+  display=True,
+  save=False,
+  fileName="ErrorAnalysis.pdf",
+  dpi=720,
+  returnFig=False,
 ):
   r'''
   Plot error analysis showing examples of false positives, false negatives, true positives, and true negatives.
@@ -2824,6 +3227,7 @@ def PlotErrorAnalysis(
   # Convert inputs to numpy arrays.
   yTrue = np.array(yTrue)
   yPred = np.array(yPred)
+
   # Set default class names for binary classification.
   if (classNames is None and len(np.unique(yTrue)) == 2):
     classNames = ["Negative", "Positive"]
@@ -2855,7 +3259,7 @@ def PlotErrorAnalysis(
   # Calculate dynamic column widths based on actual content.
   # Idx column width based on maximum index number.
   allIdxs = np.concatenate([FPIdx, FNIdx, TPIdx, TNIdx]) if (
-      len(FPIdx) + len(FNIdx) + len(TPIdx) + len(TNIdx) > 0) else np.array([0])
+    len(FPIdx) + len(FNIdx) + len(TPIdx) + len(TNIdx) > 0) else np.array([0])
   colWidthIdx = max(len(str(max(allIdxs))), 3) + 2
   # True/Pred column width based on maximum class name length.
   if (classNames is not None):
@@ -3045,16 +3449,17 @@ def PlotErrorAnalysis(
 
 
 def PlotClasswisePRFBar(
-    cm,
-    classNames=None,
-    title="Classwise Performance Metrics",
-    fontSize=14,
-    figsize=(8, 5),
-    display=True,
-    save=False,
-    fileName="ClasswisePRFBar.pdf",
-    dpi=720,
-    returnFig=False,
+  cm,
+  classNames=None,
+  title="Classwise Performance Metrics",
+  fontSize=14,
+  figsize=(8, 5),
+  display=True,
+  save=False,
+  fileName="ClasswisePRFBar.pdf",
+  dpi=720,
+  returnFig=False,
+  xAxisRotation=45,
 ):
   '''
   Plot classwise Precision, Recall, and F1-score as a grouped bar chart.
@@ -3070,6 +3475,7 @@ def PlotClasswisePRFBar(
     fileName (str): File name to save the plot. Default is "ClasswisePRFBar.pdf".
     dpi (int): DPI for saving the figure. Default is 720.
     returnFig (bool): Whether to return the figure object. Default is False.
+    xAxisRotation (int): Rotation angle for x-axis labels. Default is 45.
 
   Returns:
     matplotlib.figure.Figure or None: The matplotlib figure object if returnFig is True, otherwise None.
@@ -3132,20 +3538,21 @@ def PlotClasswisePRFBar(
 
   for i in range(metrics.shape[0]):
     ax.bar(
-      x + i * width,
-      metrics[i],
-      width,
-      label=labels[i],
-      edgecolor="black"  # Add border around bars
+      x + i * width,  # Shift x position for each metric.
+      metrics[i],  # Metric values for each class.
+      width,  # Bar width.
+      label=labels[i],  # Label for legend.
+      edgecolor="black"  # Add border around bars.
     )
 
-  ax.set_xticks(x + width * 2.5)
-  ax.set_xticklabels(classNames, fontsize=fontSize)
-  ax.set_ylim(0, 1.05)
-  ax.set_ylabel("Score", fontsize=fontSize)
-  ax.set_title(title, fontsize=fontSize + 2)
-  ax.legend(fontsize=fontSize * 0.85)
-  plt.tight_layout()
+  ax.set_xticks(x + width * 2.5)  # Center x-ticks between groups.
+  ax.set_xticklabels(classNames, fontsize=fontSize, rotation=xAxisRotation)  # Set x-tick labels and rotation.
+  ax.set_ylim(0, 1.05)  # Set y-axis limit to show bars fully.
+  ax.set_ylabel("Score", fontsize=fontSize)  # Set y-axis label.
+  ax.set_title(title, fontsize=fontSize + 2)  # Set title.
+  ax.grid(axis="y", alpha=0.3, linestyle="--", linewidth=0.5)  # Add horizontal grid lines.
+  ax.legend(fontsize=fontSize * 0.85)  # Add legend with smaller font size.
+  plt.tight_layout()  # Tight layout to minimize wasted space.
 
   # Save the plot if requested.
   if (save):  # Save the plot.
@@ -3169,15 +3576,15 @@ def PlotClasswisePRFBar(
 
 
 def PlotErrorMatrix(
-    cm,
-    classNames=None,
-    fontSize=14,
-    figsize=(7, 6),
-    display=True,
-    save=False,
-    fileName="ErrorMatrix.pdf",
-    dpi=720,
-    returnFig=False,
+  cm,
+  classNames=None,
+  fontSize=14,
+  figsize=(7, 6),
+  display=True,
+  save=False,
+  fileName="ErrorMatrix.pdf",
+  dpi=720,
+  returnFig=False,
 ):
   r'''
   Plot confusion matrix (error matrix) with highlighted most common errors.
@@ -3261,17 +3668,17 @@ def PlotErrorMatrix(
 
 
 def PlotMisclassificationExamples(
-    yTrue,
-    yPred,
-    X=None,
-    maxExamples=5,
-    fontSize=12,
-    figsize=(10, 5),
-    display=True,
-    save=False,
-    fileName="MisclassificationExamples.pdf",
-    dpi=720,
-    returnFig=False,
+  yTrue,
+  yPred,
+  X=None,
+  maxExamples=5,
+  fontSize=12,
+  figsize=(10, 5),
+  display=True,
+  save=False,
+  fileName="MisclassificationExamples.pdf",
+  dpi=720,
+  returnFig=False,
 ):
   r'''
   Plot most frequent misclassifications with example indices and optional sample data.
@@ -3359,16 +3766,16 @@ def PlotMisclassificationExamples(
 
 
 def PlotPredictionConfidenceHistogram(
-    yPredProba,
-    yPred=None,
-    fontSize=14,
-    figsize=(8, 5),
-    bins=20,
-    display=True,
-    save=False,
-    fileName="PredictionConfidenceHistogram.pdf",
-    dpi=720,
-    returnFig=False,
+  yPredProba,
+  yPred=None,
+  fontSize=14,
+  figsize=(8, 5),
+  bins=20,
+  display=True,
+  save=False,
+  fileName="PredictionConfidenceHistogram.pdf",
+  dpi=720,
+  returnFig=False,
 ):
   r'''
   Plot histogram of prediction confidences (predicted probabilities).
@@ -3443,15 +3850,15 @@ def PlotPredictionConfidenceHistogram(
 
 
 def PlotClassificationResiduals(
-    yTrue,
-    yPred,
-    fontSize=14,
-    figsize=(8, 5),
-    display=True,
-    save=False,
-    fileName="ClassificationResiduals.pdf",
-    dpi=720,
-    returnFig=False,
+  yTrue,
+  yPred,
+  fontSize=14,
+  figsize=(8, 5),
+  display=True,
+  save=False,
+  fileName="ClassificationResiduals.pdf",
+  dpi=720,
+  returnFig=False,
 ):
   r'''
   Plot residuals for classification tasks (true - predicted).
@@ -3568,17 +3975,17 @@ def PlotClassificationResiduals(
 
 
 def PlotFeatureImportance(
-    model,
-    featureNames,
-    title="Feature Importance",
-    fontSize=14,
-    figsize=(8, 5),
-    display=True,
-    save=False,
-    fileName="FeatureImportance.pdf",
-    dpi=720,
-    returnFig=False,
-    topN=None,
+  model,
+  featureNames,
+  title="Feature Importance",
+  fontSize=14,
+  figsize=(8, 5),
+  display=True,
+  save=False,
+  fileName="FeatureImportance.pdf",
+  dpi=720,
+  returnFig=False,
+  topN=None,
 ):
   r'''
   Plot feature importance from a trained model.
@@ -3878,20 +4285,20 @@ def ComputeECE(probabilities, labels, binCount: int = 15, nBins: int | None = No
 
 
 def ComputeECEPlotReliability(
-    confidences,
-    predictions,
-    labels,
-    nBins=15,
-    title="Expected Calibration Error (ECE)",
-    fontSize=14,
-    figSize=(6, 6),
-    display=True,
-    save=False,
-    fileName="ECE.pdf",
-    dpi=720,
-    returnFig=False,
-    cmap="Blues",
-    applyXYLimits=True,
+  confidences,
+  predictions,
+  labels,
+  nBins=15,
+  title="Expected Calibration Error (ECE)",
+  fontSize=14,
+  figSize=(6, 6),
+  display=True,
+  save=False,
+  fileName="ECE.pdf",
+  dpi=720,
+  returnFig=False,
+  cmap="Blues",
+  applyXYLimits=True,
 ):
   r'''
   Compute Expected Calibration Error (ECE) and plot reliability diagram.
@@ -4107,17 +4514,17 @@ def ComputeECEPlotReliability(
 
 # Plot risk-coverage curve and compute AUC for selective prediction.
 def RiskCoverageCurve(
-    confidences,
-    correctness,
-    title="Risk-Coverage (Accuracy vs Coverage)",
-    fontSize=14,
-    figSize=(6, 6),
-    display=True,
-    save=False,
-    fileName="RiskCoverage.pdf",
-    dpi=720,
-    returnFig=False,
-    color="blue",
+  confidences,
+  correctness,
+  title="Risk-Coverage (Accuracy vs Coverage)",
+  fontSize=14,
+  figSize=(6, 6),
+  display=True,
+  save=False,
+  fileName="RiskCoverage.pdf",
+  dpi=720,
+  returnFig=False,
+  color="blue",
 ):
   '''
   Compute and plot risk (error) vs coverage curve sorted by confidence. The risk-coverage
@@ -4150,8 +4557,7 @@ def RiskCoverageCurve(
     import HMB.PerformanceMetrics as pm
 
     # You would typically get confidences and correctness from model predictions.
-    probs = np.array([[0.7, 0.2, 0.1],
-                        [0.1, 0.8, 0.1]])
+    probs = np.array([[0.7, 0.2, 0.1], [0.1, 0.8, 0.1]])
     T = 500
     probsMC = pm.SampleMonteCarloDirichletFromProbs(probs, T=T, concentration=30.0)
     uncertaintyMeasures = pm.ComputeMonteCarloUncertaintyMeasures(probsMC)
@@ -4189,7 +4595,7 @@ def RiskCoverageCurve(
   accuracy = cumCorrect / np.arange(1, n + 1)
 
   # Compute AUC under accuracy vs coverage.
-  aucVal = np.trapz(accuracy, coverage)
+  aucVal = SafeTrapz(accuracy, coverage)
 
   if (save or display or returnFig):
     fig = plt.figure(figsize=figSize)
@@ -4252,18 +4658,27 @@ def ComputeBrierScore(confidences: List[float], correctness: List[float]) -> flo
 
     import numpy as np
     import HMB.PerformanceMetrics as pm
+
     confidences = [0.9, 0.8, 0.7, 0.6, 0.5]
     correctness = [1, 0, 1, 1, 0]
     brierScore = pm.ComputeBrierScore(confidences, correctness)
     print(f"Brier Score: {brierScore}")
   '''
 
-  if (not confidences or len(confidences) != len(correctness)):
+  # Validate input lengths and types.
+  if ((len(confidences) <= 0) or (len(confidences) != len(correctness))):
+    print("Error: `confidences` and `correctness` must be of the same length.")
     return None
+
+  # Ensure that inputs are numpy arrays for vectorized operations.
+  confidences = np.asarray(confidences, dtype=float)
+  correctness = np.asarray(correctness, dtype=float)
+
   try:
     diffs = [(c - y) ** 2 for c, y in zip(confidences, correctness)]
     return float(np.mean(diffs))
-  except Exception:
+  except Exception as e:
+    print(f"Error computing Brier score: {e}")
     return None
 
 

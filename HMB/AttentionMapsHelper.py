@@ -11,6 +11,7 @@ from pytorch_grad_cam import (
 from pytorch_grad_cam.utils.image import show_cam_on_image
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 from HMB.PyTorchHelper import LoadPyTorchDict
+from HMB.PlotsHelper import SaveMatplotlibFigure
 
 
 class LogitsModelWrapper(torch.nn.Module):
@@ -656,7 +657,11 @@ class AttentionMapsVisualizer(object):
 
     # Save the plot if requested.
     if (save):
-      plt.savefig(outPath, dpi=dpi, bbox_inches="tight")
+      # Use SaveMatplotlibFigure to standardize saving (accepts base path with or without extension).
+      SaveMatplotlibFigure(
+        os.path.splitext(outPath)[0], fig=plt.gcf(), dpi=dpi,
+        show=False, exportPdf=False, exportPng=True
+      )
 
     # Display the plot if requested.
     if (display):

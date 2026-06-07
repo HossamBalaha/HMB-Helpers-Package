@@ -119,27 +119,27 @@ def GetCmapColors(cmap, noColors, darkColorsOnly=True, darknessThreshold=0.7):
 
 # Define a function to plot a heatmap from 2D data with flexible options.
 def PlotHeatmap(
-    data: np.ndarray,
-    rowLabels: list[str],
-    colLabels: list[str],
-    title: str = "Heatmap",
-    xlabel: str = "Column",
-    ylabel: str = "Row",
-    cmap: Any = "viridis",
-    vmin: Optional[float] = None,
-    vmax: Optional[float] = None,
-    valueFormat: str = "{:.2f}",
-    annotate: bool = True,
-    fontSize: int = 7,
-    figSize: Optional[tuple[float, float]] = None,
-    colorbarLabel: Optional[str] = None,
-    save: bool = False,
-    savePath: Optional[Path | str] = None,
-    fileName: Optional[str] = None,
-    dpi: int = 300,
-    display: bool = True,
-    colorbar: bool = True,
-    returnFig: bool = False,
+  data: np.ndarray,
+  rowLabels: list[str],
+  colLabels: list[str],
+  title: str = "Heatmap",
+  xlabel: str = "Column",
+  ylabel: str = "Row",
+  cmap: Any = "viridis",
+  vmin: Optional[float] = None,
+  vmax: Optional[float] = None,
+  valueFormat: str = "{:.2f}",
+  annotate: bool = True,
+  fontSize: int = 7,
+  figSize: Optional[tuple[float, float]] = None,
+  colorbarLabel: Optional[str] = None,
+  save: bool = False,
+  savePath: Optional[Path | str] = None,
+  fileName: Optional[str] = None,
+  dpi: int = 300,
+  display: bool = True,
+  colorbar: bool = True,
+  returnFig: bool = False,
 ) -> Optional[plt.Figure]:
   r'''
   Plot a labeled heatmap from a 2D numeric array with flexible display and saving options.
@@ -351,25 +351,25 @@ def PlotHeatmap(
 
 # Define a function to plot a bar chart from values and labels.
 def PlotBarChart(
-    values: list[float],
-    labels: list[str],
-    title: str = "",
-    ylabel: str = "",
-    save: bool = False,
-    savePath: Optional[Path | str] = None,
-    fileName: Optional[str] = None,
-    color: Any = "tab:blue",
-    colors: Optional[list[str]] = None,
-    alpha: float = 0.85,
-    dpi: int = 300,
-    display: bool = True,
-    annotate: bool = False,
-    annotateFormat: str = "{:.4f}",
-    annotateFontSize: Optional[int] = None,
-    fontSize: int = 10,
-    figSize: Optional[tuple[float, float]] = None,
-    rotation: float = 45,
-    returnFig: bool = False,
+  values: list[float],
+  labels: list[str],
+  title: str = "",
+  ylabel: str = "",
+  save: bool = False,
+  savePath: Optional[Path | str] = None,
+  fileName: Optional[str] = None,
+  color: Any = "tab:blue",
+  colors: Optional[list[str]] = None,
+  alpha: float = 0.85,
+  dpi: int = 300,
+  display: bool = True,
+  annotate: bool = False,
+  annotateFormat: str = "{:.4f}",
+  annotateFontSize: Optional[int] = None,
+  fontSize: int = 10,
+  figSize: Optional[tuple[float, float]] = None,
+  rotation: float = 45,
+  returnFig: bool = False,
 ) -> Optional[plt.Figure]:
   r'''
   Create a bar chart from values and labels with options to annotate, save, display and return the Figure.
@@ -599,24 +599,24 @@ def PlotBarChart(
 
 # Additional generic plot helpers.
 def PlotHorizontalBarChart(
-    values: list[float],
-    labels: list[str],
-    title: str = "",
-    xlabel: str = "",
-    save: bool = False,
-    savePath: Optional[Path | str] = None,
-    fileName: Optional[str] = None,
-    color: Any = "tab:blue",
-    colors: Optional[list[str]] = None,
-    alpha: float = 0.85,
-    dpi: int = 300,
-    display: bool = True,
-    annotate: bool = False,
-    annotateFormat: str = "{:.4f}",
-    annotateFontSize: Optional[int] = None,
-    fontSize: int = 10,
-    figSize: Optional[tuple[float, float]] = None,
-    returnFig: bool = False,
+  values: list[float],
+  labels: list[str],
+  title: str = "",
+  xlabel: str = "",
+  save: bool = False,
+  savePath: Optional[Path | str] = None,
+  fileName: Optional[str] = None,
+  color: Any = "tab:blue",
+  colors: Optional[list[str]] = None,
+  alpha: float = 0.85,
+  dpi: int = 300,
+  display: bool = True,
+  annotate: bool = False,
+  annotateFormat: str = "{:.4f}",
+  annotateFontSize: Optional[int] = None,
+  fontSize: int = 10,
+  figSize: Optional[tuple[float, float]] = None,
+  returnFig: bool = False,
 ) -> Optional[plt.Figure]:
   r'''
   Create a horizontal bar chart (bars extend along the x-axis) with labeled y-axis.
@@ -789,20 +789,20 @@ def PlotHorizontalBarChart(
 
 
 def PlotPieChart(
-    values: list[float],
-    labels: list[str],
-    title: str = "",
-    save: bool = False,
-    savePath: Optional[Path | str] = None,
-    fileName: Optional[str] = None,
-    autopct: Optional[str] = "%1.1f%%",
-    explode: Optional[list[float]] = None,
-    colors: Optional[list[str]] = None,
-    dpi: int = 300,
-    display: bool = True,
-    fontSize: int = 10,
-    figSize: Optional[tuple[float, float]] = None,
-    returnFig: bool = False,
+  values: list[float],
+  labels: list[str],
+  title: str = "",
+  save: bool = False,
+  savePath: Optional[Path | str] = None,
+  fileName: Optional[str] = None,
+  autopct: Optional[str] = "%1.1f%%",
+  explode: Optional[list[float]] = None,
+  colors: Optional[list[str]] = None,
+  dpi: int = 300,
+  display: bool = True,
+  fontSize: int = 10,
+  figSize: Optional[tuple[float, float]] = None,
+  returnFig: bool = False,
 ) -> Optional[plt.Figure]:
   r'''
   Create a pie chart from categorical values and labels.
@@ -942,21 +942,21 @@ def PlotPieChart(
 
 
 def PlotLineChart(
-    x: Optional[list[float]],
-    y: list[float],
-    title: str = "",
-    xlabel: str = "",
-    ylabel: str = "",
-    save: bool = False,
-    savePath: Optional[Path | str] = None,
-    fileName: Optional[str] = None,
-    dpi: int = 300,
-    display: bool = True,
-    annotate: bool = False,
-    annotateFormat: str = "{:.2f}",
-    fontSize: int = 10,
-    figSize: Optional[tuple[float, float]] = None,
-    returnFig: bool = False,
+  x: Optional[list[float]],
+  y: list[float],
+  title: str = "",
+  xlabel: str = "",
+  ylabel: str = "",
+  save: bool = False,
+  savePath: Optional[Path | str] = None,
+  fileName: Optional[str] = None,
+  dpi: int = 300,
+  display: bool = True,
+  annotate: bool = False,
+  annotateFormat: str = "{:.2f}",
+  fontSize: int = 10,
+  figSize: Optional[tuple[float, float]] = None,
+  returnFig: bool = False,
 ) -> Optional[plt.Figure]:
   r'''
   Plot a simple line chart connecting (x, y) points.
@@ -1110,19 +1110,19 @@ def PlotLineChart(
 
 
 def PlotHistogram(
-    data: list[float],
-    bins: int = 20,
-    title: str = "",
-    xlabel: str = "",
-    ylabel: str = "Frequency",
-    save: bool = False,
-    savePath: Optional[Path | str] = None,
-    fileName: Optional[str] = None,
-    dpi: int = 300,
-    display: bool = True,
-    fontSize: int = 10,
-    figSize: Optional[tuple[float, float]] = None,
-    returnFig: bool = False,
+  data: list[float],
+  bins: int = 20,
+  title: str = "",
+  xlabel: str = "",
+  ylabel: str = "Frequency",
+  save: bool = False,
+  savePath: Optional[Path | str] = None,
+  fileName: Optional[str] = None,
+  dpi: int = 300,
+  display: bool = True,
+  fontSize: int = 10,
+  figSize: Optional[tuple[float, float]] = None,
+  returnFig: bool = False,
 ) -> Optional[plt.Figure]:
   r'''
   Plot a histogram for 1D numeric data.
@@ -1248,19 +1248,19 @@ def PlotHistogram(
 
 
 def GenerateGenericBubblePlot(
-    data: pd.DataFrame,
-    xColumn: str,
-    yColumn: str,
-    sizeColumn: str,
-    colorColumn: str,
-    outputPath: Optional[Path | str],
-    figureSize: Tuple[int, int] = (12, 12),
-    dpiValue: int = 300,
-    title: str = "Bubble Plot",
-    xlabel: str = "X Axis",
-    ylabel: str = "Y Axis",
-    performanceZones: bool = True,
-    concentrationPeak: bool = True,
+  data: pd.DataFrame,
+  xColumn: str,
+  yColumn: str,
+  sizeColumn: str,
+  colorColumn: str,
+  outputPath: Optional[Path | str],
+  figureSize: Tuple[int, int] = (12, 12),
+  dpiValue: int = 300,
+  title: str = "Bubble Plot",
+  xlabel: str = "X Axis",
+  ylabel: str = "Y Axis",
+  performanceZones: bool = True,
+  concentrationPeak: bool = True,
 ) -> bool:
   r'''
   Generate a generic bubble plot from structured data.
@@ -1387,14 +1387,14 @@ def GenerateGenericBubblePlot(
 
 
 def PlotApproachesComplexityComparison(
-    approaches,
-    flopsValues,
-    paramsValues,
-    outDir,
-    baseFlops=None,
-    baseParams=None,
-    dpi=300,
-    deviceName="CUDA",
+  approaches,
+  flopsValues,
+  paramsValues,
+  outDir,
+  baseFlops=None,
+  baseParams=None,
+  dpi=300,
+  deviceName="CUDA",
 ):
   r'''
   Plot a complexity comparison chart for different approaches.
@@ -1505,3 +1505,347 @@ def PlotApproachesComplexityComparison(
   plt.savefig(os.path.join(outDir, "ComplexityComparison.png"), dpi=dpi)
   # Close the figure to free up memory.
   plt.close()
+
+
+def PlotClassDistribution(
+  labelsArray,  # Array-like of class labels to plot the distribution for.
+  outPath: Path,  # Path to save the resulting plot.
+  title: str = None,  # Optional title for the plot.
+  maxVertical: int = 15,  # Threshold for switching between vertical and horizontal bar layouts.
+  exportPng: bool = True,  # Whether to also export a PNG alongside the PDF.
+  colormap: str = "viridis",  # Matplotlib colormap name to use for bars/line.
+  fontSize: str = "small",  # Font size for tick labels and annotations.
+  orientation: str = "auto",  # "auto", "vertical", or "horizontal" to override layout.
+  dpi: int = 300,  # Dots-per-inch for raster outputs (PNG) and fallback for PDF.
+  figureSize: tuple = None,  # Optional figure size override as (width, height).
+  paretoThreshold: float = 80.0,  # Percent threshold to mark on cumulative curve (e.g., 80.0).
+  save: bool = True,  # Whether to save the generated figure to outPath. Default True for backward compatibility.
+  display: bool = False,  # Whether to display the figure using plt.show(). Default False to avoid blocking scripts.
+):
+  r'''
+  Plot the distribution of class labels as a bar chart with cumulative percentage overlay.
+
+  This function computes the frequency of each unique class label, sorts them in descending order,
+  and visualizes the distribution as a bar chart. It also overlays a line plot showing the cumulative percentage
+  of samples covered by the classes. A marker and annotation indicate where the cumulative percentage crosses a
+  specified Pareto threshold (e.g., 80%), highlighting the number of classes that contribute to that coverage.
+  The plot can be oriented vertically or horizontally based on the number of classes or an explicit override.
+  The resulting figure is saved to the specified path in PDF format, with an optional PNG export for raster use cases.
+
+  Parameters:
+    labelsArray (array-like): Sequence of class labels to analyze and plot.
+    outPath (Path): Path to save the resulting plot (PDF and optionally PNG).
+    title (str, optional): Title for the plot. Default is None (no title).
+    maxVertical (int, optional): Maximum number of classes to use vertical bars before switching to horizontal. Default is 15.
+    exportPng (bool, optional): Whether to also export a PNG version of the plot. Default is True.
+    colormap (str, optional): Matplotlib colormap name to use for the bars and line. Default is "viridis".
+    fontSize (str or int, optional): Font size for tick labels and annotations. Default is "small".
+    orientation (str, optional): "auto", "vertical", or "horizontal" to control bar orientation. Default is "auto".
+    dpi (int, optional): Dots-per-inch for raster outputs (PNG) and fallback for PDF. Default is 300.
+    figureSize (tuple, optional): Optional figure size override as (width, height) in inches. Default is None (automatic sizing).
+    paretoThreshold (float, optional): Percent threshold to mark on cumulative curve (e.g., 80.0). Default is 80.0.
+    save (bool, optional): Whether to save the generated figure to outPath. Default is True for backward compatibility.
+    display (bool, optional): Whether to display the figure using plt.show(). Default is False to avoid blocking scripts.
+  '''
+
+  # Convert the provided labels into a NumPy array.
+  labelsArray = np.array(labelsArray)
+
+  # Compute unique class names and their corresponding counts.
+  classNames, classCounts = np.unique(labelsArray, return_counts=True)
+
+  # Sort classes by descending count to highlight the largest classes first.
+  order = np.argsort(-classCounts)
+  classNames = classNames[order]
+  classCounts = classCounts[order]
+
+  # Compute the total number of samples for percentage calculations.
+  totalSamples = int(classCounts.sum())
+
+  # Compute the percentage of each class relative to the total.
+  percentages = (classCounts / totalSamples) * 100.0
+
+  # Determine final orientation based on the override and threshold.
+  finalOrientation = orientation
+  if (orientation == "auto"):
+    finalOrientation = ("vertical" if (len(classNames) <= maxVertical) else "horizontal")
+
+  # Prepare a colormap and derive colors for each class using a continuous sampling
+  # so colors do not repeat even for many classes.
+  cmap = plt.get_cmap(colormap)
+  colors = cmap(np.linspace(0, 1, len(classNames)))
+
+  # Prepare readable label strings and perform word-wrapping for very long names.
+  rawLabels = [str(c) for c in classNames]
+  maxLabelLen = max((len(s) for s in rawLabels), default=0)
+  # Choose wrap width based on the longest label; wrap when labels exceed 20 characters.
+  wrapWidth = (20 if (maxLabelLen > 20) else None)
+  if (wrapWidth):
+    import textwrap
+    displayLabels = ["\n".join(textwrap.wrap(s, width=wrapWidth)) for s in rawLabels]
+  else:
+    displayLabels = rawLabels
+
+  # Determine the effective figure size early so it can be applied when the figure is created.
+  if (figureSize is not None):
+    effectiveFigSize = figureSize
+  else:
+    effectiveFigSize = (10, 6) if (finalOrientation == "vertical") else (10, max(6, len(classNames) * 0.3))
+
+  # Create plots for vertical orientation.
+  if (finalOrientation == "vertical"):
+    # Create the main figure and axis for the vertical bar chart.
+    fig, ax = plt.subplots(figsize=effectiveFigSize)
+    # Create x positions for the bars.
+    xPos = np.arange(len(classNames))
+    # Draw the vertical bars for class counts.
+    bars = ax.bar(xPos, classCounts, color=colors, edgecolor="black", linewidth=0.3)
+    # Configure the x-axis tick locations and labels.
+    ax.set_xticks(xPos)
+    ax.set_xticklabels(displayLabels, rotation=45, ha="right", fontsize=fontSize)
+    # Label the y-axis with counts.
+    ax.set_ylabel("Count")
+    # Annotate each bar with the absolute count and percentage.
+    for i, bar in enumerate(bars):
+      # Get the height of the bar to position the annotation.
+      height = classCounts[i]
+      # Build the label text showing count and percent with one decimal place.
+      labelText = f"{height}\n({percentages[i]:.1f}%)"
+      # Place the annotation above the bar.
+      ax.annotate(
+        labelText, xy=(bar.get_x() + bar.get_width() / 2, height),
+        xytext=(0, 3), textcoords="offset points", ha="center", va="bottom", fontsize=fontSize
+      )
+    # Add a secondary y-axis to show cumulative percentage plotted against the same x-axis positions.
+    ax2 = ax.twinx()
+    # Compute cumulative percentages for the overlay.
+    cumulative = np.cumsum(percentages)
+    # Plot the cumulative percentage line with markers on the secondary axis.
+    ax2.plot(xPos, cumulative, color="black", marker="o", linestyle="--", linewidth=1)
+    # Mark and annotate the Pareto threshold crossing (e.g., 80%).
+    try:
+      # Find the first index where cumulative percentage meets or exceeds the threshold.
+      crossing = np.where(cumulative >= paretoThreshold)[0]
+      if (len(crossing) > 0):
+        idx = int(crossing[0])
+        # Draw a marker at the crossing point on the cumulative curve.
+        ax2.scatter([xPos[idx]], [cumulative[idx]], color="red", zorder=5)
+        # Annotate the crossing point with number of classes and class name.
+        annText = f"{paretoThreshold:.0f}% at {idx + 1} classes:\n{rawLabels[idx]} ({cumulative[idx]:.1f}%)"
+        ax2.annotate(annText, xy=(xPos[idx], cumulative[idx]), xytext=(10, -30),
+                     textcoords="offset points", fontsize="x-small", color="red",
+                     arrowprops=dict(arrowstyle="->", color="red", lw=0.5))
+    except Exception:
+      # Ignore Pareto annotation failures to keep plotting robust.
+      pass
+    # Label the secondary axis and limit it to 0-100%.
+    ax2.set_ylabel("Cumulative %")
+    ax2.set_ylim(0, 100)
+    # Add grid lines for readability on the primary axis.
+    ax.grid(axis="y", linestyle=":", alpha=0.3)
+    # If a title was provided, use it and append the total sample count.
+    if (title):
+      ax.set_title(f"{title} (Total: {totalSamples})")
+
+  # Create plots for horizontal orientation.
+  else:
+    # Create the main figure and axis for the horizontal bar chart.
+    fig, ax = plt.subplots(figsize=effectiveFigSize)
+    # Create y positions for the horizontal bars.
+    yPos = np.arange(len(classNames))
+    # Draw the horizontal bars for class counts.
+    bars = ax.barh(yPos, classCounts, color=colors, edgecolor="black", linewidth=0.3)
+    # Configure the y-axis tick locations and labels.
+    ax.set_yticks(yPos)
+    ax.set_yticklabels(displayLabels, fontsize=fontSize)
+    # Label the x-axis with counts for horizontal layout.
+    ax.set_xlabel("Count")
+    # Annotate each horizontal bar with the absolute count and percentage placed at the bar end.
+    for i, bar in enumerate(bars):
+      # Get the width of the bar to position the annotation.
+      width = classCounts[i]
+      # Build the label text showing count and percent with one decimal place.
+      labelText = f"{width} ({percentages[i]:.1f}%)"
+      # Place the annotation at the end of the bar.
+      ax.annotate(
+        labelText, xy=(width, bar.get_y() + bar.get_height() / 2),
+        xytext=(3, 0), textcoords="offset points", ha="left", va="center", fontsize=fontSize
+      )
+    # Add a secondary x-axis to show cumulative percentage plotted against the same y positions.
+    ax2 = ax.twiny()
+    # Compute cumulative percentages for the overlay.
+    cumulative = np.cumsum(percentages)
+    # Plot the cumulative percentage line with markers on the secondary axis.
+    ax2.plot(cumulative, yPos, color="black", marker="o", linestyle="--", linewidth=1)
+    # Mark and annotate the Pareto threshold crossing (e.g., 80%) for horizontal layout.
+    try:
+      # Find the first index where cumulative percentage meets or exceeds the threshold.
+      crossing = np.where(cumulative >= paretoThreshold)[0]
+      if (len(crossing) > 0):
+        idx = int(crossing[0])
+        # Draw a marker at the crossing point on the cumulative curve.
+        ax2.scatter([cumulative[idx]], [yPos[idx]], color="red", zorder=5)
+        # Annotate the crossing point with number of classes and class name.
+        clsOrClasses = "class" if (idx == 0) else "classes"
+        annText = f"{paretoThreshold:.0f}% at {idx + 1} {clsOrClasses}: {rawLabels[idx]} ({cumulative[idx]:.1f}%)"
+        ax2.annotate(
+          annText, xy=(cumulative[idx], yPos[idx]), xytext=(5, 5),
+          textcoords="offset points", fontsize="x-small", color="red",
+          arrowprops=dict(arrowstyle="->", color="red", lw=0.5)
+        )
+    except Exception:
+      # Ignore Pareto annotation failures to keep plotting robust.
+      pass
+    # Label the secondary axis and limit it to 0-100%.
+    ax2.set_xlabel("Cumulative %")
+    ax2.set_xlim(0, 100)
+    # Invert y-axis so the largest class appears at the top.
+    ax.invert_yaxis()
+
+  # Tighten layout so labels and annotations do not overlap.
+  plt.tight_layout()
+  # Adjust subplot margins automatically when labels are long to avoid clipping.
+  try:
+    if (wrapWidth):
+      # Increase bottom margin for vertical orientation when long x-tick labels exist.
+      if (finalOrientation == "vertical"):
+        plt.subplots_adjust(bottom=0.30)
+      else:
+        # Increase left margin for horizontal orientation when long y-tick labels exist.
+        plt.subplots_adjust(left=0.40)
+  except Exception:
+    # Ignore subplot adjustment failures and proceed to save.
+    pass
+  # Optionally save the figure to disk.
+  if (save):
+    # Ensure the output directory exists before saving.
+    outPath.parent.mkdir(parents=True, exist_ok=True)
+    # Save the figure as a PDF to the specified path using the requested dpi.
+    try:
+      fig.savefig(str(outPath), format="pdf", dpi=dpi, bbox_inches="tight")
+    except Exception:
+      # Attempt to save without specifying dpi for vector formats if the above fails.
+      fig.savefig(str(outPath), format="pdf")
+
+    # Optionally export a PNG alongside the PDF using the specified dpi.
+    if (exportPng):
+      pngPath = outPath.with_suffix(".png")
+      fig.savefig(str(pngPath), format="png", dpi=dpi, bbox_inches="tight")
+
+  # Optionally display the figure to the user.
+  if (display):
+    try:
+      plt.show()
+    except Exception:
+      # Non-interactive environments may not support plt.show(); ignore.
+      pass
+
+  # Close the figure to free memory.
+  plt.close(fig)
+
+
+def SaveMatplotlibFigure(
+  path,
+  fig=None,
+  dpi=720,
+  show=False,
+  exportPdf=True,
+  exportPng=True,
+  otherExtensions=None,
+):
+  r'''
+  Save a matplotlib figure to disk in both PDF and PNG formats with tight layout.
+
+  This helper function attempts to save the provided figure (or the current figure if none is provided) to disk
+  using a base path. It saves in PDF format for vector quality and PNG format for raster use cases, applying tight
+  layout to ensure all elements are visible. The function also ensures that the target directory exists before saving.
+  Optionally, it can display the figure after saving.
+
+  Parameters:
+    path (str|Path): The base file path to save the figure. The function will derive PDF and PNG paths from this base.
+    fig (matplotlib.figure.Figure, optional): The figure to save. If None, the current active figure will be
+      used. Default is None.
+    dpi (int, optional): Dots-per-inch for the saved figures. Default is 720 for high-quality output.
+    show (bool, optional): Whether to display the figure after saving. Default is False.
+    exportPdf (bool, optional): Whether to save the figure in PDF format. Default is True.
+    exportPng (bool, optional): Whether to save the figure in PNG format. Default is True.
+    otherExtensions (list[str], optional): Additional file extensions to save (e.g., ["svg", "eps"]). Default is None.
+
+  Notes:
+    - The function will attempt to save in PDF format first, and if that fails (e.g., due to issues with the
+        figure content), it will still attempt to save a PNG version.
+    - The target directory will be created if it does not exist, ensuring that the save operation does not
+        fail due to missing directories.
+    - Tight layout is applied to the figure before saving to prevent clipping of labels and other elements,
+        but it will avoid calling `tight_layout` if the figure was created with `constrained_layout` to prevent
+        layout warnings.
+  '''
+
+  import os
+
+  if (fig is None):
+    fig = plt.gcf()
+  # Ensure directory exists.
+  d = os.path.dirname(path)
+  if (d and (not os.path.exists(d))):
+    os.makedirs(d, exist_ok=True)
+
+  # Check if the path already has an extension; if not, default to .pdf for the main save.
+  # If it has an extension, use it as the primary save format and derive the PDF path from it.
+  # If it has not an extension, this means the user likely intended to specify a base path without extension,
+  # so we will save both PDF and PNG using that base.
+  pathObj = Path(path)
+  if (pathObj.suffix == ""):
+    pdfPath = pathObj.with_suffix(".pdf")
+    pngPath = pathObj.with_suffix(".png")
+  else:
+    pdfPath = pathObj
+    pngPath = pathObj.with_suffix(".png")
+
+  # If the figure was created with constrained_layout=True, calling tight_layout
+  # will change the layout and emit a UserWarning. Avoid calling tight_layout
+  # in that case to prevent repeated "layout has changed to tight" warnings.
+  constrained = False
+  try:
+    constrained = bool(getattr(fig, "get_constrained_layout", lambda: False)())
+  except Exception:
+    constrained = getattr(fig, "constrained_layout", False)
+
+  # Apply tight_layout while suppressing known UserWarnings about incompatible axes
+  # (for example 3D axes, inset axes, or certain colorbar setups). Use a warnings
+  # filter around the call so the save path is not noisy for users.
+  if (not constrained):
+    import warnings
+    try:
+      with warnings.catch_warnings():
+        warnings.filterwarnings(
+          "ignore",
+          message="This figure includes Axes that are not compatible with tight_layout",
+        )
+        fig.tight_layout()
+    except Exception:
+      # If tight_layout fails for any reason, continue and attempt saving the figure
+      # without tight adjustments to avoid aborting the save routine.
+      pass
+
+  if (exportPdf):
+    try:
+      fig.savefig(str(pdfPath), format="pdf", dpi=dpi, bbox_inches="tight")
+    except Exception:
+      # Fallback to png only.
+      pass
+
+  if (exportPng):
+    fig.savefig(str(pngPath), format="png", dpi=dpi, bbox_inches="tight")
+
+  if (otherExtensions):
+    for ext in otherExtensions:
+      try:
+        fig.savefig(str(pathObj.with_suffix(f".{ext}")), format=ext, dpi=dpi, bbox_inches="tight")
+      except Exception:
+        # Ignore failures for additional formats to ensure primary saves succeed.
+        pass
+
+  if (show):
+    plt.show()
+  plt.close(fig)

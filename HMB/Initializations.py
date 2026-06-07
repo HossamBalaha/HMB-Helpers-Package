@@ -6,6 +6,11 @@ IMAGE_SUFFIXES = {
   ".JPG", ".JPEG", ".PNG", ".BMP", ".TIFF", ".TIF", ".GIF", ".WEBP"
 }
 
+VIDEO_SUFFIXES = {
+  ".mp4", ".avi", ".mov", ".mkv", ".flv", ".wmv", ".mpeg", ".mpg", ".webm",
+  ".MP4", ".AVI", ".MOV", ".MKV", ".FLV", ".WMV", ".MPEG", ".MPG", ".WEBM"
+}
+
 
 def CheckInstalledModules(modules):
   r'''
@@ -28,7 +33,13 @@ def CheckInstalledModules(modules):
       )
 
 
-def UpdateMatplotlibSettings(fontSize=16, dpi=720, figSize=None, silent=True):
+def UpdateMatplotlibSettings(
+  fontSize=16,
+  dpi=720,
+  figSize=None,
+  silent=True,
+  snsStyle="whitegrid",
+):
   r'''
   Update Matplotlib settings for better visualization.
   This function sets various parameters in Matplotlib to improve the appearance of plots.
@@ -38,16 +49,26 @@ def UpdateMatplotlibSettings(fontSize=16, dpi=720, figSize=None, silent=True):
     fontSize (int): The default font size to use for plot elements.
     dpi (int): The dots per inch (DPI) setting for figure resolution.
     figSize (tuple): The default figure size (width, height) in inches. If None, the default Matplotlib size is used.
-    silent (bool): If True, suppresses the output of the updated settings. If False, prints the updated settings to the console.
+    silent (bool): If True, suppresses the output of the updated settings. If False, prints the updated settings to
+      the console.
+    snsStyle (str): The Seaborn style to set for the plots (e.g., "whitegrid", "darkgrid", "ticks", etc.).
   '''
 
   import seaborn as sns
+  import matplotlib as mpl
+  from cycler import cycler
   import matplotlib.pyplot as plt
 
-  fontSerif = ["Times New Roman", "Georgia", "Garamond", "Palatino", "Bookman", "New Century Schoolbook"]
+  # Preferred serif fonts (preserve original preferences, but we'll fall back to system-available serifs)
+  fontSerif = [
+    "Times New Roman", "Georgia", "Garamond", "Palatino", "Bookman", "New Century Schoolbook",
+    # Common Linux-friendly fallbacks (checked at runtime)
+    "DejaVu Serif", "Liberation Serif", "Noto Serif", "FreeSerif",
+  ]
 
   # Set the default Seaborn style for the plots.
-  sns.set(style="whitegrid")
+  # Ensure grid is enabled and set the requested seaborn style.
+  sns.set(style=snsStyle, rc={"axes.grid": True})
   sns.set_context(
     "paper",
     rc={
@@ -63,56 +84,95 @@ def UpdateMatplotlibSettings(fontSize=16, dpi=720, figSize=None, silent=True):
 
   # Update Matplotlib settings for better visualization.
   params = {
-    "figure.dpi"        : dpi,  # Set figure DPI for better resolution.
-    "figure.facecolor"  : "white",  # Set figure background color.
+    "figure.dpi"                   : dpi,  # Set figure DPI for better resolution.
+    "figure.facecolor"             : "white",  # Set figure background color.
+    # Enable automatic layout adjustments to avoid calling `tight_layout` repeatedly.
+    # which can trigger "The figure layout has changed to tight" warnings.
+    "figure.autolayout"            : True,
+    # Disable constrained_layout by default to avoid conflicts with `tight_layout`.
+    "figure.constrained_layout.use": False,
 
-    "savefig.dpi"       : dpi,  # Set savefig DPI for better resolution.
-    "savefig.bbox"      : "tight",  # Save figures with tight bounding box.
-    "savefig.pad_inches": 0.05,  # Set padding around saved figures.
+    "savefig.dpi"                  : dpi,  # Set savefig DPI for better resolution.
+    "savefig.bbox"                 : "tight",  # Save figures with tight bounding box.
+    "savefig.pad_inches"           : 0.05,  # Set padding around saved figures.
 
-    "font.family"       : "serif",  # Use serif font family.
-    "font.serif"        : fontSerif,  # Specify serif font.
-    "font.size"         : fontSize,  # Set default font size.
+    "font.family"                  : "serif",  # Use serif font family.
+    "font.size"                    : fontSize,  # Set default font size.
 
-    "axes.titlesize"    : fontSize,  # Set title font size.
-    "axes.labelsize"    : fontSize,  # Set axis label font size.
-    "axes.grid"         : True,  # Enable grid by default.
-    "axes.facecolor"    : "white",  # Set axes background color.
+    "axes.titlesize"               : fontSize,  # Set title font size.
+    "axes.labelsize"               : fontSize,  # Set axis label font size.
+    "axes.grid"                    : True,  # Enable grid by default.
+    "axes.facecolor"               : "white",  # Set axes background color.
 
-    "xtick.labelsize"   : fontSize,  # Set x-tick label font size.
-    "ytick.labelsize"   : fontSize,  # Set y-tick label font size.
+    "xtick.labelsize"              : fontSize,  # Set x-tick label font size.
+    "ytick.labelsize"              : fontSize,  # Set y-tick label font size.
 
-    "legend.fontsize"   : fontSize,  # Set legend font size.
-    "legend.frameon"    : True,  # Enable legend frame.
-    "legend.framealpha" : 0.9,  # Set legend frame transparency.
+    "legend.fontsize"              : fontSize,  # Set legend font size.
+    "legend.frameon"               : True,  # Enable legend frame.
+    "legend.framealpha"            : 0.9,  # Set legend frame transparency.
 
-    "grid.alpha"        : 0.2,  # Set grid transparency.
-    "grid.linestyle"    : "--",  # Set grid line style.
-    "grid.linewidth"    : 0.5,  # Set grid line width.
-    "grid.color"        : "gray",  # Set grid color.
-    "grid.which"        : "both",  # Show grid on both major and minor ticks.
-    "grid.axis"         : "both",  # Show grid on both x and y axes.
-    "grid.zorder"       : 0,  # Set grid z-order to be behind other plot elements.
+    "grid.alpha"                   : 0.2,  # Set grid transparency.
+    "grid.linestyle"               : "--",  # Set grid line style.
+    "grid.linewidth"               : 0.5,  # Set grid line width.
+    "grid.color"                   : "gray",  # Set grid color.
+    "grid.which"                   : "both",  # Show grid on both major and minor ticks.
+    "grid.axis"                    : "both",  # Show grid on both x and y axes.
+    "grid.zorder"                  : 0,  # Set grid z-order to be behind other plot elements.
 
-    "lines.linewidth"   : 2.0,  # Set default line width.
-    "lines.markersize"  : 6,  # Set default marker size.
+    "lines.linewidth"              : 1.5,  # Publication-quality default line width.
+    "lines.markersize"             : 6,  # Set default marker size.
 
-    "axes.axisbelow"    : True,  # Ensure grid is behind other plot elements.
-    "axes.edgecolor"    : "black",  # Set axes edge color.
-    "axes.linewidth"    : 1.0,  # Set axes line width.
+    "axes.axisbelow"               : True,  # Ensure grid is behind other plot elements.
+    "axes.edgecolor"               : "black",  # Set axes edge color.
+    "axes.linewidth"               : 1.0,  # Set axes line width.
 
-    "figure.titlesize"  : fontSize,  # Set figure title font size.
-    "legend.loc"        : "best",  # Set legend location to best.
+    "figure.titlesize"             : fontSize,  # Set figure title font size.
+    "legend.loc"                   : "best",  # Set legend location to best.
   }
 
   if (figSize is not None):
     params["figure.figsize"] = figSize  # Set default figure size if provided.
 
   # Filter out any parameters that are not recognized by Matplotlib to avoid warnings.
-  validParams = {key: value for key, value in params.items() if key in plt.rcParams}
+  validParams = {key: value for key, value in params.items() if (key in plt.rcParams)}
 
   # Update Matplotlib rcParams with the defined settings.
   plt.rcParams.update(validParams)
+
+  # Choose which serif fonts to set based on what is actually installed on the system.
+  # This avoids warnings like "Generic family 'serif' not found because none of the following families were found: ..."
+  try:
+    import matplotlib.font_manager as font_manager
+    installed = {f.name for f in font_manager.fontManager.ttflist}
+    # Keep only preferred serifs that are actually available, preserving order.
+    availableSerifs = [f for f in fontSerif if (f in installed)]
+    if (availableSerifs):
+      try:
+        mpl.rcParams["font.serif"] = availableSerifs
+      except Exception:
+        mpl.rcParams["font.family"] = "serif"
+    else:
+      # Try a few well-known system serif names explicitly, otherwise fall back to sans-serif to avoid warnings.
+      for fallback in ("DejaVu Serif", "Liberation Serif", "Noto Serif", "FreeSerif"):
+        if (fallback in installed):
+          mpl.rcParams["font.serif"] = [fallback]
+          break
+      else:
+        mpl.rcParams["font.family"] = "sans-serif"
+  except Exception:
+    # If font inspection fails for any reason, leave Matplotlib defaults in place.
+    pass
+
+  # Set a colorblind-friendly palette and apply it to the axes color cycle when possible.
+  colorPalette = sns.color_palette("colorblind")
+  plt.rcParams["axes.prop_cycle"] = cycler("color", colorPalette)
+
+  # Embed fonts in vector outputs for publication (Type 42 = TrueType).
+  try:
+    mpl.rcParams["pdf.fonttype"] = 42
+    mpl.rcParams["ps.fonttype"] = 42
+  except Exception:
+    pass
 
   if (not silent):
     print("Matplotlib settings updated for better visualization.")
@@ -241,8 +301,10 @@ def SeedEverything(seed=42, deterministic=True, benchmark=True):
   random.seed(seed)  # Set the random seed for Python's built-in random module to ensure reproducibility.
   np.random.seed(seed)  # Set the random seed for NumPy to ensure reproducibility.
   torch.manual_seed(seed)  # Set the random seed for PyTorch to ensure reproducibility.
-  torch.cuda.manual_seed(seed)  # Set the random seed for CUDA to ensure reproducibility on GPU.
-  torch.cuda.manual_seed_all(seed)  # Set the random seed for all GPUs to ensure reproducibility across multiple GPUs.
+  # Check if CUDA is available for GPU operations.
+  if (torch.cuda.is_available()):
+    torch.cuda.manual_seed(seed)  # Set the random seed for CUDA to ensure reproducibility on GPU.
+    torch.cuda.manual_seed_all(seed)  # Set the random seed for all GPUs to ensure reproducibility across multiple GPUs.
 
   # If cuDNN is available, set the random seed for cuDNN to ensure reproducibility.
   # This is useful for models that use cuDNN for optimized performance on NVIDIA GPUs.
@@ -269,10 +331,13 @@ def SeedEverything(seed=42, deterministic=True, benchmark=True):
     # torch.backends.cudnn.benchmark = False
 
 
-def DoRandomSeeding():
+def DoRandomSeeding(verbose=False):
   r'''
   Perform random seeding for reproducibility.
   This function sets the random seed for various libraries to ensure consistent results across runs.
+
+  Parameters:
+    verbose (bool): If True, prints the random seed used for seeding. This is useful for tracking the seed value in logs or outputs for reproducibility purposes.
   '''
 
   import numpy as np
@@ -281,7 +346,8 @@ def DoRandomSeeding():
   maxInt = np.iinfo(np.int32).max
   rndNumber = np.random.randint(0, maxInt)
   SeedEverything(seed=rndNumber)
-  print(f"Random seed set to: {rndNumber}")
+  if (verbose):
+    print(f"Random seed set to: {rndNumber}")
 
 
 # -------------------------------------------------- #

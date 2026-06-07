@@ -2,22 +2,20 @@ import os, tqdm, torch, torchvision, cv2, time, copy, math, shutil, csv, json
 import numpy as np
 import pandas as pd
 from typing import *
+from PIL import Image
 import torch.nn as nn
 from pathlib import Path
+import torch.optim as optim
 import matplotlib.pyplot as plt
 from torchvision import transforms
-from torch.utils.data import DataLoader
-import torch.optim as optim
 from torch.amp import autocast, GradScaler
 from sklearn.metrics import confusion_matrix
 from torch.utils.tensorboard import SummaryWriter
+from torch.utils.data import TensorDataset, DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, CosineAnnealingLR
-from HMB.Initializations import IMAGE_SUFFIXES
-from HMB.PerformanceMetrics import (
-  CalculatePerformanceMetrics, PlotConfusionMatrix,
-  PlotROCAUCCurve, PlotPRCCurve, ComputeECE
-)
-from HMB.DatasetsHelper import CustomDataset
+from HMB.Initializations import IMAGE_SUFFIXES, DoRandomSeeding
+from HMB.PerformanceMetrics import *
+from HMB.DatasetsHelper import PyTorchCustomDataset, TabularPreprocessor
 from HMB.PyTorchHelper import (
   SavePyTorchDict, LoadPyTorchDict, MixupFn, MixupCriterion, LoadModel,
   EnableMixedPrecision, EarlyStopping, CheckpointSaver, ExponentialMovingAverage,
@@ -757,7 +755,7 @@ def ImageryInferenceWithPlots(
       ])
 
   # Create dataset and dataloader.
-  dataset = CustomDataset(dataDir, transform=transform)
+  dataset = PyTorchCustomDataset(dataDir, transform=transform)
   dataloader = DataLoader(dataset, batch_size=batchSize, shuffle=False)
 
   if (verbose):
@@ -1388,18 +1386,24 @@ def GenericTabularEvaluatePredictPlotSubset(
   targetColumn: str = "Label",
   featureColumns: Optional[List[str]] = None,
   subset: str = "test",
+  maxRowsToRead: Optional[int] = None,
+  dropFirstColumn: bool = False,
   prefix: str = "",
+  ignoreCategorical: bool = True,
+  tabularProcessorDir: Optional[str] = None,
+  numericScaler: object = "Standard",
+  batchSize=32,
   storageDir: Optional[str] = None,
   heavy: bool = True,
   computeECE: bool = True,
   exportFailureCases: bool = True,
   eps: float = 1e-10,
   saveArtifacts: bool = True,
-  maxSamples: Optional[int] = None,
-  preprocessFn=None,
+  maxSamplesToEval: Optional[int] = None,
   dpi: int = 720,
+  fontSize: int = 13,
   device=None,
-  figSize=(8, 8),
+  figSize=(10, 10),
 ) -> Tuple[
   Optional[str],
   Dict[str, float],
@@ -1426,7 +1430,16 @@ def GenericTabularEvaluatePredictPlotSubset(
       If None, uses all columns except targetColumn. Defaults to None.
     subset (str | None): Dataset subset to evaluate ("train", "val", "test", "all", or None).
       If the CSV has a "split" column, filters by that value. Defaults to "test".
+    maxRowsToRead (int | None): Maximum number of rows to read from the CSV. If None, reads all rows. Defaults to None.
+    dropFirstColumn (bool): Whether to drop the first column of the CSV (e.g., an index column). Defaults to False.
     prefix (str): Prefix for saved figure filenames. Defaults to "".
+    ignoreCategorical (bool): Whether to ignore non-numeric columns in features. Defaults to True.
+    tabularProcessorDir (str | None): Optional directory containing tabular data processing artifacts
+      (e.g., encoders, scalers). If provided, these will be loaded and applied to the features before prediction.
+      Defaults to None.
+    numericScaler (str | object): Type of numeric scaler to apply to features
+      ("Standard", "MinMax", or a custom scaler object). Defaults to "Standard".
+    batchSize (int): Batch size for processing the dataset in batches. Defaults to 32
     storageDir (str | None): Directory to save predictions CSV and figures.
       If None, uses current directory. Defaults to None.
     heavy (bool): Whether to compute heavy metrics and plot ROC/PRC curves. Defaults to True.
@@ -1434,10 +1447,9 @@ def GenericTabularEvaluatePredictPlotSubset(
     exportFailureCases (bool): Whether to export misclassified samples to CSV. Defaults to True.
     eps (float): Small epsilon value for numerical stability in metric calculations. Defaults to 1e-10.
     saveArtifacts (bool): Whether to save figures and artifacts. Defaults to True.
-    maxSamples (int | None): Maximum number of samples to evaluate. If None, evaluates all samples. Defaults to None.
-    preprocessFn (callable | None): Optional preprocessing function to apply to each feature row
-      before prediction. Should accept a 1D NumPy array and return a processed 1D array. Defaults to None.
+    maxSamplesToEval (int | None): Maximum number of samples to evaluate. If None, evaluates all samples. Defaults to None.
     dpi (int): DPI for saved figures. Defaults to 720.
+    fontSize (int): Font size for plot labels and annotations. Defaults to 13.
     device: Optional device to run model on (e.g., "cpu" or "cuda"). If None, uses CPU. Defaults to None.
     figSize: Tuple[int, int]: Figure size for plots. Defaults to (8, 8).
 
@@ -1454,6 +1466,9 @@ def GenericTabularEvaluatePredictPlotSubset(
       - numpy.ndarray|None: Confusion matrix as a 2D numpy array, or None if not computable.
   '''
 
+  # Set global random seeds for reproducibility using configuration value.
+  DoRandomSeeding()
+
   # Record the start time for total evaluation duration.
   startAll = time.perf_counter()
 
@@ -1462,148 +1477,234 @@ def GenericTabularEvaluatePredictPlotSubset(
     # Raise an error if the subset is not one of the allowed values.
     raise ValueError(f"Invalid subset name: {subset}")
 
-  # Load the tabular dataset from CSV.
+  # Compute the base file name for this CSV without extension.
+  baseFileName = os.path.splitext(os.path.basename(dataPath))[0]
+  # Inform user which CSV is being processed.
+  print(f"\nProcessing CSV: {dataPath} -> Dataset name: {baseFileName}")
+
+  # Load the CSV into a DataFrame using pandas with optional row limit.
   try:
-    df = pd.read_csv(dataPath, low_memory=False)
+    df = pd.read_csv(dataPath, nrows=maxRowsToRead, low_memory=False)
   except Exception as loadErr:
     print(f"Error loading dataset from {dataPath}: {loadErr}")
     return (None, {}, [], [], [], [], [], [], None)
+
+  # Optionally drop the first column if requested.
+  if (dropFirstColumn):
+    df = df.iloc[:, 1:]
+    print("Dropped the first column of the dataset as per configuration.")
 
   # Filter by subset if a "split" column exists.
   if ("split" in df.columns and subset not in ("all", None)):
     df = df[df["split"] == subset].copy()
 
-  # Determine feature columns.
-  if (featureColumns is None):
-    featureColumns = [col for col in df.columns if (col != targetColumn)]
+  if (tabularProcessorDir is not None):
+    # Initialize a Preprocessor instance for scaling and label encoding.
+    preprocessor = TabularPreprocessor(ignoreCategorical=ignoreCategorical, numericScaler=numericScaler)
+    # Attempt to load existing preprocessor artifacts from the save directory.
+    preprocessor.Load(tabularProcessorDir)
+    # If preprocessor artifacts are loaded, validate compatibility with training data.
+    if (preprocessor.IsLoaded()):
+      # Assume compatibility until checks determine otherwise.
+      compatible = True
+      savedNums = preprocessor.GetFeatureNames() or []
+      # Determine which saved numeric columns are missing from the current training DataFrame.
+      missingCols = [c for c in savedNums if c not in df.columns]
+      # If any expected numeric columns are missing, mark artifacts as incompatible.
+      if (len(missingCols) > 0):
+        # Inform user about missing numeric columns in the training partition.
+        print(f"Preprocessor artifact numeric columns missing in training data: {missingCols}")
+        compatible = False
+      # If a label encoder artifact exists, ensure it covers labels present in training data.
+      if ((targetColumn in df.columns) and (getattr(preprocessor, "labelEncoder", None) is not None)):
+        try:
+          # Get classes from the label encoder artifact.
+          encClasses = set(preprocessor.labelEncoder.classes_)
+          # Get unique labels from the training DataFrame as strings.
+          labels = set(df[targetColumn].astype(str).unique())
+          # If encoder classes do not cover training labels, mark as incompatible.
+          if (not labels.issubset(encClasses)):
+            # Inform user about label encoder mismatch.
+            print("Label encoder classes in artifacts do not cover training labels.")
+            compatible = False
+        except Exception:
+          # Treat exceptions during validation as incompatibility.
+          compatible = False
 
-  # Extract features and labels.
-  X = df[featureColumns].values
-  y = df[targetColumn].values
+      # If artifacts are compatible, proceed using them.
+      if (compatible):
+        # Inform user that artifacts were loaded and validated successfully.
+        print("Preprocessor artifacts loaded from disk and validated as compatible with training data.")
+      else:
+        raise RuntimeError(
+          f"Preprocessor artifacts found in {saveDirLocal} but are not compatible with the current training data. "
+          f"Please verify that the dataset has not changed since the artifacts were generated, "
+          f"or delete the artifacts to allow regeneration."
+        )
+    else:
+      raise RuntimeError(
+        f"Preprocessor artifacts not found in {saveDirLocal}. "
+        f"Please run the pipeline once to generate artifacts before reusing them."
+      )
 
-  # Map class labels to indices if they are not already integers.
-  if (not np.issubdtype(y.dtype, np.integer)):
-    # Create a mapping from class names to indices.
-    classNames = sorted(df[targetColumn].unique().tolist())
-    classToIdx = {name: idx for idx, name in enumerate(classNames)}
-    # Convert labels to indices.
-    yIndices = np.array([classToIdx[label] for label in y], dtype=int)
+    X, y = preprocessor.Transform(df, labelColumn=targetColumn)
+    print(
+      f"After loading preprocessor artifacts, transformed full dataset shape: "
+      f"X={X.shape if (X is not None) else None}, y={y.shape if (y is not None) else None}"
+    )
+    print("Labels:", np.unique(df[targetColumn].values))
+    encoder = preprocessor.labelEncoder
+    mappings = dict(zip(encoder.classes_, encoder.transform(encoder.classes_))) if (encoder is not None) else {}
+    print(f"Label encoder mappings: {mappings}")
+    classNames = encoder.classes_.tolist() if (encoder is not None) else []
+
   else:
-    # Labels are already integer indices.
-    classNames = [str(i) for i in range(int(np.max(y)) + 1)]
-    yIndices = y.astype(int)
+    # Determine feature columns.
+    if (featureColumns is None):
+      featureColumns = [col for col in df.columns if (col != targetColumn)]
+
+    # Extract features and labels.
+    X = df[featureColumns].values
+    y = df[targetColumn].values
+
+    if (ignoreCategorical):
+      # Identify non-numeric columns in features.
+      nonNumericCols = [i for i, col in enumerate(featureColumns) if not np.issubdtype(df[col].dtype, np.number)]
+      if (len(nonNumericCols) > 0):
+        print(
+          f"Warning: Ignoring non-numeric feature columns at indices "
+          f"{nonNumericCols} -> {[featureColumns[i] for i in nonNumericCols]}"
+        )
+        # Remove non-numeric columns from features and update feature columns list.
+        X = np.delete(X, nonNumericCols, axis=1)
+        featureColumns = [col for i, col in enumerate(featureColumns) if i not in nonNumericCols]
+        print(f"Updated features shape after removing non-numeric columns: {X.shape}")
+        print(f"Remaining feature columns: {featureColumns}")
+
+    print(
+      f"Extracted features and labels from DataFrame. "
+      f"Features shape: {X.shape}, Labels shape: {y.shape}"
+    )
+    print("Unique labels in target column:", np.unique(y))
+    encoder = None
+
+    # Map class labels to indices if they are not already integers.
+    if (not np.issubdtype(y.dtype, np.integer)):
+      # Create a mapping from class names to indices.
+      classNames = sorted(df[targetColumn].unique().tolist())
+      classToIdx = {name: idx for idx, name in enumerate(classNames)}
+      # Convert labels to indices.
+      y = np.array([classToIdx[label] for label in y], dtype=int)
+    else:
+      # Labels are already integer indices.
+      classNames = [str(i) for i in range(int(np.max(y)) + 1)]
+      y = y.astype(int)
+
+    mappings = {name: idx for idx, name in enumerate(classNames)}
+    print(f"Class names: {classNames}")
+    print(f"Class to index mapping: {mappings}")
 
   # Determine number of classes.
   numClasses = len(classNames)
+  print(f"Number of classes determined: {numClasses}")
 
   # Apply sampling limit if maxSamples is set.
-  if (maxSamples is not None and len(X) > maxSamples):
-    # Randomly sample without replacement.
-    sampleIdx = np.random.choice(len(X), size=maxSamples, replace=False)
-    X = X[sampleIdx]
-    yIndices = yIndices[sampleIdx]
+  if ((maxSamplesToEval is not None) and (len(X) > maxSamplesToEval)):
+    currentMax = max(1, maxSamplesToEval)
+    X = X[:currentMax]
+    y = y[:currentMax]
+    print(f"Limiting evaluation to the first {len(X)} samples as per configuration.")
+
+    # # Randomly sample without replacement.
+    # sampleIdx = np.random.choice(len(X), size=maxSamplesToEval, replace=False)
+    # X = X[sampleIdx]
+    # y = y[sampleIdx]
 
   # Initialize containers for collected data.
   allPredsIndices: List[int] = []
   allGtsIndices: List[int] = []
   allPredsProbs: List[List[float]] = []
-  allPredsNames: List[str] = []
-  allGtsNames: List[str] = []
   allPredsConfidences: List[Optional[float]] = []
   predictionsRecords: List[Dict[str, Any]] = []
 
+  # Move the model to the specified device if it is a PyTorch model and device is provided.
+  if (device is not None):
+    try:
+      model.to(device)
+      print(f"Model moved to device: {device}")
+    except Exception as deviceErr:
+      print(f"Warning: Could not move model to device {device}: {deviceErr}")
+
+  # Create PyTorch TensorDataset for the data with correct dtypes.
+  dataset = TensorDataset(torch.from_numpy(X).float(), torch.from_numpy(y).long())
+  # Create DataLoader for the dataset with configured batch size and shuffling.
+  loader = DataLoader(dataset, batch_size=batchSize, shuffle=True)
+  print(f"DataLoader created with batch size {batchSize} and shuffle=True. Total batches: {len(loader)}")
+
   try:
+    model.eval()
     # Iterate over samples and make predictions.
-    loader = tqdm.tqdm(range(len(X)), desc="Evaluating samples", unit="sample")
-    for i in loader:
-      # Extract feature row.
-      features = X[i]
+    tqdmLoader = tqdm.tqdm(loader, desc="Evaluating samples", unit="batch")
 
-      # Apply preprocessing if provided.
-      if (preprocessFn is not None):
+    with torch.no_grad():
+      for batchX, batchY in tqdmLoader:
+        batchX = batchX.to(device)
+        batchY = batchY.to(device)
+        outputs = model(batchX)
+        _, predicted = torch.max(outputs.data, 1)
+        probs = torch.softmax(outputs, dim=1)
+
+        # Append prediction results.
+        allPredsIndices.extend(predicted.cpu().numpy().tolist())
+        allGtsIndices.extend(batchY.cpu().numpy().tolist())
+        allPredsConfidences.extend(
+          probs.max(dim=1).values.cpu().numpy().tolist()
+        )
+        allPredsProbs.extend(
+          probs.cpu().numpy().tolist()
+        )
+
+    allPredsNames = [
+      classNames[idx]
+      if (0 <= idx < len(classNames)) else "Unknown"
+      for idx in allPredsIndices
+    ]
+    allGtsNames = [
+      classNames[idx]
+      if (0 <= idx < len(classNames)) else "Unknown"
+      for idx in allGtsIndices
+    ]
+    eceValues = []
+    if (computeECE):
+      for probs, gt in zip(allPredsProbs, allGtsIndices):
         try:
-          features = preprocessFn(features)
-        except Exception as prepErr:
-          print(f"Preprocessing failed for sample {i}: {prepErr}")
-          continue
-
-      # Make prediction using the model callable.
-      try:
-        # Should return 1D array of shape [numClasses].
-        try:
-          probs = model(features)
-        except:
-          # Apply to device and convert to NumPy if it's a tensor.
-          featuresTensor = torch.from_numpy(features).float()
-          # Expected 2D input (batchSize, inputSize), got torch.Size([42]).
-          if (featuresTensor.ndim == 1):
-            featuresTensor = featuresTensor.unsqueeze(0)
-          if (device is not None):
-            featuresTensor = featuresTensor.to(device)
-          probsTensor = model(featuresTensor)
-          probs = probsTensor.detach().cpu().numpy()
-
-        probs = np.asarray(probs, dtype=np.float32)
-        if (probs.ndim == 2 and probs.shape[0] == 1):
-          probs = probs[0]
-
-        if (probs.ndim != 1):
-          raise ValueError(f"Expected 1D probability vector, got shape {probs.shape}")
-        if (len(probs) != numClasses):
-          raise ValueError(
-            f"Number of classes mismatch: expected {numClasses}, got {len(probs)}\n"
-            f"Sample index: {i}, "
-            f"probs: {probs}"
-          )
-
-        predictedClassIndex = int(np.argmax(probs))
-        predictedConfidence = float(probs[predictedClassIndex])
-        probList = probs.tolist()
-
-      except Exception as predErr:
-        print(f"Prediction failed for sample {i}: {predErr}")
-        predictedClassIndex = -1
-        predictedConfidence = None
-        probList = []
-
-      # Append prediction results.
-      allPredsIndices.append(predictedClassIndex)
-      allGtsIndices.append(int(yIndices[i]))
-      allPredsConfidences.append(predictedConfidence)
-      allPredsProbs.append(probList)
-
-      # Resolve class names for display.
-      predName = (
-        classNames[predictedClassIndex]
-        if (0 <= predictedClassIndex < len(classNames))
-        else "Unknown"
-      )
-      allPredsNames.append(predName)
-      allGtsNames.append(classNames[int(yIndices[i])])
-
-      # Compute per-sample ECE if requested.
-      eceValue = None
-      if (computeECE and probList):
-        try:
-          eceValue = ComputeECE([probList], [int(yIndices[i])])
+          ece = ComputeECE([probs], [gt])
         except Exception:
-          eceValue = None
+          ece = None
+        eceValues.append(ece)
+    else:
+      eceValues = [None] * len(allGtsIndices)
 
-      # Determine if prediction is correct.
-      correctness = (predictedClassIndex == int(yIndices[i]))
+    print("Finished collecting predictions for all batches.")
+    print("Total GT indices collected:", len(allGtsIndices))
+    print("Total Predicted indices collected:", len(allPredsIndices))
+    print("Total Predicted probabilities collected:", len(allPredsProbs))
+    print("Total Predicted confidences collected:", len(allPredsConfidences))
+    print("Total class names:", len(classNames))
+    print("Total samples collected for confusion matrix:", len(allGtsIndices))
 
-      # Record full prediction metadata.
-      predictionsRecords.append({
-        "sampleIdx"          : i,
-        "trueClassIndex"     : int(yIndices[i]),
-        "trueClassName"      : classNames[int(yIndices[i])],
-        "predictedClassIndex": predictedClassIndex,
-        "predictedClassName" : predName,
-        "predictedConfidence": predictedConfidence,
-        "probabilities"      : (json.dumps(probList) if probList else None),
-        "ece"                : (float(eceValue) if eceValue is not None else None),
-        "correctness"        : correctness,
-      })
+    predictionsRecords = {
+      "Index"              : list(range(len(allGtsIndices))),
+      "TrueClassIndex"     : allGtsIndices,
+      "TrueClassName"      : allGtsNames,
+      "PredictedClassIndex": allPredsIndices,
+      "PredictedClassName" : allPredsNames,
+      "PredictedConfidence": allPredsConfidences,
+      "Probabilities"      : [json.dumps(probs) for probs in allPredsProbs],
+      "ECE"                : eceValues,
+      "Correctness"        : [int(pred == gt) for pred, gt in zip(allPredsIndices, allGtsIndices)],
+      **{f"Prob_Class_{cls}": [probs[i] for probs in allPredsProbs] for i, cls in enumerate(classNames)},
+    }
 
     # Log progress.
     print(f"Prediction collection completed for {len(allGtsIndices)} samples across {numClasses} classes.")
@@ -1616,50 +1717,59 @@ def GenericTabularEvaluatePredictPlotSubset(
     assert len(allPredsIndices) == len(allPredsNames), "Mismatch in predictions and names count."
     assert len(allGtsIndices) == len(allGtsNames), "Mismatch in ground truths and names count."
     assert len(allPredsIndices) == len(allPredsConfidences), "Mismatch in predictions and confidences count."
-    assert len(predictionsRecords) == len(allGtsIndices), "Mismatch in prediction records and ground truths count."
     print(f"Total samples collected: {len(allGtsIndices)}")
     print(f"{'-' * 60}")
+
+    # Resolve storage directory.
+    if (storageDir is None):
+      storageDir = Path(".") / "TabularEvalPredResults"
+    else:
+      storageDir = Path(storageDir)
+    storageDir = Path(storageDir)
+
+    # Create storage directory if saving artifacts.
+    if (saveArtifacts):
+      storageDir.mkdir(parents=True, exist_ok=True)
+      print(f"Using storage directory: {storageDir}")
 
     # Compute confusion matrix and metrics if data exists.
     if ((len(allPredsIndices) > 0) and (len(allGtsIndices) > 0)):
       cm = confusion_matrix(allGtsIndices, allPredsIndices)
       metricResults = CalculatePerformanceMetrics(
-        cm,
-        eps=eps,
-        addWeightedAverage=True,
-        addPerClass=False
+        cm,  # Confusion matrix as a 2D numpy array.
+        eps=eps,  # Epsilon value for numerical stability in metric calculations.
+        addWeightedAverage=True,  # Whether to include weighted averages in the output.
+        addPerClass=True,  # Whether to include per-class metrics in the output.
       )
       weightedMetrics = {key: value for key, value in metricResults.items() if key.startswith("Weighted")}
       print(f"Computed weighted metrics from confusion matrix on {len(allGtsIndices)} samples.")
     else:
+      metricResults = {}
       weightedMetrics = {}
       print("Warning: No predictions collected for confusion matrix computation.")
 
   except Exception as ex:
     # Handle any unexpected errors during evaluation.
+    metricResults = {}
     weightedMetrics = {}
     print(f"Error during prediction collection or metric computation: {ex}")
 
   # Apply prefix to metric keys if provided.
   if (prefix):
     weightedMetrics = {f"{prefix}{key}": value for key, value in weightedMetrics.items()}
-
-  # Resolve storage directory.
-  if (storageDir is None):
-    storageDir = Path(".")
-  else:
-    storageDir = Path(storageDir)
-
-  # Create storage directory if saving artifacts.
-  if (saveArtifacts):
-    storageDir.mkdir(parents=True, exist_ok=True)
-    print(f"Using storage directory: {storageDir}")
+    metricResults = {f"{prefix}{key}": value for key, value in metricResults.items()}
 
   # Save full predictions to CSV if enabled.
   storageFilePath = None
   if (saveArtifacts):
-    storageFileName = f"{prefix}_Predictions_{subset}.csv" if (prefix) else f"Predictions_{subset}.csv"
-    storageFilePath = storageDir / storageFileName
+    storageFileName = (
+      f"{prefix}_Predictions_{subset}.csv" if (prefix and subset) else (
+        f"{prefix}_Predictions.csv" if (prefix) else (
+          f"Predictions_{subset}.csv" if (subset) else "Predictions.csv"
+        )
+      )
+    )
+    storageFilePath = Path(storageDir) / storageFileName
     try:
       dfPreds = pd.DataFrame(predictionsRecords)
       dfPreds.to_csv(storageFilePath, index=False)
@@ -1707,6 +1817,15 @@ def GenericTabularEvaluatePredictPlotSubset(
     print(probs)
   print(f"{'-' * 60}")
 
+  cmaps = [
+    plt.cm.Blues,
+    plt.cm.Greens,
+    plt.cm.Oranges,
+    plt.cm.Purples,
+    plt.cm.Reds,
+  ]
+  rndCmap = np.random.choice(cmaps) if (len(classNames) > 2) else plt.cm.Blues
+
   # Save confusion matrix plot.
   if (saveArtifacts):
     try:
@@ -1717,11 +1836,11 @@ def GenericTabularEvaluatePredictPlotSubset(
         normalize=False,
         roundDigits=3,
         title="Confusion Matrix",
-        cmap=plt.cm.Blues,
+        cmap=rndCmap,
         display=False,
         save=True,
         fileName=str(storageDir / filename),
-        fontSize=15,
+        fontSize=fontSize,
         annotate=True,
         figSize=figSize,
         colorbar=True,
@@ -1753,11 +1872,11 @@ def GenericTabularEvaluatePredictPlotSubset(
         areProbabilities=True,
         title="ROC Curve & AUC",
         figSize=figSize,
-        cmap=None,
+        cmap=rndCmap,
         display=False,
         save=True,
         fileName=str(storageDir / filename),
-        fontSize=15,
+        fontSize=fontSize,
         plotDiagonal=True,
         annotateAUC=True,
         showLegend=True,
@@ -1765,10 +1884,7 @@ def GenericTabularEvaluatePredictPlotSubset(
         dpi=dpi,
       )
       print(f"ROC AUC figure saved to: {storageDir / filename}")
-    except Exception as rocErr:
-      print(f"Warning: Could not generate ROC AUC figure: {rocErr}")
 
-    try:
       filename = f"{prefix}_PRC.pdf" if (prefix) else "PRC.pdf"
       PlotPRCCurve(
         allGtsIndices,
@@ -1777,35 +1893,225 @@ def GenericTabularEvaluatePredictPlotSubset(
         areProbabilities=True,
         title="PRC Curve",
         figSize=figSize,
-        cmap=None,
+        cmap=rndCmap,
         display=False,
         save=True,
         fileName=str(storageDir / filename),
-        fontSize=15,
+        fontSize=fontSize,
         annotateAvg=True,
         showLegend=True,
         returnFig=False,
         dpi=dpi,
       )
       print(f"PRC figure saved to: {storageDir / filename}")
+
+      filename = f"{prefix}_Calibration_Curve.pdf" if (prefix) else "Calibration_Curve.pdf"
+      PlotCalibrationCurve(
+        probs=allPredsProbs,
+        labels=allGtsIndices,
+        nBins=10,
+        title="Calibration Curve",
+        fontSize=fontSize,
+        figSize=(6, 6),
+        display=False,
+        save=True,
+        fileName=str(storageDir / filename),
+        dpi=dpi,
+        returnFig=False,
+        color="purple",
+      )
+      print(f"Calibration curve figure saved to: {storageDir / filename}")
+
+      filename = f"{prefix}_TopK_Accuracy_Curve.pdf" if (prefix) else "TopK_Accuracy_Curve.pdf"
+      PlotTopKAccuracyCurve(
+        probs=allPredsProbs,
+        labels=allGtsIndices,
+        maxK=10,
+        title="Top-k Accuracy Curve",
+        figSize=(6, 6),
+        save=True,
+        fileName=str(storageDir / filename),
+        display=False,
+        fontSize=fontSize,
+        returnFig=False,
+        dpi=dpi,
+        color="green",
+      )
+      print(f"Top-k accuracy curve figure saved to: {storageDir / filename}")
+
+      filename = f"{prefix}_Error_Analysis.pdf" if (prefix) else "Error_Analysis.pdf"
+      PlotErrorAnalysis(
+        allGtsIndices,
+        allPredsIndices,
+        X=None,
+        classNames=classNames,
+        maxExamples=5,
+        fontSize=fontSize,
+        figsize=(14, 10),
+        display=False,
+        save=True,
+        fileName=str(storageDir / filename),
+        dpi=dpi,
+        returnFig=False,
+      )
+      print(f"Error analysis figure saved to: {storageDir / filename}")
+
+      if (len(classNames) > 2):
+        filename = f"{prefix}_Classwise_PRF_Bar.pdf" if (prefix) else "Classwise_PRF_Bar.pdf"
+        PlotClasswisePRFBar(
+          cm,
+          classNames=classNames,
+          title="Classwise Performance Metrics",
+          fontSize=fontSize,
+          figsize=(10, 6),
+          display=False,
+          save=True,
+          fileName=str(storageDir / filename),
+          dpi=dpi,
+          returnFig=False,
+        )
+
+      filename = f"{prefix}_Error_Matrix.pdf" if (prefix) else "Error_Matrix.pdf"
+      PlotErrorMatrix(
+        cm,
+        classNames=classNames,
+        fontSize=fontSize,
+        figsize=(10, 10),
+        display=False,
+        save=True,
+        fileName=str(storageDir / filename),
+        dpi=dpi,
+        returnFig=False,
+      )
+      print(f"Error matrix figure saved to: {storageDir / filename}")
+
+      filename = f"{prefix}_Misclassification_Examples.pdf" if (prefix) else "Misclassification_Examples.pdf"
+      PlotMisclassificationExamples(
+        allGtsIndices,
+        allPredsIndices,
+        X=X,
+        maxExamples=5,
+        fontSize=fontSize,
+        figsize=(10, 5),
+        display=False,
+        save=True,
+        fileName=str(storageDir / filename),
+        dpi=dpi,
+        returnFig=False,
+      )
+      print(f"Misclassification examples figure saved to: {storageDir / filename}")
+
+      filename = f"{prefix}_Prediction_Confidence_Histogram.pdf" if (prefix) else "Prediction_Confidence_Histogram.pdf"
+      PlotPredictionConfidenceHistogram(
+        allPredsProbs,
+        yPred=allPredsIndices,
+        fontSize=fontSize,
+        figsize=(8, 5),
+        bins=20,
+        display=False,
+        save=True,
+        fileName=str(storageDir / filename),
+        dpi=dpi,
+        returnFig=False,
+      )
+      print(f"Prediction confidence histogram figure saved to: {storageDir / filename}")
+
+      T = 500  # Temperature scaling factor for Monte Carlo sampling.
+      probsMC = SampleMonteCarloDirichletFromProbs(allPredsProbs, T=T, concentration=30.0)
+      uncertaintyMeasures = ComputeMonteCarloUncertaintyMeasures(probsMC)
+      confidences = uncertaintyMeasures["predictedConfidence"]
+      predictions = uncertaintyMeasures["predictedIdx"]
+      # Convert predictions and ground truth lists to numpy arrays for element-wise comparison.
+      # Compute correctness flags by comparing Monte Carlo predictions with ground truth indices.
+      correctness = (np.array(predictions) == np.array(allGtsIndices)).astype(int)
+
+      filename = f"{prefix}_ECE_Reliability_Curve.pdf" if (prefix) else "ECE_Reliability_Curve.pdf"
+      ece, binAcc, binConf, binCounts = ComputeECEPlotReliability(
+        confidences,
+        predictions,
+        labels=allGtsIndices,
+        nBins=5,
+        title="ECE Example",
+        fontSize=fontSize,
+        figSize=(6, 6),
+        display=False,
+        save=True,
+        fileName=str(storageDir / filename),
+        dpi=dpi,
+        returnFig=False,
+        cmap="Blues",
+        applyXYLimits=True
+      )
+      print(f"ECE plot saved to: {storageDir / filename}")
+      print(f"ECE: {ece}")
+      print(f"Bin Accuracies: {binAcc}")
+      print(f"Bin Confidences: {binConf}")
+      print(f"Bin Counts: {binCounts}")
+
+      filename = f"{prefix}_Risk_Coverage_Curve.pdf" if (prefix) else "Risk_Coverage_Curve.pdf"
+      RiskCoverageCurve(
+        confidences,
+        correctness,
+        title="Risk-Coverage (Accuracy vs Coverage)",
+        fontSize=fontSize,
+        figSize=(6, 6),
+        display=False,
+        save=True,
+        fileName=str(storageDir / filename),
+        dpi=dpi,
+        returnFig=False,
+        color="blue",
+      )
+      print(f"Risk-Coverage curve saved to: {storageDir / filename}")
+
+      brierScore = ComputeBrierScore(confidences, correctness)
+      print(f"Brier Score: {brierScore}")
+
+      # Ensure the prefix is a valid string for metric key formatting.
+      if (prefix is None):
+        # Assign an empty string to the prefix variable when it evaluates to None.
+        prefix = ""
+      # Store the Brier score in the extended metrics dictionary.
+      metricResults[f"{prefix}BrierScore"] = brierScore
+      # Add the expected calibration error to the extended metrics dictionary.
+      if (computeECE):
+        metricResults[f"{prefix}ECE"] = ece
+        # Add the expected calibration error to the weighted metrics dictionary.
+        weightedMetrics[f"{prefix}ECE"] = ece
+      # Store the metrics results including Brier Score and ECE if computed.
+      filename = f"{prefix}_Extended_Metrics.csv" if (prefix) else "Extended_Metrics.csv"
+      metricsFilePath = storageDir / filename
+      dfMetrics = pd.DataFrame([metricResults])
+      dfMetrics.to_csv(metricsFilePath, index=False)
+      print(f"Extended metrics including Brier Score and ECE saved to: {metricsFilePath}")
+      # Store also as JSON for easier parsing.
+      jsonFilePath = storageDir / f"{filename.replace('.csv', '.json')}"
+      dfMetrics.to_json(jsonFilePath, orient="records", lines=False)
+      print(f"Extended metrics also saved as JSON to: {jsonFilePath}")
+
+
     except Exception as prcErr:
-      print(f"Warning: Could not generate PRC figure: {prcErr}")
+      print(f"Warning: Could not generate curves: {prcErr}")
   else:
     print("Heavy metrics and plots skipped as per configuration.")
 
-  # Compute overall ECE if requested.
-  if (computeECE):
+  # Compute overall expected calibration error only if it was not already calculated during heavy metrics evaluation.
+  if (computeECE and "ECE" not in weightedMetrics):
     try:
+      # Calculate the expected calibration error using all predicted probabilities and ground truth indices.
       ece = ComputeECE(allPredsProbs, allGtsIndices)
+      # Store the computed expected calibration error in the weighted metrics dictionary.
       weightedMetrics["ECE"] = ece
+      # Print the expected calibration error value to the console.
       print("Expected Calibration Error (ECE):", ece)
     except Exception as eceErr:
+      # Print a warning message when expected calibration error computation fails.
       print(f"Warning: Could not compute ECE: {eceErr}")
 
   # Record total evaluation time.
   endAll = time.perf_counter()
   duration = endAll - startAll
-  print(f"Total evaluation and prediction time: {duration:.2f} seconds.")
+  print(f"Total evaluation, prediction, and plotting time: {duration:.2f} seconds.")
   weightedMetrics["Total Evaluation Time (s)"] = duration
 
   # Return all collected results.

@@ -1,0 +1,5 @@
+# Ensure example scripts and wrappers are included in source distributions
+recursive-include HMB/Examples *
+
+# Include top-level README and other important metadata files
+include README.md LICENSE CHANGELOG.md CONTRIBUTING.md

@@ -197,31 +197,143 @@ def CreateModel(modelName, numClasses):
   return model
 
 
+def VerifyExperimentStructure(baseExpDir, predCSVFileFix, subsets, verbose=False):
+  '''Verify the experiments folder layout and presence of per-trial prediction CSVs.
+
+  Expected structure (when Train/Test subsets are used):
+      Experiments/
+          System A/
+              Trial 1/
+                  Train_[predCSVFileFix].csv
+                  Test_[predCSVFileFix].csv
+              Trial 2/
+                  ...
+          System B/
+              ...
+
+  Prints detailed issues found and returns a boolean indicating whether the
+  structure is valid (True) or problems were detected (False).
+  '''
+
+  issues = {}
+  # Ensure baseExpDir exists and is a directory.
+  if (not os.path.exists(baseExpDir) or not os.path.isdir(baseExpDir)):
+    print(f"Error: base experiments directory does not exist or is not a directory: {baseExpDir}")
+    return False
+
+  systems = [el for el in sorted(os.listdir(baseExpDir)) if os.path.isdir(os.path.join(baseExpDir, el))]
+  # Remove the "PerformanceMetricsPlots" directory from the list of systems if it exists, as it's not a system folder.
+  systems = [s for s in systems if "PerformanceMetricsPlots" not in s]
+  if (len(systems) == 0):
+    print(f"Error: No systems (subdirectories) found in base experiments directory: {baseExpDir}")
+    return False
+
+  for system in systems:
+    systemDir = os.path.join(baseExpDir, system)
+    trialDirs = [d for d in sorted(os.listdir(systemDir)) if os.path.isdir(os.path.join(systemDir, d))]
+    # Remove any non-trial directories if needed (e.g. "PerformanceMetricsPlots" if it exists at this level).
+    trialDirs = [d for d in trialDirs if "PerformanceMetricsPlots" not in d]
+    if (len(trialDirs) == 0):
+      issues[system] = [f"No trial subdirectories found under system: {system}"]
+      continue
+
+    systemIssues = []
+    for trial in trialDirs:
+      trialDir = os.path.join(systemDir, trial)
+      for subset in subsets:
+        # Look for any file matching the prediction CSV pattern for this subset in the trial directory.
+        predFiles = [
+          f for f in os.listdir(trialDir)
+          if ((predCSVFileFix in f) and (subset in f) and f.lower().endswith('.csv'))
+        ]
+        if (len(predFiles) == 0):
+          systemIssues.append(
+            f"Missing prediction CSV for trial '{trial}', subset '{subset}'"
+            f" (expected pattern contains '{predCSVFileFix}' and subset name)"
+          )
+        elif (len(predFiles) > 1):
+          systemIssues.append(
+            f"Multiple prediction CSVs found for trial '{trial}', subset '{subset}': "
+            f"{predFiles} (expected a single file)"
+          )
+
+    if (len(systemIssues) > 0):
+      issues[system] = systemIssues
+
+  if (len(issues) > 0):
+    print("Experiment structure verification FAILED. Issues detected:")
+    for system, sysIssues in issues.items():
+      print(f"  System: {system}")
+      for it in sysIssues:
+        print(f"    - {it}")
+    return False
+
+  if (verbose):
+    print(f"Experiment structure verification succeeded for base directory: {baseExpDir}")
+  return True
+
+
 def CereateModelTransforms(model):
-  # Prepare a prediction callable that accepts a HWC numpy image and returns 1D probability vector.
-  # This matches the expected interface of `GenericEvaluatePredictPlotSubset`.
-  # Create a default transform from timm for the model if available.
+  # Prepare a prediction transform for the model and return the transform plus the
+  # model's expected square input size (height/width). This helper prefers the
+  # model's own data config (via timm) so callers can adapt preprocessing to the
+  # model's required input shape instead of blindly resizing to a user-specified
+  # image size.
   try:
     dataConfig = timm.data.resolve_model_data_config(model)
     modelTransform = timm.data.create_transform(**dataConfig, is_training=False)
+    # Extract a sensible single integer input size from the data config. Many
+    # timm models provide `input_size` as a tuple (C, H, W) or (H, W). We prefer
+    # the last dimension as the square side length when available.
+    inputSize = 224
+    if (isinstance(dataConfig, dict)):
+      cfg = dataConfig.get("input_size", None)
+      if (cfg is not None):
+        try:
+          if (isinstance(cfg, (tuple, list)) and len(cfg) >= 2):
+            # Use the last element (width) as the canonical square size.
+            inputSize = int(cfg[-1])
+          else:
+            inputSize = int(cfg)
+        except Exception:
+          # Keep sensible default on any parsing error.
+          inputSize = 224
+    return modelTransform, inputSize
   except Exception as e:
     raise ValueError(
       "Failed to create default transform from timm data config. "
       "Ensure the model name is correct and timm is properly installed. "
       f"Original error: {e}"
     )
-  return modelTransform
 
 
 # Create a callable factory for the model predictions.
 def CreatePredictCallable(model, transform, device, imageSize):
-  '''Return a callable(imageNp, imagePath=None, trueClassName=None) -> 1D numpy prob vector.'''
+  '''
+  Return a callable(imageNp, imagePath=None, trueClassName=None) -> 1D numpy prob vector.
+  '''
 
   def PredictCallable(img, imagePath=None, trueClassName=None):
     # Convert the input HWC numpy image to a PIL Image for transformation.
-    # Resize the image to the expected input size for the model using the provided transform.
     from PIL import Image
-    imgPIL = Image.fromarray(img).convert("RGB").resize((imageSize, imageSize))
+    imgPIL = Image.fromarray(img).convert("RGB")
+    # Decide whether to pre-resize here. If the provided transform already includes
+    # a Resize step (common when created from timm.data.create_transform) avoid
+    # resizing twice to preserve the model's intended preprocessing pipeline.
+    try:
+      from torchvision import transforms as T
+      shouldResize = True
+      if (hasattr(transform, "transforms")):
+        for t in transform.transforms:
+          if isinstance(t, T.Resize):
+            shouldResize = False
+            break
+    except Exception:
+      shouldResize = True
+
+    if (shouldResize):
+      imgPIL = imgPIL.resize((imageSize, imageSize))
+
     # Apply the provided transform to the image and add a batch dimension.
     inputTensor = transform(imgPIL).unsqueeze(0).to(device)
     # Perform inference with the model in evaluation mode and no gradient tracking.
@@ -296,6 +408,10 @@ def Main():
         with open(argsJsonPath, "r") as f:
           trainingArgs = json.load(f)
         modelName = trainingArgs.get("modelName", None)
+        # Use image size from training args if available.
+        imgSize = trainingArgs.get("imageSize", imgSize)
+        if (verbose):
+          print(f"Trial '{trial}' - Extracted model name from training args: {modelName}, image size: {imgSize}")
       if (modelName is None):
         if (verbose):
           print(
@@ -332,8 +448,36 @@ def Main():
 
       model = None
       if (modelName is not None):
+
+        # Load all checkpoints and find the best one based on the specified criterion (val_loss, val_accuracy, or both).
+        allCheckpoints = [
+          file
+          for file in os.listdir(trialDir)
+          if (file.endswith(".pt") or file.endswith(".pth"))
+        ]
+        # Filter checkpoints to find the best model based on the specified judgeBy criterion.
+        checkpointsMetrics = [
+          file.split("_Metric_")[1].split(".pt")[0]
+          for file in allCheckpoints
+        ]
+        if (len(checkpointsMetrics) == 0):
+          raise ValueError(f"No checkpoints found in output directory: {trialDir}")
+        elif (len(checkpointsMetrics) == 1):
+          print(f"Only one checkpoint found. Using: {allCheckpoints[0]}")
+          bestIndex = 0
+          fileToSelect = allCheckpoints[bestIndex]
+          judgeBy = trainingArgs.get("judgeBy", "both")
+          print(f"Best checkpoint based on {judgeBy}: {fileToSelect}")
+        else:
+          # Convert to float for comparison and find the index of the best checkpoint.
+          checkpointsMetrics = [float(metric) for metric in checkpointsMetrics]
+          bestIndex = checkpointsMetrics.index(max(checkpointsMetrics))
+          fileToSelect = allCheckpoints[bestIndex]
+          judgeBy = trainingArgs.get("judgeBy", "both")
+          print(f"Best checkpoint based on {judgeBy}: {fileToSelect}")
+
+        bestModelPath = os.path.join(trialDir, fileToSelect)
         numClasses = trainingArgs.get("numClasses", 4)
-        bestModelPath = os.path.join(trialDir, "BestModel.pth")
         model = CreateModel(modelName, numClasses)
         stateDict = LoadPyTorchDict(bestModelPath, device=device)
 
@@ -347,9 +491,21 @@ def Main():
         if (verbose):
           print(f"Model loaded from checkpoint: {bestModelPath}")
 
-        modelTransform = CereateModelTransforms(model)
-        if (verbose):
-          print(f"Model transform created for model '{modelName}' with expected input size {imgSize}x{imgSize}.")
+        modelTransform, modelExpectedImgSize = CereateModelTransforms(model)
+        # Prefer the model's expected input size over a user/training-specified imgSize
+        # when they differ to avoid feeding incompatible shapes (e.g. model expects 224
+        # but args/training specified 448). Update imgSize and inform user when this
+        # adjustment is made.
+        if (imgSize != modelExpectedImgSize):
+          if (verbose):
+            print(
+              f"Note: trial '{trial}' requested image size {imgSize}x{imgSize} but the model "
+              f"expects {modelExpectedImgSize}x{modelExpectedImgSize}. Using the model's expected size."
+            )
+          imgSize = modelExpectedImgSize
+        else:
+          if (verbose):
+            print(f"Model transform created for model '{modelName}' with expected input size {imgSize}x{imgSize}.")
 
         # Create profiler instance with standard ImageNet input dimensions.
         profiler = PyTorchModelMemoryProfiler(
@@ -523,7 +679,13 @@ def Main():
           print(f"After merging trial '{trial}', combined predictions shape: {allPredictions.shape}")
 
     # Concatenate all trial predictions into a single DataFrame for analysis.
-    if (len(allPredictions) > 0):
+    # Guard against the case where no trial produced any predictions (allPredictions may be None).
+    if (allPredictions is None or (isinstance(allPredictions, pd.DataFrame) and allPredictions.shape[0] == 0)):
+      if (verbose):
+        print("No predictions were found across all trials. No combined CSV file created.")
+      # Return empty structures so the caller can skip this system gracefully.
+      return pd.DataFrame(), [], [], {}
+    else:
       # Combine all trial predictions into a single DataFrame, aligning on the 'image' column.
       # Save the combined predictions to a new CSV file for further analysis.
       allPredictions.to_csv(
@@ -532,9 +694,6 @@ def Main():
       )
       if (verbose):
         print(f"Combined predictions saved to: {os.path.join(baseOutputDir, 'Combined_Predictions.csv')}")
-    else:
-      if (verbose):
-        print("No predictions were found across all trials. No combined CSV file created.")
 
     metrics = {}
     allProbs = []
@@ -823,6 +982,11 @@ def Main():
 
   if (verbose):
     print(f"Found systems in base experiment directory '{baseExpDir}': {foundSystems}")
+  # Verify the expected experiments folder structure and presence of prediction CSVs before processing.
+  structureOk = VerifyExperimentStructure(baseExpDir, predCSVFileFix, subsets, verbose=verbose)
+  if (not structureOk):
+    print("Please fix the issues above in the experiments folder structure and re-run the script.")
+    exit(1)
   if (len(foundSystems) == 0):
     print(f"No systems found in base experiment directory: {baseExpDir}. Please check the path and try again.")
     exit(1)  # Exit with an error code if no systems are found.
@@ -853,6 +1017,12 @@ def Main():
       device=device,
       maxPerturbImages=maxPerturbImages,
     )
+    # If ProcessSystem returned empty results (no predictions), skip this system.
+    if ((dfMetrics is None) or (isinstance(dfMetrics, pd.DataFrame) and dfMetrics.empty)):
+      if (verbose):
+        print(f"Skipping system '{system}' because no predictions/metrics were produced.")
+      continue
+
     # Drop the first row.
     dfMetrics = dfMetrics.drop(index=dfMetrics.index[0])
 

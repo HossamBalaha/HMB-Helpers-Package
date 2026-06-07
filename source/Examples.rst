@@ -18,9 +18,11 @@ The repository contains the following example scripts (located under ``HMB/Examp
 - ``TF_UNet_EvalPredict.py``
 - ``Timm_FineTune_Classification.py``
 - ``Timm_Statistics_Analysis_Ablations.py``
-- ``Train TF Pretrained Attention Model from DataFrame.py``
-- ``Explain TF Pretrained Attention Model from DataFrame.py``
-- ``Machine_Learning_Pipeline.py``
+- ``Train_TF_Pretrained_Attention_Model_from_DataFrame.py``
+- ``Explain_TF_Pretrained_Attention_Model_from_DataFrame.py``
+- ``Machine_Learning_Classification_Pipeline.py``
+- ``PyTorch_Tabular_CSV_Pipeline.py``
+- ``PyTorch_Tabular_CSV_Pipeline.json``
 
 Platform helper scripts
 -----------------------

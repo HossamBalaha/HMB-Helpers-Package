@@ -29,7 +29,7 @@ def ReadProjectConfig(configFilePath):
     import HMB.Utils as utils
 
     config = utils.ReadProjectConfig("config.yaml")
-    print(config["project_name"])
+    print(config["projectName"])
   '''
 
   # Check if the configuration file exists.
@@ -398,6 +398,76 @@ def ConvertToJsonSerializable(obj):
   except Exception:
     # Return None if string conversion fails.
     return None
+
+
+def SimpleSerializeForJson(obj):
+  r'''
+  Serialize an object into JSON-serializable primitives.
+
+  This function attempts to convert a variety of Python objects into structures
+  that can be safely passed to json.dumps(). It performs a best-effort,
+  recursive conversion for common types encountered in scientific and
+  machine-learning workflows:
+    - NumPy ndarrays -> nested lists
+    - NumPy scalars -> native Python scalars
+    - dict -> keys converted to strings and values serialized recursively
+    - list/tuple -> serialized element-wise to a list
+    - numeric types -> returned as-is
+    - objects exposing a `tolist()` method -> converted via tolist() and serialized recursively
+
+  If an object cannot be converted via the above rules, the function falls
+  back to using str(obj) for objects that expose `tolist()` but fail, or
+  returns the object unchanged as a last resort.
+
+  Parameters:
+    obj (any): The object to convert to JSON-serializable form.
+
+  Returns:
+    any: A JSON-serializable representation of `obj` (nested dicts/lists/primitives), or the original object when no conversion was applicable.
+  '''
+
+  # Note: If you need a more robust serializer that preserves type metadata
+  # (dtype, shape) and includes explicit type tags for reconstruction of
+  # tensors/arrays (NumPy, PyTorch, TensorFlow), consider using
+  # `ConvertToJsonSerializable` which is designed as a best-effort converter
+  # for many ML/data types. `ConvertToJsonSerializable` preserves metadata
+  # and adds type tags so data can be reconstructed or identified later;
+  # it also tries many conversion strategies and falls back to string or
+  # None when conversion isn't possible.
+
+  import numbers
+  import numpy as np
+
+  # Check whether the object is a NumPy ndarray.
+  if (isinstance(obj, np.ndarray)):
+    # Convert the ndarray to a nested list and serialize recursively.
+    return SimpleSerializeForJson(obj.tolist())
+  # Check whether the object is a NumPy scalar.
+  if (isinstance(obj, np.generic)):
+    # Convert the NumPy scalar to a native Python scalar and return.
+    return obj.item()
+  # Check whether the object is a dictionary.
+  if (isinstance(obj, dict)):
+    # Serialize dictionary keys and values recursively into JSON-serializable types.
+    return {str(k): SimpleSerializeForJson(v) for k, v in obj.items()}
+  # Check whether the object is a list or tuple.
+  if (isinstance(obj, (list, tuple))):
+    # Serialize each element of the list or tuple recursively.
+    return [SimpleSerializeForJson(v) for v in obj]
+  # Check whether the object is a numeric scalar.
+  if (isinstance(obj, numbers.Number)):
+    # Return numeric scalars directly as they are JSON-serializable.
+    return obj
+  # Check whether the object exposes a tolist method for conversion.
+  if (hasattr(obj, "tolist")):
+    try:
+      # Attempt to convert the object via tolist and serialize recursively.
+      return SimpleSerializeForJson(obj.tolist())
+    except Exception:
+      # Fallback to string representation when tolist conversion fails.
+      return str(obj)
+  # Return the object unchanged when no special handling applies.
+  return obj
 
 
 def DumpJsonFile(filePath, data, indent=2, ensureAscii=False):
@@ -895,3 +965,231 @@ def SafeCall(name, fn, *args, **kwargs):
     print("-" * 40)
     # Return None to indicate failure.
     return None
+
+
+def SafeTrapz(y, x=None):
+  r'''
+  Robust trapezoidal integration wrapper.
+
+  Tries to use numpy.trapz when available. If NumPy is missing or the attribute
+  is unavailable (some unusual environments), falls back to a pure-Python
+  implementation that computes the trapezoidal rule over the provided samples.
+
+  Parameters:
+    y (sequence): y values (list/tuple/ndarray)
+    x (sequence|None): x coordinates. If None, samples are assumed to be equally
+      spaced at integer positions 0..len(y)-1.
+
+  Returns:
+    float: Approximated integral value (area).
+  '''
+
+  try:
+    import numpy as np
+    # Prefer numpy.trapz when available.
+    if (hasattr(np, "trapz")):
+      return float(np.trapz(y, x=x))
+  except Exception:
+    pass
+
+  # Fallback pure-Python trapezoidal integration.
+  try:
+    ylist = list(y)
+    if (x is None):
+      xlist = list(range(len(ylist)))
+    else:
+      xlist = list(x)
+    if (len(ylist) != len(xlist)):
+      # Shapes mismatch - cannot integrate.
+      raise ValueError("y and x must have the same length for trapezoidal integration.")
+    area = 0.0
+    for i in range(len(ylist) - 1):
+      yi = float(ylist[i])
+      yi1 = float(ylist[i + 1])
+      xi = float(xlist[i])
+      xi1 = float(xlist[i + 1])
+      area += 0.5 * (yi + yi1) * (xi1 - xi)
+    return area
+  except Exception:
+    # As a last resort, return 0.0.
+    return 0.0
+
+
+def SafeParseProbabilities(inputVar):
+  r'''
+  Parse a probabilities object into a Python list of floats robustly.
+
+  Handling order (best-effort):
+    - None -> [].
+    - numeric scalar -> [float].
+    - list/tuple/ndarray -> list of floats.
+    - JSON string (e.g. "[0.1, 0.9]").
+    - Python literal string (e.g. "[0.1, 0.9]").
+    - strings containing NaN/nan -> handled (uses np.nan when numpy available).
+
+  Returns an empty list on unrecoverable parse errors.
+
+  Parameters:
+    inputVar (any): The input variable to parse as probabilities. This can be of various types, including None,
+      numeric scalars, lists, tuples, numpy arrays, or strings representing lists of probabilities.
+
+  Returns:
+    list: A list of floats representing the parsed probabilities. If the input cannot be parsed, an empty list is returned. The function is designed to be robust and handle a wide range of input formats gracefully, making it suitable for parsing user input or configuration values that may be provided in different forms.
+  '''
+
+  # Import the standard json module for string decoding.
+  import json
+  # Import the standard ast module for literal evaluation.
+  import ast
+  # Import the standard re module for pattern matching.
+  import re
+  # Import the numpy module under an alias for optional dependency.
+  import numpy as np
+
+  # Check if the provided input variable is exactly None.
+  if (inputVar is None):
+    # Provide an empty list as the result for null inputs.
+    return []
+
+  # Verify if the input variable is a boolean type before numeric checks.
+  if (isinstance(inputVar, bool)):
+    # Exclude boolean values from numeric processing and return an empty list.
+    return []
+
+  # Determine if the input variable is a numeric integer or floating point value.
+  if (isinstance(inputVar, (int, float))):
+    # Attempt to safely cast the numeric value to a standard float.
+    try:
+      # Wrap the converted float in a list and return it immediately.
+      return [float(inputVar)]
+    # Catch any unexpected errors during the type conversion process.
+    except Exception:
+      # Provide an empty list when the numeric conversion fails.
+      return []
+
+  # Check if numpy is available and if the input is a numpy array.
+  if (isinstance(inputVar, np.ndarray)):
+    # Attempt to transform the numpy array into a standard python list.
+    try:
+      # Convert each array element to a float and return the new list.
+      return [float(arrayElement) for arrayElement in inputVar.tolist()]
+    # Handle any failures that occur during the array conversion.
+    except Exception:
+      # Provide an empty list when the array processing fails.
+      return []
+
+  # Identify if the input variable is a native list or tuple sequence.
+  if (isinstance(inputVar, (list, tuple))):
+    # Create an empty container to hold the successfully parsed values.
+    convertedList = []
+    # Loop through every element contained within the input sequence.
+    for listElement in inputVar:
+      # Attempt to cast the current element to a floating point number.
+      try:
+        # Store the successfully converted float in a temporary variable.
+        convertedValue = float(listElement)
+        # Add the converted value to the accumulation container.
+        convertedList.append(convertedValue)
+      # Capture any errors that arise from invalid element types.
+      except Exception:
+        # Skip the problematic element and continue processing the sequence.
+        continue
+    # Output the fully populated list of converted probability values.
+    return convertedList
+
+  # Evaluate whether the input variable is a string type requiring parsing.
+  if (isinstance(inputVar, str)):
+    # Strip all leading and trailing whitespace characters from the string.
+    trimmedString = inputVar.strip()
+    # Begin the first parsing attempt using the json decoder.
+    try:
+      # Decode the json formatted text into a corresponding python object.
+      parsedObject = json.loads(trimmedString)
+      # Verify if the decoded object represents a sequence of values.
+      if (isinstance(parsedObject, (list, tuple))):
+        # Convert every item in the decoded sequence to a float.
+        return [float(sequenceItem) for sequenceItem in parsedObject]
+      # Wrap the single decoded value in a list after float conversion.
+      return [float(parsedObject)]
+    # Proceed past this block when json decoding raises an exception.
+    except Exception:
+      # Continue execution to the next parsing strategy.
+      pass
+    # Begin the second parsing attempt using the abstract syntax tree evaluator.
+    try:
+      # Safely evaluate the string as a python literal structure.
+      parsedObject = ast.literal_eval(trimmedString)
+      # Confirm whether the evaluated result forms a sequence.
+      if (isinstance(parsedObject, (list, tuple))):
+        # Transform each sequence component into a floating point number.
+        return [float(sequenceItem) for sequenceItem in parsedObject]
+      # Convert the singular evaluated result to a float and return it.
+      return [float(parsedObject)]
+    # Proceed past this block when literal evaluation raises an exception.
+    except Exception:
+      # Continue execution to the next parsing strategy.
+      pass
+    # Prepare the string for safe evaluation by replacing nan tokens.
+    cleanedString = re.sub(r"\bNaN\b|\bnan\b", "float(\"nan\")", trimmedString, flags=re.IGNORECASE)
+    # Initiate the final parsing attempt using restricted evaluation.
+    try:
+      # Execute the cleaned string within a constrained namespace.
+      evaluatedResult = eval(cleanedString, {"__builtins__": {}, "NumpyModule": np}, {})
+      # Check if the evaluation produced a sequence of values.
+      if (isinstance(evaluatedResult, (list, tuple))):
+        # Map each sequence element to float while preserving nan states.
+        return [float(itemValue) if (itemValue is not None) else float("nan") for itemValue in evaluatedResult]
+      # Convert the single evaluation result to a float and return it.
+      return [float(evaluatedResult)]
+    # Catch any remaining errors from the evaluation process.
+    except Exception:
+      # Provide an empty list when all parsing strategies have failed.
+      return []
+
+  # Return an empty list when the input type is entirely unsupported.
+  return []
+
+
+def CodeCarbonCodeEstimation(func):
+  r'''
+  Estimate the carbon emissions of a function call using CodeCarbon.
+  Reference: https://docs.codecarbon.io/latest/
+
+  You can also use:
+    - codecarbon detect (to detect the hardware).
+    - codecarbon monitor --no-api -- python XXXX.py (To track any script without changing the code).
+
+  Parameters:
+    func (callable): The function to estimate emissions for. This should be a callable that can be executed without arguments.
+
+  Returns:
+    float or None: The estimated carbon emissions in kg CO2 equivalent, or None if estimation fails.
+  '''
+
+  try:
+    from codecarbon import EmissionsTracker
+    tracker = EmissionsTracker()
+    tracker.start()
+    func()
+    emissions = tracker.stop()
+    print(f"Estimated carbon emissions: {emissions} kg CO2eq")
+    return emissions
+  except ImportError:
+    print("CodeCarbon is not installed. Please install it to use this feature.")
+    return None
+  except Exception as e:
+    print(f"An error occurred during carbon estimation: {e}")
+    return None
+
+
+def fprint(msg, *args, **kwargs):
+  r'''
+  Print a message with flush=True to ensure it appears immediately in the console.
+
+  Parameters:
+    msg (str): The message to print.
+    *args: Additional positional arguments to pass to the print function.
+    **kwargs: Additional keyword arguments to pass to the print function.
+  '''
+
+  print(msg, flush=True, *args, **kwargs)

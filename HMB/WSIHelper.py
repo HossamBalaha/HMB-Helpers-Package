@@ -173,15 +173,15 @@ def DrawPolygonOnImage(imageArr, coords, outlineColor=(255, 0, 0), fillColor=Non
 
 
 def ExtractPatchesFromWSI(
-    wsi,
-    wsiFile,
-    annotations,
-    outputDir,
-    patchSize=(256, 256),
-    overlap=(0, 0),
-    maxNumPatchesPerAnnotation=100,
-    label=None,
-    tissueThreshold=0.3,  # Fraction of non-background pixels required
+  wsi,
+  wsiFile,
+  annotations,
+  outputDir,
+  patchSize=(256, 256),
+  overlap=(0, 0),
+  maxNumPatchesPerAnnotation=100,
+  label=None,
+  tissueThreshold=0.3,  # Fraction of non-background pixels required
 ):
   r'''
   Extract patches from WSI within annotated regions, skipping background tiles.
@@ -283,21 +283,25 @@ def ExtractPatchesFromWSI(
 
 
 def TileExtractionAlignmentHandler(
-    heSlidePath,  # Path to the HE slide.
-    mtSlidePath,  # Path to the MT slide.
-    storageDir,  # Directory to store extracted patches and visualizations.
-    patchesPerSlide=5000,  # Total number of patches to extract per slide.
-    targetSize=(512, 512),  # Size of each patch to extract.
-    regionSize=(256 * 16, 256 * 16),  # Size of the region used for processing.
-    overlapSize=(256, 256),  # Overlap size between adjacent patches.
-    thumbnailSize=(1024, 1024),  # Size of the thumbnail for visualization.
-    toleranceSIFT=0.50,  # Tolerance for SIFT matching (default is 0.50).
-    maxNumFeaturesORB=5000,  # Maximum number of features to detect for matching.
-    maxGoodMatchesORB=25,  # Maximum number of good matches to consider for alignment.
-    emptyPercentageThreshold=80,  # Threshold for empty percentage in patches (default is 80%).
-    doPlotting=True,  # Whether to generate and save plots for visualization.
-    verbose=False,  # Whether to print verbose output during processing.
-    dpi=720,  # DPI for saved plots. Default is 720 for high-quality visualization.
+  heSlidePath,  # Path to the HE slide.
+  mtSlidePath,  # Path to the MT slide.
+  storageDir,  # Directory to store extracted patches and visualizations.
+  patchesPerSlide=5000,  # Total number of patches to extract per slide.
+  targetSize=(512, 512),  # Size of each patch to extract.
+  regionSize=(256 * 16, 256 * 16),  # Size of the region used for processing.
+  overlapSize=(256, 256),  # Overlap size between adjacent patches.
+  thumbnailSize=(1024, 1024),  # Size of the thumbnail for visualization.
+  toleranceSIFT=0.50,  # Tolerance for SIFT matching (default is 0.50).
+  maxNumFeaturesORB=5000,  # Maximum number of features to detect for matching.
+  maxGoodMatchesORB=25,  # Maximum number of good matches to consider for alignment.
+  emptyPercentageThreshold=80,  # Threshold for empty percentage in patches (default is 80%).
+  doPlotting=True,  # Whether to generate and save plots for visualization.
+  verbose=False,  # Whether to print verbose output during processing.
+  dpi=720,  # DPI for saved plots. Default is 720 for high-quality visualization.
+  miThreshold=0.35,  # Mutual Information threshold for similarity acceptance.
+  cosSimThreshold=0.75,  # Cosine Similarity threshold for similarity acceptance.
+  pHashThreshold=20,  # Perceptual Hash distance threshold for similarity acceptance.
+  strict=True,  # Whether to apply strict criteria for similarity acceptance.
 ):
   r'''
   Extracts and aligns patches from HE (Hematoxylin-Eosin) and MT (Masson's Trichrome) slides,
@@ -319,10 +323,16 @@ def TileExtractionAlignmentHandler(
     doPlotting (bool): Whether to generate and save plots for visualization.
     verbose (bool): Whether to print verbose output during processing.
     dpi (int): DPI for saved plots.
+    miThreshold (float): Mutual Information threshold for similarity acceptance.
+    cosSimThreshold (float): Cosine Similarity threshold for similarity acceptance.
+    pHashThreshold (int): Perceptual Hash distance threshold for similarity acceptance.
+    strict (bool): Whether to apply strict criteria for similarity acceptance.
 
   Raises:
     AssertionError: If the HE or MT slide paths do not exist.
   '''
+
+  from HMB.ImagesComparisonMetrics import IsSimilarityAccepted
 
   # Ensure the HE and MT slide paths exist. If not, raise an assertion error with a descriptive message.
   assert os.path.exists(heSlidePath), f"HE path does not exist: {heSlidePath}"
@@ -471,7 +481,13 @@ def TileExtractionAlignmentHandler(
           continue
 
         # Check if the similarity between the HE and MT patches meets the acceptance criteria.
-        isOK, reason = IsSimilarityAccepted(heRegionOrig, mtRegionOrig)
+        isOK, reason = IsSimilarityAccepted(
+          heRegionOrig, mtRegionOrig,
+          miThreshold=miThreshold,
+          cosSimThreshold=cosSimThreshold,
+          pHashThreshold=pHashThreshold,
+          strict=strict,
+        )
         if (not isOK):
           if (verbose):  # Print a message if verbose mode is enabled.
             print(f"[SKIPPED] Similarity not accepted.")
@@ -529,16 +545,16 @@ def TileExtractionAlignmentHandler(
 
 
 def ExtractPatch(
-    topLeftRegion,  # Top-left corner coordinates of the region to extract.
-    heSlide,  # HE slide object.
-    mtSlide,  # MT slide object.
-    mtContour,  # Contour defining the boundaries of the MT slide region.
-    heContour,  # Contour defining the boundaries of the HE slide region.
-    regionSize,  # Size of the region to extract (width, height).
-    targetSize,  # Target size for the final extracted patch (width, height).
-    homography,  # Homography matrix for transforming coordinates.
-    maxNumFeaturesORB=5000,  # Maximum number of features to detect for matching.
-    maxGoodMatchesORB=25,  # Maximum number of good matches to consider for alignment.
+  topLeftRegion,  # Top-left corner coordinates of the region to extract.
+  heSlide,  # HE slide object.
+  mtSlide,  # MT slide object.
+  mtContour,  # Contour defining the boundaries of the MT slide region.
+  heContour,  # Contour defining the boundaries of the HE slide region.
+  regionSize,  # Size of the region to extract (width, height).
+  targetSize,  # Target size for the final extracted patch (width, height).
+  homography,  # Homography matrix for transforming coordinates.
+  maxNumFeaturesORB=5000,  # Maximum number of features to detect for matching.
+  maxGoodMatchesORB=25,  # Maximum number of good matches to consider for alignment.
 ):
   r'''
   Extracts and processes patches from HE (Hematoxylin & Eosin) and MT (Trichrome) slides.
@@ -582,8 +598,8 @@ def ExtractPatch(
 
   # Check if the downsampled point lies within both the MT and HE contours.
   topLeftFlag = (
-      IsPointInsideContour(topLeftDownsampled, mtContour) and
-      IsPointInsideContour(topLeftDownsampled, heContour)
+    IsPointInsideContour(topLeftDownsampled, mtContour) and
+    IsPointInsideContour(topLeftDownsampled, heContour)
   )
 
   # Apply the homography transformation to the downsampled point.
@@ -690,19 +706,19 @@ def ExtractPatch(
 
 
 def FreeFormDeformationHandler(
-    heFolderPath,  # Path to the folder containing HE images.
-    mtFolderPath,  # Path to the folder containing corresponding MT images.
-    heDeformedFolderPath,  # Path to the folder where deformed HE images will be saved.
-    doPlotting=False,  # Whether to store visualizations.
-    visualizationFolderPath=None,  # Path to the folder for storing visualizations (optional, default is None).
-    gridSize=[10, 10],  # Grid size for the B-spline transform.
-    numberOfHistogramBins=50,  # Number of histogram bins for the metric.
-    samplingPercentage=0.1,  # Percentage of pixels to sample for the metric.
-    learningRate=0.01,  # Learning rate for the optimizer.
-    numberOfIterations=500,  # Maximum number of iterations.
-    convergenceMinimumValue=1e-6,  # Convergence threshold.
-    convergenceWindowSize=10,  # Window size for convergence determination.
-    verbose=False,  # Whether to print verbose output during processing.
+  heFolderPath,  # Path to the folder containing HE images.
+  mtFolderPath,  # Path to the folder containing corresponding MT images.
+  heDeformedFolderPath,  # Path to the folder where deformed HE images will be saved.
+  doPlotting=False,  # Whether to store visualizations.
+  visualizationFolderPath=None,  # Path to the folder for storing visualizations (optional, default is None).
+  gridSize=[10, 10],  # Grid size for the B-spline transform.
+  numberOfHistogramBins=50,  # Number of histogram bins for the metric.
+  samplingPercentage=0.1,  # Percentage of pixels to sample for the metric.
+  learningRate=0.01,  # Learning rate for the optimizer.
+  numberOfIterations=500,  # Maximum number of iterations.
+  convergenceMinimumValue=1e-6,  # Convergence threshold.
+  convergenceWindowSize=10,  # Window size for convergence determination.
+  verbose=False,  # Whether to print verbose output during processing.
 ):
   r'''
   Apply Free Form Deformation (FFD) to HE images and save the deformed results.
@@ -863,16 +879,16 @@ def FreeFormDeformationHandler(
 
 
 def ExtractRandomTilesFromImages(
-    labelsFile,  # Path to CSV labels or a pandas.DataFrame.
-    slidesDir="Slides",  # Directory where slide files live (joined with filenames from labels).
-    outputDir="Tiles",  # Root output directory where class folders will be created.
-    targetShape=(256, 256),  # (width, height) of tiles to extract.
-    numOfTiles=1000,  # Number of tiles to extract per slide.
-    allowedBackgroundRatio=0.65,  # Maximum allowed ratio of (mostly) background pixels.
-    filenameColumn="filename",  # Column name in labels CSV that contains filenames.
-    categoryColumn="Category",  # Column name that contains category / class integer.
-    maxAttemptsFactor=10,  # Maximum attempts = numOfTiles * maxAttemptsFactor (avoid infinite loops).
-    verbose=False,  # Verbose logging.
+  labelsFile,  # Path to CSV labels or a pandas.DataFrame.
+  slidesDir="Slides",  # Directory where slide files live (joined with filenames from labels).
+  outputDir="Tiles",  # Root output directory where class folders will be created.
+  targetShape=(256, 256),  # (width, height) of tiles to extract.
+  numOfTiles=1000,  # Number of tiles to extract per slide.
+  allowedBackgroundRatio=0.65,  # Maximum allowed ratio of (mostly) background pixels.
+  filenameColumn="filename",  # Column name in labels CSV that contains filenames.
+  categoryColumn="Category",  # Column name that contains category / class integer.
+  maxAttemptsFactor=10,  # Maximum attempts = numOfTiles * maxAttemptsFactor (avoid infinite loops).
+  verbose=False,  # Verbose logging.
 ):
   r'''
   Extract random tiles from a set of large images using pyvips for efficient IO and
@@ -1152,11 +1168,11 @@ def ExtractWSIRegion(slide, region):
 
 
 def ExtractPyramidalWSITiles(
-    slide,
-    x=0,
-    y=0,
-    width=512,
-    height=512,
+  slide,
+  x=0,
+  y=0,
+  width=512,
+  height=512,
 ):
   # Get the number of pyramid levels in the slide.
   slideLevels = slide.level_count
@@ -1312,19 +1328,19 @@ def PrepareAnnotationsForLevel(annotation, dFactor=1.0):
 
 
 def ExtractRegionTiles(
-    slide,
-    region,
-    width=512,
-    height=512,
-    overlapWidth=0,
-    overlapHeight=0,
-    storageDir=None,
-    maxTiles=None,
-    addPlots=True,
-    prefix="",
-    blackRatioThreshold=0.90,
-    removeBackgroundTiles=True,
-    convertBlackToWhite=True,
+  slide,
+  region,
+  width=512,
+  height=512,
+  overlapWidth=0,
+  overlapHeight=0,
+  storageDir=None,
+  maxTiles=None,
+  addPlots=True,
+  prefix="",
+  blackRatioThreshold=0.90,
+  removeBackgroundTiles=True,
+  convertBlackToWhite=True,
 ):
   r'''
   Extract tiles from a specified region of a whole-slide image (WSI) across all pyramid levels,
@@ -1584,14 +1600,14 @@ def ExtractRegionTiles(
 
 
 def IsBackgroundTile(
-    imagePath,  # Path to the tile image to analyze for background detection.
-    image=None,  # Optional pre-loaded image as a NumPy array (H,W,3) uint8. If provided, imagePath will be ignored.
-    # Threshold for Shannon entropy to detect uniformity. Adjust based on the expected variability in tissue tiles.
-    entropyThreshold=5.5,
-    # Threshold for color variance to detect lack of color diversity. Adjust based on the expected variability in tissue tiles.
-    colorVarianceThreshold=1500,
-    tissueAreaThreshold=0.20,  # Minimum ratio of tissue area to total area to consider the tile as non-background.
-    convertBlackToWhite=True,  # Convert black pixels to white before analysis to avoid skewing the metrics.
+  imagePath,  # Path to the tile image to analyze for background detection.
+  image=None,  # Optional pre-loaded image as a NumPy array (H,W,3) uint8. If provided, imagePath will be ignored.
+  # Threshold for Shannon entropy to detect uniformity. Adjust based on the expected variability in tissue tiles.
+  entropyThreshold=5.5,
+  # Threshold for color variance to detect lack of color diversity. Adjust based on the expected variability in tissue tiles.
+  colorVarianceThreshold=1500,
+  tissueAreaThreshold=0.20,  # Minimum ratio of tissue area to total area to consider the tile as non-background.
+  convertBlackToWhite=True,  # Convert black pixels to white before analysis to avoid skewing the metrics.
 ):
   '''
   Detect background tiles using multiple criteria suitable for non-black backgrounds.
