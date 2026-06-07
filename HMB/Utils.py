@@ -408,12 +408,12 @@ def SimpleSerializeForJson(obj):
   that can be safely passed to json.dumps(). It performs a best-effort,
   recursive conversion for common types encountered in scientific and
   machine-learning workflows:
-    - NumPy ndarrays -> nested lists
-    - NumPy scalars -> native Python scalars
-    - dict -> keys converted to strings and values serialized recursively
-    - list/tuple -> serialized element-wise to a list
-    - numeric types -> returned as-is
-    - objects exposing a `tolist()` method -> converted via tolist() and serialized recursively
+  - NumPy ndarrays -> nested lists
+  - NumPy scalars -> native Python scalars
+  - dict -> keys converted to strings and values serialized recursively
+  - list/tuple -> serialized element-wise to a list
+  - numeric types -> returned as-is
+  - objects exposing a `tolist()` method -> converted via tolist() and serialized recursively
 
   If an object cannot be converted via the above rules, the function falls
   back to using str(obj) for objects that expose `tolist()` but fail, or
