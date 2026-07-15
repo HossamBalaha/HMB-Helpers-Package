@@ -1,5 +1,5 @@
 # Import the required libraries.
-import tifffile, math, os
+import math, os
 import cv2, PIL  # Import OpenCV and PIL for image processing.
 import numpy as np  # Import numpy for numerical operations.
 from PIL import Image  # Import Image module from PIL for image handling.
@@ -3411,6 +3411,8 @@ class MultiChannelFeatureExtractor():
       imageArray (numpy.ndarray): The multi-channel image array to save.
       outputFilePath (str): The file path to save the TIFF image.
     '''
+
+    import tifffile
 
     # Check if the image array has more than four channels.
     if (imageArray.shape[-1] > 4):

@@ -73,7 +73,28 @@ autodoc_typehints = "description"
 # Initialize an empty dictionary for custom type aliases.
 autodoc_type_aliases = {}
 # Initialize an empty list for mocking heavy or unavailable imports.
-autodoc_mock_imports = []
+autodoc_mock_imports = [
+  "torch",
+  "torchvision",
+  "transformers",
+  "datasets",
+  "nltk",
+  "pydantic",
+  "openslide",
+  "optuna",
+  "simpleitk",
+  "PyWavelets",
+  "sympy",
+  "PyMuPDF",
+  "sentence_transformers",
+  "textstat",
+  "imbalanced-learn",
+  "nibabel",
+  "pyglet",
+  "xgboost",
+  "shap",
+  "tensorflow",
+]
 # Disable automatic summary table generation to prevent duplicate entries.
 autosummary_generate = False
 

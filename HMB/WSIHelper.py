@@ -1613,17 +1613,10 @@ def ExtractRegionTiles(
     dpi (int): The resolution in dots per inch for saving plots (default is 300).
 
   Returns:
-    dict: A dictionary containing the extracted tiles, masks, and ROIs for each level, structured as follows:
-      {
-        level_index: {
-          "Tiles": [list of tile images as NumPy arrays],
-          "Masks": [list of corresponding masks as NumPy arrays],
-          "ROIs": [list of corresponding ROIs as NumPy arrays],
-        },
-        ...
-      }
+    dict: A dictionary containing the extracted tiles, masks, and ROIs for each level, structured as follows: {level_index: {"Tiles": [list of tile images as NumPy arrays], "Masks": [list of corresponding masks as NumPy arrays], "ROIs": [list of corresponding ROIs as NumPy arrays]}, ...}
 
-  Notes:
+  Notes
+  -----
     - The function will create subdirectories for "Plots", "Tiles", "Masks", and "ROIs" within the specified storageDir if it is not None.
     - The function uses tqdm for progress bars when processing tiles, which can be helpful for long-running operations.
     - The function applies the annotation mask to the extracted tiles to isolate the region of interest (ROI) and can optionally filter out tiles that are mostly background based on the specified black pixel ratio threshold.
@@ -2985,7 +2978,7 @@ if (__name__ == "__main__"):
       storageDir=regionTileStorage
     )
     # Print a message indicating where the region tiles were stored.
-    print(f"Invoked ExtractRegionTiles and stored outputs (when enabled) under: {regionTileStorage}.")
+    print(f"Invoked `ExtractRegionTiles` and stored outputs (when enabled) under: {regionTileStorage}.")
   else:
     # Inform the user that the region tiling example was skipped due to a missing slide.
-    print(f"Skipping ExtractRegionTiles example; slide not found: {regionTileSlidePath}.")
+    print(f"Skipping `ExtractRegionTiles` example; slide not found: {regionTileSlidePath}.")

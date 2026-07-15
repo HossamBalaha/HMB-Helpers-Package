@@ -1,4 +1,4 @@
-import os, cv2, random, torch, timm
+import os, random, torch
 from datetime import datetime
 import numpy as np
 from PIL import Image
@@ -277,6 +277,8 @@ def TimmModel(
     )
   '''
 
+  import timm
+
   # Create the model using timm.
   model = timm.create_model(modelName, pretrained=False, num_classes=numClasses)
   # Load model checkpoint.
@@ -495,6 +497,8 @@ class AttentionMapsVisualizer(object):
       AssertionError: If no image files are found in the data folder.
       ValueError: If an unsupported CAM method is specified.
     '''
+
+    import cv2
 
     # Set default CAMs if not provided.
     if (cams is None):

@@ -3,20 +3,15 @@ import os
 
 class CompressionsHelper(object):
   r'''
-  CompressionsHelper: Convenience wrappers to extract various archive formats.
-
-  Methods:
-    - ExtractFileUsingTarfile(path, destination)
-    - ExtractFileUsingZipfile(path, destination)
-    - ExtractFileUsing7zfile(path, destination)
-    - ExtractFileUsingRarfile(path, destination)
-    - ExtractFileUsingUnrar(path, destination)
-    - ExtractFileUsingUnzip(path, destination)
+  Convenience wrappers to extract various archive formats.
+  This class provides methods to extract common archive formats such as `.tar`, `.zip`, `.7z`, and `.rar`.
+  It uses the standard library for `.tar` and `.zip` files, and optional third-party libraries for `.7z` and `.rar` files.
+  If the required third-party library is not installed, an ImportError will be raised.
   '''
 
   def ExtractFileUsingTarfile(self, path, destination):
     r'''
-    Extract a tar/ tar.gz / tar.bz2 archive using the standard library `tarfile`.
+    Extract a `tar`/ `tar.gz` / `tar.bz2` archive using the standard library `tarfile`.
 
     Parameters:
       path (str): Path to the archive file.
@@ -35,7 +30,7 @@ class CompressionsHelper(object):
     Extract a ZIP archive using the standard library `zipfile`.
 
     Parameters:
-      path (str): Path to the .zip file.
+      path (str): Path to the `.zip` file.
       destination (str): Directory to extract files into. Will be created if missing.
     '''
 
@@ -52,7 +47,7 @@ class CompressionsHelper(object):
     If `py7zr` is not installed an ImportError will be raised.
 
     Parameters:
-      path (str): Path to the .7z file.
+      path (str): Path to the `.7z` file.
       destination (str): Directory to extract files into. Will be created if missing.
     '''
 
@@ -71,7 +66,7 @@ class CompressionsHelper(object):
     If `rarfile` is not installed an ImportError will be raised.
 
     Parameters:
-      path (str): Path to the .rar file.
+      path (str): Path to the `.rar` file.
       destination (str): Directory to extract files into. Will be created if missing.
     '''
 
@@ -90,7 +85,7 @@ class CompressionsHelper(object):
     If `unrar` is not installed an ImportError will be raised.
 
     Parameters:
-      path (str): Path to the .rar file.
+      path (str): Path to the `.rar` file.
       destination (str): Directory to extract files into. Will be created if missing.
     '''
 

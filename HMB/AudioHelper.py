@@ -1,6 +1,4 @@
-import librosa
 import numpy as np
-import librosa.feature
 
 
 class AudiosHelper(object):
@@ -32,6 +30,8 @@ class AudiosHelper(object):
       - Librosa get_duration documentation: https://librosa.org/doc/latest/generated/librosa.get_duration.html
     '''
 
+    import librosa
+
     # Query librosa for the duration of the file.
     # Return result.
     return librosa.get_duration(filename=filePath)
@@ -51,6 +51,8 @@ class AudiosHelper(object):
     References:
       - Librosa get_duration documentation: https://librosa.org/doc/latest/generated/librosa.get_duration.html
     '''
+
+    import librosa
 
     # Compute and return the rounded duration using librosa.
     # Return result.
@@ -75,6 +77,8 @@ class AudiosHelper(object):
     References:
       - Librosa load documentation: https://librosa.org/doc/latest/generated/librosa.load.html
     '''
+
+    import librosa
 
     if (segmentDuration is None or segmentDuration <= 0):
       # Load full file if duration is None or non-positive.
@@ -104,6 +108,8 @@ class AudiosHelper(object):
       - Librosa STFT: https://librosa.org/doc/latest/generated/librosa.stft.html
       - General STFT description: short-time Fourier transform literature.
     '''
+
+    import librosa
 
     # Compute and return the STFT using librosa.
     # Return result.
@@ -141,6 +147,8 @@ class AudiosHelper(object):
       - Librosa harmonic/percussive separation: https://librosa.org/doc/latest/generated/librosa.effects.harmonic.html
     '''
 
+    import librosa
+
     # Extract and return the harmonic component.
     # Return result.
     return librosa.effects.harmonic(y)
@@ -158,6 +166,8 @@ class AudiosHelper(object):
     References:
       - Librosa harmonic/percussive separation: https://librosa.org/doc/latest/generated/librosa.effects.percussive.html
     '''
+
+    import librosa
 
     # Extract and return the percussive component.
     # Return result.
@@ -180,6 +190,8 @@ class AudiosHelper(object):
       - Librosa mfcc: https://librosa.org/doc/latest/generated/librosa.feature.mfcc.html
       - Milner, B., & Shao, X. (2006). Clean speech reconstruction from MFCC vectors and fundamental frequency using an integrated front-end.
     '''
+
+    import librosa.feature
 
     # Compute MFCC using Slaney configuration and return the result.
     if (nMFCC):
@@ -225,6 +237,8 @@ class AudiosHelper(object):
       - Librosa mfcc: https://librosa.org/doc/latest/generated/librosa.feature.mfcc.html
     '''
 
+    import librosa.feature
+
     # Compute MFCC using HTK configuration and return the result.
     if (nMFCC):
       # Return HTK MFCC with specified number of coefficients.
@@ -268,6 +282,8 @@ class AudiosHelper(object):
       - Librosa chroma_stft: https://librosa.org/doc/latest/generated/librosa.feature.chroma_stft.html
     '''
 
+    import librosa.feature
+
     # Compute chroma STFT and return mean across frames.
     # Return result.
     return np.mean(librosa.feature.chroma_stft(y=y, sr=sr).T, axis=0)
@@ -287,6 +303,8 @@ class AudiosHelper(object):
       - Chroma via STFT: Librosa documentation and chroma literature.
       - Librosa chroma_stft: https://librosa.org/doc/latest/generated/librosa.feature.chroma_stft.html
     '''
+
+    import librosa.feature
 
     # Compute magnitude STFT for chroma computation.
     stft = self.GetAbsoluteSTFT(y)
@@ -310,6 +328,8 @@ class AudiosHelper(object):
       - Muller, M. & Ewert, S. (2011) Chroma Toolbox reference.
     '''
 
+    import librosa.feature
+
     # Compute and return chroma CQT mean across frames.
     # Return result.
     return np.mean(librosa.feature.chroma_cqt(y=y, sr=sr).T, axis=0)
@@ -328,6 +348,8 @@ class AudiosHelper(object):
     References:
       - Chroma CENS method: Chroma Toolbox and related publications.
     '''
+
+    import librosa.feature
 
     # Compute and return chroma CENS mean across frames.
     # Return result.
@@ -348,6 +370,8 @@ class AudiosHelper(object):
       - Librosa melspectrogram: https://librosa.org/doc/latest/generated/librosa.feature.melspectrogram.html
     '''
 
+    import librosa.feature
+
     # Compute and return mean mel spectrogram over time.
     # Return result.
     return np.mean(librosa.feature.melspectrogram(y=y, sr=sr).T, axis=0)
@@ -367,6 +391,8 @@ class AudiosHelper(object):
       - Spectral contrast: Jiang et al. (2002). See Librosa spectral_contrast docs.
       - Librosa spectral_contrast: https://librosa.org/doc/latest/generated/librosa.feature.spectral_contrast.html
     '''
+
+    import librosa.feature
 
     # Compute and return mean spectral contrast across frames.
     # Return result.
@@ -409,6 +435,8 @@ class AudiosHelper(object):
       - Tonnetz: Harte et al. (2006) and Librosa documentation.
     '''
 
+    import librosa.feature
+
     # Compute and return mean tonnetz across frames.
     # Return result.
     return np.mean(librosa.feature.tonnetz(y=y, sr=sr).T, axis=0)
@@ -427,6 +455,8 @@ class AudiosHelper(object):
     References:
       - RMS energy and librosa RMS: https://librosa.org/doc/latest/generated/librosa.feature.rms.html
     '''
+
+    import librosa.feature
 
     # Compute and return mean RMS across frames.
     # Return result.
@@ -448,6 +478,8 @@ class AudiosHelper(object):
       - Librosa spectral_centroid: https://librosa.org/doc/latest/generated/librosa.feature.spectral_centroid.html
     '''
 
+    import librosa.feature
+
     # Compute and return mean spectral centroid across frames.
     # Return result.
     return np.mean(librosa.feature.spectral_centroid(y=y, sr=sr).T, axis=0)
@@ -467,6 +499,8 @@ class AudiosHelper(object):
       - Spectral bandwidth discussion and Librosa docs.
       - Librosa spectral_bandwidth: https://librosa.org/doc/latest/generated/librosa.feature.spectral_bandwidth.html
     '''
+
+    import librosa.feature
 
     # Compute and return mean spectral bandwidth across frames.
     # Return result.
@@ -488,6 +522,8 @@ class AudiosHelper(object):
       - Librosa spectral_rolloff: https://librosa.org/doc/latest/generated/librosa.feature.spectral_rolloff.html
     '''
 
+    import librosa.feature
+
     # Compute and return mean spectral rolloff across frames.
     # Return result.
     return np.mean(librosa.feature.spectral_rolloff(y=y, sr=sr).T, axis=0)
@@ -508,6 +544,8 @@ class AudiosHelper(object):
       - Dubnov et al. (2004) on spectral flatness.
     '''
 
+    import librosa.feature
+
     # Compute and return mean spectral flatness across frames.
     # Return result.
     return np.mean(librosa.feature.spectral_flatness(y=y).T, axis=0)
@@ -527,6 +565,8 @@ class AudiosHelper(object):
       - Zero-crossing Rate features and Librosa docs.
       - Librosa zero_crossing_rate: https://librosa.org/doc/latest/generated/librosa.feature.zero_crossing_rate.html
     '''
+
+    import librosa.feature
 
     # Compute and return mean zero-crossing rate across frames.
     # Return result.
@@ -551,6 +591,8 @@ class AudiosHelper(object):
       - Librosa melspectrogram: https://librosa.org/doc/latest/generated/librosa.feature.melspectrogram.html
       - Librosa power_to_db: https://librosa.org/doc/latest/generated/librosa.power_to_db.html
     '''
+
+    import librosa.feature
 
     # Compute mel spectrogram using librosa.
     mel = librosa.feature.melspectrogram(y=y, sr=sr, hop_length=hopLength, n_fft=nFFT, n_mels=numMels)
@@ -579,6 +621,8 @@ class AudiosHelper(object):
       - STFT and amplitude-to-db: Librosa documentation.
       - Librosa amplitude_to_db: https://librosa.org/doc/latest/generated/librosa.amplitude_to_db.html
     '''
+
+    import librosa
 
     # Compute STFT using librosa.
     stft = librosa.core.stft(y, hop_length=hopLength, n_fft=nFFT)
@@ -1280,6 +1324,8 @@ class AudiosHelper(object):
     Returns:
       numpy.ndarray: Mel spectrogram image with shape (numMels, outFrames, 3) if axisLast is True, else (3, numMels, outFrames).
     '''
+
+    import librosa.feature
 
     # Generate Mel spectrogram in dB.
     melDB = self.GenerateScaledMelSpectrogram(y, sr, hopLength, nFFT, numMels)

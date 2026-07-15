@@ -9,7 +9,7 @@ class RandomAgent(object):
 
   def __init__(self, ActionSpaceSampleFunc):
     r'''
-    Initialize RandomAgent.
+    Initialize the RandomAgent with a callable that samples random actions.
 
     Parameters:
       ActionSpaceSampleFunc (callable): Callable returning a random action index when called.

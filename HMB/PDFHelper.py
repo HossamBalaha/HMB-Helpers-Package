@@ -1,5 +1,5 @@
 # Import the required libraries.
-import fitz, re
+import re
 
 
 # Define a function to read the full content of a PDF file.
@@ -13,6 +13,8 @@ def ReadFullPDF(filePath):
   Returns:
     str: The full text content of the PDF file.
   '''
+
+  import fitz
 
   # Open the PDF file using fitz (PyMuPDF).
   doc = fitz.open(filePath)
@@ -50,6 +52,8 @@ def ReadPDFPage(filePath, pageNum):
     str: The text content of the specified page.
   '''
 
+  import fitz
+
   doc = fitz.open(filePath)
   # Check if the page number is valid.
   if (pageNum < 0 or pageNum >= doc.page_count):
@@ -73,6 +77,8 @@ def GetPDFPageCount(filePath):
   Returns:
     int: The number of pages in the PDF.
   '''
+
+  import fitz
 
   doc = fitz.open(filePath)
   count = doc.page_count
@@ -133,6 +139,8 @@ def ExtractPDFMetadata(filePath):
     dict: Metadata dictionary.
   '''
 
+  import fitz
+
   doc = fitz.open(filePath)
   metadata = doc.metadata
   doc.close()
@@ -150,6 +158,8 @@ def ExtractPDFImages(filePath):
   Returns:
     list: A list of image bytes objects.
   '''
+
+  import fitz
 
   doc = fitz.open(filePath)
   images = []
@@ -204,6 +214,8 @@ def SplitPDF(filePath, startPage, endPage, outputPath):
     outputPath (str): The path to save the new PDF.
   '''
 
+  import fitz
+
   doc = fitz.open(filePath)
   if ((startPage < 0) or (endPage < 0) or (startPage >= endPage) or (startPage >= doc.page_count)):
     doc.close()
@@ -227,6 +239,8 @@ def MergePDFs(pdfPaths, outputPath):
     outputPath (str): Path to save the merged PDF.
   '''
 
+  import fitz
+
   merged = fitz.open()
   # Iterate through each PDF file and insert its pages.
   for path in pdfPaths:
@@ -248,6 +262,8 @@ def DeletePDFPages(filePath, pagesToDelete, outputPath):
     outputPath (str): Path to save the new PDF.
   '''
 
+  import fitz
+
   doc = fitz.open(filePath)
   doc.delete_pages(pagesToDelete)
   doc.save(outputPath)
@@ -265,6 +281,8 @@ def RotatePDFPages(filePath, rotation, outputPath, pages=None):
     outputPath (str): Path to save the rotated PDF.
     pages (list or None): List of 0-based page indices to rotate. If None, rotate all.
   '''
+
+  import fitz
 
   # Validate rotation.
   if (rotation not in (90, 180, 270)):
@@ -295,6 +313,8 @@ def ExtractPDFAnnotations(filePath):
   Returns:
     list: List of annotation texts.
   '''
+
+  import fitz
 
   doc = fitz.open(filePath)
   annotations = []
@@ -328,6 +348,8 @@ def PDFContainsText(
   Returns:
     bool or list: True/False if found (default), or list of (pageNum, position) if returnPositions is True.
   '''
+
+  import fitz
 
   flags = 0 if (caseSensitive) else re.IGNORECASE
   doc = fitz.open(filePath)
@@ -379,6 +401,8 @@ def AddPDFBookmark(filePath, pageNum, title, outputPath):
     outputPath (str): Path to save the new PDF.
   '''
 
+  import fitz
+
   doc = fitz.open(filePath)
   if ((pageNum < 0) or (pageNum >= doc.page_count)):
     doc.close()
@@ -401,6 +425,8 @@ def ExtractPDFLinks(filePath):
   Returns:
     list: List of URLs.
   '''
+
+  import fitz
 
   doc = fitz.open(filePath)
   links = []
@@ -427,6 +453,8 @@ def HighlightPDFText(filePath, searchText, outputPath, color=(1, 1, 0)):
   Returns:
     bool: True if any text was highlighted, False otherwise.
   '''
+
+  import fitz
 
   doc = fitz.open(filePath)
   anyHighlighted = False
@@ -455,6 +483,8 @@ def EncryptPDF(filePath, password, outputPath):
     outputPath (str): Path to save the encrypted PDF.
   '''
 
+  import fitz
+
   doc = fitz.open(filePath)
   doc.save(outputPath, encryption=fitz.PDF_ENCRYPT_AES_256, owner_pw=password, user_pw=password)
   doc.close()
@@ -470,6 +500,8 @@ def DecryptPDF(filePath, password, outputPath):
     password (str): Password for decryption.
     outputPath (str): Path to save the decrypted PDF.
   '''
+
+  import fitz
 
   doc = fitz.open(filePath)
   # Authenticate using the provided password.
@@ -491,6 +523,8 @@ def ExtractPDFFonts(filePath):
   Returns:
     list: List of font names.
   '''
+
+  import fitz
 
   doc = fitz.open(filePath)
   fonts = set()

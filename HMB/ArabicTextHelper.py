@@ -1,4 +1,4 @@
-import re, emoji, nltk
+import re, nltk
 from HMB.TextHelper import TextHelper
 
 
@@ -12,7 +12,8 @@ class ArabicTextHelper(TextHelper):
   around NLTK and qalsadi functionality where applicable and try to
   preserve the original behavior while providing clear documentation.
 
-  Notes:
+  Notes
+  -----
     - Some methods require external packages (nltk, qalsadi) to be installed.
     - Methods accept and return lists of strings for batch processing.
     - Can be installed via `pip install emoji nltk qalsadi`.
@@ -37,11 +38,14 @@ class ArabicTextHelper(TextHelper):
     Returns:
       list: Preprocessed documents as strings.
 
-    Notes:
-      - This function performs character normalization, optional diacritics
-        stripping, removal of usernames/hashtags/links/emojis, and token
-        cleaning (removing non-Arabic letters and digits).
+    Note
+    ----
+      This function performs character normalization, optional diacritics
+      stripping, removal of usernames/hashtags/links/emojis, and token
+      cleaning (removing non-Arabic letters and digits).
     '''
+
+    import emoji
 
     documents = []
     for i in range(0, len(data)):
@@ -119,8 +123,9 @@ class ArabicTextHelper(TextHelper):
     Returns:
       list: Lemmatized documents as joined strings.
 
-    Notes:
-      - Requires the `qalsadi` package to be installed.
+    Note
+    ----
+      Requires the `qalsadi` package to be installed.
     '''
 
     from qalsadi.lemmatizer import Lemmatizer
@@ -212,7 +217,7 @@ class ArabicTextHelper(TextHelper):
 
     Parameters:
       text (str): Input Arabic text.
-      remove_elongation (bool): If True, collapse repeated characters (e.g., "جممميل" → "جميل").
+      removeElongation (bool): If True, collapse repeated characters (e.g., "جممميل" → "جميل").
       normalizeHamza (bool): If True, normalize hamza variants to bare alef/hamza forms.
 
     Returns:
@@ -278,9 +283,10 @@ class ArabicTextHelper(TextHelper):
     Returns:
       list: List of Arabic word tokens.
 
-    Notes:
-      - This is an intentionally lightweight tokenizer. For advanced tokenization
-        consider using language-specific tokenizers (Farasa, Camel Tools, etc.).
+    Note
+    ----
+      This is an intentionally lightweight tokenizer. For advanced tokenization
+      consider using language-specific tokenizers (Farasa, Camel Tools, etc.).
     '''
 
     # Find sequences of Arabic letters and return them as tokens.
@@ -394,8 +400,9 @@ class ArabicTextHelper(TextHelper):
     Returns:
       list: List of character n-gram strings. Returns empty list if no Arabic text found.
 
-    Notes:
-      - This operates on the concatenated Arabic tokens (spaces removed) to produce contiguous character n-grams.
+    Note
+    ----
+      This operates on the concatenated Arabic tokens (spaces removed) to produce contiguous character n-grams.
     '''
 
     if (not text or n <= 0):
@@ -416,6 +423,8 @@ class ArabicTextHelper(TextHelper):
     Returns:
       str: String with emojis removed.
     '''
+
+    import emoji
 
     return "".join(c for c in text if c not in emoji.unicode_codes.EMOJI_DATA.keys())
 

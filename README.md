@@ -312,7 +312,7 @@ If you use this package in your work, please:
      title     = {HMB-Helpers-Package: HMB-Helpers-Package v0.3.0},
      year      = {2026},
      publisher = {GitHub},
-     month     = apr,
+     month     = jul,
      version   = {v0.3.0},
      url       = {https://github.com/HossamBalaha/HMB-Helpers-Package}
    }
