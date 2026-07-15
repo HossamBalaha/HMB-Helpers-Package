@@ -15,7 +15,7 @@ pandas==2.3.3
 scipy==1.17.1
 pillow==12.2.0
 seaborn==0.13.2
-transformers==5.8.0
+transformers==5.12.1
 opencv-python==4.13.0.92
 opencv-contrib-python==4.13.0.92
 opencv-python-headless==4.13.0.92
@@ -81,3 +81,4 @@ skfeature-chappers==1.1.0
 patchify==0.2.3
 codecarbon==3.2.6
 av==17.0.1
+language_tool_python==3.4.0

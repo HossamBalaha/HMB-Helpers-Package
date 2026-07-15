@@ -1,11 +1,12 @@
 import hashlib, time, json, shutil, os, cv2, torch, math, joblib, av
 import numpy as np
 import pandas as pd
+import tensorflow as tf
 from pathlib import Path
 from sklearn.impute import SimpleImputer
 from PIL import Image, ImageOps, ImageEnhance
 from sklearn.model_selection import train_test_split
-from typing import List, Callable, Optional, Tuple, Union
+from typing import *
 from sklearn.preprocessing import StandardScaler, OrdinalEncoder, LabelEncoder
 from HMB.Utils import DumpJsonFile, ReadJsonFile
 from HMB.PyTorchHelper import PyTorchVideoTransforms
@@ -2759,6 +2760,471 @@ def LoadAllCsvs(dataDir: str, nrows: int = None) -> pd.DataFrame:
   print(f"Discovered {len(files)} CSV files in {dataDir}.")
   # Read and concatenate all discovered CSV files.
   return ReadAndConcatCsv(files, nrows=nrows)
+
+
+class TFFolderBasedDataPipeline:
+  r"""
+  A unified pipeline to handle folder scanning, auto-splitting, and tf.data.Dataset creation.
+
+  This class is designed to simplify the process of creating TensorFlow data pipelines for image
+  classification tasks. It automatically checks for the presence of "train", "val", and "test"
+  subdirectories, and if they are not found, it attempts to split the dataset based on class subdirectories.
+  It then builds tf.data.Dataset pipelines for each split, applying appropriate transformations and
+  caching strategies for training and evaluation. The class also calculates and stores the number of samples
+  in each split for easy access.
+
+  Expected directory structure:
+  Dataset/
+  ├── Class_A/
+  │   ├── image1.jpg
+  │   └── image2.png
+  ├── Class_B/
+  │   ├── image3.jpg
+  │   └── image4.bmp
+  └── Class_C/
+      └── image5.tiff
+
+  If "train", "val", and "test" folders are not found, it will create them by splitting the class folders
+  using an 80/10/10 ratio. The resulting structure will be:
+  SplitDataset/
+    ├── train/
+    │   ├── Class_A/
+    │   │   ├── image1.jpg
+    │   │   └── image2.png
+    │   ├── Class_B/
+    │   │   ├── image3.jpg
+    │   │   └── image4.bmp
+    │   └── Class_C/
+    │       └── image5.tiff
+    ├── val/
+    │   ├── Class_A/
+    │   │   ├── image6.jpg
+    │   │   └── image7.png
+    │   ├── Class_B/
+    │   │   ├── image8.jpg
+    │   │   └── image9.bmp
+    │   └── Class_C/
+    │       └── image10.tiff
+    └── test/
+        ├── Class_A/
+        │   ├── image11.jpg
+        │   └── image12.png
+        ├── Class_B/
+        │   ├── image13.jpg
+        │   └── image14.bmp
+        └── Class_C/
+            └── image15.tiff
+
+  .. note:: This class requires the `splitfolders` library for auto-splitting functionality.
+    If the library is not installed, the auto-splitting feature will not work, and the class
+    will raise an error if it cannot find the expected "train", "val", and "test" directories
+    or class subdirectories to split. To install `splitfolders`, you can use pip: `pip install splitfolders`
+
+  .. warning:: The auto-splitting process will create a new directory named "SplitDataset" in the
+    parent directory of the original dataset. Ensure that you have write permissions to the parent
+    directory and that you do not have an existing "SplitDataset" directory that you do not want to
+    be overwritten, as the splitting process will create this directory if it does not already exist.
+    Always back up your data before performing operations that modify the filesystem.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import matplotlib.pyplot as plt
+    from HMB.DatasetsHelper import TFFolderBasedDataPipeline
+
+    # Define the root directory containing the dataset.
+    dataDir = "/path/to/your/dataset"
+    # Define the batch size for the data pipeline.
+    batchSize = 32
+    # Define the target image size for resizing.
+    imageSize = 224
+
+    # Instantiate the unified data pipeline.
+    pipeline = TFFolderBasedDataPipeline(
+      dataDir=dataDir,
+      batchSize=batchSize,
+      imageSize=imageSize
+    )
+
+    # Access the training, validation, and test datasets.
+    trainDataset = pipeline.train
+    valDataset = pipeline.val
+    testDataset = pipeline.test
+
+    # Print the dataset lengths and class names for verification.
+    print("Dataset Lengths:", pipeline.lengths)
+    # Print the discovered class names.
+    print("Class Names:", pipeline.classNames)
+
+    # Create a dictionary of available loaders for easy iteration.
+    availableLoaders = {
+      "Train": pipeline.train,
+      "Val"  : pipeline.val,
+      "Test" : pipeline.test,
+    }
+    # Filter out None values for missing splits.
+    availableLoaders = {k: v for k, v in availableLoaders.items() if (v is not None)}
+
+    # Print the available loader keys.
+    print("Available Loaders:", list(availableLoaders.keys()))
+    # Print the sample batch shapes header.
+    print("Sample batch shapes:")
+
+    numOfClasses = len(pipeline.classNames)
+    print(f"Number of classes: {numOfClasses}")
+
+    # Iterate through the available loaders to print batch shapes.
+    for split, loader in availableLoaders.items():
+      # Take one batch from the loader.
+      for batch in loader.take(1):
+        # Unpack the batch into images, labels, and filenames.
+        images, labels, filenames = batch
+        # Print the shapes for the current split.
+        print(f"{split} - Images shape: {images.shape}, Labels shape: {labels.shape}, Filenames shape: {filenames.shape}")
+
+    # Visualize a few samples from the training set to verify augmentations.
+    if (pipeline.train is not None):
+      # Create a matplotlib figure for the visualization.
+      plt.figure(figsize=(12, 6))
+      # Take one batch from the training loader.
+      for i, batch in enumerate(pipeline.train.take(1)):
+        # Unpack the batch.
+        images, labels, filenames = batch
+        # Iterate through the first 8 images in the batch.
+        for j in range(min(8, images.shape[0])):
+          # Add a subplot for the current image.
+          plt.subplot(2, 4, j + 1)
+          # Display the image.
+          plt.imshow(images[j].numpy())
+          # Set the title with the label and class name.
+          plt.title(f"Label: {labels[j].numpy()} - {pipeline.classNames[labels[j].numpy()]}")
+          # Turn off the axis.
+          plt.axis("off")
+      # Set the main title for the figure.
+      plt.suptitle("Sample Augmented Training Images")
+      # Display the plot.
+      plt.show()
+  """
+
+  def __init__(
+    self,
+    dataDir: str,
+    batchSize: int = 32,
+    imageSize: int = 224,
+    ratioTuple: tuple = (0.8, 0.1, 0.1),
+  ) -> None:
+    r"""
+    Initialize the data pipeline. This method sets up the internal state, checks for directory structure,
+    prepares splits if necessary, and builds the tf.data.Dataset pipelines for training, validation, and testing.
+
+    The method performs the following steps:
+      1. Stores the provided parameters as instance variables.
+      2. Calls the _prepareSplits method to check for the presence of "train", "val", and "test" directories and to perform auto-splitting if they are not found.
+      3. Calls the _buildIndex method to scan the directories, discover class names, and calculate the number of samples in each split.
+      4. Calls the _buildPipeline method three times to create tf.data.Dataset pipelines for the "train", "val", and "test" splits, applying appropriate transformations and caching strategies for each.
+
+    Parameters:
+      dataDir (str): The root directory containing the dataset. It should contain "train", "val", and "test" subdirectories, or class subdirectories for auto-splitting.
+      batchSize (int): The batch size to use for the tf.data.Dataset pipelines. Default is 32.
+      imageSize (int): The target size to which images will be resized. Default is 224 (for 224x224 images).
+      ratioTuple (tuple): A tuple specifying the train/val/test split ratios for auto-splitting. Default is (0.8, 0.1, 0.1).
+    """
+
+    # Store the root data directory.
+    self.dataDir = Path(dataDir)
+    # Store the batch size.
+    self.batchSize = batchSize
+    # Store the target image size.
+    self.imageSize = imageSize
+    # Store the train/val/test split ratios for auto-splitting.
+    self.ratioTuple = ratioTuple
+    # Initialize the dictionary for dataset lengths.
+    self.lengths = {}
+    # Initialize the list for class names.
+    self.classNames = []
+    # Prepare the directory splits.
+    self.rootPath = self._prepareSplits()
+    # Build the dataset index to discover classes and calculate lengths.
+    self._buildIndex()
+    # Build the training pipeline.
+    self.train = self._buildPipeline("train", isTraining=True, useCache=True)
+    # Build the validation pipeline.
+    self.val = self._buildPipeline("val", isTraining=False, useCache=False)
+    # Build the test pipeline.
+    self.test = self._buildPipeline("test", isTraining=False, useCache=False)
+
+  def _prepareSplits(self) -> Path:
+    r"""
+    Check for train/val/test folders and auto-split if necessary. This method checks if the expected
+    "train", "val", and "test" subdirectories exist in the root dataset directory. If they are not found,
+    it looks for class subdirectories to perform an automatic split using the `splitfolders` library.
+    The method creates a new "SplitDataset" directory in the parent directory of the original dataset
+    if auto-splitting is performed. It returns the path to the directory that contains the "train",
+    "val", and "test" subdirectories, which will be used for building the tf.data.Dataset pipelines.
+
+    Returns:
+      pathlib.Path: The path to the directory containing the "train", "val", and "test" subdirectories, either the original root path or the new split directory if auto-splitting was performed.
+    """
+
+    # Define the root path.
+    rootPath = self.dataDir
+    # Check if the train directory exists.
+    if ((rootPath / "train").exists()):
+      # Return the original root path.
+      return rootPath
+    # Check if there are class directories in the root path to split.
+    classDirs = [
+      d for d in rootPath.iterdir()
+      if (d.is_dir() and d.name not in ["train", "val", "test", "SplitDataset"])
+    ]
+    # Check if class directories were found.
+    if (len(classDirs) > 0):
+      # Print a message about creating subsets.
+      print("Train directory not found. Using split-folders to create train/val/test subsets...")
+      # Import the splitfolders module dynamically.
+      import splitfolders
+      # Define the output directory for the split dataset.
+      rootParent = rootPath.parent
+      # Define the split output directory path.
+      splitOutputDir = rootParent / "SplitDataset"
+      # Check if the split directory does not exist.
+      if (not splitOutputDir.exists()):
+        # Use splitfolders to create the train/val/test subsets.
+        splitfolders.ratio(
+          input=str(rootPath),
+          output=str(splitOutputDir),
+          seed=1337,
+          ratio=self.ratioTuple,
+        )
+      # Return the new split directory path.
+      return splitOutputDir
+    else:
+      # Raise an error if train directory is missing and no class directories are found.
+      raise FileNotFoundError("Train directory not found and no class directories found to split.")
+
+  def _buildIndex(self) -> None:
+    r"""
+    Scan the directories to discover class names and calculate split lengths. This method scans the
+    "train" directory to discover class subdirectories, which are assumed to represent different
+    classes in the dataset. It stores the class names in a list. Then, it iterates through the "train",
+    "val", and "test" splits to count the number of valid image files in each split, storing these
+    counts in a dictionary. The method also prints out the discovered class names and the number of
+    samples found in each split for verification.
+    """
+
+    # Determine the target train directory.
+    targetDir = self.rootPath / "train"
+    # Get sorted list of class directories.
+    classDirs = sorted([d for d in targetDir.iterdir() if d.is_dir()])
+    # Store the class names.
+    self.classNames = [d.name for d in classDirs]
+    # Print the discovered classes.
+    print(f"Found {len(classDirs)} classes: {self.classNames}")
+    # Iterate through train, val, and test splits to calculate lengths.
+    for split in ["train", "val", "test"]:
+      # Determine the split directory.
+      splitDir = self.rootPath / split
+      # Check if the split directory exists.
+      if (splitDir.exists()):
+        # Initialize the count for the split.
+        count = 0
+        # Iterate through class directories in the split.
+        for classDir in classDirs:
+          # Determine the class directory in the split.
+          splitClassDir = splitDir / classDir.name
+          # Check if the class directory exists in the split.
+          if (splitClassDir.exists()):
+            # Count the valid image files.
+            for imgPath in splitClassDir.rglob("*"):
+              # Filter by common image extensions.
+              if (imgPath.suffix.lower() in tuple(IMAGE_SUFFIXES)):
+                # Increment the count.
+                count += 1
+        # Store the length for the split.
+        self.lengths[split.capitalize()] = count
+        # Print the number of samples for the split.
+        print(f"{split.capitalize()} samples: {count}")
+
+  def _loadAndProcessImage(
+    self,
+    imagePath: str,
+    isTraining: bool,
+    useCache: bool,
+    imageCache: dict
+  ) -> tf.Tensor:
+    r"""
+    Load and process a single image. This method attempts to read an image from the given path, decode it,
+    and apply transformations. If `isTraining` is True, it applies data augmentations such as random cropping,
+    flipping, brightness, and contrast adjustments. If `useCache` is True, it checks if the processed image
+    is already in the `imageCache` dictionary to avoid redundant processing. The method also includes error
+    handling to catch exceptions that may occur during image loading (e.g., due to corrupt files) and returns
+    a dummy tensor in such cases. The processed image tensor is normalized to the range [0, 1] and resized
+    to the target image size before being returned.
+
+    Parameters:
+      imagePath (str): The filesystem path to the image to be loaded and processed.
+      isTraining (bool): A flag indicating whether the image is being processed for training (True) or evaluation (False). This determines whether data augmentations are applied.
+      useCache (bool): A flag indicating whether to use the `imageCache` for storing and retrieving processed images to improve performance by avoiding redundant processing of the same image.
+      imageCache (dict): A dictionary used for caching processed images. The keys are image paths and the values are the corresponding processed image tensors. This cache is used to speed up loading during training by storing already processed images in memory.
+
+    Returns:
+      tf.Tensor: A tensor representing the processed image, normalized to [0, 1] and resized to the target image size. If an error occurs during loading, a dummy tensor of zeros with the appropriate shape is returned instead.
+    """
+
+    # Try to load and process the image to handle corrupt files.
+    try:
+      # Check if caching is enabled and the image is in the cache.
+      if (useCache and imagePath in imageCache):
+        # Retrieve the cached image tensor.
+        img = imageCache[imagePath]
+      else:
+        # Read the image file from disk.
+        imgRaw = tf.io.read_file(imagePath)
+        # Decode the image in RGB mode.
+        img = tf.image.decode_image(imgRaw, channels=3, expand_animations=False)
+        # Convert the image to float32.
+        img = tf.cast(img, tf.float32)
+        # Normalize the image to [0, 1].
+        img = img / 255.0
+        # Apply transforms if training.
+        if (isTraining):
+          # Resize the image slightly larger for random crop.
+          img = tf.image.resize(img, [int(self.imageSize * 1.1), int(self.imageSize * 1.1)])
+          # Apply random resized cropping.
+          img = tf.image.random_crop(img, size=[self.imageSize, self.imageSize, 3])
+          # Apply random horizontal flipping.
+          img = tf.image.random_flip_left_right(img)
+          # Apply random vertical flipping.
+          img = tf.image.random_flip_up_down(img)
+          # Apply random brightness.
+          img = tf.image.random_brightness(img, max_delta=0.2)
+          # Apply random contrast.
+          img = tf.image.random_contrast(img, lower=0.8, upper=1.2)
+          # Clip the image values to [0, 1].
+          img = tf.clip_by_value(img, 0.0, 1.0)
+        else:
+          # Resize the image to the target size.
+          img = tf.image.resize(img, [self.imageSize, self.imageSize])
+        # Store the image in the cache if caching is enabled.
+        if (useCache):
+          # Add the image to the cache dictionary.
+          imageCache[imagePath] = img
+    except Exception as e:
+      # Print a warning about the corrupt image.
+      print(f"Warning: Could not load image {imagePath}: {e}")
+      # Create a dummy zero tensor for the image.
+      img = tf.zeros((self.imageSize, self.imageSize, 3), dtype=tf.float32)
+    # Return the processed image tensor.
+    return img
+
+  def _createGenerator(
+    self,
+    split: str,
+    isTraining: bool,
+    useCache: bool
+  ):
+    r"""
+    Create a generator function for tf.data.Dataset.from_generator. This generator function iterates through the
+    specified split directory, loads and processes each image, and yields a tuple of (image tensor, label, filename)
+    for each sample. The method initializes an image cache dictionary to store processed images if caching is
+    enabled. It scans the split directory for class subdirectories, collects valid image paths and their
+    corresponding labels based on the class index, and then iterates through these paths to load and process
+    each image using the `_loadAndProcessImage` method. The generator yields the processed image tensor, the
+    integer label corresponding to the class, and the filename of the image for each sample in the dataset.
+
+    Parameters:
+      split (str): The name of the dataset split to create the generator for (e.g., "train", "val", "test"). This determines which subdirectory of the dataset to scan for images and labels.
+      isTraining (bool): A flag indicating whether the generator is being created for training (True) or evaluation (False). This determines whether data augmentations will be applied to the images when they are loaded and processed.
+      useCache (bool): A flag indicating whether to use an image cache to store processed images. If True, the generator will check if an image has already been processed and stored in the cache before loading and processing it again, which can improve performance during training by avoiding redundant processing of the same images.
+
+    Yields:
+      tuple: A tuple containing the processed image tensor (tf.Tensor), the integer label (int) corresponding to the class, and the filename (str) of the image for each sample in the specified split. The image tensor is normalized to [0, 1] and resized to the target image size. The label is an integer index representing the class of the image, and the filename is the name of the image file (without the path) for reference.
+    """
+
+    # Initialize the dictionary for image caching.
+    imageCache = {}
+    # Initialize the list for image paths.
+    imagePaths = []
+    # Initialize the list for labels.
+    labels = []
+    # Determine the target split directory.
+    targetDir = self.rootPath / split
+    # Get sorted list of class directories.
+    classDirs = sorted([d for d in targetDir.iterdir() if d.is_dir()])
+    # Iterate through each class directory.
+    for classIdx, classDir in enumerate(classDirs):
+      # Recursively find all image files in the class directory.
+      for imgPath in classDir.rglob("*"):
+        # Filter by common image extensions.
+        if (imgPath.suffix.lower() not in tuple(IMAGE_SUFFIXES)):
+          # Skip non-image files.
+          continue
+        # Add the valid image path.
+        imagePaths.append(str(imgPath))
+        # Add the corresponding label.
+        labels.append(classIdx)
+    # Iterate through the dataset indices.
+    for idx in range(len(imagePaths)):
+      # Load and process the image.
+      img = self._loadAndProcessImage(imagePaths[idx], isTraining, useCache, imageCache)
+      # Retrieve the corresponding label.
+      label = labels[idx]
+      # Get the filename of the image.
+      filename = Path(imagePaths[idx]).name
+      # Yield the image, label, and filename.
+      yield img, label, filename
+
+  def _buildPipeline(
+    self,
+    split: str,
+    isTraining: bool,
+    useCache: bool
+  ) -> Optional[tf.data.Dataset]:
+    r"""
+    Build the tf.data.Dataset pipeline for a specific split. This method checks if the specified split directory
+    exists and, if it does, creates a tf.data.Dataset using the `_createGenerator` method.
+    The dataset is configured with the appropriate output signature for images, labels, and filenames. It then
+    applies batching and prefetching transformations to optimize performance. If the split directory does not exist,
+    the method returns None, indicating that the dataset for that split is not available.
+
+    Parameters:
+      split (str): The name of the dataset split to build the pipeline for (e.g., "train", "val", "test"). This determines which subdirectory of the dataset to use for creating the tf.data.Dataset pipeline.
+      isTraining (bool): A flag indicating whether the pipeline is being built for training (True) or evaluation (False). This determines whether data augmentations will be applied to the images when they are loaded and processed in the generator function.
+      useCache (bool): A flag indicating whether to use an image cache to store processed images. If True, the generator function will check if an image has already been processed and stored in the cache before loading and processing it again, which can improve performance during training by avoiding redundant processing of the same images.
+    """
+
+    # Determine the target split directory.
+    splitDir = self.rootPath / split
+    # Check if the split directory exists.
+    if (not splitDir.exists()):
+      # Return None for the missing split.
+      return None
+
+    # Retrieve the total number of elements for this split from the pre-calculated lengths.
+    numElements = self.lengths.get(split.capitalize(), 0)
+
+    # Create the tf.data.Dataset using from_generator.
+    dataset = tf.data.Dataset.from_generator(
+      lambda: self._createGenerator(split, isTraining, useCache),
+      output_signature=(
+        tf.TensorSpec(shape=(self.imageSize, self.imageSize, 3), dtype=tf.float32),
+        tf.TensorSpec(shape=(), dtype=tf.int32),
+        tf.TensorSpec(shape=(), dtype=tf.string),
+      )
+    )
+
+    # Explicitly assert the cardinality so model.fit() knows the exact number of steps.
+    # This must be done BEFORE batching.
+    if (numElements > 0):
+      dataset = dataset.apply(tf.data.experimental.assert_cardinality(numElements))
+
+    # Batch the dataset.
+    dataset = dataset.batch(self.batchSize)
+    # Prefetch the dataset for performance.
+    dataset = dataset.prefetch(tf.data.AUTOTUNE)
+    # Return the configured dataset.
+    return dataset
 
 
 if __name__ == "__main__":

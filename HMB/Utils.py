@@ -4,6 +4,7 @@ import yaml  # PyYAML library for YAML file parsing.
 import pickle  # Pickle library for object serialization.
 import json  # JSON library for JSON file parsing.
 import csv  # CSV library for reading and writing CSV files.
+import numpy  # NumPy library for numerical operations.
 
 
 def ReadProjectConfig(configFilePath):
@@ -1193,3 +1194,34 @@ def fprint(msg, *args, **kwargs):
   '''
 
   print(msg, flush=True, *args, **kwargs)
+
+
+class NumpyEncoder(json.JSONEncoder):
+  r'''
+  Custom JSON encoder for NumPy data types.
+  This encoder extends the default JSONEncoder to handle NumPy arrays and scalars.
+  It converts NumPy arrays to lists and NumPy scalars to native Python types (int or float) for JSON serialization.
+  '''
+
+  # Define the default serialization method.
+  def default(self, obj):
+    r'''
+    Override the default method to handle NumPy data types.
+
+    Parameters:
+      obj (any): The object to serialize.
+
+    Returns:
+      any: A JSON-serializable representation of the object, or the result of the superclass's default method for unsupported types.
+    '''
+
+    # Check if the object is a numpy array.
+    if (isinstance(obj, numpy.ndarray)):
+      # Convert the numpy array to a native Python list.
+      return obj.tolist()
+    # Check if the object is a numpy scalar (integer or float).
+    if (isinstance(obj, (numpy.integer, numpy.floating))):
+      # Convert the numpy scalar to a native Python int or float.
+      return obj.item()
+    # Fallback to the default encoder for other types.
+    return super().default(obj)

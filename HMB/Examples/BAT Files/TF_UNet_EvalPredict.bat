@@ -15,7 +15,6 @@ set "MasksDir=C:\Users\Hossam\Downloads\PH2\Lesion"
 set "MaskPostfix=_lesion.bmp"
 set "OutputDir=C:\Users\Hossam\Downloads\VNet Trial 1\Output"
 set "InputSize=256 256 3"
-set "BatchSize=8"
 set "NumClasses=1"
 set "SavePredictions=1"  :: 1 to save predicted masks.
 :: Optional path to hyperparameters JSON file.
@@ -65,22 +64,22 @@ if not "%trialRoot%"=="" (
 )
 
 :: Build the command string; keep quoting for paths with spaces.
-set "CMD=python "%SCRIPT%" --ModelName "%ModelName%" --ModelWeights "%ModelWeights%" --DataDir "%DataDir%" --OutputDir "%OutputDir%" --BatchSize %BatchSize% --NumClasses %NumClasses%"
+set "CMD=python "%SCRIPT%" --ModelName "%ModelName%" --ModelWeights "%ModelWeights%" --DataDir "%DataDir%" --OutputDir "%OutputDir%" --NumClasses %NumClasses%"
 
 :: Append InputSize (three values).
 for /f "tokens=1-3" %%a in ("%InputSize%") do set "CMD=!CMD! --InputSize %%a %%b %%c"
 
 :: Optionally forward masks and postfix.
 if not "%MasksDir%"=="" (
-  set "CMD=!CMD! --MasksDir \"%MasksDir%\""
+  set "CMD=!CMD! --MasksDir "%MasksDir%""
 )
 if not "%MaskPostfix%"=="" (
-  set "CMD=!CMD! --MaskPostfix \"%MaskPostfix%\""
+  set "CMD=!CMD! --MaskPostfix "%MaskPostfix%""
 )
 
 :: Optionally forward hyperparameters JSON.
 if not "%HyperparamsJson%"=="" (
-  set "CMD=!CMD! --HyperparamsJson \"%HyperparamsJson%\""
+  set "CMD=!CMD! --HyperparamsJson "%HyperparamsJson%""
 )
 
 :: Optionally request saving predictions.

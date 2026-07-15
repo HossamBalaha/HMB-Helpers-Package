@@ -286,10 +286,15 @@ def BuildPretrainedAttentionModel(
   numClasses,
   optimizer=None,
   compile=True,
+  pretrained: bool = True,
+  freezeBackbone: bool = True,
+  isSparse: bool = True,
 ):
   r'''
-  Reconstruct model architecture used in training so weights can be loaded.
-  This mirrors the model construction portion of Code.py (no training code here).
+  Reconstruct model architecture used in training so weights can be loaded. It supports various backbones and
+  attention blocks, and can be configured for pretrained weights and freezing. It also compiles the model with
+  appropriate loss and optimizer if requested. Furthermore, it prints the total and trainable parameter counts
+  after applying the freeze configuration.
 
   Parameters:
     baseModelString (str): backbone model name (e.g. "Xception").
@@ -299,70 +304,43 @@ def BuildPretrainedAttentionModel(
     optimizer (tensorflow.keras.optimizers.Optimizer or None): optional optimizer to use;
       if None, defaults to Adam with lr=1e-4.
     compile (bool): whether to compile the model; if False, returns uncompiled model.
+    pretrained (bool): whether to load pretrained ImageNet weights (True) or initialize randomly (False).
+    freezeBackbone (bool): whether to freeze the backbone layers (True) or keep them trainable (False).
+    isSparse (bool): whether to use sparse categorical crossentropy (True) or binary crossentropy (False) for loss.
 
   Returns:
     model (tensorflow.keras.Model): compiled model ready to load weights and predict.
   '''
 
   from tensorflow.keras.models import Model
-  from tensorflow.keras.losses import SparseCategoricalCrossentropy, BinaryCrossentropy
+  from tensorflow.keras.losses import SparseCategoricalCrossentropy, BinaryCrossentropy, CategoricalCrossentropy
   from tensorflow.keras.layers import GlobalAveragePooling2D, Dense, Dropout
 
-  # Load the specified backbone model.
-  if (baseModelString == "Xception"):
-    from tensorflow.keras.applications import Xception
-    baseModel = Xception(
-      weights="imagenet",
-      include_top=False,
-      input_shape=inputShape
-    )
-  elif (baseModelString == "ResNet50V2"):
-    from tensorflow.keras.applications import ResNet50V2
-    baseModel = ResNet50V2(
-      weights="imagenet",
-      include_top=False,
-      input_shape=inputShape
-    )
-  elif (baseModelString == "InceptionV3"):
-    from tensorflow.keras.applications import InceptionV3
-    baseModel = InceptionV3(
-      weights="imagenet",
-      include_top=False,
-      input_shape=inputShape
-    )
-  elif (baseModelString == "DenseNet121"):
-    from tensorflow.keras.applications import DenseNet121
-    baseModel = DenseNet121(
-      weights="imagenet",
-      include_top=False,
-      input_shape=inputShape
-    )
-  elif (baseModelString == "MobileNetV2"):
-    from tensorflow.keras.applications import MobileNetV2
-    baseModel = MobileNetV2(
-      weights="imagenet",
-      include_top=False,
-      input_shape=inputShape
-    )
-  elif (baseModelString == "EfficientNetB0"):
-    from tensorflow.keras.applications import EfficientNetB0
-    baseModel = EfficientNetB0(
-      weights="imagenet",
-      include_top=False,
-      input_shape=inputShape
-    )
-  elif (baseModelString == "NASNetMobile"):
-    from tensorflow.keras.applications import NASNetMobile
-    baseModel = NASNetMobile(
-      weights="imagenet",
-      include_top=False,
-      input_shape=inputShape
-    )
-  else:
-    raise ValueError(f"Unsupported backbone model: {baseModelString}")
+  # Define the weights argument based on the pretrained flag.
+  weights = "imagenet" if (pretrained) else None
 
-  # Freeze the base model initially.
-  baseModel.trainable = False
+  # Generic load the model from Keras applications if it exists.
+  try:
+    # Get the model constructor from keras applications.
+    modelConstructor = getattr(tf.keras.applications, baseModelString, None)
+    # Check if the model constructor exists.
+    if (modelConstructor is None):
+      # Raise an error if the model is not found.
+      raise ValueError(f"Model {baseModelString} not found in tf.keras.applications.")
+    baseModel = modelConstructor(
+      weights=weights,
+      include_top=False,
+      input_shape=inputShape
+    )
+  except Exception as e:
+    raise ValueError(f"Unsupported backbone model: {baseModelString}; Error: {str(e)}")
+
+  # Freeze backbone parameters if requested to reduce overfitting.
+  if (freezeBackbone):
+    # Iterate through all base model layers.
+    for layer in baseModel.layers:
+      # Set the layer to non-trainable.
+      layer.trainable = False
 
   # Create the specified attention block.
   if (attentionBlockStr == "CBAM"):
@@ -416,7 +394,10 @@ def BuildPretrainedAttentionModel(
         custom_objects={"Adam": tf.keras.optimizers.Adam}
       )
 
-    lossFn = SparseCategoricalCrossentropy() if (numClasses > 2) else BinaryCrossentropy()
+    if (numClasses > 2):
+      lossFn = SparseCategoricalCrossentropy() if (isSparse) else CategoricalCrossentropy()
+    else:
+      lossFn = BinaryCrossentropy()
 
     # Compile the model.
     model.compile(
@@ -424,6 +405,18 @@ def BuildPretrainedAttentionModel(
       loss=lossFn,
       metrics=["accuracy"],
     )
+
+  # Calculate the total number of parameters.
+  totalParams = model.count_params()
+  # Calculate the trainable parameters.
+  trainableParams = sum([tf.keras.backend.count_params(p) for p in model.trainable_weights])
+  # Print the model creation details.
+  print(
+    f"Created model: {baseModelString} | pretrained={pretrained} | freezeBackbone={freezeBackbone} | "
+    f"attentionBlock={attentionBlockStr} | inputShape={inputShape} | numClasses={numClasses}"
+  )
+  # Print the parameter counts.
+  print(f"  Total params: {totalParams:,} | Trainable params after freeze: {trainableParams:,}")
 
   return model
 
@@ -456,7 +449,7 @@ def CreateFitPretrainedAttentionModel(
     numClasses (int): Number of output classes.
     callbacks (list): List of Keras callbacks for training.
     modelCheckpointPath (str or None): Optional path to save the best model; if None, defaults to "BestModel.keras".
-    initialEpochs (int): Number of initial training epochs.
+    initialEpochs (int): Number of initial training epochs. If 0, skips initial training and goes directly to fine-tuning.
     fineTuneEpochs (int): Number of fine-tuning epochs.
     fineTuneAt (int): Layer index to start fine-tuning from (default: 100).
     optimizer (tensorflow.keras.optimizers.Optimizer or None): Optional optimizer to use; if None, defaults to Adam with lr=1e-3.
@@ -468,6 +461,61 @@ def CreateFitPretrainedAttentionModel(
     history (tensorflow.keras.callbacks.History): Training history for initial training.
     historyFine (tensorflow.keras.callbacks.History): Training history for fine-tuning.
     configs (dict): Dictionary of training configurations and parameters.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import tensorflow as tf
+    from HMB.TFHelper import CreateFitPretrainedAttentionModel
+    from HMB.DatasetsHelper import TFFolderBasedDataPipeline
+
+    trainGen = ...  # Create your training data generator.
+    validGen = ...  # Create your validation data generator.
+
+    # OR:
+    # You can also use TFFolderBasedDataPipeline to create generators from folder structure.
+    dataDir = "path/to/data"  # Directory with 'train' and 'val' subfolders.
+    batchSize = 32
+    imageSize = (256, 256)
+    # Instantiate the unified data pipeline.
+    pipeline = TFFolderBasedDataPipeline(
+      dataDir=dataDir,
+      batchSize=batchSize,
+      imageSize=imageSize
+    )
+
+    # Access the training, validation, and test datasets.
+    trainDataset = pipeline.train
+    valDataset = pipeline.val
+    testDataset = pipeline.test
+
+    # Map the datasets to extract (x, y) pairs for training and validation.
+    # Because the pipeline datasets yield (x, y, f) where f is the file path, we map to get just (x, y).
+    trainGen = pipeline.train.map(lambda x, y, f: (x, y))
+    validGen = pipeline.val.map(lambda x, y, f: (x, y))
+
+    # Determine the number of classes from the pipeline's class names.
+    numOfClasses = len(pipeline.classNames)
+
+    optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4)  # Optional: specify an optimizer.
+
+    model, history, historyFine, configs = CreateFitPretrainedAttentionModel(
+      trainGenNew=trainGen,
+      validGenNew=validGen,
+      baseModelString="Xception",
+      attentionBlockStr="CBAM",
+      inputShape=imageSize + (3,),
+      numClasses=numOfClasses,
+      callbacks=callbacksList,
+      modelCheckpointPath="BestModel.keras",
+      initialEpochs=10,
+      fineTuneEpochs=20,
+      fineTuneAt=100,
+      optimizer=optimizer,
+      storageDir="History",
+      verbose=1
+    )
   '''
 
   from tensorflow.keras.losses import SparseCategoricalCrossentropy, BinaryCrossentropy
@@ -478,17 +526,25 @@ def CreateFitPretrainedAttentionModel(
     inputShape=inputShape,
     numClasses=numClasses,
     optimizer=optimizer,
+    compile=False,  # We will compile after unfreezing for fine-tuning.
+    pretrained=True,  # Load pretrained weights for better convergence.
+    freezeBackbone=True,  # Start with frozen backbone for initial training.
+    isSparse=True,  # Use sparse categorical crossentropy for integer labels.
   )
 
-  # Step 1: Frozen training.
-  # Train model on frozen backbone.
-  history = model.fit(
-    trainGenNew,  # Training data generator.
-    validation_data=validGenNew,  # Validation data generator.
-    epochs=initialEpochs,  # Number of epochs for initial training.
-    callbacks=callbacks,  # Callbacks for training.
-    verbose=verbose,  # Verbosity level.
-  )
+  if (initialEpochs <= 0):
+    print("Skipping initial training phase since initialEpochs <= 0.")
+    history = None
+  else:
+    # Step 1: Frozen training.
+    # Train model on frozen backbone.
+    history = model.fit(
+      trainGenNew,  # Training data generator.
+      validation_data=validGenNew,  # Validation data generator.
+      epochs=initialEpochs,  # Number of epochs for initial training.
+      callbacks=callbacks,  # Callbacks for training.
+      verbose=verbose,  # Verbosity level.
+    )
 
   # Step 2: Fine-tuning.
   # Unfreeze part of the base model for fine-tuning.
@@ -521,7 +577,8 @@ def CreateFitPretrainedAttentionModel(
     trainGenNew,  # Training data generator.
     validation_data=validGenNew,  # Validation data generator.
     epochs=totalEpochs,  # Total number of epochs.
-    initial_epoch=history.epoch[-1] + 1,  # Start from last epoch + 1.
+    # Start from last epoch + 1. If initialEpochs was 0, this will start from epoch 1.
+    initial_epoch=history.epoch[-1] + 1 if (initialEpochs > 0) else 0,
     callbacks=callbacks,  # Callbacks for training.
     verbose=verbose,  # Verbosity level.
   )
@@ -2719,9 +2776,9 @@ def BuildOptimizer(optimizerSpec):
 
   Parameters:
     optimizerSpec: Can be one of the following:
-      - An instance of a Keras optimizer (e.g., `tf.keras.optimizers.Adam()`). A fresh instance will be created from its config.
+      - An instance of a Keras optimizer (e.g., `tensorflow.keras.optimizers.Adam()`). A fresh instance will be created from its config.
       - A tuple of (optimizerClass, optimizerKwargs) where `optimizerClass` is a Keras optimizer class and `optimizerKwargs` is a dict of keyword arguments to instantiate it.
-      - A Keras optimizer class (e.g., `tf.keras.optimizers.Adam`) which will be instantiated with default parameters.
+      - A Keras optimizer class (e.g., `tensorflow.keras.optimizers.Adam`) which will be instantiated with default parameters.
       - A callable that returns an instance of a Keras optimizer when called with no arguments.
 
   Returns:
@@ -2812,12 +2869,13 @@ def CompileTrainTFUNetModel(
   keyword=None,
   testSize=0.25,
   randomState=42,
+  metrics=["accuracy"],
 ):
   r'''
   Compile and train a TFUNet model with the given parameters, and store the results.
 
   Parameters:
-    model (tf.keras.Model): The TFUNet model instance to be trained.
+    model (tensorflow.keras.Model): The TFUNet model instance to be trained.
     trialNo (int): The trial number for this training run, used for organizing outputs.
     inputSize (tuple): The expected input size of the model (height, width, channels).
     imagesList (str): Path to the directory containing input images.
@@ -2829,10 +2887,12 @@ def CompileTrainTFUNetModel(
     keyword (str): A keyword to uniquely identify this training run, used in naming output files and directories.
     testSize (float): Ratio of the dataset to be used as the test set when splitting the data. The remaining will be used for training and validation.
     randomState (int): Random state for reproducibility when splitting the dataset.
+    metrics (list): List of metrics to evaluate during training and validation.
   '''
 
   from HMB.ImagesHelper import ReadImage, ReadMask
   from sklearn.model_selection import train_test_split
+  from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau, CSVLogger, TensorBoard
 
   def _LoadData(imagesList, masksList, testSize=0.2):
     # Split the dataset into training and testing sets.
@@ -2920,9 +2980,13 @@ def CompileTrainTFUNetModel(
 
   # Compile the model with a new optimizer instance for this model's variables.
   optimizer = BuildOptimizer(hyperparameters["optimizer"])
+  lossFunc = hyperparameters["loss"]
+  # If the loss function is not a string, instantiate it (e.g., if it's a class).
+  if (not isinstance(lossFunc, str)):
+    lossFunc = lossFunc()
   model.compile(
     optimizer=optimizer,  # Optimizer.
-    loss=hyperparameters["loss"],  # Loss function.
+    loss=lossFunc,  # Loss function.
     metrics=metrics,  # Metrics.
   )
 

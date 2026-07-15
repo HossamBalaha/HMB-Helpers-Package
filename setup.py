@@ -13,7 +13,7 @@ setup(
   # Distribution name used on PyPI.
   name="hmb-helpers",
   # Current package version.
-  version="0.2.0",
+  version="0.3.0",
   # Author's display name.
   author="Hossam Magdy Balaha",
   # Author contact email.
@@ -145,6 +145,7 @@ setup(
       "contractions>=0.1.73",
       "textstat>=0.7.13",
       "rouge>=1.0.1",
+      "language_tool_python>=3.4.0",
     ],
 
     # Audio processing.
@@ -288,6 +289,7 @@ setup(
       "medmnist>=3.0.2",
       "huggingface-hub>=1.14.0",
       "codecarbon>=3.2.6",
+      "language_tool_python>=3.4.0",
       "av>=17.0.1",
     ],
   },

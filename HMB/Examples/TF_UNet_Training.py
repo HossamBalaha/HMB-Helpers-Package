@@ -5,6 +5,7 @@ import tensorflow as tf
 from tensorflow.keras.metrics import *
 from tensorflow.keras.callbacks import *
 from tensorflow.keras.optimizers import *
+from HMB.Utils import fprint
 from HMB.TFUNetHelper import VNet, SegNet
 from HMB.TFHelper import CompileTrainTFUNetModel
 from HMB.TFSegmentationLosses import *
@@ -19,23 +20,6 @@ from HMB.Initializations import (
 tf.config.run_functions_eagerly(True)
 warnings.filterwarnings("ignore")
 
-# Ensure all prints flush by default to make logs appear promptly.
-# Save the original built-in print function for delegation.
-_original_print = builtins.print
-
-
-# Define a wrapper that sets flush=True when not explicitly provided.
-def print(*args, **kwargs):
-  # Ensure flush is True by default when not provided.
-  if ("flush" not in kwargs):
-    kwargs["flush"] = True
-  # Delegate to the original print implementation.
-  return _original_print(*args, **kwargs)
-
-
-# Override the built-in print with our wrapper to ensure all prints are flushed immediately.
-builtins.print = print
-
 # Select a specific GPU when multiple GPUs are available (optional).
 gpus = tf.config.list_physical_devices("GPU")
 gpuIndex = 0  # Change this index to select a different GPU (e.g., 0, 1, 2, ...).
@@ -43,9 +27,9 @@ if (gpus):
   try:
     # Restrict TensorFlow to only use the first GPU.
     tf.config.set_visible_devices(gpus[gpuIndex], "GPU")
-    print("Using GPU:", gpus[gpuIndex])
+    fprint("Using GPU:", gpus[gpuIndex])
   except RuntimeError as e:
-    print("Error setting visible devices:", e)
+    fprint("Error setting visible devices:", e)
 
 # ============================================================================================ #
 
@@ -106,10 +90,10 @@ if __name__ == "__main__":
       imagesList.pop(i)
       masksList.pop(i)
 
-  print("Number of images:", len(imagesList))
-  print("Number of masks:", len(masksList))
-  print("First image:", imagesList[0])
-  print("First mask:", masksList[0])
+  fprint("Number of images:", len(imagesList))
+  fprint("Number of masks:", len(masksList))
+  fprint("First image:", imagesList[0])
+  fprint("First mask:", masksList[0])
 
   baseHyperparametersRanges = {
     "batchSize": [1, 3, 5, 7, 10],
@@ -161,7 +145,7 @@ if __name__ == "__main__":
   # Loop over the trials.
   for i in range(trials):
     try:
-      print("Trial:", i + 1)
+      fprint("Trial:", i + 1)
       outputFolder = os.path.join(
         storageBaseDir,
         f"{datasetName} ({whichModel} Training Example)",
@@ -180,7 +164,7 @@ if __name__ == "__main__":
         for key in segnetHyperparametersRanges.keys():
           if (key not in baseHyperparametersRanges):
             hyperparameters[key] = random.choice(segnetHyperparametersRanges[key])
-      print("Working with:", hyperparameters)
+      fprint("Working with:", hyperparameters)
 
       if (whichModel == "VNet"):
         model = VNet(
@@ -215,7 +199,12 @@ if __name__ == "__main__":
         outputFolder=outputFolder,
         keyword=f"Trial {i + 1}",
         testSize=testSize,
+        metrics=metrics,
       )
     except Exception as e:
-      print("Error:", e)
+      fprint("Error:", e)
+      import traceback
+
+      traceback.print_exc()
+      fprint("\n\nContinuing to the next trial...")
       continue

@@ -1,5 +1,5 @@
 # Import the required libraries.
-import os  # Import os for file path operations.
+import tifffile, math, os
 import cv2, PIL  # Import OpenCV and PIL for image processing.
 import numpy as np  # Import numpy for numerical operations.
 from PIL import Image  # Import Image module from PIL for image handling.
@@ -534,7 +534,14 @@ def MatchTwoImagesViaSIFT(
   kp2, des2 = sift.detectAndCompute(img2, None)
   # Create a Brute-Force Matcher.
   bf = cv2.BFMatcher()
-  # Match the descriptors using k-nearest neighbors (k=2).
+  # Match the descriptors using k-nearest neighbors (k=2). k \in {1, 2, 3, ...}.
+  # Why k=2 not k=1,3,4,etc.?
+  # Because we want to apply the ratio test to filter out poor matches.
+  # The ratio test compares the distance of the best match (k=1) to the distance of the second-best match (k=2).
+  # If the best match is significantly better than the second-best match, it is considered a good match.
+  # This helps to reduce false positives in matching.
+  # In short: k=2 is used to apply the ratio test for better match quality.
+  # In short: k!=3 because we only need the best and second-best matches for the ratio test.
   matches = bf.knnMatch(des1, des2, k=2)
   # Initialize a list to store good matches.
   good = []
@@ -1525,7 +1532,7 @@ def ComputeAndPlotDeformationFieldViaFarneback(
     iterations (int): Number of iterations for Farneback optical flow.
     polyN (int): Size of the pixel neighborhood for polynomial expansion in Farneback optical flow.
     polySigma (float): Standard deviation of the Gaussian used to smooth derivatives in Farneback optical flow.
-    flags (int): Flags for Farneback optical flow computation.    
+    flags (int): Flags for Farneback optical flow computation.
     backgroundAlpha (float): Alpha blending for the background image in the plot.
     density (float): Density parameter passed to plt.streamplot for vector density.
     addGradientBar (bool): If True, adds a gradient color bar to the plot.
@@ -2225,3 +2232,1220 @@ def FitGlobalKMeans(
   # Save the fitted KMeans model to a file.
   WritePickleFile(modelPath, kmeans)
   return kmeans
+
+
+# Define the main class to handle feature extraction and visualization.
+class MultiChannelFeatureExtractor():
+  '''
+  Class for extracting various image features such as HOG, K-Means clustering, Sobel edges, and Local Binary Patterns (LBP).
+  The class allows configuration of feature extraction parameters and provides methods to compute each feature layer from an input RGB image.
+
+  Parameters:
+    featureConfig (dict, optional): A dictionary containing configuration parameters for feature extraction. If None, default parameters will be used.
+
+  Features:
+    - HOG (Histogram of Oriented Gradients): Extracts gradient orientation histograms from the image.
+    - K-Means Clustering: Segments the image into clusters based on color similarity.
+    - Sobel Edge Detection: Computes edge magnitude using the Sobel operator.
+    - Local Binary Patterns (LBP): Captures texture information by comparing pixel intensities.
+    - Hematoxylin Stain Separation (HED): Separates stains using the Hematoxylin-Eosin-DAB color space conversion matrix.
+    - Hematoxylin Stain: Extracts the Hematoxylin channel using color deconvolution.
+    - Gabor Filter: Extracts frequency and orientation information from the image.
+    - Canny Edge Detection: Detects edges using the Canny algorithm.
+    - Local Entropy: Measures the randomness or complexity of pixel intensities in local regions.
+    - Difference of Gaussians (DoG): Enhances edges by subtracting two Gaussian blurred versions of the image.
+    - Multi-Orientation Gabor Filter: Applies Gabor filters at multiple orientations to capture texture information.
+    - Eosin Stain: Extracts the Eosin channel using color deconvolution.
+    - Laplacian Edge and Blob Detection: Computes the Laplacian of the image to detect edges and blobs.
+    - Frangi Vesselness: Enhances vessel-like and tube-like structures using the Frangi filter.
+    - Sato Tube-like Structure: Enhances tube-like structures using the Sato filter.
+    - Local Variance: Computes the variance of pixel intensities in local neighborhoods.
+    - Hue: Extracts the Hue channel from the HSV color space.
+    - Saturation: Extracts the Saturation channel from the HSV color space.
+    - Lightness: Extracts the Lightness channel from the CIELAB color space.
+    - Green-Red (A Channel): Extracts the Green-Red channel from the CIELAB color space.
+    - Blue-Yellow (B Channel): Extracts the Blue-Yellow channel from the CIELAB color space.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    from skimage.io import imread
+    from HMB.ImagesHelper import MultiChannelFeatureExtractor
+
+    # Define the file path for the input histopathology image.
+    imgPath = r"path/to/your/input/image.png"
+    # Define the output file paths for the multi-channel TIFF and visualization PNG.
+    outputPath = r"path/to/your/output/image.tiff"
+    visualizationPath = r"path/to/your/output/image.png"
+    # Instantiate the feature extractor class.
+    extractorInstance = MultiChannelFeatureExtractor()
+    # Load the test image from the specified file path.
+    loadedImage = extractorInstance.LoadImageFromPath(imgPath)
+    # Define the optimal three-channel feature list for breast cancer histopathology.
+    optimalFeatureList = ["Frangi", "MultiGabor", "LocalVariance"]
+    # Generate the custom multi-channel image using the recommended optimal feature list.
+    optimalStackedImage = extractorInstance.GenerateCustomFeatureImage(loadedImage, optimalFeatureList)
+    # Save the full three-channel data as a scientific TIFF file.
+    extractorInstance.SaveMultiChannelImage(optimalStackedImage, outputPath)
+    # Save the first three channels as a standard PNG for visual inspection.
+    extractorInstance.SaveVisualizationImage(optimalStackedImage, visualizationPath)
+    # Extract and visualize the specific feature layers from the loaded image.
+    featureLayerDict = extractorInstance.ExtractSpecificFeatureLayers(loadedImage, optimalFeatureList)
+    extractorInstance.PlotFeatureLayers(loadedImage, featureLayerDict)
+  
+    # Read the saved TIFF file to verify the integrity of the saved data.
+    loadedTiffImage = tifffile.imread(outputPath)
+    # Print the shape of the loaded TIFF image to confirm it matches the expected dimensions.
+    print("The shape of the loaded TIFF image is:", loadedTiffImage.shape)
+  '''
+
+  # Define the constructor to initialize the feature extractor.
+  def __init__(self, featureConfig=None):
+    '''
+    Initialize the `MultiChannelFeatureExtractor` with optional feature configuration.
+
+    Parameters:
+      featureConfig (dict, optional): A dictionary containing configuration parameters for feature extraction. If None, default parameters will be used.
+
+    Feature configuration parameters include:
+      - "PixelsPerCell": Tuple[int, int], default (8, 8). # Default value for HOG feature extraction.
+      - "CellsPerBlock": Tuple[int, int], default (3, 3). # Default value for HOG feature extraction.
+      - "Orientations": int, default 9. # Default value for HOG feature extraction.
+      - "KMeansClusters": int, default 5. # Default number of clusters for K-Means clustering.
+      - "LbpRadius": int, default 3. # Default radius for Local Binary Patterns (LBP) feature extraction.
+      - "LbpPoints": int, default 24. # Default number of points for Local Binary Patterns (LBP) feature extraction.
+      - "GaborFrequency": float, default 0.1. # Default frequency for Gabor filter feature extraction.
+      - "GaborTheta": float, default 0.0. # Default orientation for Gabor filter feature extraction.
+      - "CannySigma": float, default 1.0. # Default sigma value for Canny edge detection.
+      - "EntropyRadius": int, default 5. # Default radius for local entropy feature extraction.
+      - "DoGLowSigma": float, default 1. # Default low sigma value for Difference of Gaussians (DoG) feature extraction.
+      - "DoGHighSigma": float, default 3. # Default high sigma value for Difference of Gaussians (DoG) feature extraction.
+      - "GaborThetaList": List[float], default [0.0, 0.785, 1.57, 2.355]. # Default list of orientations for multi-orientation Gabor filter feature extraction.
+      - "LocalVarianceSize": int, default 15. # Default size for local variance feature extraction.
+    '''
+
+    # Check if the feature configuration is not provided.
+    if (featureConfig is None):
+      # Set the default feature configuration dictionary.
+      self.featureConfig = {
+        "PixelsPerCell"    : (8, 8),  # Default value for HOG feature extraction.
+        "CellsPerBlock"    : (3, 3),  # Default value for HOG feature extraction.
+        "Orientations"     : 9,  # Default value for HOG feature extraction.
+        "KMeansClusters"   : 4,  # Default number of clusters for K-Means clustering.
+        "LbpRadius"        : 3,  # Default radius for Local Binary Patterns (LBP) feature extraction.
+        "LbpPoints"        : 24,  # Default number of points for Local Binary Patterns (LBP) feature extraction.
+        "GaborFrequency"   : 0.1,  # Default frequency for Gabor filter feature extraction.
+        "GaborTheta"       : 0.0,  # Default orientation for Gabor filter feature extraction.
+        "CannySigma"       : 1.0,  # Default sigma value for Canny edge detection.
+        "EntropyRadius"    : 5,  # Default radius for local entropy feature extraction.
+        "DoGLowSigma"      : 1,  # Default low sigma value for Difference of Gaussians (DoG) feature extraction.
+        "DoGHighSigma"     : 3,  # Default high sigma value for Difference of Gaussians (DoG) feature extraction.
+        # Default list of orientations for multi-orientation Gabor filter feature extraction.
+        "GaborThetaList"   : [0.0, 0.785, 1.57, 2.355],
+        "LocalVarianceSize": 15,  # Default size for local variance feature extraction.
+      }
+    else:
+      # Assign the provided feature configuration dictionary.
+      self.featureConfig = featureConfig
+
+    # Initialize the K-Means clustering model attribute to None.
+    self.kmeansModel = None
+
+  # Define the method to load an image from a given file path.
+  def LoadImageFromPath(self, inputImagePath):
+    '''
+    Load an RGB image from the specified file path and return it as a NumPy array.
+
+    Parameters:
+      inputImagePath (str): The file path to the input RGB image.
+
+    Returns:
+      numpy.ndarray: The loaded RGB image as a NumPy array.
+    '''
+
+    # Import the image reading function from the skimage library.
+    from skimage.io import imread
+
+    # Load the RGB image using the provided file path.
+    loadedRgbImage = imread(inputImagePath)
+    # Return the loaded image array to the caller.
+    return loadedRgbImage
+
+  # Define the method to compute the Histogram of Oriented Gradients layer.
+  def ComputeHogLayer(self, inputRgbImage):
+    '''
+    Compute the Histogram of Oriented Gradients (HOG) layer from the input RGB image.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+
+    Returns:
+      numpy.ndarray: The normalized HOG feature layer.
+    '''
+
+    # Import the HOG feature extraction function.
+    from skimage.feature import hog
+    # Import the RGB to grayscale conversion function.
+    from skimage.color import rgb2gray
+
+    # Convert the RGB image to grayscale for gradient computation.
+    grayscaleImage = rgb2gray(inputRgbImage)
+    # Compute the HOG features and retrieve the visualization image.
+    hogResult = hog(
+      grayscaleImage,
+      orientations=self.featureConfig["Orientations"],
+      pixels_per_cell=self.featureConfig["PixelsPerCell"],
+      cells_per_block=self.featureConfig["CellsPerBlock"],
+      visualize=True,
+    )
+    # Extract the visualization array from the returned tuple.
+    hogLayer = hogResult[1]
+    # Normalize the HOG layer to a zero-to-one range.
+    normalizedLayer = (
+      (hogLayer - np.min(hogLayer)) /
+      (np.max(hogLayer) - np.min(hogLayer) + 1e-8)
+    )
+    # Return the normalized HOG layer.
+    return normalizedLayer
+
+  # Define the method to fit the K-Means clustering model on a reference image.
+  def FitClusteringModel(self, referenceImage):
+    '''
+    Fit the K-Means clustering model on a reference image to establish consistent cluster centers for the dataset.
+
+    Parameters:
+      referenceImage (numpy.ndarray or str): The reference RGB image array or file path to the image.
+    '''
+
+    # Import the K-Means clustering model.
+    from sklearn.cluster import KMeans
+
+    # Check if the reference image is a file path.
+    if isinstance(referenceImage, str):
+      # Load the reference image from the file path.
+      referenceImage = self.LoadImageFromPath(referenceImage)
+
+    # Reshape the reference image into a two-dimensional array of pixels.
+    referencePixelArray = referenceImage.reshape(-1, 3)
+    # Initialize the K-Means clustering model with the configured parameters.
+    self.kmeansModel = KMeans(
+      n_clusters=self.featureConfig["KMeansClusters"],
+      random_state=42,
+      # Number of times the k-means algorithm will be run with different centroid seeds.
+      n_init=25,
+    )
+    # Fit the model to the reference pixel array to find consistent cluster centers.
+    self.kmeansModel.fit(referencePixelArray)
+    # Print a confirmation message to the standard output.
+    print("The K-Means clustering model has been successfully fitted on the reference image.")
+
+  # Define the method to compute the K-Means clustering layer.
+  def ComputeClusteringLayer(self, inputRgbImage):
+    """
+    Compute the K-Means clustering layer from the input RGB image using the fitted model.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+
+    Returns:
+      numpy.ndarray: The normalized clustering feature layer.
+    """
+    # Check if the K-Means model has been fitted on a reference image.
+    if (self.kmeansModel is None):
+      # Raise an error if the model has not been fitted yet.
+      raise RuntimeError(
+        "The K-Means model must be fitted on a reference image using "
+        "`FitClusteringModel` before computing the clustering layer."
+      )
+    # Reshape the image into a two-dimensional array of pixels.
+    pixelArray = inputRgbImage.reshape(-1, 3)
+    # Predict the cluster labels for each pixel using the fitted model.
+    clusterLabels = self.kmeansModel.predict(pixelArray)
+    # Reshape the labels back to the original image dimensions.
+    clusterImage = clusterLabels.reshape(inputRgbImage.shape[0], inputRgbImage.shape[1])
+    # Normalize the cluster labels to a zero-to-one range.
+    normalizedLayer = clusterImage / (self.featureConfig["KMeansClusters"] - 1)
+    # Return the normalized clustering layer.
+    return normalizedLayer
+
+  # Define the method to compute the Sobel edge detection layer.
+  def ComputeEdgeLayer(self, inputRgbImage):
+    '''
+    Compute the Sobel edge detection layer from the input RGB image.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+
+    Returns:
+      numpy.ndarray: The normalized Sobel edge feature layer.
+    '''
+
+    # Import the RGB to grayscale conversion function.
+    from skimage.color import rgb2gray
+    # Import the Sobel edge detection filter.
+    from skimage.filters import sobel
+
+    # Convert the RGB image to grayscale for edge detection.
+    grayscaleImage = rgb2gray(inputRgbImage)
+    # Compute the Sobel edge magnitude for the grayscale image.
+    edgeLayer = sobel(grayscaleImage)
+    # Normalize the edge layer to a zero-to-one range.
+    normalizedLayer = (
+      (edgeLayer - np.min(edgeLayer)) /
+      (np.max(edgeLayer) - np.min(edgeLayer) + 1e-8)
+    )
+    # Return the normalized edge layer.
+    return normalizedLayer
+
+  # Define the method to compute the Local Binary Patterns texture layer.
+  def ComputeTextureLayer(self, inputRgbImage):
+    '''
+    Compute the Local Binary Patterns (LBP) texture layer from the input RGB image.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+
+    Returns:
+      numpy.ndarray: The normalized LBP texture feature layer.
+    '''
+
+    # Import the Local Binary Patterns function.
+    from skimage.feature import local_binary_pattern
+    # Import the RGB to grayscale conversion function.
+    from skimage.color import rgb2gray
+
+    # Convert the RGB image to grayscale for texture analysis.
+    grayscaleImage = rgb2gray(inputRgbImage)
+    # Compute the Local Binary Patterns for the grayscale image.
+    lbpImage = local_binary_pattern(
+      grayscaleImage,
+      self.featureConfig["LbpPoints"],
+      self.featureConfig["LbpRadius"],
+      method="uniform"
+    )
+    # Normalize the LBP image to a zero-to-one range.
+    normalizedLayer = (
+      (lbpImage - np.min(lbpImage)) /
+      (np.max(lbpImage) - np.min(lbpImage) + 1e-8)
+    )
+    # Return the normalized texture layer.
+    return normalizedLayer
+
+  # Define the method to compute the Hematoxylin stain separation layer.
+  def ComputeStainLayer(self, inputRgbImage):
+    '''
+    Compute the Hematoxylin stain separation layer using the HED color space.
+    Suitable with Hematoxylin-Eosin-DAB stained images in digital pathology.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+
+    Returns:
+      numpy.ndarray: The normalized stain separation feature layer.
+    '''
+
+    # Import the stain separation function.
+    from skimage.color import separate_stains
+    # Import the HED to RGB conversion matrix.
+    from skimage.color import hed_from_rgb
+
+    # Check if the input image requires normalization to float.
+    if (inputRgbImage.dtype == np.uint8):
+      # Convert the input image to float64 and normalize by dividing by 255.
+      floatImage = inputRgbImage.astype(np.float64) / 255.0
+    else:
+      # Assign the input image directly if it is already a float type.
+      floatImage = inputRgbImage
+    # Separate the stains using the HED color space conversion matrix.
+    separatedStains = separate_stains(floatImage, hed_from_rgb)
+    # Extract the first channel which corresponds to Hematoxylin.
+    hematoxylinChannel = separatedStains[:, :, 0]
+    # Normalize the Hematoxylin channel to a zero-to-one range.
+    normalizedLayer = (
+      (hematoxylinChannel - np.min(hematoxylinChannel)) /
+      (np.max(hematoxylinChannel) - np.min(hematoxylinChannel) + 1e-8)
+    )
+    # Return the normalized stain separation layer.
+    return normalizedLayer
+
+  # Define the method to compute the Hematoxylin stain layer using color deconvolution.
+  def ComputeHematoxylinLayer(self, inputRgbImage):
+    '''
+    Compute the Hematoxylin stain layer using color deconvolution.
+    Suitable with Hematoxylin-Eosin-DAB stained images in digital pathology.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+
+    Returns:
+      numpy.ndarray: The normalized Hematoxylin feature layer.
+    '''
+
+    # Import the RGB to HED conversion function.
+    from skimage.color import rgb2hed
+
+    # Separate the stains using the Hematoxylin-Eosin-DAB color space matrix.
+    stainSeparatedImage = rgb2hed(inputRgbImage)
+    # Extract the first channel which corresponds to the Hematoxylin stain.
+    hematoxylinChannel = stainSeparatedImage[:, :, 0]
+    # Normalize the Hematoxylin channel to a zero-to-one range.
+    normalizedLayer = (
+      (hematoxylinChannel - np.min(hematoxylinChannel)) /
+      (np.max(hematoxylinChannel) - np.min(hematoxylinChannel) + 1e-8)
+    )
+    # Return the normalized Hematoxylin layer.
+    return normalizedLayer
+
+  # Define the method to compute the Gabor filter texture layer.
+  def ComputeGaborLayer(self, inputRgbImage):
+    '''
+    Compute the Gabor filter texture layer from the input RGB image.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+
+    Returns:
+      numpy.ndarray: The normalized Gabor filter feature layer.
+    '''
+
+    # Import the Gabor filter function.
+    from skimage.filters import gabor
+    # Import the RGB to grayscale conversion function.
+    from skimage.color import rgb2gray
+
+    # Convert the RGB image to grayscale for frequency analysis.
+    grayscaleImage = rgb2gray(inputRgbImage)
+    # Apply the Gabor filter to the grayscale image.
+    gaborFilterResult = gabor(
+      grayscaleImage,
+      frequency=self.featureConfig["GaborFrequency"],
+      theta=self.featureConfig["GaborTheta"]
+    )
+    # Extract the real part of the complex Gabor filter response.
+    gaborRealPart = gaborFilterResult[0]
+    # Normalize the Gabor response to a zero-to-one range.
+    normalizedLayer = (
+      (gaborRealPart - np.min(gaborRealPart)) /
+      (np.max(gaborRealPart) - np.min(gaborRealPart) + 1e-8)
+    )
+    # Return the normalized Gabor filter layer.
+    return normalizedLayer
+
+  # Define the method to compute the Canny edge detection layer.
+  def ComputeCannyLayer(self, inputRgbImage):
+    '''
+    Compute the Canny edge detection layer from the input RGB image.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+
+    Returns:
+      numpy.ndarray: The Canny edge feature layer.
+    '''
+
+    # Import the Canny edge detection function.
+    from skimage.feature import canny
+    # Import the RGB to grayscale conversion function.
+    from skimage.color import rgb2gray
+
+    # Convert the RGB image to grayscale for advanced edge detection.
+    grayscaleImage = rgb2gray(inputRgbImage)
+    # Compute the Canny edges using the configured sigma parameter.
+    cannyEdges = canny(grayscaleImage, sigma=self.featureConfig["CannySigma"])
+    # Convert the boolean edge map to a floating-point array.
+    floatEdgeLayer = cannyEdges.astype(np.float32)
+    # Return the Canny edge layer which is already in a zero-to-one range.
+    return floatEdgeLayer
+
+  # Define the method to compute the local entropy texture layer.
+  def ComputeEntropyLayer(self, inputRgbImage):
+    '''
+    Compute the local entropy texture layer from the input RGB image.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+
+    Returns:
+      numpy.ndarray: The normalized local entropy feature layer.
+    '''
+
+    # Import the disk structuring element.
+    from skimage.morphology import disk
+    # Import the rank filters module.
+    from skimage.filters import rank
+    # Import the RGB to grayscale conversion function.
+    from skimage.color import rgb2gray
+
+    # Convert the RGB image to grayscale for entropy computation.
+    grayscaleImage = rgb2gray(inputRgbImage)
+    # Scale the grayscale image to eight-bit unsigned integer format.
+    uint8Image = (grayscaleImage * 255).astype(np.uint8)
+    # Create a disk structuring element for the local entropy filter.
+    diskElement = disk(self.featureConfig["EntropyRadius"])
+    # Compute the local entropy of the image using the disk element.
+    entropyLayer = rank.entropy(uint8Image, diskElement)
+    # Normalize the entropy layer to a zero-to-one range.
+    normalizedLayer = (
+      (entropyLayer - np.min(entropyLayer)) /
+      (np.max(entropyLayer) - np.min(entropyLayer) + 1e-8)
+    )
+    # Return the normalized entropy layer.
+    return normalizedLayer
+
+  # Define the method to compute the Difference of Gaussians blob detection layer.
+  def ComputeDoGLayer(self, inputRgbImage):
+    '''
+    Compute the Difference of Gaussians (DoG) blob detection layer from the input RGB image.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+
+    Returns:
+      numpy.ndarray: The normalized DoG feature layer.
+    '''
+
+    # Import the Difference of Gaussians filter.
+    from skimage.filters import difference_of_gaussians
+    # Import the RGB to grayscale conversion function.
+    from skimage.color import rgb2gray
+
+    # Convert the RGB image to grayscale for blob detection.
+    grayscaleImage = rgb2gray(inputRgbImage)
+    # Compute the Difference of Gaussians using the configured sigma values.
+    dogLayer = difference_of_gaussians(
+      grayscaleImage, self.featureConfig["DoGLowSigma"],
+      self.featureConfig["DoGHighSigma"]
+    )
+    # Normalize the DoG layer to a zero-to-one range.
+    normalizedLayer = (
+      (dogLayer - np.min(dogLayer)) /
+      (np.max(dogLayer) - np.min(dogLayer) + 1e-8)
+    )
+    # Return the normalized DoG layer.
+    return normalizedLayer
+
+  # Define the method to compute the multi-orientation Gabor texture layer.
+  def ComputeMultiGaborLayer(self, inputRgbImage):
+    '''
+    Compute the multi-orientation Gabor texture layer from the input RGB image.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+
+    Returns:
+      numpy.ndarray: The normalized multi-orientation Gabor feature layer.
+    '''
+
+    # Import the Gabor filter function.
+    from skimage.filters import gabor
+    # Import the RGB to grayscale conversion function.
+    from skimage.color import rgb2gray
+
+    # Convert the RGB image to grayscale for frequency analysis.
+    grayscaleImage = rgb2gray(inputRgbImage)
+    # Initialize an empty list to store the Gabor responses for each orientation.
+    gaborResponseList = []
+    # Iterate through each theta value in the configured list.
+    for currentTheta in self.featureConfig["GaborThetaList"]:
+      # Apply the Gabor filter for the current orientation.
+      gaborFilterResult = gabor(
+        grayscaleImage,
+        frequency=self.featureConfig["GaborFrequency"],
+        theta=currentTheta
+      )
+      # Extract the real part of the complex Gabor filter response.
+      gaborRealPart = gaborFilterResult[0]
+      # Append the real part to the response list.
+      gaborResponseList.append(gaborRealPart)
+    # Stack the Gabor responses into a three-dimensional array to compute the maximum across orientations.
+    stackedGaborResponses = np.stack(gaborResponseList, axis=-1)
+    # Compute the maximum response across all orientations for each pixel.
+    maxGaborResponse = np.max(stackedGaborResponses, axis=-1)
+    # Normalize the maximum Gabor response to a zero-to-one range.
+    normalizedLayer = (
+      (maxGaborResponse - np.min(maxGaborResponse)) /
+      (np.max(maxGaborResponse) - np.min(maxGaborResponse) + 1e-8)
+    )
+    # Return the normalized multi-orientation Gabor layer.
+    return normalizedLayer
+
+  # Define the method to compute the Eosin stain layer using color deconvolution.
+  def ComputeEosinLayer(self, inputRgbImage):
+    '''
+    Compute the Eosin stain layer using color deconvolution.
+    Suitable with Hematoxylin-Eosin-DAB stained images in digital pathology.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+
+    Returns:
+      numpy.ndarray: The normalized Eosin feature layer.
+    '''
+
+    # Import the RGB to HED conversion function.
+    from skimage.color import rgb2hed
+
+    # Separate the stains using the Hematoxylin-Eosin-DAB color space matrix.
+    stainSeparatedImage = rgb2hed(inputRgbImage)
+    # Extract the second channel which corresponds to the Eosin stain.
+    eosinChannel = stainSeparatedImage[:, :, 1]
+    # Normalize the Eosin channel to a zero-to-one range.
+    normalizedLayer = (
+      (eosinChannel - np.min(eosinChannel)) /
+      (np.max(eosinChannel) - np.min(eosinChannel) + 1e-8)
+    )
+    # Return the normalized Eosin layer.
+    return normalizedLayer
+
+  # Define the method to compute the Laplacian edge and blob detection layer.
+  def ComputeLaplacianLayer(self, inputRgbImage):
+    '''
+    Compute the Laplacian edge and blob detection layer from the input RGB image.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+
+    Returns:
+      numpy.ndarray: The normalized Laplacian feature layer.
+    '''
+
+    # Import the Laplacian filter function.
+    from skimage.filters import laplace
+    # Import the RGB to grayscale conversion function.
+    from skimage.color import rgb2gray
+
+    # Convert the RGB image to grayscale for Laplacian computation.
+    grayscaleImage = rgb2gray(inputRgbImage)
+    # Compute the Laplacian of the grayscale image.
+    laplacianLayer = laplace(grayscaleImage)
+    # Take the absolute value to capture both positive and negative edges.
+    absoluteLaplacian = np.abs(laplacianLayer)
+    # Normalize the Laplacian layer to a zero-to-one range.
+    normalizedLayer = (
+      (absoluteLaplacian - np.min(absoluteLaplacian)) /
+      (np.max(absoluteLaplacian) - np.min(absoluteLaplacian) + 1e-8)
+    )
+    # Return the normalized Laplacian layer.
+    return normalizedLayer
+
+  # Define the method to compute the Frangi vesselness and tube-like structure layer.
+  def ComputeFrangiLayer(self, inputRgbImage):
+    '''
+    Compute the Frangi vesselness and tube-like structure layer from the input RGB image.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+
+    Returns:
+      numpy.ndarray: The normalized Frangi feature layer.
+    '''
+
+    # Import the Frangi filter function.
+    from skimage.filters import frangi
+    # Import the RGB to grayscale conversion function.
+    from skimage.color import rgb2gray
+
+    # Convert the RGB image to grayscale for Frangi computation.
+    grayscaleImage = rgb2gray(inputRgbImage)
+    # Compute the Frangi filter response for the grayscale image.
+    frangiLayer = frangi(grayscaleImage)
+    # Normalize the Frangi layer to a zero-to-one range.
+    normalizedLayer = (
+      (frangiLayer - np.min(frangiLayer)) /
+      (np.max(frangiLayer) - np.min(frangiLayer) + 1e-8)
+    )
+    # Return the normalized Frangi layer.
+    return normalizedLayer
+
+  # Define the method to compute the Sato tube-like structure layer.
+  def ComputeSatoLayer(self, inputRgbImage):
+    '''
+    Compute the Sato tube-like structure layer from the input RGB image.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+
+    Returns:
+      numpy.ndarray: The normalized Sato feature layer.
+    '''
+
+    # Import the Sato filter function.
+    from skimage.filters import sato
+    # Import the RGB to grayscale conversion function.
+    from skimage.color import rgb2gray
+
+    # Convert the RGB image to grayscale for Sato computation.
+    grayscaleImage = rgb2gray(inputRgbImage)
+    # Compute the Sato filter response for the grayscale image.
+    satoLayer = sato(grayscaleImage)
+    # Normalize the Sato layer to a zero-to-one range.
+    normalizedLayer = (
+      (satoLayer - np.min(satoLayer)) /
+      (np.max(satoLayer) - np.min(satoLayer) + 1e-8)
+    )
+    # Return the normalized Sato layer.
+    return normalizedLayer
+
+  # Define the method to compute the local variance texture layer.
+  def ComputeLocalVarianceLayer(self, inputRgbImage):
+    '''
+    Compute the local variance texture layer from the input RGB image.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+
+    Returns:
+      numpy.ndarray: The normalized local variance feature layer.
+    '''
+
+    # Import the uniform filter function.
+    from scipy.ndimage import uniform_filter
+    # Import the RGB to grayscale conversion function.
+    from skimage.color import rgb2gray
+
+    # Convert the RGB image to grayscale for variance computation.
+    grayscaleImage = rgb2gray(inputRgbImage)
+    # Compute the local mean using a uniform filter.
+    localMean = uniform_filter(grayscaleImage, size=self.featureConfig["LocalVarianceSize"])
+    # Compute the local mean of the squared image.
+    localMeanSq = uniform_filter(grayscaleImage ** 2, size=self.featureConfig["LocalVarianceSize"])
+    # Compute the local variance using the mean and mean of squares.
+    localVariance = localMeanSq - localMean ** 2
+    # Ensure no negative values due to floating point inaccuracies.
+    localVariance = np.maximum(localVariance, 0)
+    # Normalize the local variance layer to a zero-to-one range.
+    normalizedLayer = (
+      (localVariance - np.min(localVariance)) /
+      (np.max(localVariance) - np.min(localVariance) + 1e-8)
+    )
+    # Return the normalized local variance layer.
+    return normalizedLayer
+
+  # Define the method to compute the Hue color space layer.
+  def ComputeHueLayer(self, inputRgbImage):
+    '''
+    Compute the Hue color space layer from the input RGB image.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+
+    Returns:
+      numpy.ndarray: The normalized Hue feature layer.
+    '''
+
+    # Import the RGB to HSV conversion function.
+    from skimage.color import rgb2hsv
+
+    # Convert the RGB image to the HSV color space.
+    hsvImage = rgb2hsv(inputRgbImage)
+    # Extract the Hue channel from the HSV image.
+    hueChannel = hsvImage[:, :, 0]
+    # Normalize the Hue channel to a zero-to-one range.
+    normalizedLayer = (
+      (hueChannel - np.min(hueChannel)) /
+      (np.max(hueChannel) - np.min(hueChannel) + 1e-8)
+    )
+    # Return the normalized Hue layer.
+    return normalizedLayer
+
+  # Define the method to compute the Saturation color space layer.
+  def ComputeSaturationLayer(self, inputRgbImage):
+    '''
+    Compute the Saturation color space layer from the input RGB image.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+
+    Returns:
+      numpy.ndarray: The normalized Saturation feature layer.
+    '''
+
+    # Import the RGB to HSV conversion function.
+    from skimage.color import rgb2hsv
+
+    # Convert the RGB image to the HSV color space.
+    hsvImage = rgb2hsv(inputRgbImage)
+    # Extract the Saturation channel from the HSV image.
+    saturationChannel = hsvImage[:, :, 1]
+    # Normalize the Saturation channel to a zero-to-one range.
+    normalizedLayer = (
+      (saturationChannel - np.min(saturationChannel)) /
+      (np.max(saturationChannel) - np.min(saturationChannel) + 1e-8)
+    )
+    # Return the normalized Saturation layer.
+    return normalizedLayer
+
+  # Define the method to compute the Lightness color space layer.
+  def ComputeLightnessLayer(self, inputRgbImage):
+    '''
+    Compute the Lightness color space layer from the input RGB image.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+
+    Returns:
+      numpy.ndarray: The normalized Lightness feature layer.
+    '''
+
+    # Import the RGB to LAB conversion function.
+    from skimage.color import rgb2lab
+
+    # Convert the RGB image to the CIELAB color space.
+    labImage = rgb2lab(inputRgbImage)
+    # Extract the Lightness channel from the LAB image.
+    lightnessChannel = labImage[:, :, 0]
+    # Normalize the Lightness channel to a zero-to-one range.
+    normalizedLayer = (
+      (lightnessChannel - np.min(lightnessChannel)) /
+      (np.max(lightnessChannel) - np.min(lightnessChannel) + 1e-8)
+    )
+    # Return the normalized Lightness layer.
+    return normalizedLayer
+
+  # Define the method to compute the Green-Red color space layer.
+  def ComputeAChannelLayer(self, inputRgbImage):
+    '''
+    Compute the Green-Red (A) color space layer from the input RGB image.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+
+    Returns:
+      numpy.ndarray: The normalized A channel feature layer.
+    '''
+
+    # Import the RGB to LAB conversion function.
+    from skimage.color import rgb2lab
+
+    # Convert the RGB image to the CIELAB color space.
+    labImage = rgb2lab(inputRgbImage)
+    # Extract the Green-Red channel from the LAB image.
+    aChannel = labImage[:, :, 1]
+    # Normalize the A channel to a zero-to-one range.
+    normalizedLayer = (
+      (aChannel - np.min(aChannel)) /
+      (np.max(aChannel) - np.min(aChannel) + 1e-8)
+    )
+    # Return the normalized A channel layer.
+    return normalizedLayer
+
+  # Define the method to compute the Blue-Yellow color space layer.
+  def ComputeBChannelLayer(self, inputRgbImage):
+    '''
+    Compute the Blue-Yellow (B) color space layer from the input RGB image.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+
+    Returns:
+      numpy.ndarray: The normalized B channel feature layer.
+    '''
+
+    # Import the RGB to LAB conversion function.
+    from skimage.color import rgb2lab
+
+    # Convert the RGB image to the CIELAB color space.
+    labImage = rgb2lab(inputRgbImage)
+    # Extract the Blue-Yellow channel from the LAB image.
+    bChannel = labImage[:, :, 2]
+    # Normalize the B channel to a zero-to-one range.
+    normalizedLayer = (
+      (bChannel - np.min(bChannel)) /
+      (np.max(bChannel) - np.min(bChannel) + 1e-8)
+    )
+    # Return the normalized B channel layer.
+    return normalizedLayer
+
+  # Define the method to generate a custom multi-channel image based on a list of features.
+  def GenerateCustomFeatureImage(self, inputRgbImage, featureList):
+    '''
+    Generate a custom multi-channel image based on a list of requested features.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+      featureList (list): A list of feature names to extract and stack.
+
+    Feature names can include:
+      - "R", "G", "B": Individual RGB channels.
+      - "Hog": Histogram of Oriented Gradients.
+      - "Clustering": K-Means clustering.
+      - "Edge": Sobel edge detection.
+      - "Texture": Local Binary Patterns.
+      - "Stain": Hematoxylin stain separation.
+      - "Hematoxylin": Hematoxylin stain layer.
+      - "Gabor": Gabor filter texture.
+      - "Canny": Canny edge detection.
+      - "Entropy": Local entropy texture.
+      - "DoG": Difference of Gaussians blob detection.
+      - "MultiGabor": Multi-orientation Gabor texture.
+      - "Eosin": Eosin stain layer.
+      - "Laplacian": Laplacian edge and blob detection.
+      - "Frangi": Frangi vesselness and tube-like structure.
+      - "Sato": Sato tube-like structure.
+      - "LocalVariance": Local variance texture.
+      - "Hue": Hue color space.
+      - "Saturation": Saturation color space.
+      - "Lightness": Lightness color space.
+      - "AChannel": Green-Red (A) color space.
+      - "BChannel": Blue-Yellow (B) color space.
+
+    Returns:
+      numpy.ndarray: The generated custom multi-channel image array.
+    '''
+
+    # Initialize an empty list to store the selected channels.
+    channelList = []
+    # Check if the input image requires normalization to float.
+    if (inputRgbImage.dtype == np.uint8):
+      # Convert the input image to float32 and normalize by dividing by 255.
+      normalizedRgb = inputRgbImage.astype(np.float32) / 255.0
+    else:
+      # Assign the input image directly if it is already a float type.
+      normalizedRgb = inputRgbImage
+    # Define the mapping dictionary for feature names to their respective computation methods.
+    featureMethodMap = {
+      "Hog"          : self.ComputeHogLayer,
+      "Clustering"   : self.ComputeClusteringLayer,
+      "Edge"         : self.ComputeEdgeLayer,
+      "Texture"      : self.ComputeTextureLayer,
+      "Stain"        : self.ComputeStainLayer,
+      "Hematoxylin"  : self.ComputeHematoxylinLayer,
+      "Gabor"        : self.ComputeGaborLayer,
+      "Canny"        : self.ComputeCannyLayer,
+      "Entropy"      : self.ComputeEntropyLayer,
+      "DoG"          : self.ComputeDoGLayer,
+      "MultiGabor"   : self.ComputeMultiGaborLayer,
+      "Eosin"        : self.ComputeEosinLayer,
+      "Laplacian"    : self.ComputeLaplacianLayer,
+      "Frangi"       : self.ComputeFrangiLayer,
+      "Sato"         : self.ComputeSatoLayer,
+      "LocalVariance": self.ComputeLocalVarianceLayer,
+      "Hue"          : self.ComputeHueLayer,
+      "Saturation"   : self.ComputeSaturationLayer,
+      "Lightness"    : self.ComputeLightnessLayer,
+      "AChannel"     : self.ComputeAChannelLayer,
+      "BChannel"     : self.ComputeBChannelLayer
+    }
+    # Iterate through each requested feature or channel name.
+    for featureName in featureList:
+      # Check if the requested feature is the Red channel.
+      if (featureName == "R"):
+        # Extract the Red channel from the normalized RGB image.
+        channelList.append(normalizedRgb[:, :, 0])
+      # Check if the requested feature is the Green channel.
+      elif (featureName == "G"):
+        # Extract the Green channel from the normalized RGB image.
+        channelList.append(normalizedRgb[:, :, 1])
+      # Check if the requested feature is the Blue channel.
+      elif (featureName == "B"):
+        # Extract the Blue channel from the normalized RGB image.
+        channelList.append(normalizedRgb[:, :, 2])
+      # Check if the requested feature exists in the method mapping dictionary.
+      elif (featureName in featureMethodMap):
+        # Compute the feature layer using the mapped method.
+        computedLayer = featureMethodMap[featureName](inputRgbImage)
+        # Append the computed layer to the channel list.
+        channelList.append(computedLayer)
+      else:
+        # Raise a value error for unrecognized feature names.
+        raise ValueError("Unrecognized feature name provided: " + featureName)
+    # Stack the collected channels along the last axis to form the custom image.
+    customImage = np.stack(channelList, axis=-1)
+    # Return the generated custom multi-channel image array.
+    return customImage
+
+  # Define the method to extract all configured feature layers.
+  def ExtractAllFeatureLayers(self, inputRgbImage, isDigitalPathologyImage=False):
+    '''
+    Extract all configured feature layers from the input RGB image.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+      isDigitalPathologyImage (bool): Flag indicating if the image is a digital pathology image.
+
+    Returns:
+      dict: A dictionary containing all extracted feature layers.
+    '''
+
+    # Initialize an empty dictionary to store the feature layers.
+    featureLayerDict = {}
+    # Compute and store the Histogram of Oriented Gradients layer.
+    featureLayerDict["HogLayer"] = self.ComputeHogLayer(inputRgbImage)
+    # Compute and store the K-Means clustering layer.
+    featureLayerDict["ClusteringLayer"] = self.ComputeClusteringLayer(inputRgbImage)
+    # Compute and store the Sobel edge detection layer.
+    featureLayerDict["EdgeLayer"] = self.ComputeEdgeLayer(inputRgbImage)
+    # Compute and store the Local Binary Patterns texture layer.
+    featureLayerDict["TextureLayer"] = self.ComputeTextureLayer(inputRgbImage)
+    # Compute and store the Gabor filter texture layer.
+    featureLayerDict["GaborLayer"] = self.ComputeGaborLayer(inputRgbImage)
+    # Compute and store the Canny edge detection layer.
+    featureLayerDict["CannyLayer"] = self.ComputeCannyLayer(inputRgbImage)
+    # Compute and store the local entropy texture layer.
+    featureLayerDict["EntropyLayer"] = self.ComputeEntropyLayer(inputRgbImage)
+    # Compute and store the Difference of Gaussians blob detection layer.
+    featureLayerDict["DoGLayer"] = self.ComputeDoGLayer(inputRgbImage)
+    # Compute and store the multi-orientation Gabor texture layer.
+    featureLayerDict["MultiGaborLayer"] = self.ComputeMultiGaborLayer(inputRgbImage)
+    # Compute and store the Laplacian edge and blob detection layer.
+    featureLayerDict["LaplacianLayer"] = self.ComputeLaplacianLayer(inputRgbImage)
+    # Compute and store the Frangi vesselness layer.
+    featureLayerDict["FrangiLayer"] = self.ComputeFrangiLayer(inputRgbImage)
+    # Compute and store the Sato tube-like structure layer.
+    featureLayerDict["SatoLayer"] = self.ComputeSatoLayer(inputRgbImage)
+    # Compute and store the local variance texture layer.
+    featureLayerDict["LocalVarianceLayer"] = self.ComputeLocalVarianceLayer(inputRgbImage)
+    # Compute and store the Hue color space layer.
+    featureLayerDict["HueLayer"] = self.ComputeHueLayer(inputRgbImage)
+    # Compute and store the Saturation color space layer.
+    featureLayerDict["SaturationLayer"] = self.ComputeSaturationLayer(inputRgbImage)
+    # Compute and store the Lightness color space layer.
+    featureLayerDict["LightnessLayer"] = self.ComputeLightnessLayer(inputRgbImage)
+    # Compute and store the Green-Red color space layer.
+    featureLayerDict["AChannelLayer"] = self.ComputeAChannelLayer(inputRgbImage)
+    # Compute and store the Blue-Yellow color space layer.
+    featureLayerDict["BChannelLayer"] = self.ComputeBChannelLayer(inputRgbImage)
+
+    if (isDigitalPathologyImage):
+      # Compute and store the Eosin stain layer.
+      featureLayerDict["EosinLayer"] = self.ComputeEosinLayer(inputRgbImage)
+      # Compute and store the Hematoxylin stain separation layer.
+      featureLayerDict["StainLayer"] = self.ComputeStainLayer(inputRgbImage)
+      # Compute and store the Hematoxylin stain layer using color deconvolution.
+      featureLayerDict["HematoxylinLayer"] = self.ComputeHematoxylinLayer(inputRgbImage)
+
+    # Return the dictionary containing all extracted feature layers.
+    return featureLayerDict
+
+  def ExtractSpecificFeatureLayers(self, inputRgbImage, featureList):
+    '''
+    Extract specific feature layers from the input RGB image based on a provided list of features.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+      featureList (list): A list of feature names to extract.
+
+    Feature names can include:
+      - "R", "G", "B": Individual RGB channels.
+      - "Hog": Histogram of Oriented Gradients.
+      - "Clustering": K-Means clustering.
+      - "Edge": Sobel edge detection.
+      - "Texture": Local Binary Patterns.
+      - "Stain": Hematoxylin stain separation.
+      - "Hematoxylin": Hematoxylin stain layer.
+      - "Gabor": Gabor filter texture.
+      - "Canny": Canny edge detection.
+      - "Entropy": Local entropy texture.
+      - "DoG": Difference of Gaussians blob detection.
+      - "MultiGabor": Multi-orientation Gabor texture.
+      - "Eosin": Eosin stain layer.
+      - "Laplacian": Laplacian edge and blob detection.
+      - "Frangi": Frangi vesselness and tube-like structure.
+      - "Sato": Sato tube-like structure.
+      - "LocalVariance": Local variance texture.
+      - "Hue": Hue color space.
+      - "Saturation": Saturation color space.
+      - "Lightness": Lightness color space.
+      - "AChannel": Green-Red (A) color space.
+      - "BChannel": Blue-Yellow (B) color space.
+
+    Returns:
+      dict: A dictionary containing the extracted feature layers.
+    '''
+
+    # Initialize an empty dictionary to store the extracted feature layers.
+    featureLayerDict = {}
+    # Define the mapping dictionary for feature names to their respective computation methods.
+    featureMethodMap = {
+      "Hog"          : self.ComputeHogLayer,
+      "Clustering"   : self.ComputeClusteringLayer,
+      "Edge"         : self.ComputeEdgeLayer,
+      "Texture"      : self.ComputeTextureLayer,
+      "Stain"        : self.ComputeStainLayer,
+      "Hematoxylin"  : self.ComputeHematoxylinLayer,
+      "Gabor"        : self.ComputeGaborLayer,
+      "Canny"        : self.ComputeCannyLayer,
+      "Entropy"      : self.ComputeEntropyLayer,
+      "DoG"          : self.ComputeDoGLayer,
+      "MultiGabor"   : self.ComputeMultiGaborLayer,
+      "Eosin"        : self.ComputeEosinLayer,
+      "Laplacian"    : self.ComputeLaplacianLayer,
+      "Frangi"       : self.ComputeFrangiLayer,
+      "Sato"         : self.ComputeSatoLayer,
+      "LocalVariance": self.ComputeLocalVarianceLayer,
+      "Hue"          : self.ComputeHueLayer,
+      "Saturation"   : self.ComputeSaturationLayer,
+      "Lightness"    : self.ComputeLightnessLayer,
+      "AChannel"     : self.ComputeAChannelLayer,
+      "BChannel"     : self.ComputeBChannelLayer
+    }
+
+    # Iterate through each requested feature name in the provided list.
+    for featureName in featureList:
+      # Check if the requested feature is the Red channel.
+      if (featureName == "R"):
+        # Extract the Red channel from the input RGB image.
+        featureLayerDict["R"] = inputRgbImage[:, :, 0]
+      # Check if the requested feature is the Green channel.
+      elif (featureName == "G"):
+        # Extract the Green channel from the input RGB image.
+        featureLayerDict["G"] = inputRgbImage[:, :, 1]
+      # Check if the requested feature is the Blue channel.
+      elif (featureName == "B"):
+        # Extract the Blue channel from the input RGB image.
+        featureLayerDict["B"] = inputRgbImage[:, :, 2]
+      # Check if the requested feature exists in the method mapping dictionary.
+      elif (featureName in featureMethodMap):
+        # Compute the feature layer using the mapped method.
+        computedLayer = featureMethodMap[featureName](inputRgbImage)
+        # Store the computed layer in the dictionary with the feature name as the key.
+        featureLayerDict[featureName] = computedLayer
+      else:
+        # Raise a value error for unrecognized feature names.
+        raise ValueError("Unrecognized feature name provided: " + featureName)
+
+    # Return the dictionary containing the extracted specific feature layers.
+    return featureLayerDict
+
+  # Define the method to stack the original image and feature layers.
+  def StackFeatureLayers(self, inputRgbImage, featureLayerDict):
+    '''
+    Stack the original image and the extracted feature layers into a single multi-channel array.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+      featureLayerDict (dict): A dictionary containing the extracted feature layers.
+
+    Returns:
+      numpy.ndarray: The final multi-channel stacked image array.
+    '''
+
+    # Check if the input image is of unsigned integer type.
+    if (inputRgbImage.dtype == np.uint8):
+      # Convert the input image to float32 and normalize by dividing by 255.
+      stackedImage = inputRgbImage.astype(np.float32) / 255.0
+    else:
+      # Assign the input image directly if it is already a float type.
+      stackedImage = inputRgbImage
+    # Iterate through each feature layer in the provided dictionary.
+    for layerName in featureLayerDict:
+      # Retrieve the current feature layer array.
+      currentLayer = featureLayerDict[layerName]
+      # Expand the dimensions of the layer to add a channel axis.
+      expandedLayer = np.expand_dims(currentLayer, axis=-1)
+      # Concatenate the expanded layer to the stacked image.
+      stackedImage = np.concatenate((stackedImage, expandedLayer), axis=-1)
+    # Return the final multi-channel stacked image array.
+    return stackedImage
+
+  # Define the method to plot the original image and all feature layers in a grid.
+  def PlotFeatureLayers(
+    self,
+    inputRgbImage,
+    featureLayerDict,
+    gridColumns=3,
+  ):
+    '''
+    Plot the original image and all feature layers in a grid layout.
+
+    Parameters:
+      inputRgbImage (numpy.ndarray): The input RGB image array.
+      featureLayerDict (dict): A dictionary containing the extracted feature layers.
+      gridColumns (int): The number of columns in the grid layout for plotting.
+    '''
+
+    # Close all existing figure windows to prevent multiple figures from showing.
+    # plt.close("all")
+    # Calculate the total number of subplots required.
+    totalLayers = len(featureLayerDict) + 1
+    # Calculate the number of rows for the grid layout using ceiling division.
+    gridRows = math.ceil(totalLayers / gridColumns)
+    # Create a matplotlib figure with the calculated grid dimensions.
+    figureAxisArray = plt.subplots(gridRows, gridColumns, figsize=(4 * gridColumns, 4 * gridRows))
+    # Extract the main figure object from the returned tuple.
+    mainFigure = figureAxisArray[0]
+    # Extract the array of axes for plotting the images.
+    axisArray = figureAxisArray[1]
+    # Flatten the array of axes into a one-dimensional list for easier iteration.
+    flatAxisList = axisArray.flatten()
+    # Iterate through the flattened axis list to turn off unused subplots.
+    for axisIndex in range(len(flatAxisList)):
+      # Check if the current index exceeds the total number of layers to plot.
+      if (axisIndex >= totalLayers):
+        # Turn off the axis lines for the unused subplot.
+        flatAxisList[axisIndex].axis("off")
+    # Display the original RGB image on the first subplot.
+    flatAxisList[0].imshow(inputRgbImage)
+    # Set the title of the first subplot to indicate the original image.
+    flatAxisList[0].set_title("Original RGB")
+    # Turn off the axis lines for the first subplot.
+    flatAxisList[0].axis("off")
+    # Initialize the subplot index counter for the feature layers.
+    layerIndex = 1
+    # Iterate through each feature layer in the provided dictionary.
+    for layerName in featureLayerDict:
+      # Retrieve the current feature layer array for plotting.
+      currentLayer = featureLayerDict[layerName]
+      # Display the current feature layer on the corresponding subplot.
+      flatAxisList[layerIndex].imshow(currentLayer, cmap="gray")
+      # Set the title of the subplot to the name of the feature layer.
+      flatAxisList[layerIndex].set_title(layerName)
+      # Turn off the axis lines for the current subplot.
+      flatAxisList[layerIndex].axis("off")
+      # Increment the subplot index counter for the next iteration.
+      layerIndex = layerIndex + 1
+    # Add gap between rows.
+    plt.subplots_adjust(hspace=0.4)
+    # Adjust the layout to prevent overlapping of subplot elements.
+    plt.tight_layout()
+    # Render the final figure on the screen.
+    plt.show()
+
+  # Define the method to save the multi-channel image array to disk.
+  def SaveMultiChannelImage(self, imageArray, outputFilePath):
+    '''
+    Save the multi-channel image array to disk as a TIFF file.
+
+    Parameters:
+      imageArray (numpy.ndarray): The multi-channel image array to save.
+      outputFilePath (str): The file path to save the TIFF image.
+    '''
+
+    # Check if the image array has more than four channels.
+    if (imageArray.shape[-1] > 4):
+      # Transpose the array to put channels first for TIFF compatibility.
+      transposedArray = np.transpose(imageArray, (2, 0, 1))
+      # Save the transposed array as a multi-channel TIFF file.
+      tifffile.imwrite(outputFilePath, transposedArray)
+    # Execute the alternative saving method for standard channel counts.
+    else:
+      # Save the image array directly as a TIFF file.
+      tifffile.imwrite(outputFilePath, imageArray)
+    # Print a confirmation message to the standard output.
+    print("The multi-channel image has been successfully saved to:", outputFilePath)
+
+  # Define the method to visualize and save the first three channels as an RGB image.
+  def SaveVisualizationImage(self, imageArray, visualizationPath):
+    '''
+    Visualize and save the first three channels of the image array as an RGB image.
+
+    Parameters:
+      imageArray (numpy.ndarray): The multi-channel image array.
+      visualizationPath (str): The file path to save the visualization image.
+    '''
+
+    # Extract the first three channels to form an RGB image.
+    rgbImage = imageArray[:, :, :3]
+    # Display the extracted RGB image using matplotlib.
+    plt.imshow((rgbImage * 255).astype(np.uint8))
+    # Set the title for the visualization plot.
+    plt.title("First Three Channels Visualization")
+    # Turn off the axis lines for a cleaner image.
+    plt.axis("off")
+    # Save the current figure to the specified visualization path.
+    plt.savefig(visualizationPath, bbox_inches="tight", pad_inches=0)
+    # Close the current figure to free up memory and prevent duplicate windows.
+    plt.close()
+    # Print a confirmation message for the visualization save.
+    print("The visualization image has been successfully saved to:", visualizationPath)

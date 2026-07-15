@@ -1,9 +1,26 @@
 # Import TensorFlow for loss implementations.
 import tensorflow as tf
 
+# Set the base class to tf.keras.losses.Loss for TensorFlow compatibility.
+LossBaseClass = tf.keras.losses.Loss
+# Try to get the Reduction enum from tf.keras.losses.
+try:
+  # Attempt to access the Reduction enum from tf.keras.
+  ReductionEnum = tf.keras.losses.Reduction
+except AttributeError:
+  # Fallback to a simple class with string values if the enum is missing.
+  class ReductionEnum:
+    # Define SUM_OVER_BATCH_SIZE as mean.
+    SUM_OVER_BATCH_SIZE = "mean"
+    # Define SUM as sum.
+    SUM = "sum"
+    # Define NONE as none.
+    NONE = "none"
+
 
 # DiceLoss implements the Dice loss as a Keras Loss subclass.
-class DiceLoss(tf.keras.losses.Loss):
+class DiceLoss(LossBaseClass):
+  # Describe the DiceLoss implementation and parameters.
   r'''
   Implements Dice Loss for binary segmentation tasks.
   Dice loss measures the overlap between predicted and ground truth masks.
@@ -17,12 +34,18 @@ class DiceLoss(tf.keras.losses.Loss):
     size_average (optional): Not used, for compatibility.
   '''
 
-  def __init__(self, smooth=1.0, name="DiceLoss"):
+  # Initialize the DiceLoss with smoothing constant.
+  def __init__(self, smooth=1.0, name="DiceLoss", **kwargs):
+    # Ensure name is a string to prevent lambda conversion errors.
+    if (not isinstance(name, str)):
+      # Set name to DiceLoss if it is not a string.
+      name = "DiceLoss"
     # Store smoothing constant for numerical stability.
-    super(DiceLoss, self).__init__(name=name)
+    super(DiceLoss, self).__init__(name=name, **kwargs)
     # Store the smoothing constant as a float.
-    self.smooth = float(smooth)
+    self.smooth = smooth
 
+  # Call method to compute the Dice loss.
   def call(self, yTrue, yPred):
     # Cast the ground-truth tensor to float32 for numeric stability.
     yTrue = tf.cast(yTrue, tf.float32)
@@ -45,7 +68,8 @@ class DiceLoss(tf.keras.losses.Loss):
 
 
 # DiceBCELoss combines binary cross-entropy with Dice loss.
-class DiceBCELoss(tf.keras.losses.Loss):
+class DiceBCELoss(LossBaseClass):
+  # Describe the DiceBCELoss implementation and parameters.
   r'''
   Implements Dice + BCE Loss for binary segmentation tasks.
   Combines Dice loss and binary cross-entropy loss for improved performance on imbalanced data.
@@ -62,12 +86,18 @@ class DiceBCELoss(tf.keras.losses.Loss):
     For best practice and autocasting safety, use raw logits as inputs.
   '''
 
-  def __init__(self, smooth=1.0, name="DiceBCELoss"):
+  # Initialize the DiceBCELoss with smoothing constant.
+  def __init__(self, smooth=1.0, name="DiceBCELoss", **kwargs):
+    # Ensure name is a string to prevent lambda conversion errors.
+    if (not isinstance(name, str)):
+      # Set name to DiceBCELoss if it is not a string.
+      name = "DiceBCELoss"
     # Store smoothing constant for Dice term and initialize base class.
-    super(DiceBCELoss, self).__init__(name=name)
-    # Store smoothing constant as float.
-    self.smooth = float(smooth)
+    super(DiceBCELoss, self).__init__(name=name, **kwargs)
+    # Store smoothing constant.
+    self.smooth = smooth
 
+  # Call method to compute the combined loss.
   def call(self, yTrue, yPred):
     # Cast ground-truth to float32.
     yTrue = tf.cast(yTrue, tf.float32)
@@ -79,19 +109,23 @@ class DiceBCELoss(tf.keras.losses.Loss):
     probs = tf.nn.sigmoid(yPred)
     # Flatten predictions and ground-truth to 1D vectors.
     probsFlat = tf.reshape(probs, [-1])
+    # Flatten ground-truth to 1D vector.
     trueFlat = tf.reshape(yTrue, [-1])
     # Compute intersection and denominator for Dice score.
     intersection = tf.reduce_sum(probsFlat * trueFlat)
+    # Compute denominator for Dice score.
     denom = tf.reduce_sum(probsFlat) + tf.reduce_sum(trueFlat)
     # Compute global Dice score and Dice loss.
     diceScore = (2.0 * intersection + self.smooth) / (denom + self.smooth)
+    # Compute Dice loss.
     diceLoss = 1.0 - diceScore
     # Return the sum of BCE and Dice losses.
     return bce + diceLoss
 
 
 # JaccardLoss computes 1 - IoU for binary segmentation.
-class JaccardLoss(tf.keras.losses.Loss):
+class JaccardLoss(LossBaseClass):
+  # Describe the JaccardLoss implementation and parameters.
   r'''
   Implements Jaccard Loss (IoU Loss) for binary segmentation tasks.
   Jaccard loss measures the intersection over union between predicted and ground truth masks.
@@ -105,12 +139,18 @@ class JaccardLoss(tf.keras.losses.Loss):
     size_average (optional): Not used, for compatibility.
   '''
 
-  def __init__(self, smooth=1.0, name="JaccardLoss"):
+  # Initialize the JaccardLoss with smoothing constant.
+  def __init__(self, smooth=1.0, name="JaccardLoss", **kwargs):
+    # Ensure name is a string to prevent lambda conversion errors.
+    if (not isinstance(name, str)):
+      # Set name to JaccardLoss if it is not a string.
+      name = "JaccardLoss"
     # Initialize base class and store smoothing constant.
-    super(JaccardLoss, self).__init__(name=name)
-    # Store smoothing constant as float.
-    self.smooth = float(smooth)
+    super(JaccardLoss, self).__init__(name=name, **kwargs)
+    # Store smoothing constant.
+    self.smooth = smooth
 
+  # Call method to compute the Jaccard loss.
   def call(self, yTrue, yPred):
     # Cast ground-truth to float32.
     yTrue = tf.cast(yTrue, tf.float32)
@@ -120,18 +160,23 @@ class JaccardLoss(tf.keras.losses.Loss):
     probs = tf.nn.sigmoid(yPred)
     # Flatten to 1D vectors for global IoU computation.
     probsFlat = tf.reshape(probs, [-1])
+    # Flatten ground-truth to 1D vector.
     trueFlat = tf.reshape(yTrue, [-1])
     # Compute intersection and union components.
     intersection = tf.reduce_sum(probsFlat * trueFlat)
+    # Compute total sum of predictions and ground-truth.
     total = tf.reduce_sum(probsFlat + trueFlat)
+    # Compute union.
     union = total - intersection
     # Compute Jaccard index and return IoU loss.
     jaccard = (intersection + self.smooth) / (union + self.smooth)
+    # Return 1 - Jaccard index.
     return 1.0 - jaccard
 
 
 # TverskyLoss implements the Tversky index based loss for binary segmentation.
-class TverskyLoss(tf.keras.losses.Loss):
+class TverskyLoss(LossBaseClass):
+  # Describe the TverskyLoss implementation and parameters.
   r'''
   Implements Tversky Loss for binary segmentation tasks.
   Tversky loss generalizes Dice loss by allowing control over penalties for false positives and false negatives.
@@ -147,16 +192,22 @@ class TverskyLoss(tf.keras.losses.Loss):
     size_average (optional): Not used, for compatibility.
   '''
 
-  def __init__(self, alpha=0.5, beta=0.5, smooth=1.0, name="TverskyLoss"):
+  # Initialize the TverskyLoss with alpha, beta and smoothing parameters.
+  def __init__(self, alpha=0.5, beta=0.5, smooth=1.0, name="TverskyLoss", **kwargs):
+    # Ensure name is a string to prevent lambda conversion errors.
+    if (not isinstance(name, str)):
+      # Set name to TverskyLoss if it is not a string.
+      name = "TverskyLoss"
     # Initialize base class and store alpha, beta and smoothing parameters.
-    super(TverskyLoss, self).__init__(name=name)
-    # Store alpha weight as float.
-    self.alpha = float(alpha)
-    # Store beta weight as float.
-    self.beta = float(beta)
-    # Store smoothing constant as float.
-    self.smooth = float(smooth)
+    super(TverskyLoss, self).__init__(name=name, **kwargs)
+    # Store alpha weight safely as a tensor or float.
+    self.alpha = tf.cast(alpha, tf.float32) if (not isinstance(alpha, (int, float))) else float(alpha)
+    # Store beta weight safely as a tensor or float.
+    self.beta = tf.cast(beta, tf.float32) if (not isinstance(beta, (int, float))) else float(beta)
+    # Store smoothing constant.
+    self.smooth = smooth
 
+  # Call method to compute the Tversky loss.
   def call(self, yTrue, yPred):
     # Cast ground-truth to float32.
     yTrue = tf.cast(yTrue, tf.float32)
@@ -166,18 +217,23 @@ class TverskyLoss(tf.keras.losses.Loss):
     probs = tf.nn.sigmoid(yPred)
     # Flatten predictions and ground-truth to vectors.
     probsFlat = tf.reshape(probs, [-1])
+    # Flatten ground-truth to vector.
     trueFlat = tf.reshape(yTrue, [-1])
     # Compute true positives, false negatives and false positives.
     truePos = tf.reduce_sum(probsFlat * trueFlat)
+    # Compute false negatives.
     falseNeg = tf.reduce_sum((1.0 - probsFlat) * trueFlat)
+    # Compute false positives.
     falsePos = tf.reduce_sum(probsFlat * (1.0 - trueFlat))
     # Compute Tversky index and return loss as 1 - index.
     tverskyIndex = (truePos + self.smooth) / (truePos + self.alpha * falsePos + self.beta * falseNeg + self.smooth)
+    # Return 1 - Tversky index.
     return 1.0 - tverskyIndex
 
 
 # FocalLoss focuses training on hard examples for binary segmentation.
-class FocalLoss(tf.keras.losses.Loss):
+class FocalLoss(LossBaseClass):
+  # Describe the FocalLoss implementation and parameters.
   r'''
   Implements Focal Loss for binary segmentation tasks.
   Focal loss focuses training on hard examples and addresses class imbalance.
@@ -195,16 +251,32 @@ class FocalLoss(tf.keras.losses.Loss):
     For autocasting safety, this implementation uses binary_cross_entropy_with_logits directly on logits.
   '''
 
-  def __init__(self, alpha=0.25, gamma=2.0, reduction="mean", name="FocalLoss"):
+  # Initialize the FocalLoss with alpha, gamma and reduction parameters.
+  def __init__(self, alpha=0.25, gamma=2.0, reduction="mean", name="FocalLoss", **kwargs):
+    # Ensure name is a string to prevent lambda conversion errors.
+    if (not isinstance(name, str)):
+      # Set name to FocalLoss if it is not a string.
+      name = "FocalLoss"
+    # Map string reduction to Keras Reduction enum for proper base class handling.
+    if (reduction == "mean"):
+      # Set reduction enum to SUM_OVER_BATCH_SIZE.
+      reductionEnum = ReductionEnum.SUM_OVER_BATCH_SIZE
+    elif (reduction == "sum"):
+      # Set reduction enum to SUM.
+      reductionEnum = ReductionEnum.SUM
+    else:
+      # Set reduction enum to NONE.
+      reductionEnum = ReductionEnum.NONE
     # Initialize base class and store focal loss hyperparameters and reduction method.
-    super(FocalLoss, self).__init__(name=name)
-    # Store alpha parameter as float.
-    self.alpha = float(alpha)
-    # Store gamma parameter as float.
-    self.gamma = float(gamma)
-    # Store the reduction mode.
-    self.reduction = reduction
+    super(FocalLoss, self).__init__(reduction=reductionEnum, name=name, **kwargs)
+    # Store alpha parameter.
+    self.alpha = alpha
+    # Store gamma parameter.
+    self.gamma = gamma
+    # Store the reduction mode string for internal logic if needed.
+    self.reductionMode = reduction
 
+  # Call method to compute the Focal loss.
   def call(self, yTrue, yPred):
     # Cast ground-truth to float32.
     yTrue = tf.cast(yTrue, tf.float32)
@@ -216,7 +288,9 @@ class FocalLoss(tf.keras.losses.Loss):
     probs = tf.nn.sigmoid(yPred)
     # Flatten arrays to 1D to match PyTorch elementwise operations.
     bceFlat = tf.reshape(bce, [-1])
+    # Flatten probabilities to 1D.
     probsFlat = tf.reshape(probs, [-1])
+    # Flatten ground-truth to 1D.
     trueFlat = tf.reshape(yTrue, [-1])
     # Compute pt, the probability of the true class for each element.
     pt = tf.where(tf.equal(trueFlat, 1.0), probsFlat, 1.0 - probsFlat)
@@ -224,17 +298,13 @@ class FocalLoss(tf.keras.losses.Loss):
     focalFactor = self.alpha * tf.pow((1.0 - pt), self.gamma)
     # Compute the focal loss per element.
     loss = focalFactor * bceFlat
-    # Apply the configured reduction and return final loss.
-    if (self.reduction == "mean"):
-      return tf.reduce_mean(loss)
-    elif (self.reduction == "sum"):
-      return tf.reduce_sum(loss)
-    else:
-      return loss
+    # Return the unreduced loss; the base class will handle reduction automatically.
+    return loss
 
 
 # GeneralizedDiceLoss handles multi-class segmentation with class weighting.
-class GeneralizedDiceLoss(tf.keras.losses.Loss):
+class GeneralizedDiceLoss(LossBaseClass):
+  # Describe the GeneralizedDiceLoss implementation and parameters.
   r'''
   Implements Generalized Dice Loss for multi-class segmentation tasks.
   Weights each class inversely to its frequency to address class imbalance.
@@ -245,25 +315,32 @@ class GeneralizedDiceLoss(tf.keras.losses.Loss):
     \quad \text{where} \quad w_c = \frac{1}{(\sum_i g_{ci})^2}
   '''
 
-  def __init__(self, epsilon=1e-6, name="GeneralizedDiceLoss", data_format="channels_last"):
+  # Initialize the GeneralizedDiceLoss with epsilon and data format.
+  def __init__(self, epsilon=1e-6, name="GeneralizedDiceLoss", dataFormat="channels_last", **kwargs):
+    # Ensure name is a string to prevent lambda conversion errors.
+    if (not isinstance(name, str)):
+      # Set name to GeneralizedDiceLoss if it is not a string.
+      name = "GeneralizedDiceLoss"
     # Initialize base class and store epsilon for numerical stability.
-    super(GeneralizedDiceLoss, self).__init__(name=name)
-    # Store epsilon as float.
-    self.epsilon = float(epsilon)
+    super(GeneralizedDiceLoss, self).__init__(name=name, **kwargs)
+    # Store epsilon.
+    self.epsilon = epsilon
     # Default data format matches PyTorch (channels_first). Accept "channels_first" or "channels_last".
-    self.data_format = data_format
+    self.dataFormat = dataFormat
 
+  # Call method to compute the Generalized Dice loss.
   def call(self, yTrue, yPred):
     # Cast ground-truth to float32 for numeric stability.
     yTrue = tf.cast(yTrue, tf.float32)
     # Cast predictions to float32 for numeric stability.
     yPred = tf.cast(yPred, tf.float32)
-    # Apply softmax to logits to obtain class probabilities depending on data_format.
-    if (self.data_format == "channels_first"):
+    # Apply softmax to logits to obtain class probabilities depending on dataFormat.
+    if (self.dataFormat == "channels_first"):
       # Apply softmax over the channel axis for channels-first layout.
       probs = tf.nn.softmax(yPred, axis=1)
       # Determine batch size and class count.
       batchSize = tf.shape(probs)[0]
+      # Determine class count.
       classCount = tf.shape(probs)[1]
       # Compute total number of spatial elements.
       spatial = tf.reduce_prod(tf.shape(probs)[2:])
@@ -276,15 +353,17 @@ class GeneralizedDiceLoss(tf.keras.losses.Loss):
       probs = tf.nn.softmax(yPred, axis=-1)
       # Determine batch size and class count.
       batchSize = tf.shape(probs)[0]
+      # Determine class count.
       classCount = tf.shape(probs)[-1]
       # Compute total number of spatial elements.
       spatial = tf.reduce_prod(tf.shape(probs)[1:-1])
-      # Reshape to (batch, spatial, classes)
+      # Reshape to (batch, spatial, classes).
       tmp = tf.reshape(probs, (batchSize, spatial, classCount))
       # Transpose to (batch, classes, spatial) for consistent downstream ops.
       probsFlat = tf.transpose(tmp, perm=[0, 2, 1])
-      # Do the same reshaping/transposing for ground-truth.
+      # Do the same reshaping and transposing for ground-truth.
       tmpT = tf.reshape(yTrue, (batchSize, spatial, classCount))
+      # Transpose ground-truth to (batch, classes, spatial).
       trueFlat = tf.transpose(tmpT, perm=[0, 2, 1])
     # Compute per-class volumes from ground truth.
     vol = tf.reduce_sum(trueFlat, axis=1)
@@ -292,36 +371,52 @@ class GeneralizedDiceLoss(tf.keras.losses.Loss):
     w = 1.0 / (tf.square(vol) + self.epsilon)
     # Compute intersection and union per class.
     intersection = tf.reduce_sum(probsFlat * trueFlat, axis=1)
+    # Compute union per class.
     union = tf.reduce_sum(probsFlat + trueFlat, axis=1)
-    # Weighted numerator and denominator per sample.
+    # Weighted numerator per sample.
     numerator = tf.reduce_sum(w * intersection, axis=1)
+    # Weighted denominator per sample.
     denominator = tf.reduce_sum(w * union, axis=1)
     # Compute Generalized Dice score and reduce to a scalar loss.
     diceScore = 2.0 * numerator / (denominator + self.epsilon)
+    # Return 1 - mean of Dice score.
     return 1.0 - tf.reduce_mean(diceScore)
 
 
+# Execute the main block if this script is run directly.
 if (__name__ == "__main__"):
   # Example usage for all loss functions.
   # Simulate model output tensor with random values (logits).
   logits = tf.random.normal((1, 256, 256, 1))
+  # Simulate binary targets.
   binaryTargets = tf.cast(tf.random.uniform((1, 256, 256, 1)) > 0.5, tf.float32)
   # Instantiate loss objects.
   dLoss = DiceLoss()
+  # Instantiate DiceBCELoss object.
   dbLoss = DiceBCELoss()
+  # Instantiate JaccardLoss object.
   jLoss = JaccardLoss()
+  # Instantiate TverskyLoss object.
   tLoss = TverskyLoss(alpha=0.7, beta=0.3)
+  # Instantiate FocalLoss object.
   fLoss = FocalLoss()
-  # Compute and print losses.
+  # Compute and print Dice loss.
   print("Dice Loss:", float(dLoss(binaryTargets, logits)))
+  # Compute and print Dice+BCE loss.
   print("Dice+BCE Loss:", float(dbLoss(binaryTargets, logits)))
+  # Compute and print Jaccard loss.
   print("Jaccard Loss:", float(jLoss(binaryTargets, logits)))
+  # Compute and print Tversky loss.
   print("Tversky Loss:", float(tLoss(binaryTargets, logits)))
+  # Compute and print Focal loss.
   print("Focal Loss:", float(fLoss(binaryTargets, logits)))
   # Multi-class example for Generalized Dice.
   mcLogits = tf.random.normal((2, 128, 128, 3))
+  # Simulate multi-class targets.
   mcTargets = tf.one_hot(tf.random.uniform((2, 128, 128), maxval=3, dtype=tf.int32), depth=3)
+  # Instantiate GeneralizedDiceLoss object.
   gdl = GeneralizedDiceLoss()
   # Instantiate with channels_last for this NHWC test.
-  gdl = GeneralizedDiceLoss(data_format="channels_last")
+  gdl = GeneralizedDiceLoss(dataFormat="channels_last")
+  # Compute and print Generalized Dice loss.
   print("Generalized Dice Loss:", float(gdl(mcTargets, mcLogits)))

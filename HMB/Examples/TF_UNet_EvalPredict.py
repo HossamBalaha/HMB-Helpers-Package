@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import tensorflow as tf
+from HMB.Utils import fprint
 from HMB.TFUNetHelper import VNet, SegNet
 from HMB.TFHelper import TFDataset
 from HMB.ImagesHelper import ReadImage, ReadMask
@@ -14,23 +15,6 @@ from HMB.Initializations import IMAGE_SUFFIXES
 tf.config.run_functions_eagerly(True)
 warnings.filterwarnings("ignore")
 
-# Ensure all prints flush by default to make logs appear promptly.
-# Save the original built-in print function for delegation.
-_original_print = builtins.print
-
-
-# Define a wrapper that sets flush=True when not explicitly provided.
-def print(*args, **kwargs):
-  # Ensure flush is True by default when not provided.
-  if ("flush" not in kwargs):
-    kwargs["flush"] = True
-  # Delegate to the original print implementation.
-  return _original_print(*args, **kwargs)
-
-
-# Override the built-in print with our wrapper to ensure all prints are flushed immediately.
-builtins.print = print
-
 # Select a specific GPU when multiple GPUs are available (optional).
 gpus = tf.config.list_physical_devices("GPU")
 gpuIndex = 0  # Change this index to select a different GPU (e.g., 0, 1, 2, ...).
@@ -38,9 +22,9 @@ if (gpus):
   try:
     # Restrict TensorFlow to only use the first GPU.
     tf.config.set_visible_devices(gpus[gpuIndex], "GPU")
-    print("Using GPU:", gpus[gpuIndex])
+    fprint("Using GPU:", gpus[gpuIndex])
   except RuntimeError as e:
-    print("Error setting visible devices:", e)
+    fprint("Error setting visible devices:", e)
 
 
 # ============================================================================================ #
@@ -127,12 +111,12 @@ def EvaluateModel(config):
 
   # If no images found, bail out with a helpful message.
   if (len(imageFiles) == 0):
-    print(f"No image files found in DataDir='{dataDir}'. Supported extensions: {IMAGE_SUFFIXES}")
+    fprint(f"No image files found in DataDir='{dataDir}'. Supported extensions: {IMAGE_SUFFIXES}")
     return
 
   # MasksDir is required now: validate existence and that masks match images.
   if ((not masksDir) or (not os.path.isdir(masksDir))):
-    print(f"MasksDir must be provided and be an existing directory. Given MasksDir='{masksDir}'")
+    fprint(f"MasksDir must be provided and be an existing directory. Given MasksDir='{masksDir}'")
     return
 
   # Build mask path list that corresponds to image filenames.
@@ -153,15 +137,15 @@ def EvaluateModel(config):
   # Ensure every mask exists for the corresponding image; otherwise abort with details.
   missingMasks = [m for m in masksList if (not os.path.exists(m))]
   if (len(missingMasks) > 0):
-    print(f"Found {len(missingMasks)} missing mask files in MasksDir='{masksDir}'. Missing examples:")
+    fprint(f"Found {len(missingMasks)} missing mask files in MasksDir='{masksDir}'. Missing examples:")
     for mm in missingMasks[:10]:
-      print("  ", mm)
+      fprint("  ", mm)
     if (len(missingMasks) > 10):
-      print("  ...")
-    print("Ensure mask filenames match image filenames (same basename) and try again.")
+      fprint("  ...")
+    fprint("Ensure mask filenames match image filenames (same basename) and try again.")
     return
 
-  print(
+  fprint(
     f"Found {len(imageFiles)} image files and {len(masksList)} corresponding mask files. "
     f"Proceeding with evaluation."
   )
@@ -181,11 +165,23 @@ def EvaluateModel(config):
   if (hyperparamsJson):
     # Validate that the JSON file exists on disk.
     if (not os.path.exists(hyperparamsJson)):
-      print(f"Hyperparameters JSON file not found: {hyperparamsJson}")
+      fprint(f"Hyperparameters JSON file not found: {hyperparamsJson}")
     else:
       # Read the JSON file into the hyperparams dictionary.
       with open(hyperparamsJson, "r", encoding="utf-8") as jsonFile:
         hyperparams = json.load(jsonFile)[0]
+      fprint(f"Loaded hyperparameters from JSON file '{hyperparamsJson}': {hyperparams}")
+  else:
+    fprint("No hyperparameters JSON file provided. Using default hyperparameters.")
+    # Try to find the "Hyperparameters.json" file in the same directory as the model weights.
+    weightsDir = os.path.dirname(modelWeights)
+    defaultHyperparamsPath = os.path.join(weightsDir, "Hyperparameters.json")
+    if (os.path.exists(defaultHyperparamsPath)):
+      with open(defaultHyperparamsPath, "r", encoding="utf-8") as jsonFile:
+        hyperparams = json.load(jsonFile)[0]
+      fprint(f"Loaded default hyperparameters from '{defaultHyperparamsPath}': {hyperparams}")
+    else:
+      fprint(f"No default hyperparameters JSON file found at '{defaultHyperparamsPath}'. Using defaults.")
 
   # Instantiate the requested model implementation based on the ModelName argument.
   if (modelName == "VNet"):
@@ -196,6 +192,10 @@ def EvaluateModel(config):
     applyBatchNorm = hyperparams.get("Applybatchnorm", True) in [True, "true", "True", "TRUE"]
     concatenateType = hyperparams.get("Concatenatetype", "concatenate")
     noOfLevels = int(hyperparams.get("Nooflevels", 4))
+    fprint(
+      f"Instantiating VNet with hyperparameters: kernelInitializer={kernelInitializer}, dropoutRatio={dropoutRatio}")
+    fprint(
+      f"dropoutType={dropoutType}, applyBatchNorm={applyBatchNorm}, concatenateType={concatenateType}, noOfLevels={noOfLevels}")
 
     # Create a VNet instance using extracted hyperparameters.
     model = VNet(
@@ -212,6 +212,8 @@ def EvaluateModel(config):
     level = int(hyperparams.get("Level", 4))
     encoder = hyperparams.get("Encoder", "VGG16")
 
+    fprint(f"Instantiating SegNet with hyperparameters: level={level}, encoder={encoder}")
+
     # Create a SegNet instance using the same hyperparameters when available.
     model = SegNet(
       inputSize=inputSize,
@@ -220,7 +222,7 @@ def EvaluateModel(config):
       numClasses=numClasses,
     )
   else:
-    print(f"Unsupported ModelName='{modelName}'. Supported options: 'VNet', 'SegNet'.")
+    fprint(f"Unsupported ModelName='{modelName}'. Supported options: 'VNet', 'SegNet'.")
     return
 
   # Ensure the model is built before loading weights. Some custom model
@@ -228,18 +230,21 @@ def EvaluateModel(config):
   # calling build(inputShape) or running a single forward pass.
   try:
     if (not getattr(model, "built", False)):
-      print("Model is not built. Attempting to build the model before loading weights.")
+      fprint("Model is not built. Attempting to build the model before loading weights.")
       # Try build() first — works for models that implement build().
       try:
         model.build((None, inputSize[0], inputSize[1], inputSize[2]))
-        print("Model built via build(input_shape).")
+        fprint("Model built via build(input_shape) with value:", inputSize)
       except Exception:
         raise RuntimeError("Model does not implement build(input_shape), trying a forward pass to build.")
   except Exception as e:
-    print("Unexpected error while preparing the model for weight loading:", e)
+    fprint("Unexpected error while preparing the model for weight loading:", e)
+
+  model.summary()
 
   # Load provided weights into the model.
   model.load_weights(modelWeights)
+  fprint(f"Loaded model weights from '{modelWeights}' into model '{modelName}'.")
 
   # Run predictions on the dataset to obtain model outputs.
   # Calculate explicit steps from number of images to avoid empty/zero-target
@@ -268,7 +273,7 @@ def EvaluateModel(config):
       # if (maxVal > minVal):
       #   pred2d = (pred2d - minVal) / (maxVal - minVal)
       # else:
-      #   print("Warning: Predictions have zero variance (max == min). Skipping normalization.")
+      #   fprint("Warning: Predictions have zero variance (max == min). Skipping normalization.")
       pred2d = (pred2d > 0.5).astype("float32")
 
     gt = masksArray[idx]  # Retrieve the corresponding ground truth mask.
@@ -329,7 +334,7 @@ def EvaluateModel(config):
         # if (maxVal > minVal):
         #   pred2d = (pred2d - minVal) / (maxVal - minVal)
         # else:
-        #   print("Warning: Predictions have zero variance (max == min). Skipping normalization.")
+        #   fprint("Warning: Predictions have zero variance (max == min). Skipping normalization.")
         pred2d = (pred2d > 0.5).astype("float32")
 
       plt.figure(figsize=(12, 4))
@@ -364,7 +369,7 @@ def EvaluateModel(config):
       plt.savefig(figPath)
       plt.close()
 
-  # When metrics were computed save summary and print averages.
+  # When metrics were computed save summary and fprint averages.
   if (len(results) > 0):
     # Create a DataFrame from the per-image results.
     df = pd.DataFrame(results)
@@ -377,17 +382,17 @@ def EvaluateModel(config):
     jsonPath = os.path.join(outputDir, "EvaluationSummary.json")
     with open(jsonPath, "w", encoding="utf-8") as f:
       json.dump({"Averages": meanStats.to_dict(), "Details": results}, f, indent=2)
-    # Print mean metrics for convenience.
-    print("Mean Dice:", float(meanStats.get("Dice", 0.0)))
-    print("Mean IoU:", float(meanStats.get("IoU", 0.0)))
-    print("Mean F1:", float(meanStats.get("F1", 0.0)))
-    print("Mean Accuracy:", float(meanStats.get("Accuracy", 0.0)))
-    print("Mean mAP:", float(meanStats.get("mAP", 0.0)))
-    print("Mean BF1:", float(meanStats.get("BF1", 0.0)))
-    print("Mean MCC:", float(meanStats.get("MCC", 0.0)))
-    print("Mean Kappa:", float(meanStats.get("Kappa", 0.0)))
+    # fprint mean metrics for convenience.
+    fprint("Mean Dice:", float(meanStats.get("Dice", 0.0)))
+    fprint("Mean IoU:", float(meanStats.get("IoU", 0.0)))
+    fprint("Mean F1:", float(meanStats.get("F1", 0.0)))
+    fprint("Mean Accuracy:", float(meanStats.get("Accuracy", 0.0)))
+    fprint("Mean mAP:", float(meanStats.get("mAP", 0.0)))
+    fprint("Mean BF1:", float(meanStats.get("BF1", 0.0)))
+    fprint("Mean MCC:", float(meanStats.get("MCC", 0.0)))
+    fprint("Mean Kappa:", float(meanStats.get("Kappa", 0.0)))
   else:
-    print("No metrics were computed. Check if masks were loaded correctly and try again.")
+    fprint("No metrics were computed. Check if masks were loaded correctly and try again.")
 
 
 def Run():

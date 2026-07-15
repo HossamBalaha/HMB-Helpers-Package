@@ -24,6 +24,10 @@ def ReadWSIViaOpenSlide(slidePath):
   '''
 
   assert os.path.exists(slidePath), f"Slide path does not exist: {slidePath}"
+
+  # Resolve the slide path to an absolute path to avoid issues with relative paths.
+  slidePath = str(Path(slidePath).resolve())
+
   return openslide.OpenSlide(slidePath)
 
 
@@ -34,7 +38,7 @@ def ReadGeoJSONAnnotations(annotationFile):
   Each annotation is a dict with the keys:
     - id: feature id (or index)
     - properties: feature properties (dict)
-    - geometry: dict with 'type' and 'coordinates'
+    - geometry: dict with "type" and "coordinates"
 
   Accepts either a pathlib.Path or a string path. Gracefully handles
   FeatureCollection, single Feature, or raw geometry objects.
@@ -1167,6 +1171,7 @@ def ExtractWSIRegion(slide, region):
   return regionImage, regionMask, roi
 
 
+# Define the function to extract pyramidal WSI tiles.
 def ExtractPyramidalWSITiles(
   slide,
   x=0,
@@ -1174,13 +1179,81 @@ def ExtractPyramidalWSITiles(
   width=512,
   height=512,
 ):
+  r"""
+  Extract tiles from each level of a whole-slide image (WSI) pyramid using OpenSlide, centered around a specified
+  region defined by (x, y, width, height) at the highest resolution level (level 0).
+  The function calculates the corresponding regions at each pyramid level, extracts the tiles, and visualizes
+  them in a grid layout. Also, it returns the extracted tiles in a dictionary keyed by pyramid level and a list
+  of magnification levels.
+
+  Parameters:
+    slide (openslide.OpenSlide): The OpenSlide object representing the WSI.
+    x (int): The x-coordinate of the top-left corner of the region at level 0 (default is 0).
+    y (int): The y-coordinate of the top-left corner of the region at level 0 (default is 0).
+    width (int): The width of the region to extract at level 0 (default is 512).
+    height (int): The height of the region to extract at level 0 (default is 512).
+
+  Returns:
+    tuple: A tuple containing:
+      - tiles (dict): A dictionary where keys are pyramid level indices and values are the extracted tile images as NumPy arrays.
+      - figToReturn (matplotlib.figure.Figure): The matplotlib figure object containing the visualizations of the extracted tiles and their verification crops.
+      - magLevels (list): A list of magnification levels corresponding to each pyramid level, calculated from the downsample factors.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import os
+    import matplotlib.pyplot as plt
+    from HMB.WSIHelper import ExtractRegionTiles, ReadWSIViaOpenSlide, ExtractPyramidalWSITiles
+
+    # Define the path to the WSI file.
+    path = "path/to/your/slide.svs"
+    # Define the storage path for the extracted tiles.
+    storagePath = "path/to/store/tiles"
+    # Define a case number for naming the extracted tiles.
+    caseNum = "Case123"
+
+    # Read the WSI using OpenSlide.
+    slide = ReadWSIViaOpenSlide(path)
+
+    # Define the region of interest (ROI) for tile extraction.
+    x, y = 1000, 1000
+
+    # Define the tile dimensions.
+    width, height = 512, 512
+
+    # Extract tiles from the specified region of the WSI.
+    tilesDict, outFigure, magLevels = ExtractPyramidalWSITiles(slide, x=x, y=y, width=width, height=height)
+
+    # Store the output figure in the specified directory.
+    figurePath = os.path.join(storagePath, f"{caseNum}_L0_M0_Figure.png")
+    outFigure.savefig(figurePath)
+
+    # Optionally, display the output figure.
+    outFigure.show()
+    plt.show()
+
+    # Store the extracted tiles in a directory.
+    if (not os.path.exists(storagePath)):
+      os.makedirs(storagePath)
+
+    # Iterate through the extracted tiles and save them to the specified directory.
+    for i in range(len(tilesDict.keys())):
+      key = list(sorted(tilesDict.keys()))[i]
+      tile = tilesDict[key]
+      magLevel = magLevels[i]
+      tilePath = os.path.join(storagePath, f"{caseNum}_L{key}_M{magLevel}.png")
+      plt.imsave(tilePath, tile)
+  """
+
   # Get the number of pyramid levels in the slide.
   slideLevels = slide.level_count
 
-  # Create a new matplotlib figure to plot the regions from each level.
-  plt.figure()
+  # Create a new matplotlib figure and axes to plot the regions from each level.
+  fig, axs = plt.subplots(2, slideLevels, figsize=(4 * slideLevels, 8), squeeze=False)
 
-  # A dictionary to hold the extracted tiles for each level, keyed by level index.
+  # Initialize a dictionary to hold the extracted tiles for each level.
   tiles = {}
 
   # Iterate over each level in the slide pyramid.
@@ -1190,15 +1263,15 @@ def ExtractPyramidalWSITiles(
 
     # Calculate the horizontal offset factor used to center the crop at lower resolutions.
     factorWidth = int((width / 2.0) * (1.0 - (1.0 / dRatio)))
+
     # Calculate the vertical offset factor used to center the crop at lower resolutions.
     factorHeight = int((height / 2.0) * (1.0 - (1.0 / dRatio)))
 
     # Compute the new x-coordinate for the region at the current level.
     xNew = x - dRatio * factorWidth
+
     # Compute the new y-coordinate for the region at the current level.
     yNew = y - dRatio * factorHeight
-
-    # print(f"Level {i}: Downsample Ratio={dRatio}, xNew={xNew}, yNew={yNew}")
 
     # Read a region from the slide at the given level and coordinates.
     regionSlide = slide.read_region(
@@ -1206,21 +1279,27 @@ def ExtractPyramidalWSITiles(
       slideLevel,
       (width, height),
     )
+
     # Convert the returned PIL image to RGB mode.
     regionSlide = regionSlide.convert("RGB")
+
     # Convert the PIL image to a NumPy array for manipulation and display.
     regionSlide = np.array(regionSlide)
 
     # Select the subplot for displaying the full region at this pyramid level.
-    plt.subplot(2, slideLevels, slideLevel + 1)
+    ax = axs[0, slideLevel]
+
     # Render the region image in the subplot.
-    plt.imshow(regionSlide)
+    ax.imshow(regionSlide)
+
     # Disable axis ticks and labels for the image subplot.
-    plt.axis("off")
-    # Adjust subplot layout to minimize overlaps.
-    plt.tight_layout()
+    ax.set_axis_off()
+
+    # Calculate the magnification level for the current slide level.
+    magLevel = int(slide.level_downsamples[::-1][slideLevel])
+
     # Set a title for the subplot including level and downsample factor.
-    plt.title(f"Level {slideLevel} ({dRatio}x)")
+    ax.set_title(f"Level {slideLevel} ({magLevel}x)")
 
     # Crop the rendered region to verify the corresponding area at the current level.
     verify = regionSlide[
@@ -1229,23 +1308,31 @@ def ExtractPyramidalWSITiles(
     ]
 
     # Select the subplot for displaying the verification crop.
-    plt.subplot(2, slideLevels, 3 + slideLevel + 1)
+    axVerify = axs[1, slideLevel]
+
     # Render the verification crop in the subplot.
-    plt.imshow(verify)
+    axVerify.imshow(verify)
+
     # Disable axis ticks and labels for the verification subplot.
-    plt.axis("off")
-    # Adjust layout for the verification subplot.
-    plt.tight_layout()
+    axVerify.set_axis_off()
+
     # Set a title for the verification subplot indicating the level verified.
-    plt.title(f"Cropped to Verify Level {slideLevel}")
+    axVerify.set_title(f"Cropped to Verify Level {slideLevel}")
 
     # Store the extracted tile for the current level in the tiles dictionary.
     tiles[slideLevel] = regionSlide
 
-  # Get the current figure to return it for display or saving.
-  figToReturn = plt.gcf()
+  # Adjust subplot spacing to prevent overlap without triggering layout bugs.
+  fig.subplots_adjust(wspace=0.1, hspace=0.2)
 
-  return tiles, figToReturn
+  # Assign the figure to a variable to return it for display or saving.
+  figToReturn = fig
+
+  # Define the magnification levels corresponding to each pyramid level for reference.
+  magLevels = [int(slide.level_downsamples[::-1][i]) for i in range(slideLevels)]
+
+  # Return the extracted tiles, the figure, and the magnification levels.
+  return tiles, figToReturn, magLevels
 
 
 def PrepareAnnotationsForLevel(annotation, dFactor=1.0):
@@ -1327,6 +1414,167 @@ def PrepareAnnotationsForLevel(annotation, dFactor=1.0):
   }
 
 
+def ExtractWSITissueContour(
+  slide,
+  level=-1,
+  thresholdValue=240,
+  minAreaRatio=0.01,
+):
+  r'''
+  Extracts the combined contour of all tissue content from a whole-slide image (WSI) by analyzing a thumbnail
+  or a specific pyramid level. It identifies all contiguous tissue regions, ignoring background areas based on
+  a brightness threshold, and combines them into a single unified contour representation.
+
+  Parameters:
+    slide (openslide.OpenSlide): The OpenSlide object representing the WSI.
+    level (int): The pyramid level to use for contour extraction. -1 uses the lowest resolution (thumbnail level) for speed (default is -1).
+    thresholdValue (int): The pixel value threshold to distinguish background from tissue. Pixels brighter than this are considered background (default is 240).
+    minAreaRatio (float): The minimum area ratio relative to the total contours area to consider a contour as valid tissue (default is 0.01).
+
+  Returns:
+    dict: A dictionary containing:
+      - "Coords": A list of (x, y) tuples representing the polygon coordinates of the combined tissue contour at level 0 resolution.
+      - "BoundingBox": A tuple (x, y, w, h) representing the bounding rectangle of the combined contour at level 0 resolution.
+      - "Area": The total area of all valid contours in pixels at level 0 resolution.
+
+  Raises:
+    ValueError: If no valid tissue contour is found.
+
+  Notes:
+    - The function uses OpenCV to process the image and extract contours. Ensure that OpenCV is installed in your Python environment.
+    - The contour extraction is performed on a downsampled version of the WSI for efficiency. The coordinates are then scaled back to the original resolution.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import os
+    from HMB.WSIHelper import ReadWSIViaOpenSlide, ExtractWSITissueContour
+
+    # Path to the WSI file.
+    wsiPath = r"/path/to/your/slide.svs"
+
+    # Read the WSI using OpenSlide.
+    slide = ReadWSIViaOpenSlide(wsiPath)
+
+    # Extract the tissue contour and bounding box from the WSI.
+    tissueInfo = ExtractWSITissueContour(slide, level=-1, thresholdValue=240, minAreaRatio=0.01)
+    print(f"Tissue Contour Coords: {tissueInfo['Coords']}")
+    print(f"Tissue Bounding Box: {tissueInfo['BoundingBox']}")
+    print(f"Tissue Area: {tissueInfo['Area']} pixels")
+  '''
+
+  # Determine the level index to use for extraction.
+  if (level == -1):
+    # Use the lowest resolution level available for faster processing.
+    extractLevel = slide.level_count - 1
+  else:
+    # Use the specified level if it is within valid range.
+    extractLevel = level if (level < slide.level_count) else slide.level_count - 1
+
+  # Get the dimensions of the selected level.
+  levelWidth, levelHeight = slide.level_dimensions[extractLevel]
+  print(f"Extracting tissue contour from level {extractLevel} with dimensions: {levelWidth}x{levelHeight}")
+
+  # Read the entire region at the selected level.
+  # Note: For very large slides, reading the entire level might be memory intensive.
+  # In such cases, consider using `get_thumbnail()` instead.
+  try:
+    # Attempt to read the region.
+    regionImage = slide.read_region((0, 0), extractLevel, (levelWidth, levelHeight))
+  except Exception as e:
+    # Fallback to thumbnail if reading the level fails.
+    print(f"Warning: Failed to read level {extractLevel}, falling back to thumbnail. Error: {e}")
+    regionImage = slide.get_thumbnail((levelWidth, levelHeight))
+  print(f"Region image size: {regionImage.size}")
+
+  # Convert the PIL image to a NumPy array.
+  imageArray = np.array(regionImage)
+
+  # Convert to grayscale if the image has multiple channels.
+  if (imageArray.ndim == 3):
+    # Check if alpha channel exists and remove it.
+    if (imageArray.shape[2] == 4):
+      imageArray = imageArray[:, :, :3]
+    # Convert RGB to Gray.
+    grayImage = cv2.cvtColor(imageArray, cv2.COLOR_RGB2GRAY)
+  else:
+    # Already grayscale.
+    grayImage = imageArray
+  print(f"Grayscale image size: {grayImage.shape}")
+
+  # Apply thresholding to separate tissue from background.
+  # Background is typically bright (white), so we can apply a threshold for dark pixels (tissue).
+  _, binaryImage = cv2.threshold(grayImage, thresholdValue, 255, cv2.THRESH_BINARY_INV)
+
+  # Find contours in the binary image.
+  contours, hierarchy = cv2.findContours(binaryImage, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+  if (not contours):
+    raise ValueError("No contours found in the slide image.")
+
+  # Filter contours by area to remove noise.
+  totalContoursArea = sum(cv2.contourArea(contour) for contour in contours)
+  validContours = []
+  for contour in contours:
+    area = cv2.contourArea(contour)
+    areaRatio = area / totalContoursArea
+    if (areaRatio >= minAreaRatio):
+      validContours.append(contour)
+
+  if (not validContours):
+    raise ValueError("No valid tissue contours found meeting the minimum area ratio.")
+
+  print(
+    f"Found {len(contours)} contours, with {len(validContours)} "
+    f"valid tissue contours after filtering by area ratio."
+  )
+
+  # Combine all valid contours into a single contour using convex hull.
+  allPoints = np.vstack(validContours)
+  unifiedContour = cv2.convexHull(allPoints)
+
+  # Get the bounding rectangle of the unified contour at the current level.
+  x, y, w, h = cv2.boundingRect(unifiedContour)
+
+  # Compute the downsample factor relative to level 0.
+  dFactor = slide.level_downsamples[extractLevel] / slide.level_downsamples[0]
+  print(f"Downsample factor from level {extractLevel} to level 0: {dFactor}")
+
+  # Scale the contour coordinates back to level 0 resolution.
+  scaledContour = []
+  for point in unifiedContour:
+    # Point is stored as [[x, y]].
+    px, py = point[0]
+    # Scale up to level 0.
+    scaledX = float(px * dFactor)
+    scaledY = float(py * dFactor)
+    scaledContour.append((scaledX, scaledY))
+
+  print(f"Scaled contour has {len(scaledContour)} points at level 0 resolution.")
+  print(f"Bounding box at level {extractLevel}: x={x}, y={y}, w={w}, h={h}")
+  print(
+    f"Bounding box scaled to level 0: x={int(x * dFactor)}, "
+    f"y={int(y * dFactor)}, w={int(w * dFactor)}, h={int(h * dFactor)}"
+  )
+
+  # Scale the bounding box to level 0 resolution.
+  scaledX = int(x * dFactor)
+  scaledY = int(y * dFactor)
+  scaledW = int(w * dFactor)
+  scaledH = int(h * dFactor)
+
+  # Calculate the total area of all valid contours at level 0 resolution.
+  totalValidArea = sum(cv2.contourArea(cnt) for cnt in validContours)
+  scaledArea = totalValidArea * (dFactor ** 2)
+
+  return {
+    "Coords"     : scaledContour,
+    "BoundingBox": (scaledX, scaledY, scaledW, scaledH),
+    "Area"       : scaledArea,
+  }
+
+
 def ExtractRegionTiles(
   slide,
   region,
@@ -1341,6 +1589,7 @@ def ExtractRegionTiles(
   blackRatioThreshold=0.90,
   removeBackgroundTiles=True,
   convertBlackToWhite=True,
+  dpi=300,
 ):
   r'''
   Extract tiles from a specified region of a whole-slide image (WSI) across all pyramid levels,
@@ -1361,6 +1610,63 @@ def ExtractRegionTiles(
     blackRatioThreshold (float): The maximum allowed ratio of black pixels in a tile to be considered valid (default is 0.90). Tiles with a higher ratio will be skipped.
     removeBackgroundTiles (bool): Whether to skip tiles that are considered background based on the black pixel ratio (default is True).
     convertBlackToWhite (bool): Whether to convert black pixels to white in the ROI before background analysis to avoid skewing metrics (default is True).
+    dpi (int): The resolution in dots per inch for saving plots (default is 300).
+
+  Returns:
+    dict: A dictionary containing the extracted tiles, masks, and ROIs for each level, structured as follows:
+      {
+        level_index: {
+          "Tiles": [list of tile images as NumPy arrays],
+          "Masks": [list of corresponding masks as NumPy arrays],
+          "ROIs": [list of corresponding ROIs as NumPy arrays],
+        },
+        ...
+      }
+
+  Notes:
+    - The function will create subdirectories for "Plots", "Tiles", "Masks", and "ROIs" within the specified storageDir if it is not None.
+    - The function uses tqdm for progress bars when processing tiles, which can be helpful for long-running operations.
+    - The function applies the annotation mask to the extracted tiles to isolate the region of interest (ROI) and can optionally filter out tiles that are mostly background based on the specified black pixel ratio threshold.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import os
+    from HMB.WSIHelper import ReadWSIViaOpenSlide, ExtractWSITissueContour, ExtractRegionTiles
+
+    # Define the path to the WSI file and the storage directory for results.
+    wsiPath = r"/path/to/your/slide.svs"
+    storagePath = r"/path/to/store/results"
+    caseNum = "Case123"
+
+    # Read the WSI using OpenSlide.
+    slide = ReadWSIViaOpenSlide(wsiPath)
+
+    # Extract the tissue contour from the WSI to define the region of interest.
+    tissueInfo = ExtractWSITissueContour(slide, level=-1, thresholdValue=240, minAreaRatio=0.01)
+    region = {
+      "Text": "TissueRegion",
+      "Coords": tissueInfo["Coords"]
+    }
+
+    # Extract tiles from the defined region, applying masks and saving results.
+    results = ExtractRegionTiles(
+      slide,
+      region,
+      width=512,
+      height=512,
+      overlapWidth=0,
+      overlapHeight=0,
+      storageDir=storagePath,
+      maxTiles=100,  # Set a limit on the number of tiles to extract for testing purposes.
+      addPlots=True,
+      prefix=caseNum,
+      blackRatioThreshold=0.90,
+      removeBackgroundTiles=True,
+      convertBlackToWhite=True,
+      dpi=300
+    )
   '''
 
   # Create output directories when a storage directory is provided.
@@ -1371,10 +1677,10 @@ def ExtractRegionTiles(
       os.makedirs(plotsDir, exist_ok=True)
     else:
       plotsDir = None
-    # Compose the tiles directory path and ensure it exists.
+    # Compose the tiles' directory path and ensure it exists.
     tilesDir = os.path.join(storageDir, "Tiles")
     os.makedirs(tilesDir, exist_ok=True)
-    # Compose the masks directory path and ensure it exists.
+    # Compose the masks' directory path and ensure it exists.
     masksDir = os.path.join(storageDir, "Masks")
     os.makedirs(masksDir, exist_ok=True)
     # Compose the ROIs directory path and ensure it exists.
@@ -1411,21 +1717,21 @@ def ExtractRegionTiles(
     desc="Processing X-axis",
     position=0,
   )
-  yProgressBar = tqdm.tqdm(
-    range(regionStartY, regionStartY + regionHeight, height - overlapHeight),
-    desc="Processing Y-axis",
-    leave=False,
-    position=1,
-  )
-  # Initialize a counter to keep track of the number of tiles processed (optional, can be used for maxTiles limit).
+  # Initialize a counter to keep track of the number of tiles processed (optional, can be used for `maxTiles` limit).
   counter = 0
   for x in xProgressBar:
+    yProgressBar = tqdm.tqdm(
+      range(regionStartY, regionStartY + regionHeight, height - overlapHeight),
+      desc="Processing Y-axis",
+      leave=False,
+      position=1,
+    )
     for y in yProgressBar:
       startX = x - regionStartX
       startY = y - regionStartY
 
       # Extract pyramidal tiles for the current window and receive the plotting figure.
-      tiles, fig1 = ExtractPyramidalWSITiles(
+      tiles, fig1, magLevels = ExtractPyramidalWSITiles(
         slide,
         x=x,
         y=y,
@@ -1589,13 +1895,427 @@ def ExtractRegionTiles(
           imgName = f"{prefix}_{imgName}"
         os.makedirs(os.path.join(plotsDir, category), exist_ok=True)
         plt.tight_layout()
-        plt.savefig(os.path.join(plotsDir, category, f"{imgName}.png"), dpi=300, bbox_inches="tight")
+        plt.savefig(os.path.join(plotsDir, category, f"{imgName}.png"), dpi=dpi, bbox_inches="tight")
         plt.close("all")
         plt.gcf().clear()
 
       counter += 1
       if ((maxTiles is not None) and (counter >= maxTiles)):
         print(f"Reached maximum tile limit of {maxTiles}. Stopping extraction.")
+        return
+
+
+def ExtractRegionTilesFromBoundingBox(
+  slide,
+  startX=0,
+  startY=0,
+  endX=None,
+  endY=None,
+  width=512,
+  height=512,
+  overlapWidth=0,
+  overlapHeight=0,
+  storageDir=None,
+  maxTiles=None,
+  addPlots=True,
+  prefix="",
+  blackRatioThreshold=0.90,
+  removeBackgroundTiles=True,
+  convertBlackToWhite=True,
+  dpi=300,
+):
+  r'''
+  Extract tiles from a specified bounding box of a whole-slide image (WSI) across all pyramid levels,
+  applying background filtering and saving results. The function extracts tiles within the defined
+  coordinate range, processes them at each pyramid level, and optionally saves tiles, masks, and ROIs to disk.
+
+  Parameters:
+    slide (openslide.OpenSlide): The OpenSlide object representing the WSI.
+    startX (int): The starting X coordinate in level 0 pixels for the extraction area (default is 0).
+    startY (int): The starting Y coordinate in level 0 pixels for the extraction area (default is 0).
+    endX (int or None): The ending X coordinate in level 0 pixels for the extraction area. If None, uses the full slide width (default is None).
+    endY (int or None): The ending Y coordinate in level 0 pixels for the extraction area. If None, uses the full slide height (default is None).
+    width (int): The width of the tiles to extract in pixels (default is 512).
+    height (int): The height of the tiles to extract in pixels (default is 512).
+    overlapWidth (int): The horizontal overlap between tiles in pixels (default is 0).
+    overlapHeight (int): The vertical overlap between tiles in pixels (default is 0).
+    storageDir (str or None): The directory path to save the extracted tiles, masks, and ROIs. If None, no files will be saved (default is None).
+    maxTiles (int or None): The maximum number of tiles to extract. If None, all tiles will be extracted (default is None).
+    addPlots (bool): Whether to create and save plots visualizing the tiles, masks, and ROIs (default is True).
+    prefix (str): A string prefix to add to saved file names for organization (default is an empty string).
+    blackRatioThreshold (float): The maximum allowed ratio of black pixels in a tile to be considered valid (default is 0.90). Tiles with a higher ratio will be skipped.
+    removeBackgroundTiles (bool): Whether to skip tiles that are considered background based on tissue analysis (default is True).
+    convertBlackToWhite (bool): Whether to convert black pixels to white in the ROI before background analysis to avoid skewing metrics (default is True).
+    dpi (int): The resolution in dots per inch for saved plot images (default is 300).
+
+  Examples
+  --------
+  .. code-block:: python
+
+    import os
+    import matplotlib.pyplot as plt
+    from HMB.WSIHelper import ExtractRegionTilesFromBoundingBox, ReadWSIViaOpenSlide
+
+    # Define the path to the WSI file.
+    path = "path/to/your/slide.svs"
+    # Define the storage path for the extracted tiles.
+    storagePath = "path/to/store/tiles"
+    # Define a case number for naming the extracted tiles.
+    caseNum = "Case123"
+
+    # Read the WSI using OpenSlide.
+    slide = ReadWSIViaOpenSlide(path)
+
+    # Define the bounding box coordinates for the region of interest (ROI).
+    startX, startY = 1000, 1000
+    endX, endY = 5000, 5000
+
+    # Define the tile dimensions and overlap.
+    width, height = 512, 512
+    overlapWidth, overlapHeight = 64, 64
+
+    # Extract tiles from the specified bounding box region of the WSI.
+    ExtractRegionTilesFromBoundingBox(
+      slide,
+      startX=startX,
+      startY=startY,
+      endX=endX,
+      endY=endY,
+      width=width,
+      height=height,
+      overlapWidth=overlapWidth,
+      overlapHeight=overlapHeight,
+      storageDir=storagePath,
+      maxTiles=100,
+      addPlots=True,
+      prefix=caseNum,
+      blackRatioThreshold=0.90,
+      removeBackgroundTiles=True,
+      convertBlackToWhite=True,
+      dpi=300
+    )
+
+    print("Tile extraction from bounding box completed. Check the storage directory for results.")
+  '''
+
+  # Create output directories when a storage directory is provided.
+  if (storageDir is not None):
+    if (addPlots):
+      # Compose the plots directory path and ensure it exists.
+      plotsDir = os.path.join(storageDir, "Plots")
+      os.makedirs(plotsDir, exist_ok=True)
+    else:
+      # Set plots directory to None when plotting is disabled.
+      plotsDir = None
+    # Compose the tiles' directory path and ensure it exists.
+    tilesDir = os.path.join(storageDir, "Tiles")
+    os.makedirs(tilesDir, exist_ok=True)
+    # Compose the masks' directory path and ensure it exists.
+    masksDir = os.path.join(storageDir, "Masks")
+    os.makedirs(masksDir, exist_ok=True)
+    # Compose the ROIs directory path and ensure it exists.
+    roisDir = os.path.join(storageDir, "ROIs")
+    os.makedirs(roisDir, exist_ok=True)
+    # Pre-create subdirectories for each pyramid level for tiles, masks, and ROIs.
+    for level in range(slide.level_count):
+      # Create the level-specific tiles subdirectory.
+      os.makedirs(os.path.join(tilesDir, f"Level_{level}"), exist_ok=True)
+      # Create the level-specific masks subdirectory.
+      os.makedirs(os.path.join(masksDir, f"Level_{level}"), exist_ok=True)
+      # Create the level-specific ROIs subdirectory.
+      os.makedirs(os.path.join(roisDir, f"Level_{level}"), exist_ok=True)
+  else:
+    # Set all directory variables to None when no storage directory is provided.
+    plotsDir = tilesDir = masksDir = roisDir = None
+
+  # Get the dimensions of the slide at level 0 to determine default end coordinates.
+  slideWidth, slideHeight = slide.dimensions
+  # Use the full slide width as the default end X coordinate when not specified.
+  effectiveEndX = endX if (endX is not None) else slideWidth
+  # Use the full slide height as the default end Y coordinate when not specified.
+  effectiveEndY = endY if (endY is not None) else slideHeight
+  # Calculate the total width of the extraction region in level 0 pixels.
+  regionWidth = effectiveEndX - startX
+  # Calculate the total height of the extraction region in level 0 pixels.
+  regionHeight = effectiveEndY - startY
+
+  # Initialize a dictionary to hold mapping data for all levels.
+  mappingData = {}
+  # Build mapping data for each pyramid level by computing scaled dimensions.
+  for level in range(slide.level_count):
+    # Compute the integer downsample factor relative to level 0.
+    dFactor = int(slide.level_downsamples[level] / slide.level_downsamples[0])
+    # Calculate the width of the extraction region at this pyramid level.
+    levelRegionWidth = regionWidth // dFactor
+    # Calculate the height of the extraction region at this pyramid level.
+    levelRegionHeight = regionHeight // dFactor
+    # Calculate the starting X coordinate at this pyramid level.
+    levelStartX = startX // dFactor
+    # Calculate the starting Y coordinate at this pyramid level.
+    levelStartY = startY // dFactor
+    # Create a full white mask for the extraction region at this level since no annotation polygon is used.
+    fullMask = np.ones((levelRegionHeight, levelRegionWidth), dtype=np.uint8) * 255
+    # Store the computed region metadata and mask into the mapping dictionary keyed by level.
+    mappingData[level] = {
+      "MinX"         : levelStartX,
+      "MinY"         : levelStartY,
+      "Width"        : levelRegionWidth,
+      "Height"       : levelRegionHeight,
+      "Text"         : "WholeSlide",
+      "ShiftedCoords": [
+        (0, 0),
+        (levelRegionWidth, 0),
+        (levelRegionWidth, levelRegionHeight),
+        (0, levelRegionHeight),
+      ],
+      "Mask"         : fullMask,
+    }
+
+  # Retrieve the category label from the base level mapping data for file organization.
+  category = mappingData[0]["Text"]
+
+  # Create a progress bar for iterating over the X-axis tile positions.
+  xProgressBar = tqdm.tqdm(
+    range(startX, startX + regionWidth, width - overlapWidth),
+    desc="Processing X-axis",
+    position=0,
+  )
+  # Initialize a counter to track the number of successfully processed tiles.
+  counter = 0
+  # Iterate over each X position in the extraction region.
+  for x in xProgressBar:
+    # Create a nested progress bar for iterating over the Y-axis tile positions.
+    yProgressBar = tqdm.tqdm(
+      range(startY, startY + regionHeight, height - overlapHeight),
+      desc="Processing Y-axis",
+      leave=False,
+      position=1,
+    )
+    # Iterate over each Y position in the extraction region.
+    for y in yProgressBar:
+      # Compute the local X offset relative to the region start for mask cropping.
+      localStartX = x - startX
+      # Compute the local Y offset relative to the region start for mask cropping.
+      localStartY = y - startY
+
+      # Extract pyramidal tiles for the current window and receive the plotting figure.
+      tiles, fig1, magLevels = ExtractPyramidalWSITiles(
+        slide,
+        x=x,
+        y=y,
+        width=width,
+        height=height,
+      )
+      # Close the temporary figure returned by the extraction function to free resources.
+      plt.close(fig1)
+      # Clear the current matplotlib figure state to prevent memory leaks between iterations.
+      plt.gcf().clear()
+
+      # Prepare a new plotting figure if storage and plotting are both enabled.
+      if (addPlots and storageDir is not None):
+        # Create a figure sized proportionally to the number of pyramid levels.
+        plt.figure(figsize=(12, 3 * slide.level_count))
+
+      # Initialize a dictionary to collect valid tile data across all levels for this position.
+      whatToStore = {}
+
+      # Iterate over each pyramid level to crop masks and produce ROIs.
+      for level in range(slide.level_count):
+        # Retrieve the tile image for the current level from the extracted tiles list.
+        levelTile = tiles[level]
+        # Retrieve the precomputed full mask for the current level from mapping data.
+        levelMask = mappingData[level]["Mask"]
+        # Retrieve the shifted coordinates defining the mask boundary at this level.
+        levelShiftedCoords = mappingData[level]["ShiftedCoords"]
+        # Compute the minimum X coordinate from the shifted coords for alignment reference.
+        levelMaskMinX = min(coord[0] for coord in levelShiftedCoords)
+        # Compute the minimum Y coordinate from the shifted coords for alignment reference.
+        levelMaskMinY = min(coord[1] for coord in levelShiftedCoords)
+
+        # Compute the integer downsample ratio for the current level relative to level 0.
+        dRatio = int(slide.level_downsamples[level] / slide.level_downsamples[0])
+
+        # Calculate the horizontal padding factor needed to center crops at lower resolutions.
+        factorWidth = int((width / 2.0) * (1.0 - (1.0 / dRatio)))
+        # Calculate the vertical padding factor needed to center crops at lower resolutions.
+        factorHeight = int((height / 2.0) * (1.0 - (1.0 / dRatio)))
+
+        # Compute the X coordinate in the level mask space for cropping the mask tile.
+        levelCropX = levelMaskMinX - factorWidth + (localStartX // dRatio)
+        # Compute the Y coordinate in the level mask space for cropping the mask tile.
+        levelCropY = levelMaskMinY - factorHeight + (localStartY // dRatio)
+        # Crop the mask tile from the full level mask using computed coordinates and requested size.
+        levelMaskTile = levelMask[levelCropY:levelCropY + height, levelCropX:levelCropX + width]
+        # Compute horizontal padding needed to match the mask tile size to the tile image size.
+        padX = (levelTile.shape[1] - levelMaskTile.shape[1]) // 2
+        # Compute vertical padding needed to match the mask tile size to the tile image size.
+        padY = (levelTile.shape[0] - levelMaskTile.shape[0]) // 2
+        # Pad the mask tile with zeros so it matches the tile image dimensions exactly.
+        levelMaskTile = cv2.copyMakeBorder(
+          levelMaskTile,
+          top=padY,
+          bottom=padY,
+          left=padX,
+          right=padX,
+          borderType=cv2.BORDER_CONSTANT,
+          value=0,
+        )
+        # Ensure the padded mask tile is uint8 type for proper bitwise masking operations.
+        levelMaskTile = levelMaskTile.astype(np.uint8)
+
+        # Skip this tile if the padded mask dimensions do not match the tile dimensions.
+        if ((levelMaskTile.shape[0] != levelTile.shape[0]) or (levelMaskTile.shape[1] != levelTile.shape[1])):
+          # Close any open figure before discarding this tile.
+          plt.close()
+          # Reset the storage dictionary to indicate this tile is invalid.
+          whatToStore = {}
+          # Break out of the level loop to skip further processing for this tile.
+          break
+
+        # Calculate the ratio of black (zero) pixels in the mask tile.
+        blackRatio = np.sum(levelMaskTile == 0) / levelMaskTile.size
+        # Skip this tile at level 0 if the black pixel ratio exceeds the threshold.
+        if ((level == 0) and (blackRatio > blackRatioThreshold)):
+          # Close any open figure before discarding this tile.
+          plt.close()
+          # Reset the storage dictionary to indicate this tile is invalid.
+          whatToStore = {}
+          # Break out of the level loop to skip further processing for this tile.
+          break
+
+        # Compute the masked ROI by applying the binary mask to the tile via bitwise AND.
+        levelROI = cv2.bitwise_and(levelTile, levelTile, mask=levelMaskTile)
+
+        # Convert black pixels to white in the ROI when the option is enabled.
+        if (convertBlackToWhite):
+          # Replace all zero-valued pixels in the ROI with white (255).
+          levelROI[levelROI == 0] = 255
+
+        # Perform background tile detection at level 0 when removal is enabled.
+        if ((level == 0) and (removeBackgroundTiles)):
+          # Determine whether the tile is background using entropy and color variance metrics.
+          isBackground, metrics = IsBackgroundTile(
+            None,
+            image=levelROI.copy(),
+            entropyThreshold=5.5,
+            colorVarianceThreshold=1500,
+            tissueAreaThreshold=0.20,
+            convertBlackToWhite=convertBlackToWhite,
+          )
+          # Discard the tile if it is classified as background.
+          if (isBackground):
+            # Close any open figure before discarding this tile.
+            plt.close()
+            # Reset the storage dictionary to indicate this tile is invalid.
+            whatToStore = {}
+            # Break out of the level loop to skip further processing for this tile.
+            break
+
+        # Store the validated tile, mask, and ROI for the current level.
+        whatToStore[level] = {
+          "Tile": levelTile,
+          "Mask": levelMaskTile,
+          "ROI" : levelROI,
+        }
+
+      # Proceed with saving and plotting only if valid data was collected for all levels.
+      if (whatToStore):
+        # Iterate over each level to save images and build plot subplots.
+        for level in range(slide.level_count):
+          # Retrieve the tile image for the current level from stored data.
+          levelTile = whatToStore[level]["Tile"]
+          # Retrieve the mask tile for the current level from stored data.
+          levelMaskTile = whatToStore[level]["Mask"]
+          # Retrieve the ROI image for the current level from stored data.
+          levelROI = whatToStore[level]["ROI"]
+
+          # Save tile, mask, and ROI images to disk when a storage directory is configured.
+          if (storageDir is not None):
+            # Construct the base image filename from level, coordinates, and tile dimensions.
+            imgName = f"{level}_{x}_{y}_{width}x{height}_{overlapWidth}x{overlapHeight}"
+            # Prepend the user-specified prefix to the filename when provided.
+            if (prefix):
+              # Update the image name with the prefix separator.
+              imgName = f"{prefix}_{imgName}"
+            # Ensure the category subdirectory exists under the level tiles' directory.
+            os.makedirs(os.path.join(tilesDir, f"Level_{level}", category), exist_ok=True)
+            # Ensure the category subdirectory exists under the level masks' directory.
+            os.makedirs(os.path.join(masksDir, f"Level_{level}", category), exist_ok=True)
+            # Ensure the category subdirectory exists under the level ROIs directory.
+            os.makedirs(os.path.join(roisDir, f"Level_{level}", category), exist_ok=True)
+            # Write the tile image to disk as a JPEG file.
+            cv2.imwrite(os.path.join(tilesDir, f"Level_{level}", category, f"{imgName}.jpg"), levelTile)
+            # Write the mask tile to disk as a JPEG file.
+            cv2.imwrite(os.path.join(masksDir, f"Level_{level}", category, f"{imgName}.jpg"), levelMaskTile)
+            # Write the ROI image to disk as a JPEG file.
+            cv2.imwrite(os.path.join(roisDir, f"Level_{level}", category, f"{imgName}.jpg"), levelROI)
+
+          # Add subplot visualizations when both plotting and storage are enabled.
+          if (addPlots and storageDir is not None):
+            # Display the raw tile image in the first column of the current level row.
+            plt.subplot(slide.level_count, 4, 1 + level * 4)
+            # Render the tile image on the subplot.
+            plt.imshow(levelTile)
+            # Label the subplot as the raw tile.
+            plt.title("Tile")
+            # Hide axis ticks and labels for cleaner visualization.
+            plt.axis("off")
+            # Display the mask tile in grayscale in the second column.
+            plt.subplot(slide.level_count, 4, 2 + level * 4)
+            # Render the mask tile using a grayscale colormap.
+            plt.imshow(levelMaskTile, cmap="gray")
+            # Label the subplot as the mask tile.
+            plt.title("Mask Tile")
+            # Hide axis ticks and labels for cleaner visualization.
+            plt.axis("off")
+            # Display the tile with the mask overlay in the third column.
+            plt.subplot(slide.level_count, 4, 3 + level * 4)
+            # Render the base tile image underneath the overlay.
+            plt.imshow(levelTile)
+            # Overlay the mask with transparency using a jet colormap.
+            plt.imshow(levelMaskTile, alpha=0.5, cmap="jet")
+            # Label the subplot as the annotated overlay.
+            plt.title("Tile with Annotation Overlay")
+            # Hide axis ticks and labels for cleaner visualization.
+            plt.axis("off")
+            # Display the masked ROI in the fourth column.
+            plt.subplot(slide.level_count, 4, 4 + level * 4)
+            # Render the ROI image on the subplot.
+            plt.imshow(levelROI)
+            # Label the subplot as the masked ROI.
+            plt.title("ROI (Masked Tile)")
+            # Hide axis ticks and labels for cleaner visualization.
+            plt.axis("off")
+      else:
+        # Skip saving and plotting when the tile was deemed invalid during level processing.
+        continue
+
+      # Finalize and save the composite plot figure when plotting and storage are enabled.
+      if (addPlots and storageDir is not None):
+        # Construct the plot filename from coordinates and tile dimensions without the level prefix.
+        imgName = f"{x}_{y}_{width}x{height}_{overlapWidth}x{overlapHeight}"
+        # Prepend the user-specified prefix to the plot filename when provided.
+        if (prefix):
+          # Update the plot image name with the prefix separator.
+          imgName = f"{prefix}_{imgName}"
+        # Ensure the category subdirectory exists under the plots directory.
+        os.makedirs(os.path.join(plotsDir, category), exist_ok=True)
+        # Adjust subplot spacing to prevent overlapping labels and images.
+        plt.tight_layout()
+        # Save the composite figure as a high-resolution PNG file.
+        plt.savefig(os.path.join(plotsDir, category, f"{imgName}.png"), dpi=dpi, bbox_inches="tight")
+        # Close all open figures to free memory after saving.
+        plt.close("all")
+        # Clear the current figure state to reset for the next iteration.
+        plt.gcf().clear()
+
+      # Increment the counter for successfully processed tiles.
+      counter += 1
+      # Stop extraction early when the maximum tile count has been reached.
+      if ((maxTiles is not None) and (counter >= maxTiles)):
+        # Print a notification indicating the tile limit was reached.
+        print(f"Reached maximum tile limit of {maxTiles}. Stopping extraction.")
+        # Exit the function immediately to prevent further tile processing.
         return
 
 
@@ -1685,13 +2405,377 @@ def IsBackgroundTile(
   isBackground = backgroundScore >= 3
 
   return isBackground, {
-    'entropy'        : entropyValue,
-    'colorVariance'  : colorVariance,
-    'tissueRatio'    : tissueRatio,
-    'meanSaturation' : meanSaturation,
-    'textureVariance': textureVariance,
-    'backgroundScore': backgroundScore,
+    "entropy"        : entropyValue,
+    "colorVariance"  : colorVariance,
+    "tissueRatio"    : tissueRatio,
+    "meanSaturation" : meanSaturation,
+    "textureVariance": textureVariance,
+    "backgroundScore": backgroundScore,
   }
+
+
+def BatchNormalizeHistopathologyImages(
+  inputFolder,  # The path to the input folder containing the source images.
+  outputFolder,  # The path to the output folder to save the normalized images.
+  modelPath,  # The path to save/load the fitted normalizer model as a pickle file.
+  method="reinhard",  # The normalization method to use ("reinhard", "macenko", "vahadane", or "histogram").
+  targetImage=None,  # The target RGB image (or its path) to fit the normalizer (optional).
+):
+  r'''
+  Normalize a folder of histopathology images.
+  If a fitted model exists at modelPath, it loads and applies it directly.
+  Otherwise, it fits the normalizer on the targetImage. If targetImage is None,
+  it automatically and randomly selects a representative image from the input folder.
+
+  Parameters:
+    inputFolder (str): The path to the input folder containing the source images.
+    outputFolder (str): The path to the output folder to save the normalized images.
+    modelPath (str): The path to save/load the fitted normalizer model as a pickle file.
+    method (str): The normalization method to use ("reinhard", "macenko", "vahadane", or "histogram").
+    targetImage (str or numpy.ndarray): The target RGB image (or its path) to fit the normalizer (optional).
+
+  Examples
+  --------
+  .. code-block:: python
+
+    from HMB.WSIHelper import BatchNormalizeHistopathologyImages
+
+    # Define the input and output directories, reference image, and other parameters.
+    inputDirectory = "path/to/input/images"
+    outputDirectory = "path/to/output/NormalizedImages"
+    referenceImagePath = "path/to/reference/ReferenceImage.png"
+    modelPath="path/to/save/NormalizerModel.pkl"
+    normalizationMethod = "reinhard"  # Options: "reinhard", "macenko", "vahadane", "histogram".
+
+    # Normalize a folder of histopathology images using Reinhard normalization.
+    BatchNormalizeHistopathologyImages(
+      inputFolder=inputDirectory,
+      outputFolder=outputDirectory,
+      modelPath=modelPath,
+      method=normalizationMethod,
+      targetImage=referenceImagePath  # Optional: can be None for automatic selection.
+    )
+  '''
+
+  import glob, random, pickle
+  from HMB.ImagesNormalization import (
+    ReinhardColorNormalization, MacenkoColorNormalization,
+    VahadaneColorNormalization, HistogramColorNormalization
+  )
+  from HMB.Initializations import DoRandomSeeding, IMAGE_SUFFIXES
+
+  # Use IMAGE_SUFFIXES to get all supported image files.
+  imageFiles = []
+  for suffix in IMAGE_SUFFIXES:
+    imageFiles.extend(glob.glob(os.path.join(inputFolder, f"*{suffix}")))
+
+  # Ensure that there are images to process.
+  if (len(imageFiles) == 0):
+    print(f"No supported image files found in {inputFolder}.")
+    return
+
+  print(f"Found {len(imageFiles)} images in {inputFolder}.")
+
+  # Create the output folder if it does not exist.
+  if (not os.path.exists(outputFolder)):
+    os.makedirs(outputFolder)
+
+  # Check if the fitted model already exists to support train/test split workflows.
+  if (os.path.exists(modelPath)):
+    print(f"Loading existing normalizer model from {modelPath}...")
+    with open(modelPath, "rb") as f:
+      normalizer = pickle.load(f)
+  else:
+    print(f"Model not found at {modelPath}. Initializing and fitting a new normalizer...")
+
+    # --- AUTOMATIC FALLBACK: Randomly select an image if none is provided. ---
+    if (targetImage is None):
+      print(
+        "No target image provided. "
+        "Randomly selecting a representative image from the input folder to use as the target..."
+      )
+      DoRandomSeeding()  # Ensure reproducibility for the random selection.
+      targetImagePath = random.choice(imageFiles)
+      print(f"Selected random target image: {targetImagePath}")
+
+      loadedImg = cv2.imread(targetImagePath)
+      if (loadedImg is None):
+        raise ValueError(f"Failed to load the randomly selected target image: {targetImagePath}")
+
+      # Convert BGR to RGB.
+      targetImage = cv2.cvtColor(loadedImg, cv2.COLOR_BGR2RGB)
+    else:
+      print("Fitting the normalizer to the provided target image...")
+      if (isinstance(targetImage, str)):
+        print(f"Detected file path for targetImage. Loading image from: {targetImage}")
+        loadedImg = cv2.imread(targetImage)
+        if (loadedImg is None):
+          raise ValueError(f"Failed to load target image from path: {targetImage}")
+        # Convert BGR to RGB.
+        targetImage = cv2.cvtColor(loadedImg, cv2.COLOR_BGR2RGB)
+
+    # Initialize the normalizer based on the specified method.
+    if (method == "reinhard"):
+      normalizer = ReinhardColorNormalization()
+    elif (method == "macenko"):
+      normalizer = MacenkoColorNormalization()
+    elif (method == "vahadane"):
+      normalizer = VahadaneColorNormalization()
+    elif (method == "histogram"):
+      normalizer = HistogramColorNormalization()
+    else:
+      raise ValueError("Unsupported normalization method. Use 'reinhard', 'macenko', 'vahadane', or 'histogram'.")
+
+    # Fit the normalizer to the target image.
+    normalizer.Fit(targetImage)
+
+    # Save the newly fitted normalizer model to a pickle file for future use.
+    with open(modelPath, "wb") as f:
+      pickle.dump(normalizer, f)
+    print(f"Successfully fitted and saved normalizer model to {modelPath}.")
+
+  # Iterate over each image file with a progress bar.
+  for imageFile in tqdm.tqdm(imageFiles):
+    # Read the image from the file.
+    img = cv2.imread(imageFile)
+    if (img is None):
+      continue  # Skip if the image could not be read.
+
+    # Convert the image from BGR (OpenCV default) to RGB.
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+    # Apply the normalization using the loaded or newly fitted normalizer.
+    normalizedImg = normalizer.Normalize(img)
+
+    # Convert the normalized image from RGB back to BGR for saving with OpenCV.
+    normalizedImgBGR = cv2.cvtColor(normalizedImg, cv2.COLOR_RGB2BGR)
+
+    # Get the filename from the image file path and create the output path.
+    filename = os.path.basename(imageFile)
+    outputPath = os.path.join(outputFolder, filename)
+
+    # Save the normalized image to the output folder.
+    cv2.imwrite(outputPath, normalizedImgBGR)
+
+
+def NormalizeHistopathologyDatasetSplits(
+  inputDir,
+  outputDir,
+  referencePath,
+  splits,
+  extensions,
+  normMethod,
+  storeExtension=".png"
+):
+  r'''
+  Normalizes histopathology images in a folder structure using the specified normalization method.
+  The function processes images in the specified splits and saves the normalized images to the output directory.
+
+  Parameters:
+    inputDir (str): Path to the input directory containing the images to normalize.
+    outputDir (str): Path to the output directory where normalized images will be saved.
+    referencePath (str): Path to the reference image used for normalization.
+    splits (list): List of subdirectory names (splits) to process (e.g., ["train", "val", "test"]).
+    extensions (list): List of image file extensions to process (e.g., [".jpg", ".png"]).
+    normMethod (str): Normalization method to use. Options are "reinhard", "macenko", "vahadane", "histogram", or "None" to disable normalization.
+    storeExtension (str): File extension for saving normalized images (default is ".png").
+
+  Raises:
+    ValueError: If an unsupported normalization method is specified.
+    FileNotFoundError: If the reference image is not found at the specified path.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    from HMB.WSIHelper import NormalizeHistopathologyDatasetSplits
+
+    # Define the input and output directories, reference image, and other parameters.
+    inputDirectory = "path/to/input/images"
+    outputDirectory = "path/to/output/NormalizedImages"
+    referenceImagePath = "path/to/reference/ReferenceImage.png"
+    splitsToProcess = ["train", "val", "test"]
+    imageExtensions = [".jpg", ".png"]
+    normalizationMethod = "reinhard"  # Options: "reinhard", "macenko", "vahadane", "histogram", "None".
+    storeExtension = ".png"  # Extension for saving normalized images.
+
+    # Call the function to normalize images in the specified folder structure.
+    NormalizeHistopathologyDatasetSplits(
+      inputDir=inputDirectory,
+      outputDir=outputDirectory,
+      referencePath=referenceImagePath,
+      splits=splitsToProcess,
+      extensions=imageExtensions,
+      normMethod=normalizationMethod,
+      storeExtension=storeExtension
+    )
+  '''
+
+  import pickle
+  import imageio
+  from skimage.io import imread
+  from HMB.ImagesNormalization import (
+    ReinhardColorNormalization, MacenkoColorNormalization,
+    VahadaneColorNormalization, HistogramColorNormalization
+  )
+
+  # Check if the Reinhard method is selected.
+  if (normMethod == "reinhard"):
+    # Instantiate the Reinhard color normalizer.
+    normalizer = ReinhardColorNormalization()
+  # Check if the Macenko method is selected.
+  elif (normMethod == "macenko"):
+    # Instantiate the Macenko color normalizer.
+    normalizer = MacenkoColorNormalization()
+  # Check if the Vahadane method is selected.
+  elif (normMethod == "vahadane"):
+    # Instantiate the Vahadane color normalizer.
+    normalizer = VahadaneColorNormalization()
+  # Check if the Histogram method is selected.
+  elif (normMethod == "histogram"):
+    # Instantiate the Histogram color normalizer.
+    normalizer = HistogramColorNormalization()
+  # Check if normalization is disabled.
+  elif (normMethod == "None"):
+    print("Normalization is disabled. Returning without applying any normalization.")
+    return
+  else:
+    # Raise a value error for an unrecognized normalization method.
+    raise ValueError("Unsupported normalization method.")
+
+  # Convert the input directory path to a Path object.
+  inputRoot = Path(inputDir)
+  # Convert the output directory path to a Path object.
+  outputRoot = Path(outputDir)
+  # Convert the reference image path to a Path object.
+  referenceRoot = Path(referencePath)
+
+  # Check if a normalizer was successfully instantiated.
+  if (normalizer is not None):
+    # Check if the reference image file exists.
+    if (not referenceRoot.exists()):
+      # Raise a file not found error if the reference image is missing.
+      raise FileNotFoundError(f"Reference image not found at: {referenceRoot}")
+
+    # Print a message indicating the reference image is being loaded.
+    print(f"Loading reference image for {normMethod} normalization...")
+    # Load the reference image using skimage to ensure RGB format.
+    referenceImage = imread(str(referenceRoot))
+
+    # Check if the loaded reference image is not in uint8 format.
+    if (referenceImage.dtype != np.uint8):
+      # Check if the image values are in the zero-to-one float range.
+      if (referenceImage.max() <= 1.0):
+        # Scale the float image to the zero-to-255 range and convert to uint8.
+        referenceImage = (referenceImage * 255).astype(np.uint8)
+      # Execute the fallback for other numeric types.
+      else:
+        # Directly cast the image to uint8.
+        referenceImage = referenceImage.astype(np.uint8)
+
+    # Print a message indicating the normalizer is being fitted.
+    print("Fitting the normalizer to the reference image...")
+    # Fit the normalizer using the prepared reference image.
+    normalizer.Fit(referenceImage)
+    # Print a confirmation message that the normalizer is ready.
+    print("Normalizer fitted successfully.")
+
+    # Define the file path to save the fitted normalizer model.
+    modelSavePath = outputRoot / "FittedNormalizerModel.pkl"
+    # Define the file path to save the copy of the reference image.
+    refImageSavePath = outputRoot / f"ReferenceImage{storeExtension}"
+
+    # Ensure the output directory exists before saving files.
+    outputRoot.mkdir(parents=True, exist_ok=True)
+
+    # Open the model file in write-binary mode to save the pickle.
+    with open(str(modelSavePath), "wb") as normalizerFile:
+      # Dump the fitted normalizer object into the pickle file.
+      pickle.dump(normalizer, normalizerFile)
+
+    # Print a confirmation message for the model save operation.
+    print(f"Saved the fitted normalizer model to: {modelSavePath}")
+
+    # Save the reference image to the output directory as a PNG file.
+    imageio.imwrite(str(refImageSavePath), referenceImage)
+    # Print a confirmation message for the reference image save operation.
+    print(f"Saved a copy of the reference image to: {refImageSavePath}")
+
+  # Iterate through each split with a progress bar.
+  for split in tqdm.tqdm(splits, desc="Processing Splits", unit="split"):
+    # Construct the input path for the current split.
+    splitInputPath = inputRoot / split
+    # Construct the output path for the current split.
+    splitOutputPath = outputRoot / split
+
+    # Check if the split directory exists.
+    if (not splitInputPath.exists()):
+      # Print a warning if the split is missing.
+      print(f"Warning: Split directory not found at: {splitInputPath}")
+      # Continue to the next split.
+      continue
+
+    # Get all class directories within the current split.
+    classDirs = sorted([d for d in splitInputPath.iterdir() if d.is_dir()])
+
+    # Iterate through each class directory with a progress bar.
+    for classDir in tqdm.tqdm(classDirs, desc="Processing Classes", unit="class"):
+      # Extract the class name from the directory.
+      className = classDir.name
+      # Construct the output path for the current class.
+      classOutputPath = splitOutputPath / className
+
+      # Create the output class directory if it does not exist.
+      classOutputPath.mkdir(parents=True, exist_ok=True)
+
+      # Iterate through each image extension with a progress bar.
+      for ext in tqdm.tqdm(extensions, desc="Processing Extensions", unit="extension"):
+        # Find all files with the current extension.
+        foundImages = list(classDir.glob(f"*{ext}"))
+        for imgPath in tqdm.tqdm(foundImages, desc="Processing Images", unit="image"):
+          # Construct the full output file path in PNG format.
+          outFilePath = classOutputPath / f"{imgPath.stem}{storeExtension}"
+
+          # Check if the output file already exists to avoid reprocessing.
+          if (outFilePath.exists()):
+            # Skip to the next image if it already exists.
+            continue
+
+          # Attempt to process the current image.
+          try:
+            # Load the image from the path using skimage.
+            loadedImage = imread(str(imgPath))
+
+            # Check if the loaded image is not in uint8 format.
+            if (loadedImage.dtype != np.uint8):
+              # Check if the image values are in the zero-to-one float range.
+              if (loadedImage.max() <= 1.0):
+                # Scale the float image to the zero-to-255 range and convert to uint8.
+                loadedImage = (loadedImage * 255).astype(np.uint8)
+              # Execute the fallback for other numeric types.
+              else:
+                # Directly cast the image to uint8.
+                loadedImage = loadedImage.astype(np.uint8)
+
+            # Check if a normalizer is active.
+            if (normalizer is not None):
+              # Normalize the loaded image using the fitted HMB normalizer.
+              normalizedImage = normalizer.Normalize(loadedImage)
+            # Execute the fallback if normalization is disabled.
+            else:
+              # Assign the original image as the normalized image.
+              normalizedImage = loadedImage
+
+            # Save the normalized image to the output path in PNG format.
+            imageio.imwrite(str(outFilePath), normalizedImage)
+
+          # Catch any exceptions that occur during processing.
+          except Exception as e:
+            # Print an error message if processing fails for an image.
+            print(f"    Error processing {imgPath.name}: {e}")
+
+  # Print a completion message.
+  print("Dataset processing complete!")
 
 
 if (__name__ == "__main__"):
@@ -1868,7 +2952,7 @@ if (__name__ == "__main__"):
     # Open the pyramidal slide for tile extraction.
     pyramidalSlide = ReadWSIViaOpenSlide(pyramidalSlidePath)
     # Extract tiles at multiple pyramid levels for a sample anchor point.
-    tilesDict, tilesFig = ExtractPyramidalWSITiles(pyramidalSlide, x=0, y=0, width=512, height=512)
+    tilesDict, tilesFig, magLevels = ExtractPyramidalWSITiles(pyramidalSlide, x=0, y=0, width=512, height=512)
     # Print the number of pyramid levels that were returned by the helper.
     print(f"ExtractPyramidalWSITiles returned {len(tilesDict)} levels.")
   else:

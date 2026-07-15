@@ -1,3 +1,4 @@
+import os
 import random
 import numpy as np
 import pandas as pd
@@ -1849,3 +1850,120 @@ def SaveMatplotlibFigure(
   if (show):
     plt.show()
   plt.close(fig)
+
+
+def GenerateDistributionCountFigure(
+  countDictionary,
+  classList,
+  outputDirectory,
+  splitList=None,
+  dpi=720,
+  fileName="Figure",
+  xLabel="Dataset Split",
+  yLabel="Number of Images",
+  title="Class Distribution Counts",
+):
+  r'''
+  Generate a bar chart figure showing the distribution of class counts across different dataset splits.
+
+  Parameters:
+    countDictionary (dict): A dictionary mapping keys of the form "SplitClass" to integer counts, e.g., {"TrainCat": 100, "TestDog": 50}.
+    classList (list): A list of class names to include in the plot, e.g., ["Cat", "Dog", "Bird"].
+    outputDirectory (str|Path): The directory where the output figure files will be saved.
+    splitList (list, optional): A list of dataset split names to include in the plot, e.g., ["Train", "Test", "Val"]. If None, defaults to ["Train", "Test", "Val"].
+    dpi (int, optional): Dots-per-inch for the saved figure. Default is 720 for high-quality output.
+    fileName (str, optional): Base name for the output figure files (without extension). Default is "Figure".
+    xLabel (str, optional): Label for the x-axis. Default is "Dataset Split".
+    yLabel (str, optional): Label for the y-axis. Default is "Number of Images".
+    title (str, optional): Title for the figure. Default is "Class Distribution Counts".
+
+  Notes:
+    - The function will create a grouped bar chart where each group corresponds to a dataset split,
+      and each bar within a group corresponds to a class. The height of each bar represents the count of images for that class in that split.
+    - The function saves the figure in both PDF and PNG formats in the specified output directory.
+  '''
+
+  from HMB.Initializations import UpdateMatplotlibSettings
+  # Update the matplotlib settings for publication quality.
+  UpdateMatplotlibSettings()
+  # Set the default split list if not provided.
+  if (splitList is None):
+    # Define the default split list.
+    splitList = ["Train", "Test", "Val"]
+  # Calculate the number of splits.
+  numSplits = len(splitList)
+  # Calculate the number of classes.
+  numClasses = len(classList)
+  # Initialize the figure and axis with a specific size.
+  figure, axis = plt.subplots(figsize=(8, 6))
+  # Define the width of each bar dynamically based on the number of classes.
+  barWidth = 0.8 / numClasses if (numClasses > 0) else 0.8
+  # Define the x locations for the groups.
+  xLocations = np.arange(numSplits)
+  # Generate a list of distinct colors for the classes.
+  colorMap = plt.get_cmap("tab10") if (numClasses <= 10) else plt.get_cmap("tab20")
+  # Extract the colors from the color map.
+  colors = [colorMap(i) for i in range(numClasses)]
+  # Iterate over each class to create grouped bars.
+  for clsIndex, cls in enumerate(classList):
+    # Calculate the x-axis offset for the current class.
+    offset = (clsIndex - numClasses / 2 + 0.5) * barWidth
+    # Extract the counts for the current class across all splits.
+    currentCounts = [countDictionary.get(f"{split.capitalize()}{cls}", 0) for split in splitList]
+    # Create the bars for the current class.
+    barContainer = axis.bar(
+      xLocations + offset,
+      currentCounts,
+      barWidth,
+      label=cls,
+      color=colors[clsIndex],
+      alpha=0.9,
+      edgecolor="black",
+      linewidth=0.5
+    )
+    # Iterate over each bar in the container to annotate it.
+    for bar in barContainer:
+      # Get the height of the current bar.
+      height = bar.get_height()
+      # Annotate the bar with its value.
+      axis.annotate(
+        f"{int(height)}",
+        xy=(bar.get_x() + bar.get_width() / 2, height),
+        xytext=(0, 3),
+        textcoords="offset points",
+        ha="center",
+        va="bottom",
+        fontsize=10
+      )
+  # Set the x-axis ticks.
+  axis.set_xticks(xLocations)
+  # Set the x-axis tick labels.
+  axis.set_xticklabels(splitList)
+  # Set the x-axis label.
+  axis.set_xlabel(xLabel)
+  # Set the y-axis label.
+  axis.set_ylabel(yLabel)
+  # Set the title of the plot.
+  axis.set_title(title)
+  # Add a legend to the plot.
+  axis.legend(frameon=False)
+  # Remove the top spine of the plot.
+  axis.spines["top"].set_visible(False)
+  # Remove the right spine of the plot.
+  axis.spines["right"].set_visible(False)
+  # Enable the y-axis grid for better readability.
+  axis.yaxis.grid(True, linestyle="--", alpha=0.6, zorder=0)
+  # Set the grid to be below the bars.
+  axis.set_axisbelow(True)
+  # Adjust the layout to prevent clipping.
+  plt.tight_layout()
+  # Construct the output path for the PDF figure.
+  figurePath = os.path.join(outputDirectory, f"{fileName}.pdf")
+  # Save the figure as a high-resolution PDF.
+  plt.savefig(figurePath, format="pdf", dpi=dpi, bbox_inches="tight")
+  # Construct the output path for the PNG figure.
+  pngPath = os.path.join(outputDirectory, f"{fileName}.png")
+  # Save the figure as a high-resolution PNG.
+  plt.savefig(pngPath, format="png", dpi=dpi, bbox_inches="tight")
+  # Close the figure to free memory.
+  plt.close()

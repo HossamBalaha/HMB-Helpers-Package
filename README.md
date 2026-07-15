@@ -15,7 +15,7 @@
 [![Modules](https://img.shields.io/badge/modules-40%2B-orange.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package/tree/main/HMB)
 [![Contributions](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package/blob/main/CONTRIBUTING.md)
 [![Maintenance](https://img.shields.io/badge/maintained-yes-green.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package)
-[![Release](https://img.shields.io/badge/release-v0.2.0-blue.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package/releases)
+[![Release](https://img.shields.io/badge/release-v0.3.0-blue.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package/releases)
 [![DOI](https://zenodo.org/badge/1029954303.svg)](https://doi.org/10.5281/zenodo.20577120)
 
 A comprehensive collection of helper modules for image processing, segmentation, deep learning workflows, text/PDF
@@ -309,11 +309,11 @@ If you use this package in your work, please:
    ```bibtex
    @software{balaha_hmb_helpers_2026_020,
      author    = {Balaha, Hossam Magdy},
-     title     = {HMB-Helpers-Package: HMB-Helpers-Package v0.2.0},
+     title     = {HMB-Helpers-Package: HMB-Helpers-Package v0.3.0},
      year      = {2026},
      publisher = {GitHub},
      month     = apr,
-     version   = {v0.2.0},
+     version   = {v0.3.0},
      url       = {https://github.com/HossamBalaha/HMB-Helpers-Package}
    }
  

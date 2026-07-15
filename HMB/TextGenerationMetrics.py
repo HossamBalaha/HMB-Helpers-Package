@@ -1,5 +1,5 @@
 # Import all required libraries for metrics computation.
-import torch, re, nltk, textstat, sys  # Core and NLP libraries.
+import torch, re, nltk, textstat, sys, math
 import numpy as np  # For numerical operations.
 import torch.nn as nn  # For deep learning metrics (if needed).
 from rouge import Rouge  # For ROUGE metric computation.
@@ -16,16 +16,34 @@ IncreaseSysRecursionLimit(10 ** 6)
 DownloadNLTKPackages()
 
 
-# Define the TextGenerationMetrics class for evaluating text generation models.
 class TextGenerationMetrics(object):
   r'''
   Encapsulates a comprehensive suite of text generation evaluation metrics for NLP tasks.
   Includes BLEU, ROUGE, METEOR, Edit Distance, Jaccard, Perplexity, F1, CHRF, and more.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    from HMB.TextGenerationMetrics import TextGenerationMetrics
+
+    # Initialize the metrics object.
+    metrics = TextGenerationMetrics()
+
+    # Example usage for BLEU score.
+    generatedText = "The cat sat on the mat."
+    referenceText = "The cat is sitting on the mat."
+
+    bleuScore = metrics.CalculateBLEU(generatedText, referenceText)
+    print(f"BLEU Score: {bleuScore:.4f}")
   '''
 
   def __init__(self, tokenizer=None):
     '''
     Initializes the metrics class with an optional tokenizer.
+
+    Parameters:
+      tokenizer (optional): A tokenizer object for text preprocessing. If not provided, default tokenization methods will be used.
     '''
 
     # Store the tokenizer if provided.
@@ -204,9 +222,20 @@ class TextGenerationMetrics(object):
     # Return similarity instead of distance.
     return 1.0 - normalizedDistance
 
-  def CalculateSemanticSimilarity(self, generatedText, referenceText):
+  def CalculateJaccardSimilarity(self, generatedText, referenceText):
     r'''
     Calculates Jaccard similarity based on word overlap between generated and reference text.
+
+    This function employs a purely statistical, lexical approach. It treats text as a "bag of words"
+    and calculates the ratio of shared unique words to the total unique words across both texts.
+    It is highly sensitive to exact word matches and completely ignores word order, syntax, and
+    semantic meaning. Consequently, it will assign a low score to texts that use different synonyms
+    to express the exact same meaning, unlike embedding-based approaches.
+
+    Architectural Correlation Analysis:
+      - CalculateJaccardSimilarity (Lexical): High score only if exact words match. Fails on synonyms/paraphrases.
+      - CalculateSemanticSimilarity (Embedding): High score if meaning is preserved, regardless of word choice.
+      - Conclusion: Use Jaccard for exact duplication checks; use Semantic for meaning preservation.
 
     .. math::
       Jaccard = \frac{|gen \cap ref|}{|gen \cup ref|}
@@ -216,11 +245,27 @@ class TextGenerationMetrics(object):
       - :math:`|gen \cup ref|` is the size of the union of words.
 
     Parameters:
-      generatedText (str): Generated text.
-      referenceText (str): Reference text.
+      generatedText (str): The generated text to evaluate.
+      referenceText (str): The reference text to compare against.
 
     Returns:
-      float: Jaccard similarity score.
+      float: The Jaccard similarity score between 0.0 and 1.0.
+
+    Examples
+    --------
+    .. code-block:: python
+
+      from HMB.TextGenerationMetrics import TextGenerationMetrics
+
+      # Initialize the metrics object.
+      obj = TextGenerationMetrics()
+
+      # Calculate Jaccard similarity between two texts.
+      text1 = "The study was conducted on January 15, 2023, and included 150 participants."
+      text2 = "The research took place on the fifteenth of January, 2023, with a total of one hundred fifty subjects."
+      similarity = obj.CalculateJaccardSimilarity(text1, text2)
+      # Expected output: Jaccard Similarity: 0.1200 (example value, actual may vary).
+      print(f"Jaccard Similarity: {similarity:.4f}")
     '''
 
     # Get sets of words.
@@ -237,6 +282,91 @@ class TextGenerationMetrics(object):
     jaccard = intersection / union if (union > 0) else 0.0
     # Return Jaccard similarity.
     return jaccard
+
+  def CalculateSemanticSimilarity(self, semanticModel, text1: str, text2: str) -> float:
+    r'''
+    Calculates the cosine similarity between two text embeddings using a sentence transformer model.
+
+    This function utilizes a deep learning approach, mapping texts into a high-dimensional semantic
+    space where geometric proximity indicates meaning equivalence. Unlike lexical overlap methods,
+    it is highly context-aware and robust to paraphrasing, capturing syntactic structures and
+    long-range dependencies. It will assign a high score to texts that use completely different
+    words but convey the same underlying meaning, making it ideal for evaluating humanized text
+    where vocabulary diversity is intentionally increased.
+
+    Architectural Correlation Analysis:
+      - CalculateJaccardSimilarity (Lexical): High score only if exact words match. Fails on synonyms/paraphrases.
+      - CalculateSemanticSimilarity (Embedding): High score if meaning is preserved, regardless of word choice.
+      - Conclusion: Use Jaccard for exact duplication checks; use Semantic for meaning preservation.
+
+    Parameters:
+      semanticModel (sentence_transformers.SentenceTransformer): A pre-initialized sentence transformer model.
+      text1 (str): The first text string.
+      text2 (str): The second text string.
+
+    Returns:
+      float: The cosine similarity score between 0.0 and 1.0. Returns 0.05 on failure.
+
+    Examples
+    --------
+    .. code-block:: python
+
+      from sentence_transformers import SentenceTransformer
+      from HMB.TextGenerationMetrics import TextGenerationMetrics
+
+      # Load a pre-trained sentence transformer model.
+      model = SentenceTransformer("all-MiniLM-L6-v2")
+
+      # Initialize the metrics object.
+      obj = TextGenerationMetrics()
+
+      # Calculate semantic similarity between two texts.
+      text1 = "The study was conducted on January 15, 2023, and included 150 participants."
+      text2 = "The research took place on the fifteenth of January, 2023, with a total of one hundred fifty subjects."
+      similarity = obj.CalculateSemanticSimilarity(model, text1, text2)
+      # Expected output: Semantic Similarity: 0.7649 (example value, actual may vary).
+      print(f"Semantic Similarity: {similarity:.4f}")
+    '''
+
+    # Validate that the semantic model is available for inference.
+    if (semanticModel is not None):
+      # Attempt to calculate similarity with comprehensive error handling.
+      try:
+        # Encode the first text into a high-dimensional tensor embedding.
+        embedding1 = semanticModel.encode(text1, convert_to_tensor=True)
+
+        # Encode the second text into a high-dimensional tensor embedding.
+        embedding2 = semanticModel.encode(text2, convert_to_tensor=True)
+
+        # Ensure the first embedding is 2D for the cosine similarity calculation.
+        if (len(embedding1.shape) == 1):
+          # Reshape the 1D tensor to 2D by adding a batch dimension.
+          embedding1 = embedding1.unsqueeze(0)
+
+        # Ensure the second embedding is 2D for the cosine similarity calculation.
+        if (len(embedding2.shape) == 1):
+          # Reshape the 1D tensor to 2D by adding a batch dimension.
+          embedding2 = embedding2.unsqueeze(0)
+
+        # Calculate the cosine similarity between the two embeddings along the feature dimension.
+        similarity = torch.nn.functional.cosine_similarity(embedding1, embedding2, dim=1)
+
+        # Extract the similarity value as a standard Python float.
+        similarityValue = similarity.item()
+
+        # Return the successfully calculated semantic similarity score.
+        return similarityValue
+
+      # Catch any unexpected runtime exceptions during model inference.
+      except Exception as e:
+        # Print a diagnostic warning containing the exception details.
+        print(f"⚠️ Semantic similarity calculation failed: {e}")
+
+        # Return a low fallback score to reject invalid variations.
+        return 0.05
+
+    # Return a low fallback score if the model is unavailable to reject variations.
+    return 0.05
 
   def CalculateLengthRatio(self, generatedText, referenceText):
     r'''
@@ -268,7 +398,14 @@ class TextGenerationMetrics(object):
 
   def CalculatePerplexity(self, generatedTokens, referenceTokens):
     r'''
-    Calculates the perplexity of generated tokens against reference tokens.
+    Calculates the perplexity of generated tokens against reference tokens using a statistical approach.
+
+    Architectural Paradigm & Differences:
+    This function employs a statistical, frequency-based approach, relying on empirical token counts
+    from a provided reference corpus. It is context-agnostic; it treats tokens as independent events
+    (a bag-of-words model) and calculates probabilities based solely on global frequency distributions,
+    ignoring word order entirely.
+
     Perplexity measures how well the generated text predicts the reference text.
 
     .. math::
@@ -284,31 +421,422 @@ class TextGenerationMetrics(object):
 
     Returns:
       float: Perplexity score.
+
+    Examples
+    --------
+    .. code-block:: python
+
+      from HMB.TextGenerationMetrics import TextGenerationMetrics
+
+      # Example reference and generated tokens.
+      referenceTokens = "The cat sat on the mat".split()
+      generatedTokens = "The cat sat on the mat".split()
+
+      # Initialize the metrics object.
+      obj = TextGenerationMetrics()
+
+      # Calculate perplexity.
+      perplexity = obj.CalculatePerplexity(generatedTokens, referenceTokens)
+      print(f"Statistical Perplexity: {perplexity:.4f}")
     '''
 
     # Handle empty reference.
     if (len(referenceTokens) == 0):
+      # Return infinity for empty reference.
       return float("inf")
+
     # Count occurrences of each token in the reference text.
     refCounter = Counter(referenceTokens)
+
+    # Calculate total reference tokens.
     totalRefTokens = len(referenceTokens)
-    # Calculate probabilities for each generated token.
+
+    # Initialize list for log probabilities.
     logProbs = []
+
+    # Iterate through each generated token.
     for token in generatedTokens:
+      # Calculate probability with smoothing.
       prob = refCounter[token] / totalRefTokens if (token in refCounter) else 1e-10
+
       # Add log probability if prob > 0.
       if (prob > 0):
+        # Append the natural log of the probability.
         logProbs.append(np.log(prob))
       else:
+        # Return infinity if probability is zero.
         return float("inf")
+
     # Handle empty logProbs.
     if (len(logProbs) == 0):
+      # Return infinity for empty log probabilities.
       return float("inf")
+
+    # Calculate average log probability.
     avgLogProb = np.mean(logProbs)
+
+    # Calculate perplexity from average log probability.
     perplexity = np.exp(-avgLogProb)
+
+    # Normalize perplexity by the number of generated tokens.
     perplexity = perplexity / len(generatedTokens)
+
     # Return perplexity score.
     return perplexity
+
+  def CalculateNeuralPerplexity(self, critTokenizer, critModel, text, context=""):
+    r'''
+    Calculates the perplexity score of the provided text, conditioned on an optional context, using a deep learning approach.
+
+    Architectural Paradigm & Differences:
+    This function utilizes a deep learning approach, specifically a Transformer-based causal language model
+    (such as GPT-2), to compute perplexity. It is highly context-aware. By processing the entire sequence
+    through a neural network, it captures syntactic structures, word order, and long-range dependencies.
+
+    Perplexity is defined as the exponent of the average negative log-likelihood of the tokens.
+    In this implementation, the loss is computed exclusively over the target text portion by
+    masking the context tokens. This ensures the score strictly reflects the predictability of
+    the new text given the preceding context, rather than rewarding predictable context tokens.
+
+    Heuristic Interpretation:
+      - Lower scores (e.g., < 20.0) often indicate AI-generated or highly predictable text.
+      - Moderate scores (e.g., 20.0 to 50.0) suggest natural human-like variability.
+      - Extremely high scores (e.g., > 150.0) may indicate incoherent, fragmented, or gibberish text.
+
+    Note: Perplexity is inherently model-dependent and architecture-specific. It should be
+    evaluated alongside complementary metrics such as semantic similarity, fluency scoring,
+    and stylistic analysis to ensure robust text quality detection.
+
+    Parameters:
+      critTokenizer (transformers.PreTrainedTokenizer): A pre-initialized tokenizer aligned
+          with the critic model for consistent tokenization.
+      critModel (transformers.PreTrainedModel): A pre-initialized causal language model
+          used to compute the cross-entropy loss and subsequent perplexity.
+      text (str): The target input text for which to calculate the perplexity score.
+      context (str): An optional preceding context string to condition the calculation.
+
+    Returns:
+      float: The calculated perplexity score. Returns 0.0 for empty inputs or invalid states.
+
+    Examples
+    --------
+    .. code-block:: python
+
+      from transformers import GPT2LMHeadModel, GPT2Tokenizer
+      from HMB.TextGenerationMetrics import TextGenerationMetrics
+
+      # Define the critic model name (e.g., GPT-2).
+      critModelName = "gpt2"
+      # Initialize the tokenizer from the pretrained model.
+      critTokenizer = GPT2Tokenizer.from_pretrained(critModelName)
+      # Initialize the model from the pretrained weights.
+      critModel = GPT2LMHeadModel.from_pretrained(critModelName)
+
+      # Ensure the tokenizer has a pad token to avoid errors.
+      if (critTokenizer.pad_token is None):
+        # Set the pad token to the end of sequence token.
+        critTokenizer.pad_token = critTokenizer.eos_token
+
+      text ="The cat sat on the mat."
+      context = "The cat sat on the mat. The cat is happy."
+
+      # Execute the context-aware neural function with the current strings.
+      obj = TextGenerationMetrics()
+      neuralPPL = obj.CalculateNeuralPerplexity(critTokenizer, critModel, text, context)
+
+      print(f"Neural Context-Aware Perplexity: {neuralPPL:.4f}")
+    '''
+
+    # Validate that the target text is not empty or purely whitespace.
+    if (not text or not text.strip()):
+      # Return zero immediately for invalid or empty input sequences.
+      return 0.0
+
+    # Construct the full input sequence by combining context and target text.
+    if (context and context.strip()):
+      # Concatenate the stripped context and text with a separating space.
+      fullInput = f"{context.strip()} {text.strip()}"
+    else:
+      # Use only the target text when no context is provided.
+      fullInput = text.strip()
+      # Normalize the context variable to an empty string for subsequent logic.
+      context = ""
+
+    # Determine the maximum allowed sequence length from the model configuration.
+    maxLength = getattr(critModel.config, "max_position_embeddings", 512)
+
+    # Tokenize the full combined input sequence with truncation safety.
+    encodings = critTokenizer(
+      fullInput,
+      return_tensors="pt",
+      truncation=True,
+      max_length=maxLength,
+    ).to(critModel.device)
+
+    # Clone the input token IDs to initialize the label tensor for loss computation.
+    labels = encodings.input_ids.clone()
+
+    # Mask the context tokens to exclude them from the perplexity calculation.
+    if (context):
+      # Tokenize the context independently to determine its exact token span.
+      contextEncodings = critTokenizer(
+        context.strip(),
+        return_tensors="pt",
+        truncation=True,
+        max_length=maxLength,
+      ).to(critModel.device)
+
+      # Extract the sequence length of the isolated context tokens.
+      contextLen = contextEncodings.input_ids.shape[1]
+
+      # Extract the total sequence length of the combined input tokens.
+      inputLen = encodings.input_ids.shape[1]
+
+      # Calculate a safe masking boundary to prevent tensor indexing errors.
+      maskLength = min(contextLen, inputLen)
+
+      # Assign -100 to the context label positions to ignore them during loss calculation.
+      labels[:, :maskLength] = -100
+
+    # Disable gradient computation to optimize memory usage during inference.
+    with torch.inference_mode():
+      # Attempt to execute the forward pass with the prepared inputs and labels.
+      try:
+        outputs = critModel(input_ids=encodings.input_ids, labels=labels)
+
+        # Verify that the computed loss is a valid numerical value and not NaN.
+        if (outputs.loss is None or torch.isnan(outputs.loss)):
+          # Return zero if the loss value is invalid or undefined.
+          return 0.0
+
+        # Transform the cross-entropy loss into an interpretable perplexity score.
+        perplexity = torch.exp(outputs.loss).item()
+
+        # Return the successfully calculated perplexity value.
+        return perplexity
+
+      # Catch any unexpected runtime exceptions that occur during model execution.
+      except Exception as e:
+        # Print a diagnostic warning message containing the exception details.
+        print(f"⚠️ Error during perplexity calculation: {e}")
+
+        # Return zero as a safe fallback value upon encountering an error.
+        return 0.0
+
+  def CalculateFluencyScore(self, genTokenizer, genModel, text: str, context: str = "") -> float:
+    r'''
+    Calculates a normalized fluency score for the provided text using model-based perplexity.
+
+    Architectural Paradigm & Heuristics:
+    This function converts raw perplexity into a bounded fluency score between 0.0 and 1.0
+    by applying a multi-stage heuristic pipeline. Unlike raw perplexity, which is unbounded
+    and model-dependent, this score provides an interpretable, normalized metric suitable
+    for ranking candidate text variations during the humanization process.
+
+    Heuristics applied:
+      1. Hard Length Rejection: Texts with fewer than 3 words receive a minimal score.
+      2. Linear Perplexity Inversion: Maps typical perplexity ranges to a 0.0–1.0 range.
+      3. Aggressive Short-Text Penalty: Caps the maximum score for texts under 8 words.
+      4. Valid Token Scaling: Requires approximately 15 tokens for full score confidence.
+      5. Repetition Penalty: Detects and penalizes texts with excessive word repetition.
+      6. Punctuation Penalty: Reduces the score for texts lacking terminal punctuation.
+      7. Capitalization Penalty: Reduces the score for texts not starting with a capital letter.
+
+    Parameters:
+      genTokenizer (transformers.PreTrainedTokenizer): A pre-initialized tokenizer
+        aligned with the model for consistent tokenization.
+      genModel (transformers.PreTrainedModel): A pre-initialized language model
+        used to compute the cross-entropy loss for perplexity estimation.
+      text (str): The candidate text to evaluate for fluency.
+      context (str): Optional preceding context to condition the loss calculation.
+
+    Returns:
+      float: A normalized fluency score between 0.0 (incoherent) and 1.0 (perfectly fluent).
+
+    Examples
+    --------
+    .. code-block:: python
+
+      from transformers import GPT2LMHeadModel, GPT2Tokenizer
+      from HMB.TextGenerationMetrics import TextGenerationMetrics
+
+      # Load a pre-trained GPT-2 model and tokenizer.
+      modelName = "gpt2"
+      tokenizer = GPT2Tokenizer.from_pretrained(modelName)
+      model = GPT2LMHeadModel.from_pretrained(modelName)
+
+      # Ensure the tokenizer has a pad token to avoid errors.
+      if (tokenizer.pad_token is None):
+        tokenizer.pad_token = tokenizer.eos_token
+
+      # Initialize the metrics object.
+      metrics = TextGenerationMetrics()
+
+      # Calculate fluency score for a candidate text with optional context.
+      candidateText = "The cat sat on the mat."
+      contextText = "In the living room, the cat was very comfortable."
+      fluencyScore = metrics.CalculateFluencyScore(tokenizer, model, candidateText, contextText)
+      print(f"Fluency Score: {fluencyScore:.4f}")
+    '''
+
+    # Validate that the input text is a non-empty string.
+    if (not text or not isinstance(text, str)):
+      # Return a minimal score for invalid or empty input.
+      return 0.1
+
+    # Strip leading and trailing whitespace from the input text.
+    text = text.strip()
+
+    # Strip leading and trailing whitespace from the optional context.
+    context = context.strip() if (context) else ""
+
+    # Calculate the number of words in the stripped text.
+    wordCount = len(text.split())
+
+    # Apply a hard rejection for extremely short text that is too noisy for perplexity.
+    if (wordCount < 3):
+      # Return a minimal score for text that is too short to evaluate reliably.
+      return 0.1
+
+    # Attempt to calculate the fluency score with comprehensive error handling.
+    try:
+      # Construct the full input sequence by combining context and target text.
+      fullText = (context + " " + text) if (context) else text
+
+      # Tokenize the full combined input sequence with truncation safety.
+      encoding = genTokenizer(
+        fullText,
+        return_tensors="pt",
+        truncation=True,
+        max_length=512,
+      )
+
+      # Move the input token IDs to the model's compute device.
+      inputIds = encoding.input_ids.to(genModel.device)
+
+      # Clone the input token IDs to initialize the label tensor for loss computation.
+      labels = inputIds.clone()
+
+      # Initialize the count of valid (unmasked) tokens.
+      countValidTokens = inputIds.shape[1]
+
+      # Mask the context tokens to exclude them from the perplexity calculation.
+      if (context):
+        # Tokenize the context independently to determine its exact token span.
+        contextEncoding = genTokenizer(
+          context,
+          return_tensors="pt",
+          truncation=True,
+          max_length=512,
+        )
+
+        # Extract the sequence length of the isolated context tokens.
+        contextLen = contextEncoding.input_ids.shape[1]
+
+        # Check if the context is shorter than the full input to apply masking.
+        if (contextLen < inputIds.shape[1]):
+          # Assign -100 to the context label positions to ignore them during loss.
+          labels[:, :contextLen] = -100
+
+          # Calculate the number of valid (unmasked) target tokens.
+          countValidTokens = inputIds.shape[1] - contextLen
+        else:
+          # Set valid token count to zero if context covers the entire input.
+          countValidTokens = 0
+
+      # Apply a safety check to reject inputs where all tokens are masked.
+      if (countValidTokens < 2):
+        # Return a minimal score when there are insufficient valid tokens.
+        return 0.1
+
+      # Disable gradient computation to optimize memory usage during inference.
+      with torch.inference_mode():
+        # Execute the forward pass with the prepared inputs and labels.
+        outputs = genModel(inputIds, labels=labels)
+
+        # Extract the computed loss from the model outputs.
+        loss = outputs.loss
+
+        # Verify that the computed loss is a valid numerical value and not NaN.
+        if (loss is None or torch.isnan(loss)):
+          # Return a minimal score if the loss value is invalid or undefined.
+          return 0.05
+
+        # Transform the cross-entropy loss into a raw perplexity value.
+        perplexity = torch.exp(loss).item()
+
+      # --- Scoring Formula ---
+      # Base Score: Linear inversion mapped to a 0-250 perplexity range.
+      # Good text PPL: ~20-50 -> Score ~0.8-0.9
+      # Moderate text PPL: ~100 -> Score ~0.6
+      # Gibberish PPL: ~250+ -> Score ~0.0
+      baseScore = max(0.0, 1.0 - (perplexity / 250.0))
+
+      # Length Penalty & Capping
+      # Problem: Short gibberish (3-4 words) often has artificially low PPL.
+      # Solution: Cap the maximum possible score for very short texts, but allow normal sentences to score well.
+      if (wordCount < 6):
+        # Max score scales from 0.30 (3 words) to 0.50 (6 words).
+        maxPossibleScore = 0.30 + (wordCount * 0.05)
+        baseScore = min(baseScore, maxPossibleScore)
+
+      # Calculate a length confidence factor based on the number of valid tokens.
+      lengthFactor = min(1.0, countValidTokens / 15.0)
+
+      # Blend the base score with the length confidence factor to produce a preliminary score.
+      finalScore = baseScore * (0.6 + 0.4 * lengthFactor)
+
+      # Apply a penalty for texts with a high ratio of duplicated words (common in repetitive gibberish).
+      wordFrequencies = {}
+
+      # Iterate through each word in the text to count occurrences, stripping punctuation.
+      for word in text.lower().split():
+        # Clean punctuation from word for accurate counting.
+        cleanWord = word.strip(".,!?;:\"'()[]{}")
+
+        # Increment the frequency count for the current cleaned word.
+        if (cleanWord):
+          wordFrequencies[cleanWord] = wordFrequencies.get(cleanWord, 0) + 1
+
+      # Check the diversity of the vocabulary to detect repetitive gibberish.
+      if (wordFrequencies):
+        # Count how many unique words appear more than once in the text.
+        duplicatedUniqueWords = sum(1 for count in wordFrequencies.values() if count > 1)
+
+        # Calculate the total number of unique words.
+        totalUniqueWords = len(wordFrequencies)
+
+        # Calculate the ratio of duplicated unique words to total unique words.
+        duplicateRatio = duplicatedUniqueWords / totalUniqueWords
+
+        # Apply a heavy penalty if more than 30% of the unique vocabulary is repeated.
+        if (duplicateRatio > 0.3):
+          # Reduce the final score proportionally to the vocabulary repetition.
+          finalScore *= (1.0 - duplicateRatio)
+
+      # Apply a punctuation penalty for texts lacking proper terminal punctuation.
+      if (text[-1] not in ".!?"):
+        # Reduce the score by ten percent for missing terminal punctuation.
+        finalScore *= 0.9
+
+      # Apply a capitalization penalty for texts not starting with a capital letter.
+      if (not text[0].isupper()):
+        # Reduce the score by five percent for missing initial capitalization.
+        finalScore *= 0.95
+
+      # Clamp the final score to the valid range of 0.0 to 1.0.
+      finalScore = max(0.0, min(1.0, finalScore))
+
+      # Return the fully adjusted and clamped fluency score.
+      return round(finalScore, 4)
+
+    # Catch any unexpected runtime exceptions during the fluency calculation.
+    except Exception as e:
+      # Print a diagnostic warning message containing the exception details.
+      print(f"⚠️ Fluency scoring failed: {e}")
+
+      # Return a minimal fallback score upon encountering an error.
+      return 0.05
 
   def CalculateAccuracy(self, generatedText, referenceText):
     r'''
@@ -632,7 +1160,7 @@ class TextGenerationMetrics(object):
       "ROUGE"             : self.CalculateROUGE(generatedText, referenceText),
       "METEOR"            : self.CalculateMETEOR(generatedText, referenceText),
       "EditDistance"      : self.CalculateEditDistance(generatedText, referenceText),
-      "SemanticSimilarity": self.CalculateSemanticSimilarity(generatedText, referenceText),
+      "SemanticSimilarity": self.CalculateJaccardSimilarity(generatedText, referenceText),
       "LengthRatio"       : self.CalculateLengthRatio(generatedText, referenceText),
       "Perplexity"        : self.CalculatePerplexity(generatedText.split(), referenceText.split()),
       "Accuracy"          : self.CalculateAccuracy(generatedText, referenceText),
@@ -670,7 +1198,7 @@ if __name__ == "__main__":
     # Compute edit distance similarity.
     editDistance = metrics.CalculateEditDistance(genText, refText)
     # Compute semantic similarity.
-    semanticSimilarity = metrics.CalculateSemanticSimilarity(genText, refText)
+    semanticSimilarity = metrics.CalculateJaccardSimilarity(genText, refText)
     # Compute length ratio.
     lengthRatio = metrics.CalculateLengthRatio(genText, refText)
     # Compute perplexity.

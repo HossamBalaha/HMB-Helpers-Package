@@ -5,6 +5,154 @@ All notable changes to the **HMB Helpers Package** will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-07-15
+
+### Added
+
+- `HMB/ImageNormalization.py` (`MacenkoColorNormalization`): Added a new `MacenkoColorNormalization` class to make
+  Macenko stain normalization fully functional, complete with `Fit` and `Normalize` methods for robust stain vector and
+  concentration handling.
+- `HMB/ImageNormalization.py` (`VahadaneColorNormalization` & `FindStainMatrixVahadane`): Added a new
+  `VahadaneColorNormalization` class and its corresponding `FindStainMatrixVahadane` helper function. This utilizes
+  Sparse Non-negative Matrix Factorization (SNMF) for robust stain matrix estimation.
+- `HMB/ImageNormalization.py` (`HistogramColorNormalization`): Added a new `HistogramColorNormalization` class for
+  performing histogram matching (specification) color normalization, mapping source image channel distributions to a
+  target template.
+- `HMB/WSIHelper.py` (`BatchNormalizeHistopathologyImages`): Added a comprehensive batch-processing helper
+  function. It automates the normalization of entire folders of histopathology images, supporting the loading of
+  pre-fitted models (via pickle) or fitting a new model on the fly, and applying the chosen method (Reinhard, Macenko,
+  Vahadane, or Histogram) across all supported image suffixes.
+- `HMB/YOLOHelper.py` (`TrainMultipleYoloDetectors`): Added a high-level function to train multiple YOLO26 object
+  detection models, handling environment setup, training, validation, and optional ONNX export.
+- `HMB/YOLOHelper.py` (`EvaluateAndSaveYoloDetections`): Added a robust evaluation pipeline for YOLO26 detection models
+  to compute and save suitable metrics (mAP50, mAP50-95, Precision, Recall) across dataset splits.
+- `HMB/YOLOHelper.py` (`GenerateYoloDetectionExplainability`): Added a utility function to perform inference on a subset
+  of images and generate visual explainability artifacts (bounding boxes, class labels, and confidence scores).
+- `HMB/DatasetsHelper.py` (`TFFolderBasedDataPipeline`): Added a unified data pipeline class for TensorFlow-based
+  image classification. It handles automatic folder scanning, dynamic dataset splitting (via `splitfolders` if
+  explicit train/val/test folders are missing), and the creation of highly optimized `tf.data.Dataset` pipelines
+  with built-in support for caching, batching, and prefetching.
+- `HMB/WSIHelper.py` (`ExtractRegionTilesFromBoundingBox`): Added a new function to extract tiles from a specified
+  bounding box of a whole-slide image (WSI) across all pyramid levels, applying background filtering and optionally
+  saving tiles, masks, and ROIs to disk.
+- `HMB/WSIHelper.py` (`ExtractWSITissueContour`): Added a new function to extract the combined contour of all tissue
+  content from a WSI by analyzing a thumbnail or a specific pyramid level, combining all valid contiguous tissue regions
+  into a single unified contour representation.
+- `HMB/WSIHelper.py` (`ExtractPyramidalWSITiles`): Added comprehensive documentation and usage examples to the function
+  docstring.
+- `HMB/WSIHelper.py` (`ExtractRegionTiles`): Improved documentation and added concrete usage examples.
+- `HMB/WSIHelper.py` (`ExtractRegionTiles`): Improved documentation and added concrete usage examples.
+- `HMB/TextGenerationMetrics.py` (`CalculateNeuralPerplexity`): Added a new function to calculate the perplexity score
+  of the provided text, conditioned on an optional context, using a deep learning approach.
+- `HMB/TextGenerationMetrics.py` (`CalculateFluencyScore`): Added a new function to calculate a normalized fluency score
+  for the provided text using model-based perplexity.
+- `HMB/TextHelper.py` (`IsSyntacticallyValid`): Added a new function to perform a robust heuristic check to determine
+  the syntactic validity of a given text.
+- `HMB/TextHelper.py` (`CalculateDynamicTemperature`): Added a new function to analyze sentence content and return the
+  optimal dynamic temperature for generation.
+- `HMB/TextHelper.py` (`CalculateSemanticSimilarity`): Added a new function to calculate the cosine similarity between
+  two text embeddings using a sentence transformer model.
+- `HMB/TextHelper.py` (`GetContextualSynonym`): Added a new function to retrieve a contextual synonym for a specified
+  word based on the provided surrounding text.
+- `HMB/TextHelper.py` (`BackTranslateDeepRestructure`): Added a new function to perform deep restructuring via
+  back-translation through an intermediate pivot language.
+- `HMB/TextHelper.py` (`CalculateMaskedLikelihoodDelta`): Added a new function to calculate the probability delta
+  between an original word and a replacement word at a specific masked position in the context using a Masked Language
+  Model.
+- `HMB/TextHelper.py` (`CorrectGrammar`): Added a new function to apply comprehensive grammar correction using
+  LanguageTool with advanced contextual correctness scoring and dynamic temporal consistency enforcement.
+- `HMB/TextHelper.py` (`GetInflectedForm`): Added a new function to retrieve a dynamically inflected morphological form
+  of a given spaCy token.
+- `HMB/TextHelper.py` (`GetPastParticipleForm`): Added a new function to retrieve the past participle form (VBN) of a
+  given spaCy token.
+- `HMB/TextHelper.py` (`GetPastTenseForm`): Added a new function to retrieve the simple past tense form (VBD) of a given
+  spaCy token.
+- `HMB/TextHelper.py` (`CalculateEnglishCorrectnessScore`): Added a new function to calculate a robust correctness score
+  for a specific grammar match.
+- `HMB/TextHelper.py` (`ApplyLanguageToolCorrections`): Added a new function to iteratively apply the highest-scoring
+  grammar corrections to the input text.
+- `HMB/TextHelper.py` (`EnforceTemporalConsistency`): Added a new function to dynamically enforce past tense for verbs
+  when past time markers are detected.
+- `HMB/TextHelper.py` (`TextSemanticShield`): Added a new class to extract named entities, domain-specific terms, and
+  noun chunks via spaCy, and replace them with high-entropy cryptographic tokens to prevent downstream transformations
+  from corrupting technical terminology. It includes `ApplyCryptographicMask` to apply the masking and `RestoreEntities`
+  to restore the original entities.
+- `requirements.txt`: Added `language_tool_python==3.4.0` to support advanced grammar correction features.
+- `HMB/Utils.py` (`NumpyEncoder`): Added a custom JSON encoder for NumPy data types. This encoder extends the default
+  JSONEncoder to handle NumPy arrays and scalars. It converts NumPy arrays to lists and NumPy scalars to native Python
+  types (int or float) for JSON serialization.
+- `HMB/PlotsHelper.py` (`GenerateDistributionCountFigure`): Added a function to generate a bar chart figure showing the
+  distribution of class counts across different dataset splits.
+- `HMB/WSIHelper.py` (`HistopathologyNormalizeImageFolder`): Added a function to normalize histopathology images in a
+  folder structure using the specified normalization method. The function processes images in the specified splits and
+  saves the normalized images to the output directory.
+- `HMB/ImagesHelper.py` (`MultiChannelFeatureExtractor`): Added a new class for extracting various image features such
+  as HOG, K-Means clustering, Sobel edges, and Local Binary Patterns (LBP). The class allows configuration of feature
+  extraction parameters and provides methods to compute each feature layer from an input RGB image.
+
+### Changed
+
+- `HMB/ImageNormalization.py`: Refined and expanded docstrings across the module to improve clarity, parameter
+  descriptions, and overall consistency.
+- `HMB/ImageNormalization.py` (`ApplyReinhard`): Enhanced the standalone function by introducing an `eps` parameter (a
+  small epsilon value) to guard against division by zero when calculating normalization ratios.
+- `HMB/ImageNormalization.py` (`ReinhardColorNormalization`): Enhanced the class implementation, documentation, and
+  internal stability checks.
+- `HMB/ImageNormalization.py` (`GetFitNormalizer`): Enhanced the utility function to seamlessly support and initialize
+  the newly added normalization methods (Macenko, Vahadane, and Histogram) in addition to the existing Reinhard method.
+- `HMB/TFHelper.py` (`CreateFitPretrainedAttentionModel`): Added conditional logic to safely skip the initial frozen
+  training phase when `initialEpochs <= 0`. Additionally, updated the fine-tuning phase's `initial_epoch` parameter to
+  dynamically default to `0` when the initial phase is skipped, preventing `AttributeError` exceptions that would occur
+  when trying to access the `history` object if it is `None`.
+- `HMB/TFHelper.py` (`BuildPretrainedAttentionModel`):
+    - Refactored the backbone model initialization to dynamically load models using
+      `tf.keras.applications`. This replaces the previous hardcoded `if/elif` chain, resulting in
+      cleaner, more maintainable code and automatic support for any valid Keras application model string.
+    - Added `pretrained`, `freezeBackbone`, and `isSparse` boolean flags to the function signature. This enhances
+      flexibility by allowing users to dynamically toggle ImageNet weight initialization, backbone trainability, and the
+      choice between sparse categorical and binary crossentropy loss.
+    - Enhanced model initialization logging to dynamically calculate and print total vs. trainable parameter counts,
+      alongside a comprehensive summary of the model's configuration (backbone, attention block, input shape, and number
+      of classes).
+- `HMB/WSIHelper.py` (`ExtractPyramidalWSITiles`):
+    - Updated subplot titles to display the actual magnification level (`magLevel`) instead of the downsample ratio (
+      `dRatio`).
+    - Adjusted the Matplotlib figure creation to dynamically set the figure size based on the number of pyramid levels (
+      `figsize=(4 * slideLevels, 8)`).
+    - Updated the return signature to include `magLevels`, a list of magnification levels corresponding to each pyramid
+      level.
+- `HMB/WSIHelper.py`: Updated all internal calls to `ExtractPyramidalWSITiles` to correctly unpack the newly returned
+  `magLevels` variable.
+- `HMB/WSIHelper.py` (`ExtractRegionTiles`): Added a `dpi` parameter to allow configuring the resolution in dots per
+  inch for saved plot images.
+- `HMB/WSIHelper.py` (`ReadWSIViaOpenSlide`): The input `slidePath` is now resolved to an absolute path using
+  `pathlib.Path.resolve()` before opening the slide. This prevents issues that can arise when passing relative paths
+  to the underlying OpenSlide library.
+- `HMB/TextGenerationMetrics.py` (`TextGenerationMetrics`): Enhanced the docstring of the class and its functions. Added
+  a usage example to the docstring of the `CalculatePerplexity` function.
+- `HMB/TextHelper.py` (`Summarizer`): Renamed to `HuggingFaceTextSummarizer` for better clarity and enhanced its
+  docstring.
+- `HMB/TextHelper.py` (`CalculateSemanticSimilarity`): Renamed to `CalculateJaccardSimilarity` to better reflect its
+  functionality (calculating Jaccard similarity based on word overlap). Enhanced its docstring and added a usage
+  example.
+- `HMB/TFHelper.py` (`CompileTrainTFUNetModel`): Fixed an import issue and added a `metrics` parameter (default
+  `["accuracy"]`) to specify the list of metrics to evaluate during training and validation.
+- `Examples/TF_UNet_Training.py`: Updated to use the new `metrics` parameter in the `CompileTrainTFUNetModel` call,
+  added `traceback.print_exc()` to the `except Exception as e` block, and replaced the locally declared print function
+  with `fprint` from `HMB.Utils`.
+- `Examples/TF_UNet_EvalPredict.py`: Replaced the locally declared print function with `fprint` from `HMB.Utils`.
+  Enhanced the hyperparameters loading process to robustly check for a user-provided JSON path, validate its existence,
+  and gracefully fall back to a default `Hyperparameters.json` located in the model weights directory if no explicit
+  path is provided.
+- `HMB/TFSegmentationLosses.py`: Enhanced all loss classes (`DiceLoss`, `DiceBCELoss`, `JaccardLoss`, `TverskyLoss`,
+  `FocalLoss`, and `GeneralizedDiceLoss`) to properly handle `tf.keras.losses.Reduction` and `tf.keras.losses.Loss`,
+  preventing potential errors.
+
+### Fixed
+
+- `Examples/TF_UNet_EvalPredict.bat`: Replaced incorrect `\"` with `"` for proper syntax. Removed the undefined
+  `--BatchSize %BatchSize%` argument, as it is not defined in the corresponding `TF_UNet_EvalPredict.py` script.
+
 ## [0.2.0] - 2026-06-07
 
 ### Added
