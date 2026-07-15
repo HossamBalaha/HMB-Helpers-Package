@@ -31,7 +31,7 @@ if (os.path.exists(versionFile)):
       # Check if the current line contains the version declaration marker.
       if (line.startswith("__version__")):
         # Extract the version value and strip whitespace or quote characters.
-        release = line.split("=")[1].strip().replace('"', '').replace("'", "")
+        release = line.split("=")[1].strip().replace('"', "").replace("'", "")
         # Extract the major version component for the short version variable.
         version = release.split(".")[0]
         # Terminate the loop immediately after successfully parsing the version.
@@ -56,6 +56,7 @@ extensions = [
   "sphinx_copybutton",  # Add copy buttons to code blocks.
   "sphinx_design",  # Enhanced design elements.
   "sphinx_autodoc_typehints",  # Better handling of type hints.
+  "sphinx.ext.napoleon",  # Support for Google and NumPy style docstrings.
 ]
 
 # Specify the directory containing custom template files.
@@ -86,6 +87,10 @@ napoleon_include_init_with_doc = True
 napoleon_include_private_with_doc = False
 # Include special method documentation in the output.
 napoleon_include_special_with_doc = True
+# Tell Napoleon to treat these as official docstring headers
+napoleon_custom_sections = [
+  ("Design", "note"),
+]
 # Format example blocks as admonitions.
 napoleon_use_admonition_for_examples = True
 # Format note blocks as admonitions.

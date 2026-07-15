@@ -10,7 +10,7 @@ Quick Pointers
 - **Example scripts**: ``HMB/Examples``.
 - **Documentation source**: ``source/`` (build with Sphinx into ``build/html``).
 - **Tests**: Run via ``tests/run_tests.py`` (see README for examples).
-- **Package version**: 0.2.0 (`Changelog <https://github.com/HossamBalaha/HMB-Helpers-Package/releases>`_).
+- **Package version**: 0.3.0 (`Changelog <https://github.com/HossamBalaha/HMB-Helpers-Package/releases>`_).
 
 General
 -------
@@ -408,7 +408,7 @@ Licensing & Citation
      author = {Balaha, Hossam Magdy},
      title = {HMB-Helpers-Package},
      year = {2026},
-     version = {0.2.0},
+     version = {0.3.0},
      url = {https://github.com/HossamBalaha/HMB-Helpers-Package}
    }
 

@@ -100,6 +100,16 @@ class CBAMBlock(Layer):
     # Forward pass applying channel and spatial attention.
 
   def call(self, inputs):
+    r'''
+    Forward pass: apply channel attention followed by spatial attention.
+
+    Parameters:
+      inputs (tensorflow.Tensor): Input feature map of shape (b, H, W, C).
+
+    Returns:
+      tensorflow.Tensor: Refined feature map after applying CBAM attention.
+    '''
+
     # Channel attention.
     # Global average pooling across spatial dims.
     avgPool = self.gap(inputs)
@@ -217,6 +227,16 @@ class SEBlock(Layer):
 
   # Forward pass applying squeeze and excitation.
   def call(self, inputs):
+    r'''
+    Forward pass: apply squeeze (global pooling) and excitation (MLP) to compute channel-wise weights and scale the input features.
+
+    Parameters:
+      inputs (tensorflow.Tensor): Input feature map of shape (b, H, W, C).
+
+    Returns:
+      tensorflow.Tensor: Recalibrated feature map after applying SE attention.
+    '''
+
     # Squeeze: Global average pooling across spatial dims.
     squeeze = self.gap(inputs)
     # Excitation: First dense layer.
@@ -293,6 +313,16 @@ class ECABlock(Layer):
 
   # Forward pass applying efficient channel attention.
   def call(self, inputs):
+    r'''
+    Forward pass: apply global pooling, 1D convolution for channel attention, and scale the input features.
+
+    Parameters:
+      inputs (tensorflow.Tensor): Input feature map of shape (b, H, W, C).
+
+    Returns:
+      tensorflow.Tensor: Recalibrated feature map after applying ECA attention.
+    '''
+
     # Global average pooling across spatial dims.
     squeeze = self.gap(inputs)
     # Reshape to (b, C, 1) so Conv1D can operate over the channel dimension
@@ -360,6 +390,9 @@ class MultiHeadSelfAttention(Layer):
 
     Parameters:
       inputs (tensorflow.Tensor): Input feature map of shape (b, H, W, C).
+
+    Returns:
+      tensorflow.Tensor: Output feature map of shape (b, H, W, C) after self-attention.
     '''
 
     b = tf.shape(inputs)[0]
@@ -424,6 +457,9 @@ class NonLocalBlock(Layer):
 
     Parameters:
       inputs (tensorflow.Tensor): Input feature map of shape (b, H, W, C).
+
+    Returns:
+      tensorflow.Tensor: Output feature map of shape (b, H, W, C) after non-local attention.
     '''
 
     b = tf.shape(inputs)[0]
@@ -505,6 +541,9 @@ class BAMBlock(Layer):
 
     Parameters:
       inputs (tensorflow.Tensor): Input feature map of shape (b, H, W, C).
+
+    Returns:
+      tensorflow.Tensor: Output feature map of shape (b, H, W, C) after BAM attention.
     '''
 
     # channel attention: global pooling -> MLP -> sigmoid -> reshape.
@@ -552,7 +591,11 @@ class GCBlock(Layer):
   def build(self, inputShape):
     r'''
     Build conv_mask and transform dense layers based on input channels.
+
+    Parameters:
+      inputShape (tuple): Shape of the input tensor.
     '''
+
     c = int(inputShape[-1])
     self.convMask = Conv2D(1, 1, padding="same", use_bias=False, name="gc_conv_mask")
     self.softmax = Softmax(axis=1)  # later applied over spatial positions.
@@ -569,6 +612,9 @@ class GCBlock(Layer):
 
     Parameters:
       inputs (tensorflow.Tensor): Input feature map of shape (b, H, W, C).
+
+    Returns:
+      tensorflow.Tensor: Output feature map of shape (b, H, W, C) after GC attention.
     '''
 
     b = tf.shape(inputs)[0]
@@ -634,6 +680,9 @@ class AxialAttention(Layer):
 
     Parameters:
       inputs (tensorflow.Tensor): Input feature map of shape (b, H, W, C).
+
+    Returns:
+      tensorflow.Tensor: Output feature map of shape (b, H, W, C) after axial attention.
     '''
 
     # height-wise attention: transpose to bring height into the "sequence" axis.
@@ -704,6 +753,9 @@ class AttentionAugmentedConv(Layer):
 
     Parameters:
       inputs (tensorflow.Tensor): Input feature map of shape (b, H, W, C).
+
+    Returns:
+      tensorflow.Tensor: Output feature map of shape (b, H, W, filters) after concatenation of conv and attention branches.
     '''
 
     convOut = self.conv(inputs)
@@ -774,6 +826,9 @@ class SKBlock(Layer):
 
     Parameters:
       inputs (tensorflow.Tensor): Input feature map of shape (b, H, W, C).
+
+    Returns:
+      tensorflow.Tensor: Output feature map of shape (b, H, W, C) after selective kernel fusion.
     '''
 
     # Compute each branch output -> list of tensors (b,H,W,C).
@@ -851,6 +906,9 @@ class TripletAttention(Layer):
 
     Parameters:
       x (tensorflow.Tensor): Input feature map of shape (b, H, W, C).
+
+    Returns:
+      tensorflow.Tensor: Spatially attended feature map of shape (b, H, W, C).
     '''
 
     avg = tf.reduce_mean(x, axis=-1, keepdims=True)
@@ -866,6 +924,9 @@ class TripletAttention(Layer):
 
     Parameters:
       inputs (tensorflow.Tensor): Input feature map of shape (b, H, W, C).
+
+    Returns:
+      tensorflow.Tensor: Output feature map of shape (b, H, W, C) after triplet attention.
     '''
 
     a = self._spatial_att(inputs)
@@ -909,6 +970,9 @@ class CoordAttention(Layer):
   def build(self, inputShape):
     r'''
     Build 1x1 conv layers used by the block.
+
+    Parameters:
+      inputShape (tuple): Shape of the input tensor.
     '''
 
     # inputShape is (batch, H, W, C).
@@ -929,8 +993,11 @@ class CoordAttention(Layer):
     r'''
     Forward pass for coordinate attention.
 
-    Input: (b, H, W, C).
-    Output: (b, H, W, C) where input is scaled by coordinate attention maps.
+    Parameters:
+      inputs (tensorflow.Tensor): Input feature map of shape (b, H, W, C).
+
+    Returns:
+      tensorflow.Tensor: Output feature map of shape (b, H, W, C) after applying coordinate attention.
     '''
 
     # Compute directional pooled descriptors.
@@ -975,7 +1042,7 @@ class SCSEBlock(Layer):
 
   def __init__(self, ratio=16, **kwargs):
     r'''
-    Initialize scSEBlock.
+    Initialize the scSEBlock.
 
     Parameters:
       ratio (int): Reduction ratio for the channel bottleneck. Default is 16.
@@ -987,6 +1054,9 @@ class SCSEBlock(Layer):
   def build(self, inputShape):
     r'''
     Build dense layers for cSE and a 1x1 conv for sSE.
+
+    Parameters:
+      inputShape (tuple): Shape of the input tensor.
     '''
 
     channel = int(inputShape[-1])
@@ -1022,8 +1092,11 @@ class SCSEBlock(Layer):
     r'''
     Forward pass: compute cSE and sSE branches and fuse their outputs.
 
-    Input: (b, H, W, C).
-    Output: (b, H, W, C) fused from both branches.
+    Parameters:
+      inputs (tensorflow.Tensor): Input feature map of shape (b, H, W, C).
+
+    Returns:
+      tensorflow.Tensor: Output feature map of shape (b, H, W, C) after applying scSE attention.
     '''
 
     # cSE branch: global pooling -> MLP -> reshape and scale.
@@ -1068,6 +1141,9 @@ class PositionAttentionModule(Layer):
   def build(self, inputShape):
     r'''
     Build 1x1 conv projections for query, key and value, and an output conv.
+
+    Parameters:
+      inputShape (tuple): Shape of the input tensor.
     '''
 
     channel = int(inputShape[-1])
@@ -1091,8 +1167,11 @@ class PositionAttentionModule(Layer):
     r'''
     Forward pass for PAM.
 
-    Input: (b, H, W, C).
-    Output: (b, H, W, C) with position attention applied.
+    Parameters:
+      inputs (tensorflow.Tensor): Input feature map of shape (b, H, W, C).
+
+    Returns:
+      tensorflow.Tensor: Output feature map of shape (b, H, W, C) after position attention.
     '''
 
     b = tf.shape(inputs)[0]
@@ -1145,6 +1224,9 @@ class ChannelAttentionModule(Layer):
   def build(self, inputShape):
     r'''
     Nothing heavy to build for CAM besides a learnable scale parameter.
+
+    Parameters:
+      inputShape (tuple): Shape of the input tensor.
     '''
 
     channel = int(inputShape[-1])
@@ -1155,8 +1237,11 @@ class ChannelAttentionModule(Layer):
     r'''
     Forward pass for CAM.
 
-    Input: (b, H, W, C).
-    Output: (b, H, W, C) with channel attention applied.
+    Parameters:
+      inputs (tensorflow.Tensor): Input feature map of shape (b, H, W, C).
+
+    Returns:
+      tensorflow.Tensor: Output feature map of shape (b, H, W, C) after channel attention.
     '''
 
     b = tf.shape(inputs)[0]
@@ -1210,6 +1295,9 @@ class DANetBlock(Layer):
   def build(self, inputShape):
     r'''
     Build internal PAM and CAM modules and small convs for feature transforms.
+
+    Parameters:
+      inputShape (tuple): Shape of the input tensor.
     '''
 
     channel = int(inputShape[-1])
@@ -1230,8 +1318,8 @@ class DANetBlock(Layer):
     r'''
     Forward pass: apply branch transforms, attention modules and fuse outputs.
 
-    Input: (b, H, W, C).
-    Output: (b, H, W, C) fused from PAM and CAM branches.
+    Parameters:
+      inputs (tensorflow.Tensor): Input feature map of shape (b, H, W, C).
     '''
 
     # Prepare features for each branch.
@@ -1275,6 +1363,9 @@ class CrissCrossAttention(Layer):
   def build(self, inputShape):
     r'''
     Build 1x1 conv projections for query, key and value and an output conv.
+
+    Parameters:
+      inputShape (tuple): Shape of the input tensor.
     '''
 
     channel = int(inputShape[-1])
@@ -1298,8 +1389,11 @@ class CrissCrossAttention(Layer):
     r'''
     Forward pass for criss-cross attention.
 
-    Input: (b, H, W, C).
-    Output: (b, H, W, C) with criss-cross contextual attention applied.
+    Parameters:
+      inputs (tensorflow.Tensor): Input feature map of shape (b, H, W, C).
+
+    Returns:
+      tensorflow.Tensor: Output feature map of shape (b, H, W, C) after criss-cross attention.
     '''
 
     b = tf.shape(inputs)[0]
@@ -1370,6 +1464,9 @@ class CrissCrossWrapperBlock(Layer):
   def build(self, inputShape):
     r'''
     Instantiate the repeated CrissCrossAttention layers.
+
+    Parameters:
+      inputShape (tuple): Shape of the input tensor.
     '''
 
     self.blocks = [CrissCrossAttention(self.interChannels) for _ in range(self.repeats)]
@@ -1379,8 +1476,11 @@ class CrissCrossWrapperBlock(Layer):
     r'''
     Forward pass: sequentially apply the CrissCrossAttention blocks.
 
-    Input: (b, H, W, C).
-    Output: (b, H, W, C) after repeated criss-cross attention.
+    Parameters:
+      inputs (tensorflow.Tensor): Input feature map of shape (b, H, W, C).
+
+    Returns:
+      tensorflow.Tensor: Output feature map of shape (b, H, W, C) after applying the repeated criss-cross attention blocks.
     '''
 
     x = inputs

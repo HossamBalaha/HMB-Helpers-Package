@@ -21,7 +21,7 @@
 HMB Documentation
 =================
 
-**Version:** 0.2.0 — see the full changelog and contribution guidelines:
+**Version:** 0.3.0 — see the full changelog and contribution guidelines:
 
 - `CHANGELOG.md <https://github.com/HossamBalaha/HMB-Helpers-Package/blob/main/CHANGELOG.md>`_
 - `CONTRIBUTING.md <https://github.com/HossamBalaha/HMB-Helpers-Package/blob/main/CONTRIBUTING.md>`_

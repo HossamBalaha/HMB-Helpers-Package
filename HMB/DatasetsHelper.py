@@ -52,7 +52,8 @@ class TabularPreprocessor:
     - The GetFeatureNames method provides the ordered list of feature names corresponding to the transformed feature matrix columns.
     - The ValidateSchema method checks that a new DataFrame contains the expected columns before transformation, raising an error if there are mismatches.
 
-  Example usage:
+  Examples
+  --------
   .. code-block:: python
 
     # Initialize the preprocessor and ignore categorical columns.
@@ -2763,68 +2764,83 @@ def LoadAllCsvs(dataDir: str, nrows: int = None) -> pd.DataFrame:
 
 
 class TFFolderBasedDataPipeline:
-  r"""
+  r'''
   A unified pipeline to handle folder scanning, auto-splitting, and tf.data.Dataset creation.
 
   This class is designed to simplify the process of creating TensorFlow data pipelines for image
   classification tasks. It automatically checks for the presence of "train", "val", and "test"
   subdirectories, and if they are not found, it attempts to split the dataset based on class subdirectories.
-  It then builds tf.data.Dataset pipelines for each split, applying appropriate transformations and
+  It then builds `tf.data.Dataset` pipelines for each split, applying appropriate transformations and
   caching strategies for training and evaluation. The class also calculates and stores the number of samples
   in each split for easy access.
 
-  Expected directory structure:
-  Dataset/
-  ├── Class_A/
-  │   ├── image1.jpg
-  │   └── image2.png
-  ├── Class_B/
-  │   ├── image3.jpg
-  │   └── image4.bmp
-  └── Class_C/
-      └── image5.tiff
+  Design
+  ------
+
+  The expected directory structure for the dataset is as follows:
+
+  .. code-block:: text
+
+    Dataset/
+    ├── Class_A/
+    │   ├── image1.jpg
+    │   └── image2.png
+    ├── Class_B/
+    │   ├── image3.jpg
+    │   └── image4.bmp
+    └── Class_C/
+        └── image5.tiff
 
   If "train", "val", and "test" folders are not found, it will create them by splitting the class folders
   using an 80/10/10 ratio. The resulting structure will be:
-  SplitDataset/
-    ├── train/
-    │   ├── Class_A/
-    │   │   ├── image1.jpg
-    │   │   └── image2.png
-    │   ├── Class_B/
-    │   │   ├── image3.jpg
-    │   │   └── image4.bmp
-    │   └── Class_C/
-    │       └── image5.tiff
-    ├── val/
-    │   ├── Class_A/
-    │   │   ├── image6.jpg
-    │   │   └── image7.png
-    │   ├── Class_B/
-    │   │   ├── image8.jpg
-    │   │   └── image9.bmp
-    │   └── Class_C/
-    │       └── image10.tiff
-    └── test/
-        ├── Class_A/
-        │   ├── image11.jpg
-        │   └── image12.png
-        ├── Class_B/
-        │   ├── image13.jpg
-        │   └── image14.bmp
-        └── Class_C/
-            └── image15.tiff
 
-  .. note:: This class requires the `splitfolders` library for auto-splitting functionality.
-    If the library is not installed, the auto-splitting feature will not work, and the class
-    will raise an error if it cannot find the expected "train", "val", and "test" directories
-    or class subdirectories to split. To install `splitfolders`, you can use pip: `pip install splitfolders`
+  .. code-block:: text
 
-  .. warning:: The auto-splitting process will create a new directory named "SplitDataset" in the
-    parent directory of the original dataset. Ensure that you have write permissions to the parent
-    directory and that you do not have an existing "SplitDataset" directory that you do not want to
-    be overwritten, as the splitting process will create this directory if it does not already exist.
-    Always back up your data before performing operations that modify the filesystem.
+    SplitDataset/
+      ├── train/
+      │   ├── Class_A/
+      │   │   ├── image1.jpg
+      │   │   └── image2.png
+      │   ├── Class_B/
+      │   │   ├── image3.jpg
+      │   │   └── image4.bmp
+      │   └── Class_C/
+      │       └── image5.tiff
+      ├── val/
+      │   ├── Class_A/
+      │   │   ├── image6.jpg
+      │   │   └── image7.png
+      │   ├── Class_B/
+      │   │   ├── image8.jpg
+      │   │   └── image9.bmp
+      │   └── Class_C/
+      │       └── image10.tiff
+      └── test/
+          ├── Class_A/
+          │   ├── image11.jpg
+          │   └── image12.png
+          ├── Class_B/
+          │   ├── image13.jpg
+          │   └── image14.bmp
+          └── Class_C/
+              └── image15.tiff
+
+  Note
+  ----
+
+  This class requires the `splitfolders` library for auto-splitting functionality.
+  If the library is not installed, the auto-splitting feature will not work, and the class
+  will raise an error if it cannot find the expected "train", "val", and "test" directories
+  or class subdirectories to split. To install `splitfolders`, you can use pip: `pip install splitfolders`
+
+  Warnings
+  --------
+
+  The auto-splitting process will create a new directory named "SplitDataset" in the
+  parent directory of the original dataset. Ensure that you have write permissions to the parent
+  directory and that you do not have an existing "SplitDataset" directory that you do not want to
+  be overwritten, as the splitting process will create this directory if it does not already exist.
+  Always back up your data before performing operations that modify the filesystem.
 
   Examples
   --------
@@ -2905,7 +2921,7 @@ class TFFolderBasedDataPipeline:
       plt.suptitle("Sample Augmented Training Images")
       # Display the plot.
       plt.show()
-  """
+  '''
 
   def __init__(
     self,
@@ -2914,7 +2930,7 @@ class TFFolderBasedDataPipeline:
     imageSize: int = 224,
     ratioTuple: tuple = (0.8, 0.1, 0.1),
   ) -> None:
-    r"""
+    r'''
     Initialize the data pipeline. This method sets up the internal state, checks for directory structure,
     prepares splits if necessary, and builds the tf.data.Dataset pipelines for training, validation, and testing.
 
@@ -2929,7 +2945,7 @@ class TFFolderBasedDataPipeline:
       batchSize (int): The batch size to use for the tf.data.Dataset pipelines. Default is 32.
       imageSize (int): The target size to which images will be resized. Default is 224 (for 224x224 images).
       ratioTuple (tuple): A tuple specifying the train/val/test split ratios for auto-splitting. Default is (0.8, 0.1, 0.1).
-    """
+    '''
 
     # Store the root data directory.
     self.dataDir = Path(dataDir)
@@ -2955,7 +2971,7 @@ class TFFolderBasedDataPipeline:
     self.test = self._buildPipeline("test", isTraining=False, useCache=False)
 
   def _prepareSplits(self) -> Path:
-    r"""
+    r'''
     Check for train/val/test folders and auto-split if necessary. This method checks if the expected
     "train", "val", and "test" subdirectories exist in the root dataset directory. If they are not found,
     it looks for class subdirectories to perform an automatic split using the `splitfolders` library.
@@ -2965,7 +2981,7 @@ class TFFolderBasedDataPipeline:
 
     Returns:
       pathlib.Path: The path to the directory containing the "train", "val", and "test" subdirectories, either the original root path or the new split directory if auto-splitting was performed.
-    """
+    '''
 
     # Define the root path.
     rootPath = self.dataDir
@@ -3004,14 +3020,14 @@ class TFFolderBasedDataPipeline:
       raise FileNotFoundError("Train directory not found and no class directories found to split.")
 
   def _buildIndex(self) -> None:
-    r"""
+    r'''
     Scan the directories to discover class names and calculate split lengths. This method scans the
     "train" directory to discover class subdirectories, which are assumed to represent different
     classes in the dataset. It stores the class names in a list. Then, it iterates through the "train",
     "val", and "test" splits to count the number of valid image files in each split, storing these
     counts in a dictionary. The method also prints out the discovered class names and the number of
     samples found in each split for verification.
-    """
+    '''
 
     # Determine the target train directory.
     targetDir = self.rootPath / "train"
@@ -3053,7 +3069,7 @@ class TFFolderBasedDataPipeline:
     useCache: bool,
     imageCache: dict
   ) -> tf.Tensor:
-    r"""
+    r'''
     Load and process a single image. This method attempts to read an image from the given path, decode it,
     and apply transformations. If `isTraining` is True, it applies data augmentations such as random cropping,
     flipping, brightness, and contrast adjustments. If `useCache` is True, it checks if the processed image
@@ -3069,8 +3085,8 @@ class TFFolderBasedDataPipeline:
       imageCache (dict): A dictionary used for caching processed images. The keys are image paths and the values are the corresponding processed image tensors. This cache is used to speed up loading during training by storing already processed images in memory.
 
     Returns:
-      tf.Tensor: A tensor representing the processed image, normalized to [0, 1] and resized to the target image size. If an error occurs during loading, a dummy tensor of zeros with the appropriate shape is returned instead.
-    """
+      tensorflow.Tensor: A tensor representing the processed image, normalized to [0, 1] and resized to the target image size. If an error occurs during loading, a dummy tensor of zeros with the appropriate shape is returned instead.
+    '''
 
     # Try to load and process the image to handle corrupt files.
     try:
@@ -3124,7 +3140,7 @@ class TFFolderBasedDataPipeline:
     isTraining: bool,
     useCache: bool
   ):
-    r"""
+    r'''
     Create a generator function for tf.data.Dataset.from_generator. This generator function iterates through the
     specified split directory, loads and processes each image, and yields a tuple of (image tensor, label, filename)
     for each sample. The method initializes an image cache dictionary to store processed images if caching is
@@ -3140,7 +3156,7 @@ class TFFolderBasedDataPipeline:
 
     Yields:
       tuple: A tuple containing the processed image tensor (tf.Tensor), the integer label (int) corresponding to the class, and the filename (str) of the image for each sample in the specified split. The image tensor is normalized to [0, 1] and resized to the target image size. The label is an integer index representing the class of the image, and the filename is the name of the image file (without the path) for reference.
-    """
+    '''
 
     # Initialize the dictionary for image caching.
     imageCache = {}
@@ -3181,7 +3197,7 @@ class TFFolderBasedDataPipeline:
     isTraining: bool,
     useCache: bool
   ) -> Optional[tf.data.Dataset]:
-    r"""
+    r'''
     Build the tf.data.Dataset pipeline for a specific split. This method checks if the specified split directory
     exists and, if it does, creates a tf.data.Dataset using the `_createGenerator` method.
     The dataset is configured with the appropriate output signature for images, labels, and filenames. It then
@@ -3192,7 +3208,7 @@ class TFFolderBasedDataPipeline:
       split (str): The name of the dataset split to build the pipeline for (e.g., "train", "val", "test"). This determines which subdirectory of the dataset to use for creating the tf.data.Dataset pipeline.
       isTraining (bool): A flag indicating whether the pipeline is being built for training (True) or evaluation (False). This determines whether data augmentations will be applied to the images when they are loaded and processed in the generator function.
       useCache (bool): A flag indicating whether to use an image cache to store processed images. If True, the generator function will check if an image has already been processed and stored in the cache before loading and processing it again, which can improve performance during training by avoiding redundant processing of the same images.
-    """
+    '''
 
     # Determine the target split directory.
     splitDir = self.rootPath / split

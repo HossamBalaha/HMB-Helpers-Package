@@ -2388,17 +2388,45 @@ class SubpixelConv2D(Layer):
   '''
 
   def __init__(self, scale=2, **kwargs):
+    r'''
+    Initialize the SubpixelConv2D layer.
+
+    Parameters:
+      scale (int): Upscaling factor (default 2).
+      **kwargs: Additional keyword arguments for the base Layer class.
+    '''
+
     # Scale is the upscaling ratio, a single integer.
     self.scale = scale
     super(SubpixelConv2D, self).__init__(**kwargs)
 
   def call(self, inputs):
+    r'''
+    Forward pass of the SubpixelConv2D layer. See https://arxiv.org/abs/1609.05158 for details on sub-pixel convolution.
+
+    Parameters:
+      inputs (tf.Tensor): Input tensor of shape (batch, height, width, channels).
+
+    Returns:
+      tensorflow.Tensor: Output tensor after applying depth_to_space, with shape (batch, height*scale, width*scale, channels/(scale^2)).
+    '''
+
     # Upscaling is done by depth to space operation.
     # Sub-pixel convolution is learnable.
     # See https://arxiv.org/abs/1609.05158
     return depth_to_space(inputs, self.scale)
 
   def compute_output_shape(self, inputShape):
+    r'''
+    Compute the output shape of the SubpixelConv2D layer based on the input shape and the scaling factor.
+
+    Parameters:
+      inputShape (tuple): Shape of the input tensor (batch, height, width, channels).
+
+    Returns:
+      tuple: Output shape after applying depth_to_space, with shape (batch, height*scale, width*scale, channels/(scale^2)).
+    '''
+
     return (
       inputShape[0],  # Batch
       # Height
@@ -2409,6 +2437,13 @@ class SubpixelConv2D(Layer):
     )
 
   def get_config(self):
+    r'''
+    Return the configuration of the SubpixelConv2D layer for serialization.
+
+    Returns:
+      dict: Configuration dictionary containing the scale factor and any additional parameters from the base Layer class.
+    '''
+
     config = super(SubpixelConv2D, self).get_config()
     config["scale"] = self.scale
     return config

@@ -16,7 +16,7 @@
 [![Contributions](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package/blob/main/CONTRIBUTING.md)
 [![Maintenance](https://img.shields.io/badge/maintained-yes-green.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package)
 [![Release](https://img.shields.io/badge/release-v0.3.0-blue.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package/releases)
-[![DOI](https://zenodo.org/badge/1029954303.svg)](https://doi.org/10.5281/zenodo.20577120)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21378674.svg)](https://doi.org/10.5281/zenodo.21378674)
 
 A comprehensive collection of helper modules for image processing, segmentation, deep learning workflows, text/PDF
 utilities, and scientific computing in PyTorch, TensorFlow, and beyond.
@@ -307,7 +307,7 @@ If you use this package in your work, please:
 1. Include a copy of the LICENSE file with any distribution
 2. Credit the author in documentation or publications:
    ```bibtex
-   @software{balaha_hmb_helpers_2026_020,
+   @software{balaha_hmb_helpers_2026_030,
      author    = {Balaha, Hossam Magdy},
      title     = {HMB-Helpers-Package: HMB-Helpers-Package v0.3.0},
      year      = {2026},
@@ -317,16 +317,16 @@ If you use this package in your work, please:
      url       = {https://github.com/HossamBalaha/HMB-Helpers-Package}
    }
  
-   @software{hossam_magdy_balaha_2026_20577120,
-     author    = {Hossam Magdy Balaha},
-     title     = {HossamBalaha/HMB-Helpers-Package: HMB-Helpers-Package v0.2.0},
-     month     = june,
-     year      = 2026,
-     publisher = {Zenodo},
-     version   = {v0.2.0},
-     doi       = {10.5281/zenodo.20577120},
-     url       = {https://doi.org/10.5281/zenodo.20577120},
-   }
+   @software{hossam_magdy_balaha_2026_21378674,
+      author       = {Hossam Magdy Balaha},
+      title        = {HossamBalaha/HMB-Helpers-Package: HMB-Helpers-Package v0.3.0},
+      month        = jul,
+      year         = 2026,
+      publisher    = {Zenodo},
+      version      = {v.0.3.0},
+      doi          = {10.5281/zenodo.21378674},
+      url          = {https://doi.org/10.5281/zenodo.21378674},
+    }
     ```
 
 ## Support & Contact
