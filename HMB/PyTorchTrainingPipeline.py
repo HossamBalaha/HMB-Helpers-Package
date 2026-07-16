@@ -9,7 +9,6 @@ import torch.optim as optim
 import matplotlib.pyplot as plt
 from torch.amp import autocast, GradScaler
 from sklearn.metrics import confusion_matrix
-from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import TensorDataset, DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, CosineAnnealingLR
 from HMB.Initializations import IMAGE_SUFFIXES, DoRandomSeeding
@@ -2212,6 +2211,8 @@ class PyTorchClassificationTrainingPipeline:
       saveDataFrames (bool): Whether to save train/val/test/all DataFrames to outputDir for reference (default: True).
       configs (dict | None): Optional configuration dictionary to save to outputDir/ConfigsUsed.json (default: None).
     '''
+
+    from torch.utils.tensorboard import SummaryWriter
 
     # Store references to the model and device.
     self.model = model
