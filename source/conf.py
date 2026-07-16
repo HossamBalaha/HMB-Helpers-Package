@@ -57,7 +57,10 @@ extensions = [
   "sphinx_design",  # Enhanced design elements.
   "sphinx_autodoc_typehints",  # Better handling of type hints.
   "sphinx.ext.napoleon",  # Support for Google and NumPy style docstrings.
+  "sphinx_autoapi.extension",  # Automatically generate API documentation from source code.
 ]
+
+autoapi_dirs = ["../"]  # Points up to your repository root where the HMB folder is.
 
 # Specify the directory containing custom template files.
 templates_path = ["_templates"]
@@ -72,29 +75,8 @@ autoclass_content = "both"
 autodoc_typehints = "description"
 # Initialize an empty dictionary for custom type aliases.
 autodoc_type_aliases = {}
-# Initialize an empty list for mocking heavy or unavailable imports.
-autodoc_mock_imports = [
-  "torch",
-  "torchvision",
-  "transformers",
-  "datasets",
-  "nltk",
-  "pydantic",
-  "openslide",
-  "optuna",
-  "simpleitk",
-  "PyWavelets",
-  "sympy",
-  "PyMuPDF",
-  "sentence_transformers",
-  "textstat",
-  "imbalanced-learn",
-  "nibabel",
-  "pyglet",
-  "xgboost",
-  "shap",
-  "tensorflow",
-]
+# Initialize a list for mocking heavy or unavailable imports.
+autodoc_mock_imports = []
 # Disable automatic summary table generation to prevent duplicate entries.
 autosummary_generate = False
 
