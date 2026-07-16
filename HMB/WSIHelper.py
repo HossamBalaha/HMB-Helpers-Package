@@ -1,5 +1,5 @@
 # Import the required libraries.
-import PIL, cv2, os, openslide, json, tqdm
+import PIL, cv2, os, tqdm
 import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
@@ -22,6 +22,8 @@ def ReadWSIViaOpenSlide(slidePath):
   Raises:
     AssertionError: If the slide path does not exist.
   '''
+
+  import openslide
 
   assert os.path.exists(slidePath), f"Slide path does not exist: {slidePath}"
 
@@ -57,6 +59,7 @@ def ReadGeoJSONAnnotations(annotationFile):
     return []
 
   try:
+    import json
     with p.open("r", encoding="utf-8") as f:
       data = json.load(f)
   except Exception as e:
@@ -336,6 +339,7 @@ def TileExtractionAlignmentHandler(
     AssertionError: If the HE or MT slide paths do not exist.
   '''
 
+  import openslide
   from HMB.ImagesComparisonMetrics import IsSimilarityAccepted
 
   # Ensure the HE and MT slide paths exist. If not, raise an assertion error with a descriptive message.
@@ -1100,6 +1104,8 @@ def ExtractWSIRegion(slide, region):
       - regionMask (numpy.ndarray): The binary mask for the region as a NumPy uint8 array (H,W) with 0/255 values.
       - roi (numpy.ndarray): The extracted region of interest (ROI) as a NumPy RGB array (H,W,3) uint8.
   '''
+
+  import openslide
 
   # Validate the input region dictionary.
   if (region is None):

@@ -1,7 +1,6 @@
 import torch, tqdm
 import torch.nn as nn
 import torch.optim as optim
-from transformers import T5ForConditionalGeneration, T5Tokenizer
 
 
 class EmbeddingsToTextModel(nn.Module):
@@ -12,11 +11,11 @@ class EmbeddingsToTextModel(nn.Module):
   to enhance the generation process.
 
   Attributes:
-    t5 (T5ForConditionalGeneration): Pre-trained T5 model for text generation.
-    tokenizer (T5Tokenizer): Tokenizer for the T5 model.
-    featureProjection (nn.Sequential): Sequential layer for projecting input features.
-    toT5Hidden (nn.Linear): Linear layer to project features to T5's hidden size.
-    promptEmbeddings (nn.Parameter): Learnable prompt embeddings for the model.
+    t5 (transformers.T5ForConditionalGeneration): Pre-trained T5 model for text generation.
+    tokenizer (transformers.T5Tokenizer): Tokenizer for the T5 model.
+    featureProjection (torch.nn.Sequential): Sequential layer for projecting input features.
+    toT5Hidden (torch.nn.Linear): Linear layer to project features to T5's hidden size.
+    promptEmbeddings (torch.nn.Parameter): Learnable prompt embeddings for the model.
     numPromptTokens (int): Number of learnable prompt tokens.
     generationMaxLength (int): Maximum length for generated text sequences.
 
@@ -69,6 +68,8 @@ class EmbeddingsToTextModel(nn.Module):
       dropoutRatio (float): Dropout ratio for regularization (default: 0.1).
       numPromptTokens (int): Number of learnable prompt tokens (default: 5).
     '''
+
+    from transformers import T5ForConditionalGeneration, T5Tokenizer
 
     # Calls the parent class constructor to initialize nn.Module.
     super(EmbeddingsToTextModel, self).__init__()

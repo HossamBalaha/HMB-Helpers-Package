@@ -6,7 +6,6 @@ from PIL import Image  # Import Image module from PIL for image handling.
 import matplotlib.pyplot as plt  # Import matplotlib for plotting.
 # Import specific modules from PIL for image enhancements and drawing.
 from PIL import Image, ImageEnhance, ImageFilter, ImageDraw
-from io import BytesIO  # Import BytesIO for in-memory byte streams.
 from HMB.Utils import fprint  # Import custom print function from HMB utilities.
 
 
@@ -1763,6 +1762,8 @@ def ApplyJPEGCompression(img: Image.Image, quality: int = 75) -> Image.Image:
   Returns:
     PIL.Image: Compressed image.
   '''
+
+  from io import BytesIO  # Import BytesIO for in-memory byte streams.
 
   # Create an in-memory binary buffer to simulate file saving.
   buf = BytesIO()

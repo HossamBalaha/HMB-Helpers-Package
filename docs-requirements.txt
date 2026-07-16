@@ -1,4 +1,9 @@
 numpy<2
+opencv-python
+opencv-contrib-python
+pandas
+matplotlib
+scikit-learn
 sphinx-rtd-theme
 sphinx
 furo

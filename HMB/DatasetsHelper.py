@@ -3,9 +3,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from pathlib import Path
-from sklearn.impute import SimpleImputer
 from PIL import Image, ImageOps, ImageEnhance
-from sklearn.model_selection import train_test_split
 from typing import *
 from sklearn.preprocessing import StandardScaler, OrdinalEncoder, LabelEncoder
 from HMB.Utils import DumpJsonFile, ReadJsonFile
@@ -94,6 +92,16 @@ class TabularPreprocessor:
 
   # Fit the preprocessor on a training DataFrame.
   def Fit(self, df: pd.DataFrame, labelColumn: str = None):
+    r'''
+    Fit the preprocessor on a training DataFrame.
+
+    Parameters:
+      df (pandas.DataFrame): The training DataFrame containing features and optional label column.
+      labelColumn (str|None): Optional name of the label column to encode. If None, no label encoding is performed.
+    '''
+
+    from sklearn.impute import SimpleImputer
+
     # Automatically detect numeric columns.
     self.numericColumns = df.select_dtypes(include=[np.number]).columns.tolist()
     # Conditionally detect categorical columns based on ignoreCategorical flag.
@@ -1350,6 +1358,8 @@ class GenericImagesDatasetHandler(object):
       dict: Mapping of splitName->list[Path] of copied files.
     '''
 
+    from sklearn.model_selection import train_test_split
+
     if (type(outputDir) == str):
       outputDir = Path(outputDir)
 
@@ -1448,6 +1458,8 @@ class GenericImagesDatasetHandler(object):
     Returns:
       dict: Mapping of splitName->list[Path] of copied files.
     '''
+
+    from sklearn.model_selection import train_test_split
 
     if (type(outputDir) == str):
       outputDir = Path(outputDir)

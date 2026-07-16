@@ -1,16 +1,10 @@
-import os, torch, cv2, time
-from tqdm import tqdm
+import os
 import numpy as np
-import pandas as pd
-from PIL import Image
 from pathlib import Path
-from ultralytics import YOLO
 from typing import Any, Dict, List, Optional, Tuple
-from sklearn.metrics import confusion_matrix
 from HMB.Utils import DumpJsonFile
-from HMB.Initializations import IgnoreWarnings, SeedEverything, IMAGE_SUFFIXES
+from HMB.Initializations import IgnoreWarnings, SeedEverything
 from HMB.PerformanceMetrics import CalculatePerformanceMetrics
-from HMB.PyTorchTrainingPipeline import GenericImageryEvaluatePredictPlotSubset
 
 
 def ExtractYOLOModelSize(modelName: str) -> str:
@@ -82,6 +76,8 @@ def TrainMultipleYoloClassifiers(
     enablePlots (bool, Optional): Whether to enable training plots. Defaults to True.
     enableSave (bool, Optional): Whether to save the best model. Defaults to True.
   '''
+
+  from ultralytics import YOLO
 
   # Ensure default model list is provided when None.
   if (targetModels is None):
@@ -216,6 +212,10 @@ def EvaluateAndSaveYoloClassifications(
   Returns.
     dict: Mapping of model->{category->csvPath, metrics} for quick programmatic access.
   '''
+
+  import pandas as pd
+  from tqdm import tqdm
+  from ultralytics import YOLO
 
   # Default allowed image extensions when None provided.
   if (extensions is None):
@@ -398,6 +398,7 @@ def EvaluateAndSaveYoloClassifications(
 
       # Compute confusion matrix for the set.
       try:
+        from sklearn.metrics import confusion_matrix
         # cm = confusion_matrix(references, predictions)
         # Fix: Explicitly define all possible class labels.
         numClasses = len(model.names)
@@ -492,6 +493,8 @@ def EvaluatePredictPlotSubset(
       - numpy.ndarray|None: Confusion matrix as a 2D numpy array, or None if not computable.
   '''
 
+  from HMB.PyTorchTrainingPipeline import GenericImageryEvaluatePredictPlotSubset
+
   # Define a YOLO-specific prediction adapter that wraps the model to return probabilities.
   def YoloPredictFn(
     image: np.ndarray,
@@ -509,6 +512,8 @@ def EvaluatePredictPlotSubset(
     Returns:
       numpy.ndarray: 1D array of class probabilities.
     '''
+
+    import torch
 
     # Run YOLO prediction (expects BGR or RGB? YOLO handles internally)
     results = model.predict(image, verbose=False)
@@ -582,6 +587,9 @@ def MeasureLatencyWithUltralytics(
   Returns:
     float | None: Average latency in milliseconds on success, or None on failure.
   '''
+
+  import torch, time
+  from ultralytics import YOLO
 
   try:
     # Determine extension lower-case for format guessing.
@@ -759,6 +767,9 @@ def ExportYOLO2TorchScript(
     str | None: Returns the output path on success, otherwise None.
   '''
 
+  import torch
+  from ultralytics import YOLO
+
   try:
     # Instantiate the YOLO classifier wrapper.
     try:
@@ -807,6 +818,8 @@ def ExportYOLO2ONNX(weightsPath: str, outPath: str, imgsz: int = 224, opset: int
   Returns:
     str | None: Returns the output path on success, otherwise None.
   '''
+
+  from ultralytics import YOLO
 
   try:
     # Instantiate the YOLO classifier wrapper.
@@ -858,6 +871,9 @@ def ApplyYOLOPruning(weightsPath: str, outPath: str, sparsity: float = 0.5) -> O
   Returns:
     str | None: Returns the output path on success, otherwise None.
   '''
+
+  import torch
+  from ultralytics import YOLO
 
   try:
     # Instantiate the wrapper for classification.
@@ -963,6 +979,8 @@ def TrainMultipleYoloDetectors(
     enablePlots (bool): Whether to generate and save plots during training and validation. Defaults to True.
     enableSave (bool): Whether to save model weights and artifacts. Defaults to True.
   '''
+
+  from ultralytics import YOLO
 
   # Ensure the default model list is provided when none is specified.
   if (targetModels is None):
@@ -1091,6 +1109,8 @@ def EvaluateAndSaveYoloDetections(
     inputShape (Tuple[int, int]): Input image shape (height, width) for evaluation. Defaults to (512, 512).
     loadPt (bool): Whether to load .pt weights (True) or .onnx weights (False). Defaults to True.
   '''
+
+  from ultralytics import YOLO
 
   # Set default categories when none are provided.
   if (categories is None):
@@ -1236,6 +1256,10 @@ def GenerateYoloDetectionExplainability(
     inputShape (Tuple[int, int]): Input image shape (height, width) for inference. Defaults to (512, 512).
     maxSamples (int): Maximum number of images to process for explainability. Defaults to 10.
   '''
+
+  import cv2
+  from ultralytics import YOLO
+  from HMB.Initializations import IMAGE_SUFFIXES
 
   # Instantiate the YOLO detection model from the provided weights.
   detectionModel = YOLO(modelPath, task="detect")
