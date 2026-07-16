@@ -1,7 +1,5 @@
 import tqdm, os, pickle, torch
 import numpy as np
-from PIL import Image
-from timm.layers import SwiGLUPacked
 
 
 class TransformersEmbeddingModel(object):
@@ -60,6 +58,8 @@ class TransformersEmbeddingModel(object):
       embedding (numpy.ndarray): The extracted embedding as a numpy array.
     '''
 
+    from PIL import Image
+
     assert os.path.exists(imagePath), f"Image path {imagePath} does not exist."
     if (self.model is None or self.processor is None):
       self.LoadModel()
@@ -86,7 +86,7 @@ def ExtractEmbeddingsTimm(
   datasetFolder,
   outputPicklePath,
   modelName="hf-hub:paige-ai/Virchow2",
-  mlpLayer=SwiGLUPacked,
+  mlpLayer=None,
   actLayer=torch.nn.SiLU,
   device=None,
 ):
@@ -97,7 +97,7 @@ def ExtractEmbeddingsTimm(
     datasetFolder (str): Path to the root folder containing subfolders for each class, each with images.
     outputPicklePath (str): Path to save the output pickle file containing the embeddings lookup table.
     modelName (str): Name of the timm model to use. Default is "hf-hub:paige-ai/Virchow2".
-    mlpLayer (nn.Module): MLP layer class to use in the model. Default is SwiGLUPacked.
+    mlpLayer (nn.Module): MLP layer class to use in the model. Default is None.
     actLayer (nn.Module): Activation layer class to use in the model. Default is torch.nn.SiLU.
     device (str or torch.device, optional): Device to run the model on (e.g., "cuda", "cpu"). If None, uses CUDA if available.
 
@@ -118,8 +118,13 @@ def ExtractEmbeddingsTimm(
   '''
 
   import timm
+  from PIL import Image
   from timm.data import resolve_data_config
   from timm.data.transforms_factory import create_transform
+
+  if (mlpLayer is None):
+    from timm.layers import SwiGLUPacked
+    mlpLayer = SwiGLUPacked
 
   # Set device to CUDA if available, else CPU.
   DEVICE = device or ("cuda" if torch.cuda.is_available() else "cpu")

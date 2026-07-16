@@ -1,4 +1,4 @@
-import os, tqdm, torch, torchvision, cv2, time, copy, math, shutil, csv, json
+import os, tqdm, torch, cv2, time, copy, math, shutil, csv, json
 import numpy as np
 import pandas as pd
 from typing import *
