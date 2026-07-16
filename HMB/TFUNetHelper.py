@@ -3113,8 +3113,7 @@ def CreateUNet(
     modelType (str): Case-insensitive model selection string (e.g. "dynamic", "UNet", "ASPPUNet").
 
   Returns:
-    tensorflow.keras.Model: Instantiated model ready for training or inference. The returned
-      model accepts NHWC inputs and produces logits in NHWC format (shape [B, H, W, C]).
+    tensorflow.keras.Model: Instantiated model ready for training or inference. The returned model accepts NHWC inputs and produces logits in NHWC format (shape [B, H, W, C]).
 
   Notes:
     - If an unrecognized `modelType` is provided the function falls back to the

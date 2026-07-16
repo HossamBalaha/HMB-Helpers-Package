@@ -1,6 +1,5 @@
 # Import the required libraries.
-import contractions, spacy, uuid, nltk, re
-from nltk.tokenize import sent_tokenize, word_tokenize
+import re
 from typing import List, Dict, Tuple, Any, Optional, Set
 
 
@@ -209,6 +208,8 @@ class TextHelper:
       list: Word tokens.
     '''
 
+    from nltk.tokenize import word_tokenize
+
     document = word_tokenize(document)
     return document
 
@@ -224,6 +225,8 @@ class TextHelper:
     Returns:
       list: Sentence strings.
     '''
+
+    from nltk.tokenize import sent_tokenize
 
     document = sent_tokenize(document)
     return document
@@ -406,6 +409,8 @@ class TextHelper:
     Returns:
       model: Trained gensim Doc2Vec model.
     '''
+
+    from nltk.tokenize import word_tokenize
     from gensim.models.doc2vec import Doc2Vec, TaggedDocument
 
     tagged_data = [
@@ -795,6 +800,8 @@ class TextSemanticShield:
       - nlpModelName (str): The name of the spaCy language model to load. Defaults to "en_core_web_sm".
     '''
 
+    import spacy
+
     # Attempt to load the spaCy language model for dependency parsing and NER.
     try:
       # Load the spaCy model directly from the installed packages.
@@ -829,6 +836,8 @@ class TextSemanticShield:
       - Tuple[str, Dict[str, str]]: A tuple containing the masked text and a dictionary mapping cryptographic tokens to their corresponding original entities.
     '''
 
+    import re
+
     # Parse the input text using the spaCy language model pipeline.
     doc = self.nlpModel(text)
 
@@ -861,6 +870,8 @@ class TextSemanticShield:
     for entity in entitiesToProtect:
       # Check if the entity exceeds the minimum length threshold.
       if (len(entity) > self.minEntityLength):
+        import uuid
+
         # Generate a high-entropy cryptographic placeholder string using uuid.
         cryptoToken = f"«K_{uuid.uuid4().hex[:8]}»"
 
@@ -981,6 +992,7 @@ def CleanText(
 
   # Expand contractions if specified.
   if (handleContractions):
+    import contractions
     cleanedText = contractions.fix(cleanedText)  # Expand contractions (e.g., don't → do not).
 
   # Remove special characters and punctuation if specified.
@@ -1024,6 +1036,7 @@ def CleanText(
 
   # Remove common words if specified.
   if (removeCommonWords):
+    import nltk  # Import NLTK for frequency distribution.
     # Get word frequency distribution.
     wordFreq = nltk.FreqDist(cleanedText.split())
     # Get the N most common words.
@@ -2486,6 +2499,8 @@ if __name__ == "__main__":
 
   # POS tagging and Chunking (try to get POS tags first, fall back to token list).
   try:
+    from nltk.tokenize import word_tokenize
+
     posTokens = th.POS(word_tokenize("Apple is looking at buying U.K. startup for $1 billion"))
   except Exception:
     posTokens = None

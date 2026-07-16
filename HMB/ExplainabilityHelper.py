@@ -1,4 +1,4 @@
-import shap, os, pickle, copy, cv2, torch, time, shutil, torch, warnings
+import os, pickle, copy, cv2, torch, time, shutil, warnings
 import numpy as np
 import pandas as pd
 from PIL import Image
@@ -277,6 +277,8 @@ class OptunaMLPipelineSHAPExplainer(object):
       - The SHAP explainer is stored in self.explainer.
     '''
 
+    import shap
+
     # Initialize SHAP explainer using the trained model and prepared test data.
     noOfFeatures = self.XTest.shape[1]
     if (maxEvals is None):
@@ -498,6 +500,8 @@ class OptunaMLPipelineSHAPExplainer(object):
         If None, the top 4 features by mean absolute SHAP value will be selected automatically.
     '''
 
+    import shap
+
     if (topFeatures is None):
       # Auto-select by mean |SHAP|.
       meanAbs = np.abs(self.shapValues.values).mean(0)
@@ -525,6 +529,8 @@ class OptunaMLPipelineSHAPExplainer(object):
       noOfFeatures (int, optional): Number of top features to display in the beeswarm plot (default: 15).
     '''
 
+    import shap
+
     # Generate beeswarm plot for each diagnostic category.
     for catLabel, catName in self.categoryMap.items():
       mask = self.yTest == catLabel
@@ -550,6 +556,8 @@ class OptunaMLPipelineSHAPExplainer(object):
       maxErrors (int, optional): Maximum number of misclassified instances to visualize (default: 5).
     '''
 
+    import shap
+
     # Identify misclassified samples.
     errors = (self.yPred != self.yTest)
     errorIndices = np.where(errors)[0][:maxErrors]
@@ -573,6 +581,8 @@ class OptunaMLPipelineSHAPExplainer(object):
       noOfFeatures (int, optional): Number of top features to include (default: 20).
       classLabel (int | str | None, optional): Specific class to filter; None shows all classes.
     '''
+
+    import shap
 
     # Select subset of instances for visualization to maintain readability.
     # The `self.shapValues` object can be a raw ndarray or a SHAP Explanation-like object
@@ -680,6 +690,8 @@ class OptunaMLPipelineSHAPExplainer(object):
       - Prints a message when visualizations are saved.
       - Uses SHAP's built-in plotting functions for visualization.
     '''
+
+    import shap
 
     # Determine the instance index to explain if not provided.
     # Use a local RNG (numpy Generator) to avoid relying on NumPy's global RNG and to silence
@@ -5095,9 +5107,11 @@ def ComputeShapValues(
     Any: SHAP explanation object (shap.Explanation or list of arrays).
   '''
 
+  import shap
+
   # Require shap to be available.
   if (shap is None):
-    raise ImportError("SHAP is required for ComputeShapValues. Install shap and try again.")
+    raise ImportError("SHAP is required for `ComputeShapValues`. Install shap and try again.")
 
   # Define a prediction function wrapper that returns probabilities for numpy input.
   def predFunction(x: np.ndarray) -> np.ndarray:
@@ -5144,6 +5158,8 @@ def ShapSummaryPlot(
     savePath (str | None): Optional path to save the figure (default: None).
     dpi (int): Dots per inch for saved figure resolution (default: 720).
   '''
+
+  import shap
 
   # Create a new default_rng instance to avoid using the global RNG.
   rngObj = np.random.default_rng()
