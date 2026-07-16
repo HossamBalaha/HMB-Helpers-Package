@@ -1,3 +1,4 @@
+numpy<2
 sphinx-rtd-theme
 sphinx
 furo
@@ -5,4 +6,3 @@ myst-parser
 sphinx-copybutton
 sphinx-design
 sphinx-autodoc-typehints
-numpy<2
