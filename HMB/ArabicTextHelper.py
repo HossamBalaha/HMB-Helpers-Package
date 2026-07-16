@@ -1,4 +1,4 @@
-import re, nltk
+import re
 from HMB.TextHelper import TextHelper
 
 
