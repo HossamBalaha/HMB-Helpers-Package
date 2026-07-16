@@ -1,7 +1,6 @@
 import os, matplotlib, traceback
 import numpy as np
 import pandas as pd
-import seaborn as sns
 import scipy.stats as stats
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
@@ -3377,6 +3376,8 @@ def PlotDistributionEDA(
     )
   '''
 
+  import seaborn as sns
+
   def _PlotColumnsByType(
     df,  # DataFrame to analyze.
     baseDir,  # Base directory to save the plots.
@@ -3652,6 +3653,8 @@ def PlotMetrics(
       extension=".pdf"
     )
   '''
+
+  import seaborn as sns
 
   UpdateMatplotlibSettings(fontSize=fontSize, figSize=(factor * 5, factor * 5))
 

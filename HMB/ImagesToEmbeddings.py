@@ -1,10 +1,7 @@
-import timm, tqdm, os, pickle, torch
+import tqdm, os, pickle, torch
 import numpy as np
 from PIL import Image
-from timm.data import resolve_data_config
-from timm.data.transforms_factory import create_transform
 from timm.layers import SwiGLUPacked
-from transformers import AutoImageProcessor, AutoModel
 
 
 class TransformersEmbeddingModel(object):
@@ -37,9 +34,11 @@ class TransformersEmbeddingModel(object):
     Load the pre-trained model and processor from the specified model name.
 
     Returns:
-      model (nn.Module): The loaded pre-trained model.
-      processor (AutoImageProcessor): The loaded image processor.
+      model (torch.nn.Module): The loaded pre-trained model.
+      processor (transformers.AutoImageProcessor): The loaded image processor.
     '''
+
+    from transformers import AutoImageProcessor, AutoModel
 
     # Load the processor and model from Hugging Face.
     self.processor = AutoImageProcessor.from_pretrained(self.modelName, use_fast=True)
@@ -117,6 +116,10 @@ def ExtractEmbeddingsTimm(
 
     e = [class_token ; mean(patch_tokens)]
   '''
+
+  import timm
+  from timm.data import resolve_data_config
+  from timm.data.transforms_factory import create_transform
 
   # Set device to CUDA if available, else CPU.
   DEVICE = device or ("cuda" if torch.cuda.is_available() else "cpu")

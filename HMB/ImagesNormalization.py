@@ -2,7 +2,6 @@
 import os, glob, pickle, random
 import cv2  # OpenCV for image processing.
 import numpy as np  # NumPy for numerical operations.
-import spams  # SPAMS for sparse matrix computations.
 import tqdm  # TQDM for progress bars.
 from HMB.Initializations import IMAGE_SUFFIXES, DoRandomSeeding
 
@@ -164,6 +163,8 @@ def FindStainMatrixVahadane(img, beta=0.15, lambda1=0.01):
   Returns:
     numpy.ndarray: Stain matrix (2x3).
   '''
+
+  import spams  # SPAMS for sparse matrix computations.
 
   # Ensure the input is a 3-channel RGB image.
   if ((len(img.shape) != 3) or (img.shape[2] != 3)):
@@ -864,6 +865,8 @@ def ConcentrateStainMatrixMacenko(img, stainMatrix, lambdaVal=0.01):
   Returns:
     numpy.ndarray: Concentrated stain matrix (2x3).
   '''
+
+  import spams  # SPAMS for sparse matrix computations.
 
   # Ensure the input is a 3-channel RGB image.
   if ((len(img.shape) != 3) or (img.shape[2] != 3)):

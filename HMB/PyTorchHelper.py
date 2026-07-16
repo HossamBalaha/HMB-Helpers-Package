@@ -1,4 +1,4 @@
-import os, timm, torch, copy, time, json, hashlib, csv
+import os, torch, copy, time, json, hashlib, csv
 import numpy as np
 import torch.nn as nn
 from PIL import Image
@@ -464,6 +464,8 @@ def CreateTimmModel(modelName, numClasses, pretrained=True):
   Returns:
     torch.nn.Module: The created timm model instance.
   '''
+
+  import timm
 
   # Creating model.
   model = timm.create_model(

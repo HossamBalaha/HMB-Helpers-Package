@@ -4,7 +4,6 @@ import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 import xml.etree.ElementTree as ET
-from shapely.geometry import Polygon
 from HMB.Utils import *
 from HMB.ImagesHelper import *
 
@@ -1667,6 +1666,8 @@ def ExtractRegionTiles(
       dpi=300
     )
   '''
+
+  from shapely.geometry import Polygon
 
   # Create output directories when a storage directory is provided.
   if (storageDir is not None):
