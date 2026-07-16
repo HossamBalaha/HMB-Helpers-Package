@@ -1,17 +1,11 @@
 import os, random, torch
-from datetime import datetime
 import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
-from torchvision import transforms
 from pytorch_grad_cam import (
   GradCAM, HiResCAM, ScoreCAM, GradCAMPlusPlus,
   AblationCAM, XGradCAM, EigenCAM, FullGrad
 )
-from pytorch_grad_cam.utils.image import show_cam_on_image
-from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
-from HMB.PyTorchHelper import LoadPyTorchDict
-from HMB.PlotsHelper import SaveMatplotlibFigure
 
 
 class LogitsModelWrapper(torch.nn.Module):
@@ -82,6 +76,8 @@ def HuggingFaceModel(
     )
   '''
 
+  from HMB.PyTorchHelper import LoadPyTorchDict
+  from torchvision import transforms
   from transformers import ViTForImageClassification
 
   # Create the model using Hugging Face transformers.
@@ -278,6 +274,7 @@ def TimmModel(
   '''
 
   import timm
+  from HMB.PyTorchHelper import LoadPyTorchDict
 
   # Create the model using timm.
   model = timm.create_model(modelName, pretrained=False, num_classes=numClasses)
@@ -499,6 +496,7 @@ class AttentionMapsVisualizer(object):
     '''
 
     import cv2
+    from HMB.PlotsHelper import SaveMatplotlibFigure
 
     # Set default CAMs if not provided.
     if (cams is None):
@@ -656,6 +654,7 @@ class AttentionMapsVisualizer(object):
     print("Visualization complete and ready for saving or displaying.")
 
     # Generate output file path.
+    from datetime import datetime
     rndTimestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     outPath = os.path.join(self.baseFolder, f"{outPrefix}_{rndTimestamp}.png")
 

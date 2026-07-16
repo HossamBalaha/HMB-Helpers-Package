@@ -1,4 +1,4 @@
-import os, optuna, pickle, shutil
+import os, pickle
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -2278,6 +2278,7 @@ class OptunaTuningClassification(object):
     self.targetColumn = targetColumn  # Name of the target column in the dataset.
     self.dropFirstColumn = dropFirstColumn  # Whether to drop the first column (usually an index or ID).
 
+    import optuna
     if (samplerTech == "TPE"):
       self.sampler = optuna.samplers.TPESampler(
         seed=np.random.randint(0, 10000),
@@ -2443,6 +2444,8 @@ class OptunaTuningClassification(object):
     It also saves the study object for future reference.
     '''
 
+    import optuna, shutil
+
     # Create the study object.
     storagePath = f"{self.storageFolderPath}/{self.prefix}_Study.db"
     if (not self.loadStudy and os.path.exists(storagePath)):
@@ -2590,6 +2593,7 @@ def OptunaTuningClassificationTesting(
     sortByMetric (str, optional): The metric by which to sort the experiments when selecting the top experiments. Default is "Weighted Average".
   '''
 
+  import shutil
   from sklearn.metrics import confusion_matrix, classification_report
   from HMB.Utils import ReadPickleFile
   from HMB.PerformanceMetrics import (

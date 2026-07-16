@@ -56,7 +56,6 @@ extensions = [
   "sphinx_copybutton",  # Add copy buttons to code blocks.
   "sphinx_design",  # Enhanced design elements.
   "sphinx_autodoc_typehints",  # Better handling of type hints.
-  "sphinx.ext.napoleon",  # Support for Google and NumPy style docstrings.
 ]
 
 # Specify the directory containing custom template files.
@@ -73,7 +72,9 @@ autodoc_typehints = "description"
 # Initialize an empty dictionary for custom type aliases.
 autodoc_type_aliases = {}
 # Initialize a list for mocking heavy or unavailable imports.
-autodoc_mock_imports = []
+autodoc_mock_imports = [
+  "torch", "tensorflow", "timm", "torchvision", "transformers", "datasets", "opencv-python",
+]
 # Disable automatic summary table generation to prevent duplicate entries.
 autosummary_generate = False
 

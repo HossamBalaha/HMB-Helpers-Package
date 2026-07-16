@@ -1,4 +1,4 @@
-import os, pickle, patchify
+import os
 import numpy as np
 import pandas as pd
 from PIL import Image
@@ -588,10 +588,6 @@ def CreateFitPretrainedAttentionModel(
   if (modelCheckpointPath is None):
     modelCheckpointPath = os.path.join(storageDir, f"BestModel.keras")
   model = tf.keras.models.load_model(modelCheckpointPath)  # Load the best saved model.
-  # # Store the best model after fine-tuning as pickle file.
-  # picklePath = os.path.join(storageDir, f"BestModel.pkl")
-  # with open(picklePath) as f:
-  #   pickle.dump(model, f)
 
   configs = {
     "baseModelString"    : str(baseModelString),
@@ -1999,6 +1995,7 @@ def ImageToViTPatches(image, noOfPatches, patchSize):
     numpy.ndarray: A numpy array of shape (noOfPatches, patchSize*patchSize*3) containing the flattened patch embeddings for each image. Each row corresponds to a patch, and the columns represent the pixel values of the patch flattened into a vector (patchSize*patchSize*3, where 3 is the number of color channels).
   '''
 
+  import patchify
   # Extract patches using patchify: returns (gridH, gridW, 1, ph, pw, c).
   patches = patchify.patchify(image, (patchSize, patchSize, 3), step=patchSize)
   # Reshape to flat list: (num_patches, patchSize, patchSize, 3).
@@ -2081,11 +2078,20 @@ class ViTPatchDataGeneratorFromDataFrame(Sequence):
       np.random.shuffle(self.indices)
 
   def __len__(self):
-    '''Return number of batches per epoch.'''
+    r'''
+    Return number of batches per epoch.
+    '''
     return self.numImages // self.batchSize
 
   def _image_to_patches(self, image):
-    '''Extract and flatten non-overlapping patches from a preprocessed image.'''
+    r'''
+    Extract and flatten non-overlapping patches from a preprocessed image.
+
+    Parameters:
+      image (numpy.ndarray): A preprocessed image array of shape (height, width, channels) that is compatible with the expected input shape of the Vision Transformer model.
+    '''
+
+    import patchify
 
     # Extract patches using patchify: returns (grid_h, grid_w, 1, ph, pw, c).
     patches = patchify.patchify(image, (self.patchSize, self.patchSize, 3), step=self.patchSize)
@@ -2102,7 +2108,15 @@ class ViTPatchDataGeneratorFromDataFrame(Sequence):
     return patches.reshape(self.noOfPatches, -1)
 
   def __getitem__(self, index):
-    '''Generate one batch of data.'''
+    r'''
+    Generate one batch of data.
+
+    Parameters:
+      index (int): Index of the batch to generate.
+    '''
+
+    import cv2
+
     # Select batch indices.
     batchIndices = self.indices[index * self.batchSize: (index + 1) * self.batchSize]
 
@@ -2163,27 +2177,26 @@ class ViTPatchDataGeneratorFromFolder(Sequence):
   Keras Sequence generator for Vision Transformer training using images from a folder structure.
   This generator loads images from a specified folder structure, extracts non-overlapping patches,
   flattens them to embedding vectors, and yields batches compatible with the VisionTransformer model architecture.
-
-  Parameters:
-    folder (str): Path to the root folder containing subfolders for each class, with images inside those subfolders.
-    inputShape (tuple): Expected input shape of the images (height, width, channels).
-    batchSize (int): Number of samples per batch.
-    classMode (str): "categorical" for one-hot encoded labels, "sparse" for integer labels.
-    noOfPatches (int): Number of patches to extract from each image (default 256).
-    patchSize (int): Size of each square patch (default 16, resulting in 16x16 patches).
-    embedDimension (int): Dimension of the flattened patch embeddings (default 768 for ViT-Base).
-    shuffle (bool): Whether to shuffle the data at the end of each epoch (default False).
-
-  Returns:
-    A batch of data in the form (images, labels) where:
-      - images: A numpy array of shape (batchSize, noOfPatches, embedDimension) containing the flattened patch embeddings for each image in the batch.
-      - labels: A numpy array of shape (batchSize, numClasses) for "categorical" classMode or (batchSize, 1) for "sparse" classMode containing the corresponding labels for each image in the batch.
   '''
 
   def __init__(
     self, folder, inputShape, batchSize, classMode="categorical",
     noOfPatches=256, patchSize=16, embedDimension=768, shuffle=False,
   ):
+    r'''
+    Initialize the data generator with the specified parameters.
+
+    Parameters:
+      folder (str): Path to the root folder containing subfolders for each class, with images inside those subfolders.
+      inputShape (tuple): Expected input shape of the images (height, width, channels).
+      batchSize (int): Number of samples per batch.
+      classMode (str): "categorical" for one-hot encoded labels, "sparse" for integer labels.
+      noOfPatches (int): Number of patches to extract from each image (default 256).
+      patchSize (int): Size of each square patch (default 16, resulting in 16x16 patches).
+      embedDimension (int): Dimension of the flattened patch embeddings (default 768 for ViT-Base).
+      shuffle (bool): Whether to shuffle the data at the end of each epoch (default False).
+    '''
+
     self.folder = folder
     self.inputShape = inputShape
     self.batchSize = batchSize
@@ -2213,6 +2226,20 @@ class ViTPatchDataGeneratorFromFolder(Sequence):
     return self.numImages // self.batchSize
 
   def __getitem__(self, index):
+    r'''
+    Generate one batch of data.
+
+    Parameters:
+      index (int): Index of the batch to generate.
+
+    Returns:
+      tuple: A tuple (images, labels) where:
+        - images: A numpy array of shape (batchSize, noOfPatches, embedDimension) containing the flattened patch embeddings for each image in the batch.
+        - labels: A numpy array of shape (batchSize, numClasses) for "categorical" classMode or (batchSize, 1) for "sparse" classMode containing the corresponding labels for each image in the batch.
+    '''
+
+    import cv2
+
     indices = self.indices[index * self.batchSize: (index + 1) * self.batchSize]
     images = np.zeros((self.batchSize, self.noOfPatches, self.embedDimension))
     if (self.classMode == "categorical"):
@@ -2226,7 +2253,7 @@ class ViTPatchDataGeneratorFromFolder(Sequence):
 
       image = cv2.imread(image)
       image = cv2.resize(image, (self.inputShape[1], self.inputShape[0]), interpolation=cv2.INTER_CUBIC)
-      patches = ImageToPatches(image, self.noOfPatches, self.patchSize)
+      patches = ImageToViTPatches(image, self.noOfPatches, self.patchSize)
 
       images[i] = patches
 
