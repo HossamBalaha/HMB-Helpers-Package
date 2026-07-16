@@ -73,7 +73,11 @@ autodoc_typehints = "description"
 # Initialize an empty dictionary for custom type aliases.
 autodoc_type_aliases = {}
 # Initialize a list for mocking heavy or unavailable imports.
-autodoc_mock_imports = []
+autodoc_mock_imports = [
+  "torch",
+  "torchvision",
+  "tensorflow"
+]
 # Disable automatic summary table generation to prevent duplicate entries.
 autosummary_generate = False
 
@@ -106,6 +110,9 @@ napoleon_use_rtype = True
 
 # Enable the display of todo items in the final documentation.
 todo_include_todos = True
+
+# Enable nitpicky mode to warn about all missing references.
+nitpicky = True
 
 # Define cross project linking mappings for external documentation references.
 intersphinx_mapping = {

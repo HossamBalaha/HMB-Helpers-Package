@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Tuple, List
+from typing import Tuple
 import tensorflow as tf
 
 AVAILABLE_UNETS = [
@@ -90,21 +90,19 @@ def PreparePredTensorToNumpy(predTensor: tf.Tensor, doScale2Image: bool = False)
 class DoubleConv(tf.keras.layers.Layer):
   r'''
   Double convolution block used throughout the U-Net encoder and decoder.
-
-  Short summary:
-    Two consecutive 3x3 Conv2D layers each followed by normalization
-    and ReLU activation used as a basic encoder/decoder building block.
-
-  Parameters:
-    inChannels (int): Number of input channels.
-    outChannels (int): Number of output channels.
-
-  Returns:
-    tensorflow.Tensor: Output feature map of shape [B, H, W, outChannels].
+  Two consecutive 3x3 Conv2D layers each followed by normalization
+  and ReLU activation used as a basic encoder/decoder building block.
   '''
 
-  # Initialize the double convolution block.
   def __init__(self, inChannels: int, outChannels: int):
+    r'''
+    Initializes a double convolution block with two Conv2D layers, each followed by BatchNormalization and ReLU activation.
+
+    Parameters:
+      inChannels (int): Number of input channels.
+      outChannels (int): Number of output channels.
+    '''
+
     super(DoubleConv, self).__init__()
     # Create the first convolution, normalization and activation.
     self.conv1 = tf.keras.layers.Conv2D(outChannels, kernel_size=3, padding="same")
@@ -115,8 +113,18 @@ class DoubleConv(tf.keras.layers.Layer):
     self.bn2 = tf.keras.layers.BatchNormalization()
     self.act2 = tf.keras.layers.ReLU()
 
-  # Forward pass for the double conv block.
   def call(self, x, training=False):
+    r'''
+    Forward pass through the double convolution block.
+
+    Parameters:
+      x (tensorflow.Tensor): Input tensor of shape [B, H, W, inChannels].
+      training (bool): Whether the model is in training mode (affects BatchNormalization).
+
+    Returns:
+      tensorflow.Tensor: Output feature map of shape [B, H, W, outChannels].
+    '''
+
     # Apply first conv branch.
     x = self.conv1(x)
     x = self.bn1(x, training=training)
@@ -132,25 +140,24 @@ class DoubleConv(tf.keras.layers.Layer):
 class ConfigConv(tf.keras.layers.Layer):
   r'''
   Configurable double-convolution block with selectable normalization, dropout and residual option.
-
-  Short summary:
-    A DoubleConv-like block with optional normalization type, dropout,
-    and an optional residual connection when input and output channels match.
-
-  Parameters:
-    inChannels (int): Number of input channels.
-    outChannels (int): Number of output channels.
-    norm (str): Normalization type: "batch" | "instance" | "none".
-    dropout (float): Dropout probability applied after the block.
-    residual (bool): Whether to add a residual skip when shapes permit.
-
-  Returns:
-    tensorflow.Tensor: Processed feature map with same spatial size as input.
+  A DoubleConv-like block with optional normalization type, dropout, and an optional residual connection when input and output channels match.
   '''
 
-  # Initialize configurable conv block.
-  def __init__(self, inChannels: int, outChannels: int, norm: str = "batch", dropout: float = 0.0,
-               residual: bool = False):
+  def __init__(
+    self, inChannels: int, outChannels: int, norm: str = "batch", dropout: float = 0.0,
+    residual: bool = False
+  ):
+    r'''
+    Initializes a configurable convolutional block with two Conv2D layers, optional normalization, dropout, and residual connection.
+
+    Parameters:
+      inChannels (int): Number of input channels.
+      outChannels (int): Number of output channels.
+      norm (str): Normalization type: "batch" | "instance" | "none".
+      dropout (float): Dropout probability applied after the block.
+      residual (bool): Whether to add a residual skip when shapes permit.
+    '''
+
     super(ConfigConv, self).__init__()
     # Store residual and dropout configuration.
     self.residual = (residual and (inChannels == outChannels))
@@ -176,8 +183,18 @@ class ConfigConv(tf.keras.layers.Layer):
     # Create optional dropout layer when configured.
     self.dropout = (tf.keras.layers.Dropout(self.dropoutRate) if (self.dropoutRate) else None)
 
-  # Forward pass for the configurable block.
   def call(self, x, training=False):
+    r'''
+    Forward pass through the configurable convolutional block.
+
+    Parameters:
+      x (tensorflow.Tensor): Input tensor of shape [B, H, W, inChannels].
+      training (bool): Whether the model is in training mode (affects normalization and dropout).
+
+    Returns:
+      tensorflow.Tensor: Output tensor of shape [B, H, W, outChannels], optionally with residual addition.
+    '''
+
     # Apply first conv and optional normalization.
     out = self.conv1(x)
     if (self.norm1 is not None):
@@ -199,22 +216,19 @@ class ConfigConv(tf.keras.layers.Layer):
 
 class ResidualBlock(tf.keras.layers.Layer):
   r'''
-  Residual convolutional block.
-
-  Short summary:
-    Two conv->BatchNorm->ReLU layers with an identity skip connection. A 1x1
-    projection is applied to the identity when the number of channels differs.
-
-  Parameters:
-    inChannels (int): Number of input channels.
-    outChannels (int): Number of output channels.
-
-  Returns:
-    tensorflow.Tensor: Output tensor with applied residual addition.
+  Residual convolutional block. Two conv->BatchNorm->ReLU layers with an identity skip connection. A 1x1
+  projection is applied to the identity when the number of channels differs.
   '''
 
-  # Initialize residual block.
   def __init__(self, inChannels: int, outChannels: int):
+    r'''
+    Initializes a residual convolutional block with two Conv2D layers, each followed by BatchNormalization and ReLU activation.
+
+    Parameters:
+      inChannels (int): Number of input channels.
+      outChannels (int): Number of output channels.
+    '''
+
     super(ResidualBlock, self).__init__()
     # Create convolutional and normalization layers.
     self.conv1 = tf.keras.layers.Conv2D(outChannels, kernel_size=3, padding="same")
@@ -226,8 +240,18 @@ class ResidualBlock(tf.keras.layers.Layer):
     if (self.needProj):
       self.proj = tf.keras.layers.Conv2D(outChannels, kernel_size=1)
 
-  # Forward pass for residual block.
   def call(self, x, training=False):
+    r'''
+    Forward pass through the residual convolutional block.
+
+    Parameters:
+      x (tensorflow.Tensor): Input tensor of shape [B, H, W, inChannels].
+      training (bool): Whether the model is in training mode (affects BatchNormalization).
+
+    Returns:
+      tensorflow.Tensor: Output tensor of shape [B, H, W, outChannels] after residual addition and activation.
+    '''
+
     # Preserve identity for skip connection.
     identity = x
     # First conv->bn->relu.
@@ -248,23 +272,20 @@ class ResidualBlock(tf.keras.layers.Layer):
 class AttentionGate(tf.keras.layers.Layer):
   r'''
   Attention gating module for skip connections.
-
-  Short summary:
-    Lightweight gating unit that computes attention coefficients for encoder skip
-    features using a gating signal from the decoder, improving focus on
-    relevant spatial locations.
-
-  Parameters:
-    F_g (int): Channels of the gating signal from the decoder.
-    F_l (int): Channels of the skip connection from the encoder.
-    F_int (int): Intermediate channel width inside the gate.
-
-  Returns:
-    tensorflow.Tensor: Reweighted skip features of shape matching the input skip map.
+  Lightweight gating unit that computes attention coefficients for encoder skip
+  features using a gating signal from the decoder, improving focus on
+  relevant spatial locations.
   '''
 
-  # Initialize attention gate sub-layers.
   def __init__(self, F_g: int, F_l: int, F_int: int):
+    r'''
+    Initializes an attention gate with convolutional layers to compute attention coefficients.
+
+    Parameters:
+      F_g (int): Number of channels in the gating signal from the decoder.
+      F_l (int): Number of channels in the skip connection from the encoder.
+      F_int (int): Number of intermediate channels used for attention computation.
+    '''
     super(AttentionGate, self).__init__()
     # Create gating and skip mapping branches.
     self.W_g = tf.keras.Sequential([
@@ -284,8 +305,19 @@ class AttentionGate(tf.keras.layers.Layer):
     # ReLU activation used before psi.
     self.relu = tf.keras.layers.ReLU()
 
-  # Forward pass for attention gate.
   def call(self, g, x, training=False):
+    r'''
+    Forward pass through the attention gate.
+
+    Parameters:
+      g (tensorflow.Tensor): Gating signal from the decoder of shape [B, H, W, F_g].
+      x (tensorflow.Tensor): Skip connection from the encoder of shape [B, H, W, F_l].
+      training (bool): Whether the model is in training mode (affects BatchNormalization).
+
+    Returns:
+      tensorflow.Tensor: Reweighted skip features of shape [B, H, W, F_l] after applying attention coefficients.
+    '''
+
     # Map the gating signal.
     g1 = self.W_g(g, training=training)
     # Map the encoder skip features.
@@ -300,28 +332,33 @@ class AttentionGate(tf.keras.layers.Layer):
 class DepthwiseSeparableConv(tf.keras.layers.Layer):
   r'''
   Depthwise separable convolution block.
-
-  Short summary:
-    Implements a depthwise convolution followed by a pointwise convolution,
-    used to reduce parameter counts and computation in lightweight models.
-
-  Parameters:
-    inChannels (int): Number of input channels.
-    outChannels (int): Number of output channels.
-
-  Returns:
-    tensorflow.Tensor: Activated output tensor with outChannels channels.
+  Implements a depthwise convolution followed by a pointwise convolution,
+  used to reduce parameter counts and computation in lightweight models.
   '''
 
-  # Initialize depthwise separable conv block.
   def __init__(self, inChannels: int, outChannels: int):
+    r'''
+    Initializes a depthwise separable convolution block with a SeparableConv2D layer, BatchNormalization, and ReLU activation.
+
+    Parameters:
+      inChannels (int): Number of input channels.
+      outChannels (int): Number of output channels.
+    '''
+
     super(DepthwiseSeparableConv, self).__init__()
     self.sep = tf.keras.layers.SeparableConv2D(outChannels, kernel_size=3, padding="same")
     self.bn = tf.keras.layers.BatchNormalization()
     self.act = tf.keras.layers.ReLU()
 
-  # Forward pass for separable conv.
   def call(self, x, training=False):
+    r'''
+    Forward pass through the depthwise separable convolution block.
+
+    Parameters:
+      x (tensorflow.Tensor): Input tensor of shape [B, H, W, inChannels].
+      training (bool): Whether the model is in training mode (affects BatchNormalization).
+    '''
+
     # Apply separable convolution.
     x = self.sep(x)
     # Apply batch normalization.
@@ -333,29 +370,36 @@ class DepthwiseSeparableConv(tf.keras.layers.Layer):
 class SEBlock(tf.keras.layers.Layer):
   r'''
   Squeeze-and-Excitation (SE) block.
-
-  Short summary:
-    Performs global channel-wise pooling followed by a small bottleneck
-    MLP that produces per-channel scaling weights applied to the input.
-
-  Parameters:
-    channels (int): Number of input/output channels.
-    reduction (int): Reduction ratio for the bottleneck. Default 16.
-
-  Returns:
-    tensorflow.Tensor: Recalibrated tensor of same shape as input.
+  Performs global channel-wise pooling followed by a small bottleneck
+  MLP that produces per-channel scaling weights applied to the input.
   '''
 
-  # Initialize SE block components.
   def __init__(self, channels: int, reduction: int = 16):
+    r'''
+    Initializes a Squeeze-and-Excitation block with global average pooling and two dense layers for channel recalibration.
+
+    Parameters:
+      channels (int): Number of input/output channels.
+      reduction (int): Reduction ratio for the bottleneck MLP. Default 16.
+    '''
+
     super(SEBlock, self).__init__()
     reduced = max(1, channels // reduction)
     self.pool = tf.keras.layers.GlobalAveragePooling2D()
     self.fc1 = tf.keras.layers.Dense(reduced, activation="relu")
     self.fc2 = tf.keras.layers.Dense(channels, activation="sigmoid")
 
-  # Forward pass for SE block.
   def call(self, x):
+    r'''
+    Forward pass through the Squeeze-and-Excitation block.
+
+    Parameters:
+      x (tensorflow.Tensor): Input tensor of shape [B, H, W, channels].
+
+    Returns:
+      tensorflow.Tensor: Output tensor of shape [B, H, W, channels] after channel-wise recalibration.
+    '''
+
     # Squeeze global context and excite channels.
     s = self.pool(x)
     s = self.fc1(s)
@@ -367,22 +411,20 @@ class SEBlock(tf.keras.layers.Layer):
 class MultiResBlock(tf.keras.layers.Layer):
   r'''
   Multi-resolution convolution block capturing features at multiple receptive fields.
-
-  Short summary:
-    Parallel convolutions with different receptive fields followed by channel weighting
-    to capture multi-scale context within a single block while controlling parameter growth.
-
-  Parameters:
-    inChans (int): Input channel count.
-    outChans (int): Output channel count (total across all paths).
-    alpha (float): Scaling factor for path channel allocation. Default 1.67.
-
-  Returns:
-    tensorflow.Tensor: Multi-resolution feature map with outChans channels.
+  Parallel convolutions with different receptive fields followed by channel weighting
+  to capture multi-scale context within a single block while controlling parameter growth.
   '''
 
-  # Initialize MultiRes block and its parallel paths.
   def __init__(self, inChans: int, outChans: int, alpha: float = 1.67):
+    r'''
+    Initializes a MultiRes block with three parallel convolutional paths (3x3, 5x5, 7x7) and a shortcut connection.
+
+    Parameters:
+      inChans (int): Number of input channels.
+      outChans (int): Total number of output channels across all paths.
+      alpha (float): Scaling factor to determine channel allocation for each path. Default 1.67.
+    '''
+
     super(MultiResBlock, self).__init__()
     # Compute allocation for multi-resolution paths.
     u = int(outChans / alpha)
@@ -420,8 +462,18 @@ class MultiResBlock(tf.keras.layers.Layer):
       self.convShortcut = (lambda x: x)
     self.batchNorm = tf.keras.layers.BatchNormalization()
 
-  # Forward pass for MultiRes block.
   def call(self, x, training=False):
+    r'''
+    Forward pass through the MultiRes block.
+
+    Parameters:
+      x (tensorflow.Tensor): Input tensor of shape [B, H, W, inChans].
+      training (bool): Whether the model is in training mode (affects BatchNormalization).
+
+    Returns:
+      tensorflow.Tensor: Output tensor of shape [B, H, W, outChans].
+    '''
+
     # Execute each parallel path.
     path1 = (self.conv3x3(x, training=training) if hasattr(self.conv3x3, "call") else self.conv3x3(x))
     path2 = (self.conv5x5(x, training=training) if hasattr(self.conv5x5, "call") else self.conv5x5(x))
@@ -437,23 +489,21 @@ class MultiResBlock(tf.keras.layers.Layer):
 class DenseBlock(tf.keras.layers.Layer):
   r'''
   Dense connectivity block with bottleneck layers for parameter efficiency.
-
-  Short summary:
-    Stacks multiple bottleneck layers where each layer receives feature maps from
-    all preceding layers as input, promoting feature reuse and gradient flow.
-
-  Parameters:
-    inChans (int): Input channel count.
-    numLayers (int): Number of bottleneck layers in block. Default 4.
-    growthRate (int): Channels added per layer. Default 32.
-    bnSize (int): Bottleneck expansion factor. Default 4.
-
-  Returns:
-    tensorflow.Tensor: Concatenated output of all layers including original input.
+  Stacks multiple bottleneck layers where each layer receives feature maps from
+  all preceding layers as input, promoting feature reuse and gradient flow.
   '''
 
-  # Initialize Dense block with bottleneck layers.
   def __init__(self, inChans: int, numLayers: int = 4, growthRate: int = 32, bnSize: int = 4):
+    r'''
+    Initializes a Dense block with a specified number of bottleneck layers, growth rate, and bottleneck size.
+
+    Parameters:
+      inChans (int): Number of input channels.
+      numLayers (int): Number of bottleneck layers in the block. Default 4.
+      growthRate (int): Number of channels added per layer. Default 32.
+      bnSize (int): Bottleneck expansion factor for intermediate channels. Default 4.
+    '''
+
     super(DenseBlock, self).__init__()
     self.layers_list = []
     current = inChans
@@ -471,11 +521,22 @@ class DenseBlock(tf.keras.layers.Layer):
 
   # Forward pass for Dense block.
   def call(self, x, training=False):
+    r'''
+    Forward pass through the Dense block, progressively concatenating features from all previous layers.
+
+    Parameters:
+      x (tensorflow.Tensor): Input tensor of shape [B, H, W, inChans].
+      training (bool): Whether the model is in training mode (affects BatchNormalization).
+
+    Returns:
+      tensorflow.Tensor: Output tensor of shape [B, H, W, inChans + numLayers * growthRate].
+    '''
+
     # Accumulate dense features progressively.
     features = [x]
     for layer in self.layers_list:
       concated = tf.concat(features, axis=-1)
-      out = (layer(concated, training=training) if hasattr(layer, "call") else layer(concated))
+      out = (layer(concated, training=training) if (hasattr(layer, "call")) else layer(concated))
       features.append(out)
     return tf.concat(features, axis=-1)
 
@@ -483,21 +544,19 @@ class DenseBlock(tf.keras.layers.Layer):
 class RecurrentConvLayer(tf.keras.layers.Layer):
   r'''
   Recurrent convolutional layer with internal state feedback.
-
-  Short summary:
-    Applies convolution repeatedly for T timesteps where each step receives feedback
-    from its previous output, enabling iterative refinement of spatial features.
-
-  Parameters:
-    channels (int): Input/output channel count.
-    t (int): Number of recurrent iterations. Default 2.
-
-  Returns:
-    tensorflow.Tensor: Refined feature map after T recurrent steps.
+  Applies convolution repeatedly for T timesteps where each step receives feedback
+  from its previous output, enabling iterative refinement of spatial features.
   '''
 
-  # Initialize recurrent conv layer.
   def __init__(self, channels: int, t: int = 2):
+    r'''
+    Initializes a recurrent convolutional layer with shared convolutional weights and batch normalization.
+
+    Parameters:
+      channels (int): Number of input/output channels.
+      t (int): Number of recurrent iterations. Default 2.
+    '''
+
     super(RecurrentConvLayer, self).__init__()
     self.t = t
     self.conv = tf.keras.layers.Conv2D(channels, 3, padding="same")
@@ -505,6 +564,17 @@ class RecurrentConvLayer(tf.keras.layers.Layer):
 
   # Forward pass applying recurrence.
   def call(self, x, training=False):
+    r'''
+    Forward pass through the recurrent convolutional layer, iteratively refining features over T timesteps.
+
+    Parameters:
+      x (tensorflow.Tensor): Input tensor of shape [B, H, W, channels].
+      training (bool): Whether the model is in training mode (affects BatchNormalization).
+
+    Returns:
+      tensorflow.Tensor: Output tensor of shape [B, H, W, channels] after T recurrent iterations.
+    '''
+
     # Initialize hidden state with the input.
     hidden = x
     for _ in range(self.t):
@@ -518,22 +588,20 @@ class RecurrentConvLayer(tf.keras.layers.Layer):
 class ASPP(tf.keras.layers.Layer):
   r'''
   Atrous Spatial Pyramid Pooling for multi-scale context aggregation.
-
-  Short summary:
-    Parallel dilated convolutions at multiple rates plus image pooling to capture
-    objects at different scales within a single feature map.
-
-  Parameters:
-    inChans (int): Input channel count.
-    outChans (int): Output channel count after fusion.
-    dilations (Tuple[int]): Dilation rates for parallel branches. Default (1,6,12,18).
-
-  Returns:
-    tensorflow.Tensor: Context-enriched feature map with outChans channels.
+  Parallel dilated convolutions at multiple rates plus image pooling to capture
+  objects at different scales within a single feature map.
   '''
 
-  # Initialize ASPP branches.
   def __init__(self, inChans: int, outChans: int, dilations: Tuple[int] = (1, 6, 12, 18)):
+    r'''
+    Initializes the ASPP module with parallel convolutional branches and image pooling.
+
+    Parameters:
+      inChans (int): Number of input channels.
+      outChans (int): Number of output channels after concatenation and projection.
+      dilations (Tuple[int]): Dilation rates for the 3x3 convolution branches. Default (1, 6, 12, 18).
+    '''
+
     super(ASPP, self).__init__()
     # Create ASPP branches.
     self.conv1x1 = tf.keras.Sequential([
@@ -566,6 +634,17 @@ class ASPP(tf.keras.layers.Layer):
 
   # Forward pass for ASPP.
   def call(self, x, training=False):
+    r'''
+    Forward pass through the ASPP module, aggregating multi-scale features and projecting to output channels.
+
+    Parameters:
+      x (tensorflow.Tensor): Input tensor of shape [B, H, W, inChans].
+      training (bool): Whether the model is in training mode (affects BatchNormalization and Dropout).
+
+    Returns:
+      tensorflow.Tensor: Output tensor of shape [B, H, W, outChans] after multi-scale feature aggregation.
+    '''
+
     # Record spatial dimensions for upsampling pooled features later.
     h = tf.shape(x)[1]
     w = tf.shape(x)[2]
@@ -585,28 +664,35 @@ class ASPP(tf.keras.layers.Layer):
 class PatchEmbedding(tf.keras.layers.Layer):
   r'''
   2D image to patch embedding with optional positional encoding.
-
-  Short summary:
-    Converts input image into non-overlapping patches via convolutional projection
-    and flattens them into a sequence for transformer processing.
-
-  Parameters:
-    inChans (int): Input channel count.
-    embedDim (int): Embedding dimension per patch. Default 256.
-    patchSize (int): Patch size (height=width). Default 4.
-
-  Returns:
-    Tuple[tensorflow.Tensor, Tuple[int,int]]: Patch sequence [B, N, embedDim] and (patchH, patchW).
+  Converts input image into non-overlapping patches via convolutional projection
+  and flattens them into a sequence for transformer processing.
   '''
 
-  # Initialize patch embedding projection.
   def __init__(self, inChans: int, embedDim: int = 256, patchSize: int = 4):
+    r'''
+    Initializes a patch embedding layer that projects an input image into a sequence of patch embeddings using a Conv2D layer.
+
+    Parameters:
+      inChans (int): Number of input channels.
+      embedDim (int): Dimension of the embedding for each patch. Default 256.
+      patchSize (int): Size of each patch (height and width). Default 4.
+    '''
+
     super(PatchEmbedding, self).__init__()
     self.patchSize = patchSize
     self.proj = tf.keras.layers.Conv2D(embedDim, kernel_size=patchSize, strides=patchSize)
 
-  # Forward pass producing patch sequence and grid size.
   def call(self, x):
+    r'''
+    Forward pass through the patch embedding layer, projecting the input image into a sequence of flattened patch embeddings.
+
+    Parameters:
+      x (tensorflow.Tensor): Input tensor of shape [B, H, W, inChans].
+
+    Returns:
+      Tuple[tensorflow.Tensor, Tuple[int,int]]: Patch sequence of shape [B, N, embedDim] and tuple (patchH, patchW) representing the grid size of patches.
+    '''
+
     # Project image into patch embeddings.
     x = self.proj(x)
     patchH = tf.shape(x)[1]
@@ -618,23 +704,21 @@ class PatchEmbedding(tf.keras.layers.Layer):
 class TransformerBlock(tf.keras.layers.Layer):
   r'''
   Standard transformer encoder block with pre-normalization.
-
-  Short summary:
-    Multi-head self-attention followed by position-wise feed-forward network
-    with layer normalization and residual connections before each sub-layer.
-
-  Parameters:
-    embedDim (int): Embedding dimension.
-    numHeads (int): Number of attention heads. Default 8.
-    mlpRatio (float): Hidden dimension ratio for MLP. Default 4.0.
-    dropout (float): Dropout probability. Default 0.1.
-
-  Returns:
-    tensorflow.Tensor: Transformed sequence of same shape as input.
+  Multi-head self-attention followed by position-wise feed-forward network
+  with layer normalization and residual connections before each sub-layer.
   '''
 
-  # Initialize transformer encoder block.
   def __init__(self, embedDim: int, numHeads: int = 8, mlpRatio: float = 4.0, dropout: float = 0.1):
+    r'''
+    Initializes a transformer encoder block with multi-head self-attention and feed-forward MLP.
+
+    Parameters:
+      embedDim (int): Dimension of the input embeddings.
+      numHeads (int): Number of attention heads. Default 8.
+      mlpRatio (float): Ratio to determine the hidden dimension of the MLP relative to embedDim. Default 4.0.
+      dropout (float): Dropout rate applied after attention and MLP layers. Default 0.1.
+    '''
+
     super(TransformerBlock, self).__init__()
     # Layer normalization and multi-head attention.
     self.norm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
@@ -648,41 +732,57 @@ class TransformerBlock(tf.keras.layers.Layer):
       tf.keras.layers.Dropout(dropout),
     ])
 
-  # Forward pass for transformer block.
   def call(self, x, training=False):
+    r'''
+    Forward pass through the transformer encoder block, applying pre-normalization, multi-head self-attention, and feed-forward MLP with residual connections.
+
+    Parameters:
+      x (tensorflow.Tensor): Input tensor of shape [B, N, embedDim].
+      training (bool): Whether the model is in training mode (affects Dropout).
+
+    Returns:
+      tensorflow.Tensor: Output tensor of shape [B, N, embedDim] after attention and MLP processing.
+    '''
+
     # Pre-normalize and apply multi-head self-attention.
-    x_norm = self.norm1(x)
-    attn_out = self.attn(x_norm, x_norm)
-    x = x + attn_out
+    xNorm = self.norm1(x)
+    attnOut = self.attn(xNorm, xNorm)
+    x = x + attnOut
     # Feed-forward MLP with residual connection.
-    x_norm = self.norm2(x)
-    x = x + self.mlp(x_norm, training=training)
+    xNorm = self.norm2(x)
+    x = x + self.mlp(xNorm, training=training)
     return x
 
 
 class ChannelAttn(tf.keras.layers.Layer):
   r'''
   Channel attention branch of CBAM using squeeze-and-excitation.
-
-  Short summary:
-    Global average and max pooling followed by shared MLP to compute
-    channel-wise attention weights that rescale feature channels.
-
-  Parameters:
-    channels (int): Input channel count.
-    reduction (int): Reduction ratio for bottleneck MLP. Default 16.
-
-  Returns:
-    tensorflow.Tensor: Channel-refined feature map.
+  Global average and max pooling followed by shared MLP to compute
+  channel-wise attention weights that rescale feature channels.
   '''
 
   def __init__(self, channels: int, reduction: int = 16):
+    r'''
+    Initializes a channel attention block with global pooling and a two-layer MLP for channel recalibration.
+
+    Parameters:
+      channels (int): Number of input/output channels.
+      reduction (int): Reduction ratio for the bottleneck MLP. Default 16.
+    '''
+
     super(ChannelAttn, self).__init__()
     reduced = max(1, channels // reduction)
     self.fc1 = tf.keras.layers.Dense(reduced, activation="relu")
     self.fc2 = tf.keras.layers.Dense(channels)
 
   def call(self, x):
+    r'''
+    Forward pass through the channel attention block, computing channel-wise attention weights and applying them to the input feature map.
+
+    Parameters:
+      x (tensorflow.Tensor): Input tensor of shape [B, H, W, channels].
+    '''
+
     # Extract batch and channel dimensions and apply pooled streams.
     avgPooled = tf.reduce_mean(x, axis=[1, 2])
     maxPooled = tf.reduce_max(x, axis=[1, 2])
@@ -696,23 +796,29 @@ class ChannelAttn(tf.keras.layers.Layer):
 class SpatialAttn(tf.keras.layers.Layer):
   r'''
   Spatial attention branch of CBAM using channel aggregation.
-
-  Short summary:
-    Channel-wise average and max pooling followed by convolution to compute
-    spatial attention map that highlights important regions in feature maps.
-
-  Parameters:
-    kernelSize (int): Convolution kernel size for spatial attention. Default 7.
-
-  Returns:
-    tensorflow.Tensor: Spatially-refined feature map.
+  Channel-wise average and max pooling followed by convolution to compute
+  spatial attention map that highlights important regions in feature maps.
   '''
 
   def __init__(self, kernelSize: int = 7):
+    r'''
+    Initializes a spatial attention block with a convolutional layer to compute spatial attention weights.
+
+    Parameters:
+      kernelSize (int): Size of the convolution kernel for spatial attention. Default 7.
+    '''
+
     super(SpatialAttn, self).__init__()
     self.conv = tf.keras.layers.Conv2D(1, kernel_size=kernelSize, padding="same", use_bias=False)
 
   def call(self, x):
+    r'''
+    Forward pass through the spatial attention block, computing a spatial attention map and applying it to the input feature map.
+
+    Parameters:
+      x (tensorflow.Tensor): Input tensor of shape [B, H, W, channels].
+    '''
+
     # Aggregate along channel axis using average and max pooling.
     avgPooled = tf.reduce_mean(x, axis=-1, keepdims=True)
     maxPooled = tf.reduce_max(x, axis=-1, keepdims=True)
@@ -725,25 +831,34 @@ class SpatialAttn(tf.keras.layers.Layer):
 class CBAM(tf.keras.layers.Layer):
   r'''
   Convolutional Block Attention Module (channel + spatial attention).
-
-  Short summary:
-    Sequential channel attention followed by spatial attention to adaptively
-    refine feature maps along both channel and spatial dimensions.
-
-  Parameters:
-    channels (int): Input/output channel count.
-    reduction (int): Reduction ratio for channel attention. Default 16.
-
-  Returns:
-    tensorflow.Tensor: Attention-refined feature map with same shape as input.
+  Sequential channel attention followed by spatial attention to adaptively
+  refine feature maps along both channel and spatial dimensions.
   '''
 
   def __init__(self, channels: int, reduction: int = 16):
+    r'''
+    Initializes a CBAM module with channel and spatial attention branches.
+
+    Parameters:
+      channels (int): Number of input/output channels.
+      reduction (int): Reduction ratio for the channel attention MLP. Default 16.
+    '''
+
     super(CBAM, self).__init__()
     self.channelAttn = ChannelAttn(channels, reduction)
     self.spatialAttn = SpatialAttn()
 
   def call(self, x):
+    r'''
+    Forward pass through the CBAM module, applying channel attention followed by spatial attention.
+
+    Parameters:
+      x (tensorflow.Tensor): Input tensor of shape [B, H, W, channels].
+
+    Returns:
+      tensorflow.Tensor: Output tensor of shape [B, H, W, channels] after attention refinement.
+    '''
+
     x = self.channelAttn(x)
     x = self.spatialAttn(x)
     return x
@@ -752,11 +867,9 @@ class CBAM(tf.keras.layers.Layer):
 class UNet(tf.keras.Model):
   r'''
   Standard 2D U-Net implemented with tf.keras.
-
-  Short summary:
-    A typical encoder-decoder U-Net with four downsampling stages, a bottleneck,
-    and four symmetric upsampling stages. Supports learned transpose convolution
-    upsampling or bilinear upsampling followed by 1x1 projection.
+  A typical encoder-decoder U-Net with four downsampling stages, a bottleneck,
+  and four symmetric upsampling stages. Supports learned transpose convolution
+  upsampling or bilinear upsampling followed by 1x1 projection.
 
   Parameters:
     inputChannels (int): Number of input image channels. Default 3.
@@ -774,8 +887,10 @@ class UNet(tf.keras.Model):
   '''
 
   # Initialize UNet architecture.
-  def __init__(self, inputChannels: int = 3, numClasses: int = 2, baseChannels: int = 64,
-               useConvTranspose2d: bool = True):
+  def __init__(
+    self, inputChannels: int = 3, numClasses: int = 2, baseChannels: int = 64,
+    useConvTranspose2d: bool = True
+  ):
     super(UNet, self).__init__()
     # Encoder blocks and pooling layers.
     self.enc1 = DoubleConv(inputChannels, baseChannels)
@@ -2408,22 +2523,9 @@ class VNet(tf.keras.Model):
 class SegNet(tf.keras.Model):
   r'''
   SegNet architecture for multi-class semantic segmentation (Class-based Implementation).
-
-  Short summary:
-    Memory-efficient encoder-decoder network supporting VGG16, ResNet50, 
-    MobileNetV2, or Vanilla backbones. Uses Functional API internally for 
-    optimal graph construction and memory usage.
-
-  Parameters:
-    inputChannels (int): Number of input image channels. Default 3.
-    numClasses (int): Number of output classes. Default 2.
-    level (int): Decoder starting stage (1-4). Higher levels use deeper features.
-    encoder (str): Backbone type: "VGG16", "ResNet50", "MobileNet", or "Vanilla".
-    inputSize (tuple, optional): Fixed input shape (H, W, C). None = dynamic.
-    useBias (bool): Whether Conv layers use bias. Default False (BN compatible).
-
-  Returns:
-    tensorflow.Tensor: Segmentation probabilities [B, H, W, numClasses].
+  Memory-efficient encoder-decoder network supporting VGG16, ResNet50,
+  MobileNetV2, or Vanilla backbones. Uses Functional API internally for
+  optimal graph construction and memory usage.
   '''
 
   def __init__(
@@ -2435,6 +2537,18 @@ class SegNet(tf.keras.Model):
     inputSize=None,
     useBias=False
   ):
+    r'''
+    Initialize SegNet with specified configuration.
+
+    Parameters:
+      inputChannels (int): Number of input image channels. Default 3.
+      numClasses (int): Number of output classes. Default 2.
+      level (int): Decoder starting stage (1-4). Higher levels use deeper features.
+      encoder (str): Backbone type: "VGG16", "ResNet50", "MobileNet", or "Vanilla".
+      inputSize (tuple, optional): Fixed input shape (H, W, C). None = dynamic.
+      useBias (bool): Whether Conv layers use bias. Default False (BN compatible).
+    '''
+
     # Call parent constructor with a descriptive name.
     super(SegNet, self).__init__(name=f"SegNet_{encoder}_L{level}")
 
@@ -2506,7 +2620,12 @@ class SegNet(tf.keras.Model):
       self.BuildFunctionalModel()
 
   def BuildEncoderLayers(self):
-    '''Initialize encoder backbone layers based on selected type.'''
+    r'''
+    Initialize encoder backbone layers based on selected type.
+
+    Raises:
+      ValueError: If an unsupported encoder type is specified.
+    '''
 
     # Route to the encoder initializer for the selected backbone.
     if (self.encoderType == "VGG16"):
@@ -2521,9 +2640,14 @@ class SegNet(tf.keras.Model):
     elif (self.encoderType == "Vanilla"):
       # Initialize lightweight vanilla encoder.
       self.InitVanillaEncoder()
+    else:
+      # Raise an error for unsupported encoder types.
+      raise ValueError(f"Unsupported encoder type: {self.encoderType}")
 
   def InitVggEncoder(self):
-    '''VGG16-style encoder: 4 blocks returning feature levels at strides 2,4,8,16.'''
+    r'''
+    VGG16-style encoder: 4 blocks returning feature levels at strides 2,4,8,16.
+    '''
 
     # Local helper to create a VGG block returning convolutional layers and a pooling layer.
     def vggBlock(filters, blockNum):
@@ -2554,19 +2678,25 @@ class SegNet(tf.keras.Model):
       self.vggLayers.extend(vggBlock(filters, blockNum))
 
   def InitResnet50Encoder(self):
-    '''ResNet50 encoder using keras.applications for memory efficiency.'''
+    r'''
+    ResNet50 encoder using keras.applications for memory efficiency.
+    '''
 
     # We'll build this dynamically in RunResnetEncoder to avoid graph duplication.
     self.resnetBase = None
 
   def InitMobilenetEncoder(self):
-    '''MobileNetV2 encoder using keras.applications for memory efficiency.'''
+    r'''
+    MobileNetV2 encoder using keras.applications for memory efficiency.
+    '''
 
     # Placeholder for the lazily constructed MobileNet base model.
     self.mobilenetBase = None
 
   def InitVanillaEncoder(self):
-    '''Vanilla encoder with correct channel progression: in→64→128→256→512.'''
+    r'''
+    Vanilla encoder with correct channel progression: in→64→128→256→512.
+    '''
 
     # Kernel, padding and pooling configuration for vanilla blocks.
     kernel, pad, pool = 3, 1, 2
@@ -2610,7 +2740,9 @@ class SegNet(tf.keras.Model):
     ])
 
   def BuildDecoderLayers(self):
-    '''Build decoder layers with unique names to prevent duplication errors.'''
+    r'''
+    Build decoder layers with unique names to prevent duplication errors.
+    '''
 
     # Decoder configuration tuples: (filters, do_upsample) for 5 stages.
     decoderStages = [(512, True), (512, True), (256, True), (128, True), (64, False)]
@@ -2639,7 +2771,9 @@ class SegNet(tf.keras.Model):
         )
 
   def BuildOutputHead(self):
-    '''Build final classification head.'''
+    r'''
+    Build final classification head.
+    '''
 
     # Configure output convolution and activation based on number of classes.
     if (self.numClasses > 2):
@@ -2658,7 +2792,16 @@ class SegNet(tf.keras.Model):
       self.outAct = tf.keras.layers.Activation("sigmoid", name="outSigmoid")
 
   def RunVggEncoder(self, x, training=False):
-    '''Execute VGG encoder and return 4 feature levels.'''
+    r'''
+    Execute VGG encoder and return 4 feature levels.
+
+    Parameters:
+      x (tensorflow.Tensor): Input tensor of shape [B, H, W, C].
+      training (bool): Whether the model is in training mode (affects BatchNorm). Default False.
+
+    Returns:
+      list of tensorflow.Tensor: List of encoder feature levels for decoder input.
+    '''
 
     # Container for collected feature maps at pooling milestones.
     levels = []
@@ -2679,7 +2822,16 @@ class SegNet(tf.keras.Model):
     return levels
 
   def RunVanillaEncoder(self, x, training=False):
-    '''Execute Vanilla encoder and return 4 feature levels.'''
+    r'''
+    Execute Vanilla encoder and return 4 feature levels.
+
+    Parameters:
+      x (tensorflow.Tensor): Input tensor of shape [B, H, W, C].
+      training (bool): Whether the model is in training mode (affects BatchNorm). Default False.
+
+    Returns:
+      list of tensorflow.Tensor: List of encoder feature levels for decoder input.
+    '''
 
     # Container for vanilla encoder feature levels.
     levels = []
@@ -2694,7 +2846,16 @@ class SegNet(tf.keras.Model):
     return levels
 
   def RunResnetEncoder(self, x, training=False):
-    '''Execute ResNet50 encoder and return 4 feature levels.'''
+    r'''
+    Execute ResNet50 encoder and return 4 feature levels.
+
+    Parameters:
+      x (tensorflow.Tensor): Input tensor of shape [B, H, W, C].
+      training (bool): Whether the model is in training mode (affects BatchNorm). Default False.
+
+    Returns:
+      list of tensorflow.Tensor: List of encoder feature levels for decoder input.
+    '''
 
     # Lazily build a ResNet50 base model on first call to avoid duplicated graphs.
     if (self.resnetBase is None):
@@ -2727,7 +2888,16 @@ class SegNet(tf.keras.Model):
     return self.resnetBase(x, training=training)
 
   def RunMobilenetEncoder(self, x, training=False):
-    '''Execute MobileNetV2 encoder and return 4 feature levels.'''
+    r'''
+    Execute MobileNetV2 encoder and return 4 feature levels.
+
+    Parameters:
+      x (tensorflow.Tensor): Input tensor of shape [B, H, W, C].
+      training (bool): Whether the model is in training mode (affects BatchNorm). Default False.
+
+    Returns:
+      list of tensorflow.Tensor: List of encoder feature levels for decoder input.
+    '''
 
     # Lazily build MobileNetV2 base the first time this path is executed.
     if (self.mobilenetBase is None):
@@ -2759,7 +2929,16 @@ class SegNet(tf.keras.Model):
     return self.mobilenetBase(x, training=training)
 
   def RunEncoder(self, x, training=False):
-    '''Route to appropriate encoder implementation.'''
+    r'''
+    Route to appropriate encoder implementation.
+
+    Parameters:
+      x (tensorflow.Tensor): Input tensor of shape [B, H, W, C].
+      training (bool): Whether the model is in training mode (affects BatchNorm). Default False.
+
+    Returns:
+      list of tensorflow.Tensor: List of encoder feature levels for decoder input.
+    '''
 
     # Route to the appropriate encoder runtime method based on selected encoder.
     if (self.encoderType == "VGG16"):
@@ -2774,7 +2953,16 @@ class SegNet(tf.keras.Model):
     return []
 
   def RunDecoder(self, x, training=False):
-    '''Execute decoder pathway from selected level.'''
+    r'''
+    Execute decoder pathway from selected level.
+
+    Parameters:
+      x (tensorflow.Tensor): Input tensor from encoder level.
+      training (bool): Whether the model is in training mode (affects BatchNorm). Default False.
+
+    Returns:
+      tensorflow.Tensor: Output tensor after decoder processing.
+    r'''
 
     # Execute the decoder stages sequentially.
     for i in range(5):
@@ -2797,7 +2985,9 @@ class SegNet(tf.keras.Model):
     return x
 
   def BuildFunctionalModel(self):
-    '''Build static functional model for fixed input shapes (optimization).'''
+    r'''
+    Build static functional model for fixed input shapes (optimization).
+    '''
 
     # Create a Keras Input for the configured fixed input size.
     inputs = tf.keras.layers.Input(shape=self.inputSize, name="segnet_input")
@@ -2815,7 +3005,16 @@ class SegNet(tf.keras.Model):
     self.functionalModel = tf.keras.models.Model(inputs=inputs, outputs=outputs, name=self.name)
 
   def call(self, x, training=False):
-    '''Forward pass: route to functional model if fixed shape, else dynamic.'''
+    r'''
+    Forward pass: route to functional model if fixed shape, else dynamic.
+
+    Parameters:
+      x (tensorflow.Tensor): Input tensor of shape [B, H, W, C].
+      training (bool): Whether the model is in training mode (affects BatchNorm and Dropout). Default False.
+      
+    Returns:
+      tensorflow.Tensor: Output tensor of shape [B, H, W, numClasses] with probabilities or logits depending on configuration.
+    '''
 
     # If a fixed-shape functional model exists, route inputs there for execution.
     if (self._is_fixed_shape and self.functionalModel is not None):
@@ -2834,7 +3033,12 @@ class SegNet(tf.keras.Model):
     return self.outAct(x)
 
   def build(self, input_shape=None):
-    '''Explicitly build model weights (useful for dynamic shapes).'''
+    r'''
+    Explicitly build model weights (useful for dynamic shapes).
+    
+    Parameters:
+      input_shape (tuple, optional): Input shape to build the model. If None, a dynamic shape with known channels is used.
+    '''
 
     # If no input shape was provided use a dynamic 4D shape with known channels.
     if (input_shape is None):
@@ -2845,7 +3049,12 @@ class SegNet(tf.keras.Model):
     _ = self.call(tf.zeros((1,) + input_shape[1:]), training=False)
 
   def get_config(self):
-    '''Enable model serialization.'''
+    r'''
+    Enable model serialization.
+    
+    Returns:
+      dict: Configuration dictionary containing model parameters for reproduction.
+    '''
 
     # Serialize configuration for model reproduction.
     config = {
@@ -2857,12 +3066,21 @@ class SegNet(tf.keras.Model):
       "useBias"      : self.useBias,
     }
     # Retrieve base class configuration and merge with local config.
-    base_config = super().get_config()
-    return {**base_config, **config}
+    baseConfig = super().get_config()
+    return {**baseConfig, **config}
 
   @classmethod
   def from_config(cls, config):
-    '''Enable model deserialization.'''
+    r'''
+    Enable model deserialization.
+    
+    Parameters:
+      cls: The class to instantiate (SegNet).
+      config (dict): Configuration dictionary containing model parameters.
+
+    Returns:
+      SegNet: An instance of SegNet reconstructed from the provided configuration.
+    '''
 
     # Reconstruct an instance from the serialized configuration.
     return cls(**config)
@@ -2903,6 +3121,7 @@ def CreateUNet(
       `DynamicUNet` configuration. Use the names exposed in AVAILABLE_UNETS or
       the CamelCase class names when calling `GetUNetModel`.
   '''
+
   mt = (modelType or "dynamic")
   mtLower = mt.lower()
 
@@ -3042,10 +3261,10 @@ def GetUNetModel(modelName: str, inputChannels: int, numClasses: int, baseChanne
     modelName (str): Exact CamelCase name of the desired model class (e.g. "UNet", "TransUNet").
     inputChannels (int): Number of input channels to construct the model with.
     numClasses (int): Number of output classes for the model.
-    baseChannels (int): Base channel count used by many model constructors. Default 64.
+    baseChannels (int): Base channel count used by many model constructors. Default `64`.
 
   Returns:
-    tf.keras.Model: Instantiated model corresponding to `modelName`.
+    tensorflow.keras.Model: Instantiated model corresponding to `modelName`.
 
   Raises:
     ValueError: If `modelName` is not recognized among the known UNet class names in this module.
@@ -3099,7 +3318,7 @@ def GetUNetModel(modelName: str, inputChannels: int, numClasses: int, baseChanne
 if __name__ == "__main__":
   # Example to test all UNet variants.
   for unetType in AVAILABLE_UNETS[::-1]:
-    for imgSize in [128]:  # , 224, 256, 512
+    for imgSize in [128]:  # , 224, 256, 512.
       print(f"Testing UNet variant: {unetType} with input size {imgSize}x{imgSize}")
       # Create model instance.
       model = CreateUNet(

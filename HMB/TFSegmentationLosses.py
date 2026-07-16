@@ -18,9 +18,7 @@ except AttributeError:
     NONE = "none"
 
 
-# DiceLoss implements the Dice loss as a Keras Loss subclass.
 class DiceLoss(LossBaseClass):
-  # Describe the DiceLoss implementation and parameters.
   r'''
   Implements Dice Loss for binary segmentation tasks.
   Dice loss measures the overlap between predicted and ground truth masks.
@@ -67,9 +65,7 @@ class DiceLoss(LossBaseClass):
     return 1.0 - diceScore
 
 
-# DiceBCELoss combines binary cross-entropy with Dice loss.
 class DiceBCELoss(LossBaseClass):
-  # Describe the DiceBCELoss implementation and parameters.
   r'''
   Implements Dice + BCE Loss for binary segmentation tasks.
   Combines Dice loss and binary cross-entropy loss for improved performance on imbalanced data.
@@ -123,9 +119,7 @@ class DiceBCELoss(LossBaseClass):
     return bce + diceLoss
 
 
-# JaccardLoss computes 1 - IoU for binary segmentation.
 class JaccardLoss(LossBaseClass):
-  # Describe the JaccardLoss implementation and parameters.
   r'''
   Implements Jaccard Loss (IoU Loss) for binary segmentation tasks.
   Jaccard loss measures the intersection over union between predicted and ground truth masks.
@@ -174,9 +168,7 @@ class JaccardLoss(LossBaseClass):
     return 1.0 - jaccard
 
 
-# TverskyLoss implements the Tversky index based loss for binary segmentation.
 class TverskyLoss(LossBaseClass):
-  # Describe the TverskyLoss implementation and parameters.
   r'''
   Implements Tversky Loss for binary segmentation tasks.
   Tversky loss generalizes Dice loss by allowing control over penalties for false positives and false negatives.
@@ -231,9 +223,7 @@ class TverskyLoss(LossBaseClass):
     return 1.0 - tverskyIndex
 
 
-# FocalLoss focuses training on hard examples for binary segmentation.
 class FocalLoss(LossBaseClass):
-  # Describe the FocalLoss implementation and parameters.
   r'''
   Implements Focal Loss for binary segmentation tasks.
   Focal loss focuses training on hard examples and addresses class imbalance.
@@ -302,9 +292,7 @@ class FocalLoss(LossBaseClass):
     return loss
 
 
-# GeneralizedDiceLoss handles multi-class segmentation with class weighting.
 class GeneralizedDiceLoss(LossBaseClass):
-  # Describe the GeneralizedDiceLoss implementation and parameters.
   r'''
   Implements Generalized Dice Loss for multi-class segmentation tasks.
   Weights each class inversely to its frequency to address class imbalance.
