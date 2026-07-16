@@ -222,7 +222,7 @@ Next Steps
 - View the full API reference: `modules.html <modules.html>`_
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Contents:
 
    Installation

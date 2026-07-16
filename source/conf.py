@@ -73,11 +73,7 @@ autodoc_typehints = "description"
 # Initialize an empty dictionary for custom type aliases.
 autodoc_type_aliases = {}
 # Initialize a list for mocking heavy or unavailable imports.
-autodoc_mock_imports = [
-  "torch",
-  "torchvision",
-  "tensorflow"
-]
+autodoc_mock_imports = []
 # Disable automatic summary table generation to prevent duplicate entries.
 autosummary_generate = False
 
