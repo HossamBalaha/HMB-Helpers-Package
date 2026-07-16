@@ -2,14 +2,8 @@ import os, matplotlib, traceback
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
-import statsmodels.api as sm
 import matplotlib.pyplot as plt
-from statsmodels.stats.power import TTestPower
-from statsmodels.stats.weightstats import zconfint
-from sklearn.linear_model import LinearRegression
-from statsmodels.stats.diagnostic import lilliefors
 from skimage.measure import shannon_entropy, moments
-from statsmodels.stats.diagnostic import acorr_ljungbox
 from scipy.stats import skew, kurtosis, bootstrap, wilcoxon
 from HMB.PlotsHelper import GetCmapColors, GetRandomCMAPalette
 from HMB.Initializations import UpdateMatplotlibSettings
@@ -1730,18 +1724,17 @@ class StatisticalAnalysisFramework(object):
     Check statistical assumptions such as normality and symmetry based on data type and sample size.
 
     For Continuous data:
-
-    - Normality is assessed using Shapiro-Wilk for n <= 5000, D'Agostino's K^2 for n > 20, and Lilliefors for n > 5000.
-    - Symmetry is assessed via skewness of differences from baseline when a baseline is provided (paired design).
-    - Logs are generated for each test applied or skipped with reasons.
+      - Normality is assessed using Shapiro-Wilk for n <= 5000, D'Agostino's K^2 for n > 20, and Lilliefors for n > 5000.
+      - Symmetry is assessed via skewness of differences from baseline when a baseline is provided (paired design).
+      - Logs are generated for each test applied or skipped with reasons.
 
     For Binary data:
-
-    - Normality is not applicable and set to False.
-    - Symmetry is treated as True by default.
-    - Logs are generated indicating that normality and symmetry checks were skipped for binary data.
-
+      - Normality is not applicable and set to False.
+      - Symmetry is treated as True by default.
+      - Logs are generated indicating that normality and symmetry checks were skipped for binary data.
     '''
+
+    from statsmodels.stats.diagnostic import lilliefors
 
     # Record the sample size n.
     n = len(self.data)
@@ -2774,6 +2767,12 @@ def StatisticalAnalysis(results, hypothesizedMean=0, secondMetricList=None, conf
     print(analysisReport)
   '''
 
+  import statsmodels.api as sm
+  from statsmodels.stats.power import TTestPower
+  from statsmodels.stats.weightstats import zconfint
+  from statsmodels.stats.diagnostic import acorr_ljungbox
+  from sklearn.linear_model import LinearRegression
+
   # Initialize an empty dictionary to store the analysis results.
   report = {}
 
@@ -3655,6 +3654,7 @@ def PlotMetrics(
   '''
 
   import seaborn as sns
+  import statsmodels.api as sm
 
   UpdateMatplotlibSettings(fontSize=fontSize, figSize=(factor * 5, factor * 5))
 

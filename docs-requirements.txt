@@ -1,4 +1,6 @@
 numpy<2
+torch
+tensorflow
 opencv-python
 opencv-contrib-python
 pandas

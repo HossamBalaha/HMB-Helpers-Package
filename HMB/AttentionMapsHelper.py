@@ -2,10 +2,6 @@ import os, random, torch
 import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
-from pytorch_grad_cam import (
-  GradCAM, HiResCAM, ScoreCAM, GradCAMPlusPlus,
-  AblationCAM, XGradCAM, EigenCAM, FullGrad
-)
 
 
 class LogitsModelWrapper(torch.nn.Module):
@@ -496,6 +492,10 @@ class AttentionMapsVisualizer(object):
     '''
 
     import cv2
+    from pytorch_grad_cam import (
+      GradCAM, HiResCAM, ScoreCAM, GradCAMPlusPlus,
+      AblationCAM, XGradCAM, EigenCAM, FullGrad
+    )
     from HMB.PlotsHelper import SaveMatplotlibFigure
 
     # Set default CAMs if not provided.
