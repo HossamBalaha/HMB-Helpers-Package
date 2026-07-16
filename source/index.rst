@@ -272,8 +272,6 @@ Next Steps
    modules
    FAQ
 
-   autoapi/index
-
 Getting Help
 ------------
 - For questions, open an issue on `GitHub <https://github.com/HossamBalaha/HMB-Helpers-Package/issues>`_

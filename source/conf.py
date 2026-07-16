@@ -57,10 +57,7 @@ extensions = [
   "sphinx_design",  # Enhanced design elements.
   "sphinx_autodoc_typehints",  # Better handling of type hints.
   "sphinx.ext.napoleon",  # Support for Google and NumPy style docstrings.
-  "sphinx_autoapi.extension",  # Automatically generate API documentation from source code.
 ]
-
-autoapi_dirs = ["../"]  # Points up to your repository root where the HMB folder is.
 
 # Specify the directory containing custom template files.
 templates_path = ["_templates"]
