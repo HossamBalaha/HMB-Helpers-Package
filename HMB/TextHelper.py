@@ -233,7 +233,7 @@ class TextHelper:
     Remove English stopwords from an iterable of tokens.
 
     Parameters:
-      document (iterable): Iterable of token strings.
+      document (Iterable): Iterable of token strings.
 
     Returns:
       list: Tokens with stopwords removed.
@@ -251,7 +251,7 @@ class TextHelper:
     Return Porter stems for each token in the input.
 
     Parameters:
-      document (iterable): Iterable of token strings.
+      document (Iterable): Iterable of token strings.
 
     Returns:
       list of tuple: Each tuple is (token, stem).
@@ -267,7 +267,7 @@ class TextHelper:
     Return WordNet lemma for each token.
 
     Parameters:
-      document (iterable): Iterable of token strings.
+      document (Iterable): Iterable of token strings.
 
     Returns:
       list of tuple: Each tuple is (token, lemma).
@@ -283,7 +283,7 @@ class TextHelper:
     Part-of-speech tagging using NLTK's averaged perceptron tagger.
 
     Parameters:
-      document (iterable): Iterable of token strings.
+      document (Iterable): Iterable of token strings.
 
     Returns:
       list of tuple: POS tags as returned by nltk.pos_tag.
@@ -300,7 +300,7 @@ class TextHelper:
     Named-entity chunking helper using NLTK's ne_chunk.
 
     Parameters:
-      document (iterable): Iterable of token strings (POS-tagged preferred).
+      document (Iterable[str]): Iterable of token strings (POS-tagged preferred).
 
     Returns:
       nltk.Tree: Chunked parse tree produced by ne_chunk.

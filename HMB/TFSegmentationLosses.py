@@ -26,14 +26,18 @@ class DiceLoss(LossBaseClass):
   .. math::
 
     \text{Dice} = 1 - \frac{2 \times |X \cap Y| + \text{smooth}}{|X| + |Y| + \text{smooth}}
-
-  Parameters:
-    weight (optional): Not used, for compatibility.
-    size_average (optional): Not used, for compatibility.
   '''
 
-  # Initialize the DiceLoss with smoothing constant.
   def __init__(self, smooth=1.0, name="DiceLoss", **kwargs):
+    r'''
+    Initialize the DiceLoss with a smoothing constant for numerical stability.
+
+    Parameters:
+      smooth (float): Smoothing constant to avoid division by zero. Default is 1.
+      name (str): Name of the loss function. Default is "DiceLoss".
+      **kwargs: Additional keyword arguments for the base class.
+    '''
+
     # Ensure name is a string to prevent lambda conversion errors.
     if (not isinstance(name, str)):
       # Set name to DiceLoss if it is not a string.
@@ -43,8 +47,18 @@ class DiceLoss(LossBaseClass):
     # Store the smoothing constant as a float.
     self.smooth = smooth
 
-  # Call method to compute the Dice loss.
   def call(self, yTrue, yPred):
+    r'''
+    Compute the Dice loss between ground truth and predictions.
+
+    Parameters:
+      yTrue (tensorflow.Tensor): Ground truth binary mask tensor.
+      yPred (tensorflow.Tensor): Predicted logits tensor.
+
+    Returns:
+      tensorflow.Tensor: Scalar tensor representing the Dice loss.
+    '''
+
     # Cast the ground-truth tensor to float32 for numeric stability.
     yTrue = tf.cast(yTrue, tf.float32)
     # Cast the prediction tensor to float32 for numeric stability.
@@ -74,16 +88,20 @@ class DiceBCELoss(LossBaseClass):
 
     \text{Loss} = \text{BCE}(X, Y) + \left[1 - \frac{2 \times |X \cap Y| + \text{smooth}}{|X| + |Y| + \text{smooth}}\right]
 
-  Parameters:
-    weight (optional): Not used, for compatibility.
-    size_average (optional): Not used, for compatibility.
-
   Note:
     For best practice and autocasting safety, use raw logits as inputs.
   '''
 
-  # Initialize the DiceBCELoss with smoothing constant.
   def __init__(self, smooth=1.0, name="DiceBCELoss", **kwargs):
+    r'''
+    Initialize the DiceBCELoss with a smoothing constant for numerical stability.
+
+    Parameters:
+      smooth (float): Smoothing constant to avoid division by zero. Default is 1.
+      name (str): Name of the loss function. Default is "DiceBCELoss".
+      **kwargs: Additional keyword arguments for the base class.
+    '''
+
     # Ensure name is a string to prevent lambda conversion errors.
     if (not isinstance(name, str)):
       # Set name to DiceBCELoss if it is not a string.
@@ -93,8 +111,18 @@ class DiceBCELoss(LossBaseClass):
     # Store smoothing constant.
     self.smooth = smooth
 
-  # Call method to compute the combined loss.
   def call(self, yTrue, yPred):
+    r'''
+    Compute the combined Dice and Binary Cross-Entropy loss between ground truth and predictions.
+
+    Parameters:
+      yTrue (tensorflow.Tensor): Ground truth binary mask tensor.
+      yPred (tensorflow.Tensor): Predicted logits tensor.
+
+    Returns:
+      tensorflow.Tensor: Scalar tensor representing the combined Dice + BCE loss.
+    '''
+
     # Cast ground-truth to float32.
     yTrue = tf.cast(yTrue, tf.float32)
     # Cast predictions to float32.
@@ -127,14 +155,18 @@ class JaccardLoss(LossBaseClass):
   .. math::
 
     \text{Jaccard} = 1 - \frac{|X \cap Y| + \text{smooth}}{|X \cup Y| + \text{smooth}}
-
-  Parameters:
-    weight (optional): Not used, for compatibility.
-    size_average (optional): Not used, for compatibility.
   '''
 
-  # Initialize the JaccardLoss with smoothing constant.
   def __init__(self, smooth=1.0, name="JaccardLoss", **kwargs):
+    r'''
+    Initialize the JaccardLoss with a smoothing constant for numerical stability.
+
+    Parameters:
+      smooth (float): Smoothing constant to avoid division by zero. Default is 1.
+      name (str): Name of the loss function. Default is "JaccardLoss".
+      **kwargs: Additional keyword arguments for the base class.
+    '''
+
     # Ensure name is a string to prevent lambda conversion errors.
     if (not isinstance(name, str)):
       # Set name to JaccardLoss if it is not a string.
@@ -144,8 +176,15 @@ class JaccardLoss(LossBaseClass):
     # Store smoothing constant.
     self.smooth = smooth
 
-  # Call method to compute the Jaccard loss.
   def call(self, yTrue, yPred):
+    r'''
+    Compute the Jaccard loss (IoU loss) between ground truth and predictions.
+
+    Parameters:
+      yTrue (tensorflow.Tensor): Ground truth binary mask tensor.
+      yPred (tensorflow.Tensor): Predicted logits tensor.
+    '''
+
     # Cast ground-truth to float32.
     yTrue = tf.cast(yTrue, tf.float32)
     # Cast predictions to float32.
@@ -176,16 +215,20 @@ class TverskyLoss(LossBaseClass):
   .. math::
 
     \text{Tversky} = 1 - \frac{|X \cap Y| + \text{smooth}}{|X \cap Y| + \alpha \times |X \setminus Y| + \beta \times |Y \setminus X| + \text{smooth}}
-
-  Parameters:
-    alpha (float): Weight for false positives.
-    beta (float): Weight for false negatives.
-    weight (optional): Not used, for compatibility.
-    size_average (optional): Not used, for compatibility.
   '''
 
-  # Initialize the TverskyLoss with alpha, beta and smoothing parameters.
   def __init__(self, alpha=0.5, beta=0.5, smooth=1.0, name="TverskyLoss", **kwargs):
+    r'''
+    Initialize the TverskyLoss with alpha, beta and smoothing parameters.
+
+    Parameters:
+      alpha (float): Weight for false positives. Default is 0.5.
+      beta (float): Weight for false negatives. Default is 0.5.
+      smooth (float): Smoothing constant to avoid division by zero. Default is 1.
+      name (str): Name of the loss function. Default is "TverskyLoss".
+      **kwargs: Additional keyword arguments for the base class.
+    '''
+
     # Ensure name is a string to prevent lambda conversion errors.
     if (not isinstance(name, str)):
       # Set name to TverskyLoss if it is not a string.
@@ -199,8 +242,18 @@ class TverskyLoss(LossBaseClass):
     # Store smoothing constant.
     self.smooth = smooth
 
-  # Call method to compute the Tversky loss.
   def call(self, yTrue, yPred):
+    r'''
+    Compute the Tversky loss between ground truth and predictions.
+
+    Parameters:
+      yTrue (tensorflow.Tensor): Ground truth binary mask tensor.
+      yPred (tensorflow.Tensor): Predicted logits tensor.
+
+    Returns:
+      tensorflow.Tensor: Scalar tensor representing the Tversky loss.
+    '''
+
     # Cast ground-truth to float32.
     yTrue = tf.cast(yTrue, tf.float32)
     # Cast predictions to float32.
@@ -232,17 +285,22 @@ class FocalLoss(LossBaseClass):
 
     \text{Focal}(p_t) = - \alpha \times (1-p_t)^{\gamma} \times \log(p_t)
 
-  Parameters:
-    alpha (float): Weighting factor for the rare class. Default is 0.25.
-    gamma (float): Focusing parameter for modulating factor (1 - p_t). Default is 2.0.
-    reduction (str): Specifies the reduction to apply to the output. Default is "mean".
-
   Note:
     For autocasting safety, this implementation uses binary_cross_entropy_with_logits directly on logits.
   '''
 
-  # Initialize the FocalLoss with alpha, gamma and reduction parameters.
   def __init__(self, alpha=0.25, gamma=2.0, reduction="mean", name="FocalLoss", **kwargs):
+    r'''
+    Initialize the FocalLoss with alpha, gamma and reduction parameters.
+
+    Parameters:
+      alpha (float): Weighting factor for the rare class. Default is 0.25.
+      gamma (float): Focusing parameter to reduce the relative loss for well-classified examples. Default is 2.0.
+      reduction (str): Reduction method to apply to the loss. Options are "mean", "sum", or "none". Default is "mean".
+      name (str): Name of the loss function. Default is "FocalLoss".
+      **kwargs: Additional keyword arguments for the base class.
+    '''
+
     # Ensure name is a string to prevent lambda conversion errors.
     if (not isinstance(name, str)):
       # Set name to FocalLoss if it is not a string.
@@ -266,8 +324,18 @@ class FocalLoss(LossBaseClass):
     # Store the reduction mode string for internal logic if needed.
     self.reductionMode = reduction
 
-  # Call method to compute the Focal loss.
   def call(self, yTrue, yPred):
+    r'''
+    Compute the Focal loss between ground truth and predictions.
+
+    Parameters:
+      yTrue (tensorflow.Tensor): Ground truth binary mask tensor.
+      yPred (tensorflow.Tensor): Predicted logits tensor.
+
+    Returns:
+      tensorflow.Tensor: Tensor representing the Focal loss, unreduced.
+    '''
+
     # Cast ground-truth to float32.
     yTrue = tf.cast(yTrue, tf.float32)
     # Cast predictions to float32.
@@ -303,8 +371,17 @@ class GeneralizedDiceLoss(LossBaseClass):
     \quad \text{where} \quad w_c = \frac{1}{(\sum_i g_{ci})^2}
   '''
 
-  # Initialize the GeneralizedDiceLoss with epsilon and data format.
   def __init__(self, epsilon=1e-6, name="GeneralizedDiceLoss", dataFormat="channels_last", **kwargs):
+    r'''
+    Initialize the GeneralizedDiceLoss with epsilon for numerical stability and data format.
+
+    Parameters:
+      epsilon (float): Small constant to avoid division by zero. Default is 1e-6.
+      name (str): Name of the loss function. Default is "GeneralizedDiceLoss".
+      dataFormat (str): Data format, either "channels_first" or "channels_last".
+      **kwargs: Additional keyword arguments for the base class.
+    '''
+
     # Ensure name is a string to prevent lambda conversion errors.
     if (not isinstance(name, str)):
       # Set name to GeneralizedDiceLoss if it is not a string.
@@ -316,8 +393,18 @@ class GeneralizedDiceLoss(LossBaseClass):
     # Default data format matches PyTorch (channels_first). Accept "channels_first" or "channels_last".
     self.dataFormat = dataFormat
 
-  # Call method to compute the Generalized Dice loss.
   def call(self, yTrue, yPred):
+    r'''
+    Compute the Generalized Dice loss between ground truth and predictions for multi-class segmentation.
+
+    Parameters:
+      yTrue (tensorflow.Tensor): Ground truth one-hot encoded tensor of shape (batch, classes, height, width) or (batch, height, width, classes) depending on dataFormat.
+      yPred (tensorflow.Tensor): Predicted logits tensor of the same shape as yTrue.
+
+    Returns:
+      tensorflow.Tensor: Tensor representing the Generalized Dice loss, unreduced.
+    '''
+
     # Cast ground-truth to float32 for numeric stability.
     yTrue = tf.cast(yTrue, tf.float32)
     # Cast predictions to float32 for numeric stability.

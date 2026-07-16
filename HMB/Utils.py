@@ -151,7 +151,7 @@ def WritePickleFile(filePath, data):
 
   Parameters:
     filePath (str): Path to the pickle file.
-    data (any): Data to be written to the file.
+    data (Any): Data to be written to the file.
   '''
 
   # Open the file in write-binary mode.
@@ -214,7 +214,7 @@ def ConvertToJsonSerializable(obj):
   machine learning models and their parameters.
 
   Parameters:
-    obj (any): The object to be converted to a JSON-serializable format.
+    obj (Any): The object to be converted to a JSON-serializable format.
 
   Returns:
     A JSON-serializable representation of the input object. The return type can vary depending on the input:
@@ -421,10 +421,10 @@ def SimpleSerializeForJson(obj):
   returns the object unchanged as a last resort.
 
   Parameters:
-    obj (any): The object to convert to JSON-serializable form.
+    obj (Any): The object to convert to JSON-serializable form.
 
   Returns:
-    any: A JSON-serializable representation of `obj` (nested dicts/lists/primitives), or the original object when no conversion was applicable.
+    Any: A JSON-serializable representation of `obj` (nested dicts/lists/primitives), or the original object when no conversion was applicable.
   '''
 
   # Note: If you need a more robust serializer that preserves type metadata
@@ -478,8 +478,8 @@ def DumpJsonFile(filePath, data, indent=2, ensureAscii=False):
   Parameters:
     filePath (str): Path to the JSON file.
     data (object): Data to be dumped to the JSON file.
-    indent (int, optional): Number of spaces for indentation in the JSON file. Default is 2.
-    ensureAscii (bool, optional): If True, all non-ASCII characters in the output are escaped. Default is False.
+    indent (int, Optional): Number of spaces for indentation in the JSON file. Default is 2.
+    ensureAscii (bool, Optional): If True, all non-ASCII characters in the output are escaped. Default is False.
   '''
 
   # Open the JSON file in write mode and dump the data.
@@ -634,8 +634,8 @@ def AppendOrCreateNewCSV(
   Parameters:
     fileName (str): Path to the CSV file.
     data (list or dict): Data to append to the CSV file. Can be a list of rows (list of lists) or a dictionary.
-    header (list, optional): Header for the CSV file. Required if creating a new file.
-    mode (str, optional): Mode to open the file. Default is "a" (append). It can be changed to "w" (write) if needed.
+    header (list, Optional): Header for the CSV file. Required if creating a new file.
+    mode (str, Optional): Mode to open the file. Default is "a" (append). It can be changed to "w" (write) if needed.
   '''
 
   # Append data to a CSV file or create a new one if it doesn't exist.
@@ -682,7 +682,7 @@ def AppendOrCreateNewDataFrameCSV(
   Parameters:
     fileName (str): Path to the CSV file.
     data (list or pandas.DataFrame): Data to write. If list, must align with header.
-    header (list, optional): Column names. Required if creating a new file and data lacks column info.
+    header (list, Optional): Column names. Required if creating a new file and data lacks column info.
   '''
 
   # Import pandas locally to avoid global dependency.
@@ -732,7 +732,7 @@ def GroupImagesByClass(inputDir, imgExtensions=None):
 
   Parameters:
     inputDir (str): Path to the input directory containing images.
-    imgExtensions (set, optional): Set of image file extensions to consider. Default includes common formats.
+    imgExtensions (set, Optional): Set of image file extensions to consider. Default includes common formats.
 
   Returns:
     dict: A dictionary where keys are class names (top-level folder names) and values are lists of image file paths.
@@ -793,7 +793,7 @@ def SelectBalancedImages(imageGroups, maxImages, seed=42):
   Parameters:
     imageGroups (dict): Dictionary where keys are class names and values are lists of image file paths.
     maxImages (int): Maximum number of images to select.
-    seed (int, optional): Random seed for reproducibility. Default is 42.
+    seed (int, Optional): Random seed for reproducibility. Default is 42.
 
   Returns:
     list: List of selected image file paths.
@@ -834,7 +834,7 @@ def PrintHyperParamsList(hparamsFile, returnList=False):
 
   Parameters:
     hparamsFile (str): Path to the hyperparameters file.
-    returnList (bool, optional): If True, return the list of hyperparameter sets instead of printing. Default is False.
+    returnList (bool, Optional): If True, return the list of hyperparameter sets instead of printing. Default is False.
 
   Returns:
     list or None: If `returnList` is True, returns the list of hyperparameter sets; otherwise, returns None.
@@ -907,7 +907,7 @@ def FormatNumericWithDelta(value, baseValue=None, fmt="{:.2f}"):
     value (float or None): The current value to format. If None, "N/A" will be returned.
     baseValue (float or None): The baseline value for comparison. If None or zero, the delta will not be computed
       to avoid division by zero.
-    fmt (str, optional): A format string for the value (default is "{:.2f}"). This should be a valid Python format
+    fmt (str, Optional): A format string for the value (default is "{:.2f}"). This should be a valid Python format
       string that can be used with the `format` method to format the value. For example, "{:.2f}" will format the
       value to two decimal places, while "{:.1f}" will format it to one decimal place. You can customize this
       format string based on your specific needs for displaying the value. The function will use this format
@@ -941,7 +941,7 @@ def SafeCall(name, fn, *args, **kwargs):
 
   Parameters:
     name (str): Name of the function being called (for reporting).
-    fn (callable): The function to call.
+    fn (Callable): The function to call.
     *args: Positional arguments to pass to the function.
     **kwargs: Keyword arguments to pass to the function.
 
@@ -977,9 +977,8 @@ def SafeTrapz(y, x=None):
   implementation that computes the trapezoidal rule over the provided samples.
 
   Parameters:
-    y (sequence): y values (list/tuple/ndarray)
-    x (sequence|None): x coordinates. If None, samples are assumed to be equally
-      spaced at integer positions 0..len(y)-1.
+    y (Sequence): y values (list/tuple/ndarray)
+    x (Sequence|None): x coordinates. If None, samples are assumed to be equally spaced at integer positions 0..len(y)-1.
 
   Returns:
     float: Approximated integral value (area).
@@ -1031,7 +1030,7 @@ def SafeParseProbabilities(inputVar):
   Returns an empty list on unrecoverable parse errors.
 
   Parameters:
-    inputVar (any): The input variable to parse as probabilities. This can be of various types, including None,
+    inputVar (Any): The input variable to parse as probabilities. This can be of various types, including None,
       numeric scalars, lists, tuples, numpy arrays, or strings representing lists of probabilities.
 
   Returns:
@@ -1161,7 +1160,7 @@ def CodeCarbonCodeEstimation(func):
     - codecarbon monitor --no-api -- python XXXX.py (To track any script without changing the code).
 
   Parameters:
-    func (callable): The function to estimate emissions for. This should be a callable that can be executed without arguments.
+    func (Callable): The function to estimate emissions for. This should be a callable that can be executed without arguments.
 
   Returns:
     float or None: The estimated carbon emissions in kg CO2 equivalent, or None if estimation fails.
@@ -1209,10 +1208,10 @@ class NumpyEncoder(json.JSONEncoder):
     Override the default method to handle NumPy data types.
 
     Parameters:
-      obj (any): The object to serialize.
+      obj (Any): The object to serialize.
 
     Returns:
-      any: A JSON-serializable representation of the object, or the result of the superclass's default method for unsupported types.
+      Any: A JSON-serializable representation of the object, or the result of the superclass's default method for unsupported types.
     '''
 
     # Check if the object is a numpy array.

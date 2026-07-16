@@ -43,7 +43,7 @@ class TextGenerationMetrics(object):
     Initializes the metrics class with an optional tokenizer.
 
     Parameters:
-      tokenizer (optional): A tokenizer object for text preprocessing. If not provided, default tokenization methods will be used.
+      tokenizer (Optional): A tokenizer object for text preprocessing. If not provided, default tokenization methods will be used.
     '''
 
     # Store the tokenizer if provided.

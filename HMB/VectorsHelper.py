@@ -81,7 +81,7 @@ class VectorsHelper(object):
       vector1, vector2 (array-like): Input vectors.
 
     Returns:
-      float or ndarray: Euclidean distance.
+      float or numpy.ndarray: Euclidean distance.
     '''
 
     diff = np.subtract(vector1, vector2)
@@ -103,9 +103,9 @@ class VectorsHelper(object):
     Returns:
       float or numpy.ndarray: Angle in radians or degrees depending on mode.
 
-    Notes:
-      - No clipping is performed on the cosine input; numerical round-off may cause values slightly outside
-        [-1, 1] which can produce NaNs. Consumers may want to clip the argument.
+    Note:
+      No clipping is performed on the cosine input; numerical round-off may cause values slightly outside
+      [-1, 1] which can produce NaNs. Consumers may want to clip the argument.
     '''
 
     num = self.DotProduct(vector1, vector2)

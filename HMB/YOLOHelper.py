@@ -69,18 +69,18 @@ def TrainMultipleYoloClassifiers(
     datasetPath (str): Path to the dataset folder containing train/val splits.
     baseDir (str): Directory to save experiment outputs.
     runsDir (str): Subdirectory under baseDir to store run outputs.
-    targetModels (List[str], optional): List of YOLO model keywords to train. Defaults to None, which uses a predefined set.
-    epochs (int, optional): Number of training epochs. Defaults to 250.
-    batchSize (int, optional): Batch size for training. Defaults to 128.
-    inputShape (Tuple[int, int], optional): Input image shape (height, width). Defaults to (512, 512).
-    trialNum (int, optional): Trial number for naming runs. Defaults to 1.
-    exportOnnx (bool, optional): Whether to export trained models to ONNX format. Defaults to True.
-    onnxOpset (int, optional): ONNX opset version for export. Defaults to 11.
-    deviceEnvVars (dict, optional): Environment variables for device configuration. Defaults to None.
-    seed (int, optional): Random seed for reproducibility. Defaults to None.
-    overwriteExisting (bool, optional): Whether to overwrite existing runs. Defaults to False.
-    enablePlots (bool, optional): Whether to enable training plots. Defaults to True.
-    enableSave (bool, optional): Whether to save the best model. Defaults to True.
+    targetModels (List[str], Optional): List of YOLO model keywords to train. Defaults to None, which uses a predefined set.
+    epochs (int, Optional): Number of training epochs. Defaults to 250.
+    batchSize (int, Optional): Batch size for training. Defaults to 128.
+    inputShape (Tuple[int, int], Optional): Input image shape (height, width). Defaults to (512, 512).
+    trialNum (int, Optional): Trial number for naming runs. Defaults to 1.
+    exportOnnx (bool, Optional): Whether to export trained models to ONNX format. Defaults to True.
+    onnxOpset (int, Optional): ONNX opset version for export. Defaults to 11.
+    deviceEnvVars (dict, Optional): Environment variables for device configuration. Defaults to None.
+    seed (int, Optional): Random seed for reproducibility. Defaults to None.
+    overwriteExisting (bool, Optional): Whether to overwrite existing runs. Defaults to False.
+    enablePlots (bool, Optional): Whether to enable training plots. Defaults to True.
+    enableSave (bool, Optional): Whether to save the best model. Defaults to True.
   '''
 
   # Ensure default model list is provided when None.
@@ -466,7 +466,7 @@ def EvaluatePredictPlotSubset(
 
   Parameters:
     datasetDir (str): Path to the dataset directory containing train/val/test splits.
-    model (ultralytics.YOLO): Trained Ultralytics YOLO classification model.
+    model (Callable): A callable that takes an image (numpy.ndarray) and returns a 1D array of class probabilities.
     subset (str): Dataset subset to evaluate ("train", "val", "test", or "all"). Defaults to "test".
     prefix (str): Prefix for saved figure filenames. Defaults to "".
     storageDir (str | None): Directory to save predictions CSV and figures. If None, uses current directory. Defaults to None.
@@ -476,7 +476,7 @@ def EvaluatePredictPlotSubset(
     eps (float): Small epsilon value for numerical stability in metric calculations. Defaults to 1e-10.
     saveArtifacts (bool): Whether to save figures and artifacts. Defaults to True.
     maxSamples (int | None): Maximum number of samples to evaluate. If None, evaluates all samples. Defaults to None.
-    preprocessFn (callable | None): Optional preprocessing function to apply to each image before prediction. Defaults to None.
+    preprocessFn (Callable | None): Optional preprocessing function to apply to each image before prediction. Defaults to None.
     dpi (int): DPI setting for saved figures. Defaults to 720.
 
   Returns:

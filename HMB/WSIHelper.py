@@ -117,7 +117,7 @@ def DrawPolygonOnImage(imageArr, coords, outlineColor=(255, 0, 0), fillColor=Non
   Draw a polygon with optional filled semi-transparent interior.
 
   Parameters:
-    imageArr (np.ndarray): Input image (HWC, uint8), RGB or BGR.
+    imageArr (numpy.ndarray): Input image (HWC, uint8), RGB or BGR.
     coords (list): List of (x, y) tuples defining polygon vertices.
     outlineColor (tuple): RGB color for outline, e.g., (255, 0, 0) = red.
     fillColor (tuple or None): RGBA color for fill, e.g., (255, 0, 0, 0.5). If None, no fill.
@@ -192,9 +192,9 @@ def ExtractPatchesFromWSI(
 
   Parameters:
     wsi (openslide.OpenSlide): OpenSlide WSI object.
-    wsiFile (str or Path): Path to the WSI file (for reference).
+    wsiFile (str or pathlib.Path): Path to the WSI file (for reference).
     annotations (list): List of GeoJSON-like annotation dicts.
-    outputDir (str or Path): Directory to save extracted patches.
+    outputDir (str or pathlib.Path): Directory to save extracted patches.
     patchSize (tuple): Size of patches to extract (width, height).
     overlap (tuple): Overlap between patches (x_overlap, y_overlap).
     maxNumPatchesPerAnnotation (int): Max patches to extract per annotation.
@@ -714,7 +714,7 @@ def FreeFormDeformationHandler(
   mtFolderPath,  # Path to the folder containing corresponding MT images.
   heDeformedFolderPath,  # Path to the folder where deformed HE images will be saved.
   doPlotting=False,  # Whether to store visualizations.
-  visualizationFolderPath=None,  # Path to the folder for storing visualizations (optional, default is None).
+  visualizationFolderPath=None,  # Path to the folder for storing visualizations (Optional, default is None).
   gridSize=[10, 10],  # Grid size for the B-spline transform.
   numberOfHistogramBins=50,  # Number of histogram bins for the metric.
   samplingPercentage=0.1,  # Percentage of pixels to sample for the metric.
@@ -743,7 +743,7 @@ def FreeFormDeformationHandler(
     mtFolderPath (str): Path to the folder containing corresponding MT images.
     heDeformedFolderPath (str): Path to the folder where deformed HE images will be saved.
     doPlotting (bool): Whether to store visualizations (default is False).
-    visualizationFolderPath (str): Path to the folder for storing visualizations (optional).
+    visualizationFolderPath (str | None): Path to the folder for storing visualizations (Optional, default is None).
     gridSize (list): Grid size for the B-spline transform (default is [10, 10]).
     numberOfHistogramBins (int): Number of histogram bins for the metric (default is 50).
     samplingPercentage (float): Percentage of pixels to sample for the metric (default is 0.1).
@@ -1091,7 +1091,7 @@ def ExtractWSIRegion(slide, region):
   according to the polygon defined by the annotation.
 
   Parameters:
-    slide (openslide.OpenSlide or slide-like): The OpenSlide object representing the WSI or an object with a `read_region` method and `dimensions` attribute.
+    slide (openslide.OpenSlide): The OpenSlide object representing the WSI or an object with a `read_region` method and `dimensions` attribute.
     region (dict): A dictionary with a "Coords" key containing a list of (x, y) tuples.
 
   Returns:
@@ -2326,12 +2326,12 @@ def IsBackgroundTile(
   Detect background tiles using multiple criteria suitable for non-black backgrounds.
 
   Parameters:
-    imagePath: Path to the tile image.
-    image: Optional pre-loaded image as a NumPy array (H,W,3) uint8. If provided, imagePath will be ignored.
-    entropyThreshold: Threshold for Shannon entropy to detect uniformity.
-    colorVarianceThreshold: Threshold for color variance to detect lack of color diversity.
-    tissueAreaThreshold: Threshold for the ratio of tissue area to total area.
-    convertBlackToWhite: Whether to convert black pixels to white before analysis (default is True).
+    imagePath (str): Path to the tile image to analyze for background detection.
+    image (numpy.ndarray, Optional): Pre-loaded image as a NumPy array (H,W,3) uint8. If provided, imagePath will be ignored.
+    entropyThreshold (float): Threshold for Shannon entropy to detect uniformity. Adjust based on the expected variability in tissue tiles.
+    colorVarianceThreshold (float): Threshold for color variance to detect lack of color diversity. Adjust based on the expected variability in tissue tiles.
+    tissueAreaThreshold (float): Minimum ratio of tissue area to total area to consider the tile as non-background.
+    convertBlackToWhite (bool): Whether to convert black pixels to white before analysis (default is True).
 
   Returns:
     bool: True if the tile is considered background, False otherwise.

@@ -118,8 +118,8 @@ class VotingHelper(object):
     Compute a weighted majority vote over labels.
 
     Parameters:
-      predictions (iterable): Iterable of labels.
-      weights (iterable): Iterable of numeric weights (same length as predictions).
+      predictions (Iterable): Iterable of labels.
+      weights (Iterable): Iterable of numeric weights (same length as predictions).
 
     Returns:
       label: The label with the highest cumulative weight.
@@ -142,7 +142,7 @@ class VotingHelper(object):
     Simple majority vote (unweighted).
 
     Parameters:
-      predictions (iterable): Iterable of labels.
+      predictions (Iterable): Iterable of labels.
 
     Returns:
       label: The most common label.
@@ -160,8 +160,8 @@ class VotingHelper(object):
     Weighted average of numeric predictions.
 
     Parameters:
-      predictions (iterable): Iterable of numeric predictions.
-      weights (iterable): Iterable of numeric weights (same length as predictions).
+      predictions (Iterable): Iterable of numeric predictions.
+      weights (Iterable): Iterable of numeric weights (same length as predictions).
 
     Returns:
       float: Weighted mean.
@@ -181,7 +181,7 @@ class VotingHelper(object):
     Simple arithmetic mean of numeric predictions.
 
     Parameters:
-      predictions (iterable): Iterable of numeric predictions.
+      predictions (Iterable): Iterable of numeric predictions.
 
     Returns:
       float: Arithmetic mean.
@@ -197,8 +197,8 @@ class VotingHelper(object):
     Weighted median: returns a scalar median taking weights into account.
 
     Parameters:
-      predictions (iterable): Iterable of numeric predictions.
-      weights (iterable): Iterable of numeric weights (same length as predictions).
+      predictions (Iterable): Iterable of numeric predictions.
+      weights (Iterable, Optional): Iterable of numeric weights (same length as predictions).
 
     Returns:
       float: Weighted median.
@@ -224,7 +224,7 @@ class VotingHelper(object):
     Unweighted median for numeric predictions.
 
     Parameters:
-      predictions (iterable): Iterable of numeric predictions.
+      predictions (Iterable): Iterable of numeric predictions.
 
     Returns:
       float: Median value.
@@ -248,8 +248,8 @@ class VotingHelper(object):
     WeightedMajorityVoting.
 
     Parameters:
-      predictions (iterable): Iterable of labels (numeric or non-numeric).
-      weights (iterable): Iterable of numeric weights (same length as predictions).
+      predictions (Iterable): Iterable of labels (numeric or non-numeric).
+      weights (Iterable): Iterable of numeric weights (same length as predictions).
 
     Returns:
       label or float: Weighted mode label or numeric value.
@@ -282,7 +282,7 @@ class VotingHelper(object):
     Unweighted mode (most common element).
 
     Parameters:
-      predictions (iterable): Iterable of labels.
+      predictions (Iterable): Iterable of labels.
 
     Returns:
       label: Most common label.
@@ -299,8 +299,8 @@ class VotingHelper(object):
     Weighted geometric mean for positive numeric predictions.
 
     Parameters:
-      predictions (iterable): Iterable of positive numeric predictions.
-      weights (iterable): Iterable of numeric weights (same length as predictions).
+      predictions (Iterable): Iterable of positive numeric predictions.
+      weights (Iterable): Iterable of numeric weights (same length as predictions).
 
     Returns:
       float: Weighted geometric mean.
@@ -323,7 +323,7 @@ class VotingHelper(object):
     Geometric mean for positive numeric predictions.
 
     Parameters:
-      predictions (iterable): Iterable of positive numeric predictions.
+      predictions (Iterable): Iterable of positive numeric predictions.
 
     Returns:
       float: Geometric mean.
@@ -344,8 +344,8 @@ class VotingHelper(object):
     Weighted harmonic mean for positive numeric predictions.
 
     Parameters:
-      predictions (iterable): Iterable of positive numeric predictions.
-      weights (iterable): Iterable of numeric weights (same length as predictions).
+      predictions (Iterable): Iterable of positive numeric predictions.
+      weights (Iterable): Iterable of numeric weights (same length as predictions).
 
     Returns:
       float: Weighted harmonic mean.
@@ -367,7 +367,7 @@ class VotingHelper(object):
     Unweighted harmonic mean for positive numeric predictions.
 
     Parameters:
-      predictions (iterable): Iterable of positive numeric predictions.
+      predictions (Iterable): Iterable of positive numeric predictions.
 
     Returns:
       float: Harmonic mean.
@@ -385,8 +385,8 @@ class VotingHelper(object):
     Weighted root-mean-square (quadratic mean).
 
     Parameters:
-      predictions (iterable): Iterable of numeric predictions.
-      weights (iterable): Iterable of numeric weights (same length as predictions).
+      predictions (Iterable): Iterable of numeric predictions.
+      weights (Iterable): Iterable of numeric weights (same length as predictions).
 
     Returns:
       float: Weighted root-mean-square.
@@ -406,7 +406,7 @@ class VotingHelper(object):
     Unweighted root-mean-square.
 
     Parameters:
-      predictions (iterable): Iterable of numeric predictions.
+      predictions (Iterable): Iterable of numeric predictions.
 
     Returns:
       float: Root-mean-square.
@@ -435,8 +435,8 @@ class VotingHelper(object):
     Weighted cubic mean (signed) -> (mean of cubes)^(1/3).
 
     Parameters:
-      predictions (iterable): Iterable of numeric predictions.
-      weights (iterable): Iterable of numeric weights (same length as predictions).
+      predictions (Iterable): Iterable of numeric predictions.
+      weights (Iterable): Iterable of numeric weights (same length as predictions).
 
     Returns:
       float: Weighted cubic mean.
@@ -457,7 +457,7 @@ class VotingHelper(object):
     Unweighted cubic mean.
 
     Parameters:
-      predictions (iterable): Iterable of numeric predictions.
+      predictions (Iterable): Iterable of numeric predictions.
 
     Returns:
       float: Cubic mean.
@@ -474,8 +474,8 @@ class VotingHelper(object):
     Weighted quartic mean -> 4th root of mean of 4th powers.
 
     Parameters:
-      predictions (iterable): Iterable of numeric predictions.
-      weights (iterable): Iterable of numeric weights (same length as predictions).
+      predictions (Iterable): Iterable of numeric predictions.
+      weights (Iterable): Iterable of numeric weights (same length as predictions).
 
     Returns:
       float: Weighted quartic mean.
@@ -495,7 +495,7 @@ class VotingHelper(object):
     Unweighted quartic mean.
 
     Parameters:
-      predictions (iterable): Iterable of numeric predictions.
+      predictions (Iterable): Iterable of numeric predictions.
 
     Returns:
       float: Quartic mean.
@@ -547,8 +547,8 @@ class VotingHelper(object):
     Weighted voting using model confidence scores.
 
     Parameters:
-      predictions (iterable): Predicted labels.
-      confidences (iterable): Confidence scores in [0, 1] or positive reals.
+      predictions (Iterable): Predicted labels.
+      confidences (Iterable): Confidence scores in [0, 1] or positive reals.
 
     Returns:
       label: Label with highest cumulative confidence-weighted vote.
@@ -582,8 +582,8 @@ class VotingHelper(object):
     Bayesian Model Averaging: weight predictions by posterior model probabilities.
 
     Parameters:
-      predictions (iterable): Predicted labels from each model.
-      modelPosteriors (iterable): Posterior probabilities for each model (sum to 1).
+      predictions (Iterable): Predicted labels from each model.
+      modelPosteriors (Iterable): Posterior probabilities for each model (sum to 1).
 
     Returns:
       label: Label with highest posterior-weighted cumulative probability.
@@ -613,8 +613,7 @@ class VotingHelper(object):
     Borda Count rank aggregation: higher ranks receive more points.
 
     Parameters:
-      rankedPredictions (list of lists):
-        Each inner list is a ranking of labels from most to least preferred.
+      rankedPredictions (list of list): Each inner list is a ranking of labels from most to least preferred.
 
     Returns:
       label: Label with the highest cumulative Borda score.
@@ -644,8 +643,8 @@ class VotingHelper(object):
     Aggregate predictions weighted by inverse uncertainty.
 
     Parameters:
-      predictions (iterable): Predicted labels.
-      uncertainties (iterable): Uncertainty estimates (lower = more certain).
+      predictions (Iterable): Predicted labels.
+      uncertainties (Iterable): Uncertainty estimates (lower = more certain).
       uncertaintyType (str): "inverse" or "exponential" weighting scheme.
 
     Returns:
@@ -733,7 +732,7 @@ class VotingHelper(object):
     Weight predictions by model diversity (pairwise disagreement).
 
     Parameters:
-      predictions (list of lists):
+      predictions (list of list):
         Each inner list contains predictions from one model across samples.
 
     Returns:
@@ -777,8 +776,7 @@ class VotingHelper(object):
     Condorcet voting: winner defeats all others in pairwise comparisons.
 
     Parameters:
-      rankedPredictions (list of lists):
-        Each inner list is a ranking of labels from most to least preferred.
+      rankedPredictions (list of list): Each inner list is a ranking of labels from most to least preferred.
 
     Returns:
       label: Condorcet winner if one exists, else fallback to Borda winner.
@@ -832,8 +830,8 @@ class VotingHelper(object):
     Weight predictions by model calibration quality (higher = better calibrated).
 
     Parameters:
-      predictions (iterable): Predicted labels.
-      calibrationScores (iterable): Calibration metrics in [0, 1] where 1 = perfectly calibrated.
+      predictions (Iterable): Predicted labels.
+      calibrationScores (Iterable): Calibration metrics in [0, 1] where 1 = perfectly calibrated.
 
     Returns:
       label: Label with highest calibration-weighted cumulative vote.
@@ -914,7 +912,7 @@ class VotingHelper(object):
     Solve Ax = b using Gaussian elimination with partial pivoting.
 
     Parameters:
-      A (list of lists): Coefficient matrix.
+      A (list of list): Coefficient matrix.
       b (list): Right-hand side vector.
 
     Returns:
@@ -959,7 +957,7 @@ class VotingHelper(object):
     Aggregate predictions using learned weights.
 
     Parameters:
-      predictions (list of lists): Shape (n_models, n_samples).
+      predictions (list of list): Shape (n_models, n_samples).
       weights (list): Learned weight for each model.
 
     Returns:
@@ -993,7 +991,7 @@ class VotingHelper(object):
     Copeland voting: score candidates by net pairwise wins (wins minus losses).
 
     Parameters:
-      rankedPredictions (list of lists):
+      rankedPredictions (list of list):
         Each inner list is a ranking of labels from most to least preferred.
 
     Returns:
@@ -1037,7 +1035,7 @@ class VotingHelper(object):
     Trimmed mean aggregation: exclude extreme values before averaging.
 
     Parameters:
-      predictions (iterable): Iterable of numeric predictions.
+      predictions (Iterable): Iterable of numeric predictions.
       trimFraction (float): Fraction of extreme values to exclude from each tail (0 to 0.5).
 
     Returns:
@@ -1076,7 +1074,7 @@ class VotingHelper(object):
     Parameters:
       probabilityPredictions (list of dict):
         Each dict maps class labels to predicted probabilities.
-      expertWeights (iterable, optional):
+      expertWeights (Iterable, Optional):
         Weight for each expert model (default: uniform weighting).
 
     Returns:
@@ -1140,10 +1138,8 @@ class VotingHelper(object):
     Weight predictions by inverse correlation to promote ensemble diversity.
 
     Parameters:
-      predictions (list of lists):
-        Each inner list contains predictions from one model across samples.
-      baseWeights (iterable, optional):
-        Initial weight for each model before correlation adjustment.
+      predictions (list of list): Each inner list contains predictions from one model across samples.
+      baseWeights (Iterable, Optional): Initial weight for each model before correlation adjustment.
 
     Returns:
       list: Aggregated prediction for each sample position.
@@ -1211,8 +1207,8 @@ class VotingHelper(object):
     Attention-based aggregation: compute dynamic weights via scaled dot-product attention.
 
     Parameters:
-      predictions (list of lists): Shape (n_models, n_samples) of predicted labels.
-      contextFeatures (list of lists): Shape (n_models, n_features) of model context vectors.
+      predictions (list of list): Shape (n_models, n_samples) of predicted labels.
+      contextFeatures (list of list): Shape (n_models, n_features) of model context vectors.
       attentionDim (int): Dimensionality of attention projection (default: 16).
 
     Returns:
@@ -1276,10 +1272,10 @@ class VotingHelper(object):
     Online adaptive voting using Hedge algorithm with exponential weighting and regret bounds.
 
     Parameters:
-      predictions (list of lists): Shape (n_models, n_samples) of predicted labels.
-      initialWeights (iterable, optional): Initial weight for each model (default: uniform).
+      predictions (list of list): Shape (n_models, n_samples) of predicted labels.
+      initialWeights (Iterable, Optional): Initial weight for each model (default: uniform).
       learningRate (float): Learning rate for weight updates (0 to 1).
-      feedback (list of lists, optional): Shape (n_models, n_samples) of per-sample losses.
+      feedback (list of list, Optional): Shape (n_models, n_samples) of per-sample losses.
 
     Returns:
       dict: Contains aggregated predictions and final adaptive weights.
@@ -1348,9 +1344,9 @@ class VotingHelper(object):
     Federated averaging aggregator: combine local model predictions weighted by client data size.
 
     Parameters:
-      localPredictions (list of lists): Shape (n_clients, n_samples) of local predictions.
-      clientWeights (iterable, optional): Explicit weight for each client (default: data-size proportional).
-      clientDataSizes (iterable, optional): Number of samples per client for proportional weighting.
+      localPredictions (list of list): Shape (n_clients, n_samples) of local predictions.
+      clientWeights (Iterable, Optional): Explicit weight for each client (default: data-size proportional).
+      clientDataSizes (Iterable, Optional): Number of samples per client for proportional weighting.
 
     Returns:
       list: Aggregated prediction for each sample position using federated weighting.
@@ -1410,7 +1406,7 @@ class VotingHelper(object):
     Median-of-means aggregation: robust to Byzantine faults and adversarial model contributions.
 
     Parameters:
-      predictions (list of lists): Shape (n_models, n_samples) of predicted labels.
+      predictions (list of list): Shape (n_models, n_samples) of predicted labels.
       nBuckets (int): Number of random buckets for partitioning models (default: 5).
       randomSeed (int): Seed for reproducible bucket assignment (default: 42).
 
@@ -1477,7 +1473,7 @@ class VotingHelper(object):
     Quantile-based aggregation: combine predictive distributions via quantile averaging.
 
     Parameters:
-      quantilePredictions (list of dicts): Each dict maps quantile levels to predicted values.
+      quantilePredictions (list of dict): Each dict maps quantile levels to predicted values.
         Example: [{"Q0.1": 1.0, "Q0.5": 2.0, "Q0.9": 3.0}, ...]
       targetQuantile (float): Target quantile level for aggregation (0 to 1, default: 0.5 for median).
 
@@ -1580,8 +1576,8 @@ class VotingHelper(object):
     Dynamic ensemble selection: weight models by local competence estimates per sample.
 
     Parameters:
-      predictions (list of lists): Shape (n_models, n_samples) of predicted labels.
-      competenceScores (list of lists, optional): Shape (n_models, n_samples) of competence estimates.
+      predictions (list of list): Shape (n_models, n_samples) of predicted labels.
+      competenceScores (list of list, Optional): Shape (n_models, n_samples) of competence estimates.
       neighborhoodSize (int): Number of nearest neighbors for local competence estimation (default: 3).
 
     Returns:
@@ -1637,9 +1633,9 @@ class VotingHelper(object):
     Wasserstein barycenter aggregation: combine predictive distributions via optimal transport.
 
     Parameters:
-      distributionPredictions (list of dicts): Each dict maps numeric values to probability mass.
+      distributionPredictions (list of dict): Each dict maps numeric values to probability mass.
         Example: [{"1.0": 0.2, "2.0": 0.5, "3.0": 0.3}, ...]
-      weights (iterable, optional): Weight for each distribution (default: uniform).
+      weights (Iterable, Optional): Weight for each distribution (default: uniform).
       nGrid (int): Number of grid points for discretized Wasserstein computation (default: 100).
 
     Returns:
@@ -1704,9 +1700,9 @@ class VotingHelper(object):
     Causal aggregation: weight models by invariant predictive performance across environments.
 
     Parameters:
-      predictions (list of lists): Shape (n_models, n_samples) of predicted labels.
+      predictions (list of list): Shape (n_models, n_samples) of predicted labels.
       environmentLabels (list): Environment identifier for each sample (e.g., ["train", "test", "shifted"]).
-      groundTruth (list, optional): Ground truth labels for computing invariant performance metrics.
+      groundTruth (list, Optional): Ground truth labels for computing invariant performance metrics.
 
     Returns:
       list: Aggregated prediction for each sample position using environment-invariant weighting.
@@ -1803,11 +1799,11 @@ class VotingHelper(object):
     GNN-style aggregation: propagate predictions through model dependency graph via message passing.
 
     Parameters:
-      predictions (list of lists): Shape (n_models, n_samples) of predicted labels.
-      adjacencyMatrix (list of lists): Shape (n_models, n_models) adjacency matrix for model graph.
+      predictions (list of list): Shape (n_models, n_samples) of predicted labels.
+      adjacencyMatrix (list of list): Shape (n_models, n_models) adjacency matrix for model graph.
       aggregationSteps (int): Number of message-passing iterations (default: 2).
       activationType (str): Activation function for message aggregation: "relu", "tanh", or "identity".
-      fixedLabels (list, optional): Fixed ordered list of all possible labels for consistent embedding dimensions.
+      fixedLabels (list, Optional): Fixed ordered list of all possible labels for consistent embedding dimensions.
 
     Returns:
       list: Aggregated prediction for each sample position using graph-propagated weights.

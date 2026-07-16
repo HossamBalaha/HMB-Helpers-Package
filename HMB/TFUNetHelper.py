@@ -2545,7 +2545,7 @@ class SegNet(tf.keras.Model):
       numClasses (int): Number of output classes. Default 2.
       level (int): Decoder starting stage (1-4). Higher levels use deeper features.
       encoder (str): Backbone type: "VGG16", "ResNet50", "MobileNet", or "Vanilla".
-      inputSize (tuple, optional): Fixed input shape (H, W, C). None = dynamic.
+      inputSize (tuple, Optional): Fixed input shape (H, W, C). None = dynamic.
       useBias (bool): Whether Conv layers use bias. Default False (BN compatible).
     '''
 
@@ -3037,7 +3037,7 @@ class SegNet(tf.keras.Model):
     Explicitly build model weights (useful for dynamic shapes).
     
     Parameters:
-      input_shape (tuple, optional): Input shape to build the model. If None, a dynamic shape with known channels is used.
+      input_shape (tuple, Optional): Input shape to build the model. If None, a dynamic shape with known channels is used.
     '''
 
     # If no input shape was provided use a dynamic 4D shape with known channels.

@@ -45,7 +45,7 @@ class VideosHelper(object):
 
     Parameters:
       videoPath (str): Output path for the video file.
-      frames (iterable): Sequence of frames (NumPy arrays) to write.
+      frames (Iterable): Sequence of frames (NumPy arrays) to write.
       fps (float): Frames per second.
       frameSize (tuple): (width, height) of the frames.
       fourccType (str): FourCC codec string (default "mp4v").
@@ -78,7 +78,7 @@ class VideosHelper(object):
 
     Parameters:
       video (cv2.VideoCapture): Video capture object.
-      frameIndexRange (iterable): Iterable of frame indices to display.
+      frameIndexRange (Iterable): Iterable of frame indices to display.
     '''
 
     for frameIndex in frameIndexRange:
@@ -231,7 +231,7 @@ class VideosHelper(object):
 
     Parameters:
       video (cv2.VideoCapture): Opened video capture object.
-      frameTimeRange (iterable): Iterable of timestamps in seconds.
+      frameTimeRange (Iterable): Iterable of timestamps in seconds.
 
     Returns:
       list: List of frame indices (may be fractional).
@@ -247,7 +247,7 @@ class VideosHelper(object):
 
     Parameters:
       video (cv2.VideoCapture): Opened video capture object.
-      frameIndexRange (iterable): Iterable of frame indices.
+      frameIndexRange (Iterable): Iterable of frame indices.
 
     Returns:
       list: List of timestamps in seconds.
@@ -263,7 +263,7 @@ class VideosHelper(object):
 
     Parameters:
       video (cv2.VideoCapture): Opened video capture object.
-      frameIndexRange (iterable): Iterable of frame indices.
+      frameIndexRange (Iterable): Iterable of frame indices.
 
     Returns:
       list: List of frames as NumPy arrays.

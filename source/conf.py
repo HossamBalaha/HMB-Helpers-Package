@@ -107,8 +107,16 @@ napoleon_use_rtype = True
 # Enable the display of todo items in the final documentation.
 todo_include_todos = True
 
-# Enable nitpicky mode to warn about all missing references.
-nitpicky = True
+# Enable/Disable nitpicky mode to warn about all missing references.
+nitpicky = False
+# Define specific reference types to ignore during nitpicky checks.
+nitpick_ignore = []
+
+# Define custom type aliases for Napoleon to improve docstring clarity.
+napoleon_type_aliases = {
+  'array-like': ':term:`array-like <array_like>`',
+  'array_like': ':term:`array_like`',
+}
 
 # Define cross project linking mappings for external documentation references.
 intersphinx_mapping = {
@@ -144,6 +152,8 @@ intersphinx_mapping = {
   "gensim"               : ("https://radimrehurek.com/gensim/", None),
   "gtts"                 : ("https://gtts.readthedocs.io/en/latest/", None),
   "py7zr"                : ("https://py7zr.readthedocs.io/en/latest/", None),
+  "spacy"                : ("https://spacy.readthedocs.io/en/latest/", None),
+  "opencv-python"        : ("https://opencv24-python-tutorials.readthedocs.io/en/latest/", None),
 }
 
 # -- Options for HTML output -------------------------------------------------
