@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 import scipy.stats as stats
 import matplotlib.pyplot as plt
-from skimage.measure import shannon_entropy, moments
 from scipy.stats import skew, kurtosis, bootstrap, wilcoxon
 from HMB.PlotsHelper import GetCmapColors, GetRandomCMAPalette
 from HMB.Initializations import UpdateMatplotlibSettings
@@ -236,6 +235,8 @@ class GeneralStatisticsHelper(object):
       - skimage.measure.moments
     '''
 
+    from skimage.measure import moments
+
     M = moments(data)
     return M[0, 0]
 
@@ -252,6 +253,7 @@ class GeneralStatisticsHelper(object):
     Notes:
       - Uses raw (not central) moments so typical centroid formula applies: (M10/M00, M01/M00).
     '''
+    from skimage.measure import moments
 
     M = moments(data)
     return (M[1, 0] / M[0, 0], M[0, 1] / M[0, 0])
@@ -1240,6 +1242,8 @@ class GeneralStatisticsHelper(object):
     Returns:
       float: Mean Shannon entropy.
     '''
+
+    from skimage.measure import shannon_entropy
 
     shannonEntropy = np.mean(shannon_entropy(data))
     return shannonEntropy

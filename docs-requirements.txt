@@ -1,4 +1,5 @@
 numpy<2
+timm
 torch
 tensorflow
 opencv-python

@@ -6,10 +6,8 @@ from pathlib import Path
 from collections import Counter
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
-import torchvision.transforms as T
 from datetime import datetime, timezone
 from torch.amp import autocast, GradScaler
-import torchvision.transforms.functional as Fv
 from typing import Any, Dict, List, Optional, Tuple, Union
 from HMB.ImagesHelper import *
 from HMB.PlotsHelper import PlotHeatmap, PlotBarChart, COLORS
@@ -2213,6 +2211,9 @@ class PyTorchVideoTransforms:
     Returns:
       Transformed tensor of shape (C, T, H, W).
     '''
+
+    import torchvision.transforms as T
+    import torchvision.transforms.functional as Fv
 
     # Convert the numpy array to a torch tensor and adjust the channel dimension.
     videoTensor = torch.from_numpy(inputVideo).permute(0, 3, 1, 2).float() / 255.0

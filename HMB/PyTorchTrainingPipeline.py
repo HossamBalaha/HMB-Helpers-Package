@@ -7,7 +7,6 @@ import torch.nn as nn
 from pathlib import Path
 import torch.optim as optim
 import matplotlib.pyplot as plt
-from torchvision import transforms
 from torch.amp import autocast, GradScaler
 from sklearn.metrics import confusion_matrix
 from torch.utils.tensorboard import SummaryWriter
@@ -732,6 +731,8 @@ def ImageryInferenceWithPlots(
     dpi (int, optional): DPI for saving plots.
     verbose (bool, optional): Whether to print progress.
   '''
+
+  from torchvision import transforms
 
   if (len(expDirs) == 0):
     if (verbose):

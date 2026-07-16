@@ -1,12 +1,6 @@
 # Import all required libraries for metrics computation.
-import torch, re, nltk, textstat, sys, math
+import torch, re, math
 import numpy as np  # For numerical operations.
-import torch.nn as nn  # For deep learning metrics (if needed).
-from rouge import Rouge  # For ROUGE metric computation.
-from collections import Counter  # For token counting.
-from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction  # BLEU metric.
-from nltk.translate.chrf_score import sentence_chrf  # CHRF metric.
-from sklearn.metrics import accuracy_score, f1_score  # For accuracy and F1 metrics.
 
 from HMB.Initializations import IncreaseSysRecursionLimit, DownloadNLTKPackages
 
@@ -46,6 +40,9 @@ class TextGenerationMetrics(object):
       tokenizer (Optional): A tokenizer object for text preprocessing. If not provided, default tokenization methods will be used.
     '''
 
+    from rouge import Rouge  # For ROUGE metric computation.
+    from nltk.translate.bleu_score import SmoothingFunction
+
     # Store the tokenizer if provided.
     self.tokenizer = tokenizer
     # Initialize ROUGE metric.
@@ -74,6 +71,8 @@ class TextGenerationMetrics(object):
     Returns:
       float: BLEU score.
     '''
+
+    from nltk.translate.bleu_score import sentence_bleu
 
     # Tokenize texts.
     generatedTokens = generatedText.split()
@@ -439,6 +438,8 @@ class TextGenerationMetrics(object):
       perplexity = obj.CalculatePerplexity(generatedTokens, referenceTokens)
       print(f"Statistical Perplexity: {perplexity:.4f}")
     '''
+
+    from collections import Counter  # For token counting.
 
     # Handle empty reference.
     if (len(referenceTokens) == 0):
@@ -927,6 +928,8 @@ class TextGenerationMetrics(object):
       float: CHRF score.
     '''
 
+    from nltk.translate.chrf_score import sentence_chrf  # CHRF metric.
+
     # Calculate CHRF score.
     chrfScore = sentence_chrf(generatedText, referenceText)
     # Return CHRF score.
@@ -1014,6 +1017,8 @@ class TextGenerationMetrics(object):
       float: Flesch-Kincaid grade level (lower is easier).
     '''
 
+    import textstat
+
     # Compute readability score.
     return textstat.flesch_kincaid_grade(generatedText)
 
@@ -1036,6 +1041,8 @@ class TextGenerationMetrics(object):
     Returns:
       float: Information density (0.0 no content words, 1.0 all content words).
     '''
+
+    import nltk
 
     # Tokenize and POS tag.
     tokens = nltk.word_tokenize(generatedText.lower())

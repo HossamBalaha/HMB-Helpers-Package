@@ -1,4 +1,4 @@
-import hashlib, time, json, shutil, os, cv2, torch, math, joblib, av
+import hashlib, time, json, shutil, os, cv2, torch, math, joblib
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -2290,6 +2290,8 @@ class PyTorchVideoClassificationDataset(torch.utils.data.Dataset):
     Parameters:
       videoPath: Path to the video file to be decoded.
     '''
+
+    import av
 
     # Initialize an empty list to store decoded frame arrays.
     frameList = []
