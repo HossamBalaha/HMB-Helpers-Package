@@ -1,4 +1,4 @@
-import argparse, splitfolders, os, torch, timm, builtins
+import argparse, splitfolders, os, torch, timm
 import numpy as np
 import pandas as pd
 import torch.nn as nn
@@ -10,23 +10,7 @@ from HMB.PyTorchHelper import GetOptimizer, LoadPyTorchDict
 from HMB.Initializations import IgnoreWarnings, DoRandomSeeding
 from HMB.PyTorchTrainingPipeline import TrainEvaluateClassificationModel, GenericImageryEvaluatePredictPlotSubset
 from HMB.DatasetsHelper import PyTorchCustomDataset
-
-# Ensure all prints flush by default to make logs appear promptly.
-# Save the original built-in print function for delegation.
-_original_print = builtins.print
-
-
-# Define a wrapper that sets flush=True when not explicitly provided.
-def print(*args, **kwargs):
-  # Ensure flush is True by default when not provided.
-  if ("flush" not in kwargs):
-    kwargs["flush"] = True
-  # Delegate to the original print implementation.
-  return _original_print(*args, **kwargs)
-
-
-# Override the built-in print with our wrapper to ensure all prints are flushed immediately.
-builtins.print = print
+from HMB.Utils import fprint
 
 
 # Define a function to parse command line arguments for training configuration.
@@ -277,7 +261,7 @@ def ValidateArgs(args):
   # Fall back to CPU if CUDA was requested but is not available.
   if (args.device.startswith("cuda") and not torch.cuda.is_available()):
     # Inform the user when falling back to CPU.
-    print("Warning: CUDA requested but not available. Falling back to CPU.")
+    fprint("Warning: CUDA requested but not available. Falling back to CPU.")
     # Set device to CPU for safety.
     args.device = "cpu"
 
@@ -377,10 +361,10 @@ def ValidateArgs(args):
       # Raise when splitTestFolder is invalid.
       raise ValueError("--splitTestFolder must be a path to an existing directory or None")
 
-  print("-" * 40)
+  fprint("-" * 40)
   for k, v in vars(args).items():
-    print(f"{k}: {v}")
-  print("-" * 40)
+    fprint(f"{k}: {v}")
+  fprint("-" * 40)
 
   # Return the validated and possibly modified args object.
   return args
@@ -416,20 +400,20 @@ def CreateTimmDataLoaders(
     valDataset = PyTorchCustomDataset(splitValFolder, transform=valTransforms)
 
   if (args.verbose):
-    print(
+    fprint(
       f"Training dataset created with {len(trainDataset)} samples from "
       f"{splitTrainFolder if splitTrainFolder else os.path.join(args.dataDir + ' Split', 'train')}"
     )
-    print(
+    fprint(
       f"Validation dataset created with {len(valDataset)} samples from "
       f"{splitValFolder if splitValFolder else os.path.join(args.dataDir + ' Split', 'val')}"
     )
-    print(f"Data configuration used for transforms: {dataConfig}")
-    print(f"Example training transform pipeline: {trainTransforms}")
-    print(f"Example validation transform pipeline: {valTransforms}")
-    print("Classes:", trainDataset.classes)
-    print("Class to index mapping:", trainDataset.classToIdx)
-    print(
+    fprint(f"Data configuration used for transforms: {dataConfig}")
+    fprint(f"Example training transform pipeline: {trainTransforms}")
+    fprint(f"Example validation transform pipeline: {valTransforms}")
+    fprint("Classes:", trainDataset.classes)
+    fprint("Class to index mapping:", trainDataset.classToIdx)
+    fprint(
       f"First 5 samples in training dataset: "
       f"{[trainDataset[i][1] for i in range(min(5, len(trainDataset)))]}"
     )
@@ -459,10 +443,10 @@ def CreateTimmDataLoaders(
 # Create and configure the timm model for the current task.
 def CreateModel(args):
   # Notify that model creation has started.
-  print("Creating model...")
+  fprint("Creating model...")
   # Instantiate the timm model with the requested number of classes.
   model = timm.create_model(args.modelName, pretrained=True, num_classes=args.numClasses)
-  print(f"Model {args.modelName} created with {args.numClasses} output classes.")
+  fprint(f"Model {args.modelName} created with {args.numClasses} output classes.")
   # Return the constructed model object.
   return model
 
@@ -476,9 +460,9 @@ def MainTrain():
   # Print all arguments when verbose mode is enabled.
   if (getattr(args, "verbose", False)):
     # Print the complete args namespace.
-    print("Full arguments:")
+    fprint("Full arguments:")
     for k, v in vars(args).items():
-      print(f"  {k}: {v}")
+      fprint(f"  {k}: {v}")
 
   # Check whether to split the dataset or whether split folders already exist.
   if (
@@ -487,7 +471,7 @@ def MainTrain():
     (not os.path.exists(os.path.join(args.dataDir + " Split", "val")))
   )):
     # Print message about existence of train and validation folders.
-    print("Train and validation folders already exist.")
+    fprint("Train and validation folders already exist.")
     # Conditionally split the dataset if requested by the argument.
     if (args.doSplit):
       # Compute the training ratio based on the split ratio argument.
@@ -500,11 +484,11 @@ def MainTrain():
         ratio=(trainRatio, args.splitRatio)
       )
       # Print completion message for dataset splitting.
-      print("Dataset split completed.")
+      fprint("Dataset split completed.")
 
   # Ensure the output directory exists or create it.
   os.makedirs(args.outputDir, exist_ok=True)
-  print(f"Output directory: {args.outputDir}")
+  fprint(f"Output directory: {args.outputDir}")
 
   # Save the training configuration arguments to a JSON file in the output directory for future reference.
   argsJsonPath = os.path.join(args.outputDir, "TrainingArgs.json")
@@ -513,10 +497,10 @@ def MainTrain():
   # Select the device for computation and wrap it in a torch.device.
   device = torch.device(args.device)
   # Print the selected device to the console.
-  print(f"Using device: {device}")
+  fprint(f"Using device: {device}")
 
   # Print a message indicating creation of data loaders.
-  print("Creating data loaders...")
+  fprint("Creating data loaders...")
   # Resolve explicit split train folder path when provided.
   splitTrainFolder = (
     args.splitTrainFolder
@@ -532,19 +516,19 @@ def MainTrain():
     splitValFolder=splitValFolder
   )
   # Print the number of training samples available.
-  print(f"Training samples: {len(trainLoader.dataset)}")
+  fprint(f"Training samples: {len(trainLoader.dataset)}")
   # Print the number of validation samples available.
-  print(f"Validation samples: {len(valLoader.dataset)}")
+  fprint(f"Validation samples: {len(valLoader.dataset)}")
 
   # Create the model using the CreateModel helper.
   model = CreateModel(args)
   # Move the model to the selected device for training.
   model.to(device)
-  print("Model created and moved to device.")
+  fprint("Model created and moved to device.")
 
   # Instantiate the cross-entropy loss function for classification.
   criterion = nn.CrossEntropyLoss()
-  print("Loss function created.")
+  fprint("Loss function created.")
   # Instantiate the optimizer via project's GetOptimizer helper.
   optimizer = GetOptimizer(
     model,  # Model whose parameters to optimize.
@@ -552,7 +536,7 @@ def MainTrain():
     learningRate=args.learningRate,  # Learning rate for the optimizer.
     weightDecay=args.weightDecay,  # Weight decay for regularization.
   )
-  print(f"Optimizer ({args.optimizer}) created.")
+  fprint(f"Optimizer ({args.optimizer}) created.")
 
   # Call `TrainEvaluateModel` to perform training and evaluation and store the history.
   history = TrainEvaluateClassificationModel(
@@ -584,9 +568,9 @@ def MainTrain():
   # Save the training history as a CSV file in the output directory.
   historyCsvPath = os.path.join(args.outputDir, "TrainingHistory.csv")
   pd.DataFrame(history).to_csv(historyCsvPath, index=False)
-  print(f"Training history saved to: {historyCsvPath}")
+  fprint(f"Training history saved to: {historyCsvPath}")
   # Print a message indicating training completion.
-  print("Training complete.")
+  fprint("Training complete.")
 
 
 # Create a callable factory for timm model predictions.
@@ -634,16 +618,16 @@ def MainTest():
   if (len(checkpointsMetrics) == 0):
     raise ValueError(f"No checkpoints found in output directory: {args.outputDir}")
   elif (len(checkpointsMetrics) == 1):
-    print(f"Only one checkpoint found. Using: {allCheckpoints[0]}")
+    fprint(f"Only one checkpoint found. Using: {allCheckpoints[0]}")
     bestIndex = 0
     fileToSelect = allCheckpoints[bestIndex]
-    print(f"Best checkpoint based on {args.judgeBy}: {fileToSelect}")
+    fprint(f"Best checkpoint based on {args.judgeBy}: {fileToSelect}")
   else:
     # Convert to float for comparison and find the index of the best checkpoint.
     checkpointsMetrics = [float(metric) for metric in checkpointsMetrics]
     bestIndex = checkpointsMetrics.index(max(checkpointsMetrics))
     fileToSelect = allCheckpoints[bestIndex]
-    print(f"Best checkpoint based on {args.judgeBy}: {fileToSelect}")
+    fprint(f"Best checkpoint based on {args.judgeBy}: {fileToSelect}")
 
   bestModelPath = os.path.join(args.outputDir, fileToSelect)
   stateDict = LoadPyTorchDict(bestModelPath, device=args.device)
@@ -665,7 +649,7 @@ def MainTest():
     )
 
   model.load_state_dict(modelStateDict)
-  print(f"Model loaded from checkpoint: {bestModelPath}")
+  fprint(f"Model loaded from checkpoint: {bestModelPath}")
 
   # Prepare a prediction callable that accepts a HWC numpy image and returns 1D probability vector.
   # This matches the expected interface of `GenericEvaluatePredictPlotSubset`.
@@ -690,7 +674,7 @@ def MainTest():
       if (getattr(args, f"split{split.capitalize()}Folder"))
       else os.path.join(args.dataDir + " Split", split)
     )
-    print(f"{split.capitalize()} folder: {splitFolder}")
+    fprint(f"{split.capitalize()} folder: {splitFolder}")
 
     # Run inference and generate plots for the current split using the `GenericEvaluatePredictPlotSubset` helper.
     (
@@ -711,8 +695,8 @@ def MainTest():
       dpi=720,
     )
 
-  print(f"Per-sample predictions CSV path: {predsCsvPath}")
-  print("Inference and per-sample export complete.")
+  fprint(f"Per-sample predictions CSV path: {predsCsvPath}")
+  fprint("Inference and per-sample export complete.")
 
 
 # Execute the script when run directly.

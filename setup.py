@@ -13,7 +13,7 @@ setup(
   # Distribution name used on PyPI.
   name="hmb-helpers",
   # Current package version.
-  version="0.3.0",
+  version="0.4.0",
   # Author's display name.
   author="Hossam Magdy Balaha",
   # Author contact email.
@@ -93,6 +93,7 @@ setup(
       "pyvips>=3.1.1",
       "patchify>=0.2.3",
       "av>=17.0.1",
+      "imagecodecs>=2026.1.14",
     ],
 
     # Deep learning frameworks (CPU defaults; users install CUDA separately).
@@ -102,6 +103,9 @@ setup(
       "torch>=2.7.1",
       "torchvision>=0.22.1",
       "torchaudio>=2.7.1",
+      "lion_pytorch>=0.2.4",
+      "prodigyopt>=1.1.2",
+      "schedulefree>=1.4.1",
     ],
     "tensorflow"  : [
       "tensorflow>=2.12.0",
@@ -291,6 +295,10 @@ setup(
       "codecarbon>=3.2.6",
       "language_tool_python>=3.4.0",
       "av>=17.0.1",
+      "imagecodecs>=2026.1.14",
+      "lion_pytorch>=0.2.4",
+      "prodigyopt>=1.1.2",
+      "schedulefree>=1.4.1",
     ],
   },
 

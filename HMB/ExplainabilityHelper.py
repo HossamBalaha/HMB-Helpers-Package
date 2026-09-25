@@ -939,6 +939,13 @@ class CAMExplainerPyTorch(object):
     "occlusion",
     "gradxinput",
     "smoothgradcampp",
+    "hirescam",
+    "attentionrollout",
+    "rise",
+    "featureablation",
+    "vitgradcam",
+    "vitxgradcam",
+    "viteigencam",
   }
 
   def __init__(
@@ -1200,6 +1207,13 @@ class CAMExplainerPyTorch(object):
       "occlusion"          : "Occlusion",
       "gradxinput"         : "GradXInput",
       "smoothgradcampp"    : "SmoothGradCamPP",
+      "hirescam"           : "HiResCam",
+      "attentionrollout"   : "AttentionRollout",
+      "rise"               : "Rise",
+      "featureablation"    : "FeatureAblation",
+      "vitgradcam"         : "ViTGradCam",
+      "vitxgradcam"        : "ViTXGradCam",
+      "viteigencam"        : "ViTEigenCam",
     }
     return mapping.get(camTypeString.lower(), camTypeString.title())
 
@@ -1392,6 +1406,13 @@ class CAMExplainerPyTorch(object):
       "occlusion"          : "ComputeOcclusion",
       "gradxinput"         : "ComputeGradXInput",
       "smoothgradcampp"    : "ComputeSmoothGradCamPlusPlusSaliency",
+      "hirescam"           : "ComputeHiResCamSaliency",
+      "attentionrollout"   : "ComputeAttentionRolloutSaliency",
+      "rise"               : "ComputeRISE",
+      "featureablation"    : "ComputeFeatureAblation",
+      "vitgradcam"         : "ComputeViTGradCamSaliency",
+      "vitxgradcam"        : "ComputeViTXGradCamSaliency",
+      "viteigencam"        : "ComputeViTEigenCamSaliency",
     }
     chosen = funcMap.get(self.camType, "ComputeGradCamSaliency")
     # If this instance implements a method with that name, call it.
@@ -1615,19 +1636,19 @@ class CAMExplainerPyTorch(object):
     elapsed = time.time() - startTime
     # Build a summary dictionary to return.
     result = {
-      "image"               : str(imagePath),
-      "true_class_idx"      : trueClass if (trueClass is not None) else -1,
-      "true_class_name"     : trueClassName,
-      "predicted_class_idx" : predictedClass,
-      "predicted_class_name": predictedClassName,
-      "mean_saliency"       : float(np.mean(saliencyResized)),
-      "max_saliency"        : float(np.max(saliencyResized)),
-      "confidence"          : confidence,
-      "processing_time_sec" : elapsed,
-      "overlay_path"        : str(overlayPath),
-      "annotated_path"      : str(annotatedPath),
-      "heatmap_path"        : str(heatmapPath),
-      "cam_type"            : self.camType,
+      "Image"             : str(imagePath),
+      "TrueClassIdx"      : trueClass if (trueClass is not None) else -1,
+      "TrueClassName"     : trueClassName,
+      "PredictedClassIdx" : predictedClass,
+      "PredictedClassName": predictedClassName,
+      "MeanSaliency"      : float(np.mean(saliencyResized)),
+      "MaxSaliency"       : float(np.max(saliencyResized)),
+      "Confidence"        : confidence,
+      "ProcessingTimeSec" : elapsed,
+      "OverlayPath"       : str(overlayPath),
+      "AnnotatedPath"     : str(annotatedPath),
+      "HeatmapPath"       : str(heatmapPath),
+      "CamType"           : self.camType,
     }
     return result
 
@@ -2202,6 +2223,191 @@ class CAMExplainerPyTorch(object):
     finally:
       fh.remove()
 
+  def ComputeAttentionRolloutSaliency(self, inputTensor, targetClass=None, targetLayer=None, device=None):
+    r'''
+    Compute Attention Rollout heatmap for Vision Transformers using the instance model.
+
+    Parameters:
+      inputTensor (torch.Tensor): Input tensor shaped (1, C, H, W).
+      targetClass (int | None): Target class index (ignored for attention rollout, kept for API consistency).
+      targetLayer (torch.nn.Module | None): Ignored for attention rollout.
+      device (torch.device | None): Device used for computation.
+
+    Returns:
+      numpy.ndarray: Attention Rollout heatmap normalized to [0,1].
+    '''
+
+    model = self.torchModel
+    if (model is None):
+      raise RuntimeError("No model available on the explainer instance for Attention Rollout.")
+    device = device if (device is not None) else self.device
+    model.eval()
+    model.to(device)
+    x = inputTensor.to(device).detach()
+
+    # Attempt to find attention layers.
+    # For timm models (ViT, Swin, etc.), attention weights are the input to the attn_drop module.
+    attnLayers = []
+    for name, module in model.named_modules():
+      if (name.endswith("attn_drop") or isinstance(module, torch.nn.MultiheadAttention)):
+        attnLayers.append(module)
+
+    if (len(attnLayers) == 0):
+      raise RuntimeError("No attention layers found in the model for Attention Rollout.")
+
+    attentions = []
+
+    def forwardHook(module, inp, out):
+      attn = None
+
+      # 1. Check if input contains attention weights (e.g., input to attn_drop in timm).
+      if (isinstance(inp, tuple) and len(inp) > 0 and isinstance(inp[0], torch.Tensor)):
+        if (inp[0].dim() in [3, 4] and inp[0].shape[-1] == inp[0].shape[-2]):
+          attn = inp[0].detach()
+
+      # 2. Check if output contains attention weights (e.g., PyTorch MHA with need_weights=True).
+      if (attn is None and isinstance(out, tuple) and len(out) >= 2 and isinstance(out[1], torch.Tensor)):
+        if (out[1].dim() in [3, 4] and out[1].shape[-1] == out[1].shape[-2]):
+          attn = out[1].detach()
+
+      # 3. Check for custom attribute.
+      if (attn is None and hasattr(module, "_attn_weights") and isinstance(module._attn_weights, torch.Tensor)):
+        attn = module._attn_weights.detach()
+
+      if (attn is None):
+        raise RuntimeError(
+          "Cannot extract attention weights. The model must be configured to return attention weights "
+          "(e.g., via a custom forward hook or model flag) for Attention Rollout to work."
+        )
+
+      # Average over heads if 4D: (B, num_heads, seqLen, seqLen) -> (B, seqLen, seqLen)
+      if (attn.dim() == 4):
+        attn = attn.mean(dim=1)
+      elif (attn.dim() != 3):
+        raise RuntimeError(f"Unexpected attention shape: {attn.shape}")
+
+      attentions.append(attn)
+
+    hooks = []
+    for layer in attnLayers:
+      hooks.append(layer.register_forward_hook(forwardHook))
+
+    try:
+      with torch.no_grad():
+        _ = model(x)
+
+      if (len(attentions) == 0):
+        raise RuntimeError("Attention hooks did not capture attention weights.")
+
+      # Attention Rollout algorithm.
+      B, seqLen, _ = attentions[0].shape
+      rollout = torch.eye(seqLen, device=device).unsqueeze(0).repeat(B, 1, 1)
+
+      for attn in attentions:
+        # Add residual connection.
+        attnWithResidual = attn + torch.eye(seqLen, device=device).unsqueeze(0)
+        # Normalize rows.
+        attnWithResidual = attnWithResidual / (attnWithResidual.sum(dim=-1, keepdim=True) + 1e-8)
+        # Multiply.
+        rollout = torch.bmm(rollout, attnWithResidual)
+
+      # The rollout matrix is (B, seqLen, seqLen).
+      # We want the attention from the CLS token (index 0) to all patch tokens.
+      clsAttn = rollout[0, 0, 1:]
+
+      # Reshape to 2D spatial dimensions.
+      numPatches = clsAttn.shape[0]
+      gridSize = int(np.round(np.sqrt(numPatches)))
+      if (gridSize * gridSize != numPatches):
+        raise RuntimeError(f"Cannot reshape {numPatches} patches into a square grid. Grid size: {gridSize}")
+
+      cam = clsAttn.reshape(gridSize, gridSize).unsqueeze(0).unsqueeze(0)
+
+      # Interpolate to input image size.
+      cam = torch.nn.functional.interpolate(
+        cam, size=(x.shape[2], x.shape[3]), mode="bilinear", align_corners=False
+      )
+      cam = cam.squeeze().cpu().numpy()
+      cam = cam - cam.min()
+      if (cam.max() > 0):
+        cam = cam / cam.max()
+      return cam.astype(np.float32)
+    finally:
+      for h in hooks:
+        h.remove()
+
+  def ComputeHiResCamSaliency(self, inputTensor, targetClass, targetLayer=None, device=None):
+    r'''
+    Compute HiRes-CAM heatmap for the predicted class using the instance model.
+
+    Parameters:
+      inputTensor (torch.Tensor): Input tensor shaped (1, C, H, W).
+      targetClass (int): Target class index to explain.
+      targetLayer (torch.nn.Module | None): Layer to attach hooks to for HiRes-CAM.
+      device (torch.device | None): Device used for computation.
+
+    Returns:
+      numpy.ndarray: HiRes-CAM heatmap normalized to [0,1].
+    '''
+
+    model = self.torchModel
+    if (model is None):
+      raise RuntimeError("No model available on the explainer instance for HiRes-CAM.")
+    device = device if (device is not None) else self.device
+    model.eval()
+    model.to(device)
+    x = inputTensor.to(device).detach()
+    x.requires_grad_(True)
+
+    resolvedLayer = self.ResolveTargetLayer(model, targetLayer) if (targetLayer is not None) else (
+      self.targetLayer if (self.targetLayer is not None) else self.GetLastConvLayer(model))
+    if (resolvedLayer is None):
+      raise RuntimeError("No Conv2d layer found for HiRes-CAM.")
+
+    activations = []
+    gradients = []
+
+    def forwardHook(module, inp, out):
+      activations.append(out.detach())
+
+    def backwardHook(module, gradIn, gradOut):
+      gradients.append(gradOut[0].detach())
+
+    fh = resolvedLayer.register_forward_hook(forwardHook)
+    bh = resolvedLayer.register_full_backward_hook(backwardHook)
+    try:
+      outputs = model(x)
+      if (isinstance(outputs, (list, tuple))):
+        outputs = outputs[0]
+      if (outputs.dim() == 2):
+        logits = outputs[0]
+      elif (outputs.dim() == 1):
+        logits = outputs
+      else:
+        raise ValueError(f"Unexpected output shape: {outputs.shape}")
+      score = logits[targetClass]
+      model.zero_grad()
+      if (x.grad is not None):
+        x.grad.zero_()
+      score.backward(retain_graph=True)
+      if (len(activations) == 0 or len(gradients) == 0):
+        raise RuntimeError("HiRes-CAM hooks did not capture activations/gradients.")
+      act = activations[-1]
+      grad = gradients[-1]
+      # HiRes-CAM: element-wise product of gradient and activation, summed over channels, then ReLU
+      hiResCam = torch.relu((grad * act).sum(dim=1, keepdim=True))
+      hiResCam = torch.nn.functional.interpolate(
+        hiResCam, size=(x.shape[2], x.shape[3]), mode="bilinear", align_corners=False
+      )
+      cam = hiResCam.squeeze().cpu().numpy()
+      cam = cam - cam.min()
+      if (cam.max() > 0):
+        cam = cam / cam.max()
+      return cam.astype(np.float32)
+    finally:
+      fh.remove()
+      bh.remove()
+
   def ResolveTargetLayer(self, model, targetLayer):
     r'''
     Resolve a target layer specification to a torch.nn.Module instance.
@@ -2263,36 +2469,81 @@ class CAMExplainerPyTorch(object):
       numpy.ndarray: Integrated Gradients attribution map normalized to [0,1].
     '''
 
+    # Assign the model to a local variable.
     model = self.torchModel
+    # Check if the model is not available.
     if (model is None):
+      # Raise a runtime error.
       raise RuntimeError("No model available on the explainer instance for Integrated Gradients.")
+    # Assign the device to a local variable.
     device = device if (device is not None) else self.device
+    # Set the model to evaluation mode.
     model.eval()
+    # Move the model to the specified device.
     model.to(device)
-    baseline = torch.zeros_like(inputTensor).to(device)
-    # Build list of scaled inputs excluding the baseline itself.
-    scaledInputs = [baseline + (float(k) / steps) * (inputTensor.to(device) - baseline) for k in range(1, steps + 1)]
-    totalGrad = np.zeros((inputTensor.shape[2], inputTensor.shape[3]), dtype=np.float32)
-    for xScaled in scaledInputs:
-      xScaled.requires_grad_(True)
-      outputs = model(xScaled)
+
+    # Move the input tensor to the device and detach it.
+    x = inputTensor.to(device).detach()
+    # Create a baseline tensor of zeros with the same shape as the input.
+    baseline = torch.zeros_like(x)
+
+    # Disable gradient calculation for the initial prediction.
+    with torch.no_grad():
+      # Get the model outputs.
+      outputs = model(x)
+      # Check if the outputs are a list or tuple.
       if (isinstance(outputs, (list, tuple))):
+        # Extract the first element.
         outputs = outputs[0]
+      # Extract the logits based on the output dimension.
       logits = outputs[0] if (outputs.dim() == 2) else outputs
-      score = logits[targetClass]
-      model.zero_grad()
-      if (xScaled.grad is not None):
-        xScaled.grad.zero_()
-      score.backward(retain_graph=False)
-      grad = xScaled.grad.detach().cpu().numpy()[0]
-      totalGrad += np.mean(grad, axis=0)
-    avgGrad = totalGrad / float(steps)
-    delta = (inputTensor.detach().cpu().numpy()[0] - baseline.detach().cpu().numpy()[0])
-    ig = avgGrad * np.mean(delta, axis=0)
-    ig = ig - ig.min()
-    if (ig.max() > 0):
-      ig = ig / ig.max()
-    return ig.astype(np.float32)
+      # Determine the target class if it is not provided.
+      targetClass = int(torch.argmax(logits).item()) if (targetClass is None) else targetClass
+
+    # Generate linearly spaced alpha values from 0 to 1.
+    alphas = torch.linspace(0, 1, steps + 1, device=device).view(-1, 1, 1, 1)
+    # Compute the interpolated inputs along the path.
+    interpolated = baseline + (x - baseline) * alphas
+
+    # Initialize an empty list for gradients.
+    gradients = []
+    # Iterate over each interpolated input.
+    for interp in interpolated:
+      # Unsqueeze and enable gradient tracking for the interpolated input.
+      interpReq = interp.unsqueeze(0).clone().detach().requires_grad_(True)
+      # Get the model outputs for the interpolated input.
+      outputs = model(interpReq)
+      # Check if the outputs are a list or tuple.
+      if (isinstance(outputs, (list, tuple))):
+        # Extract the first element.
+        outputs = outputs[0]
+      # Extract the logits based on the output dimension.
+      logits = outputs[0] if (outputs.dim() == 2) else outputs
+      # Extract the target score.
+      targetScore = logits[targetClass]
+      # Perform backpropagation to compute gradients.
+      targetScore.backward()
+      # Append the detached gradients to the list.
+      gradients.append(interpReq.grad.detach())
+
+    # Stack the list of gradients into a single tensor.
+    gradients = torch.stack(gradients)
+    # Calculate the average of the gradients.
+    avgGradients = gradients.mean(dim=0)
+    # Compute the integrated gradients.
+    integratedGrads = (x - baseline) * avgGradients
+
+    # Sum the integrated gradients across the channel dimension.
+    attribution = integratedGrads.sum(dim=1, keepdim=True)
+    # Apply ReLU to keep only positive contributions.
+    attribution = torch.relu(attribution)
+    # Normalize the attribution by subtracting the minimum value.
+    attribution = attribution - attribution.min()
+    # Normalize the attribution by dividing by the maximum value.
+    attribution = attribution / (attribution.max() + 1e-8)
+
+    # Detach, move to CPU, and return the attribution tensor as a numpy array.
+    return attribution.squeeze().cpu().numpy().astype(np.float32)
 
   def ComputeOcclusion(self, inputTensor, targetClass, targetLayer=None, device=None, patchSize=32, stride=16):
     r'''
@@ -2397,7 +2648,7 @@ class CAMExplainerPyTorch(object):
       sal = sal / float(sal.max())
     return sal.astype(np.float32)
 
-  def ComputeSmoothGrad(self, inputTensor, targetClass, targetLayer=None, device=None, samples=25, noiseLevel=0.15):
+  def ComputeSmoothGrad(self, inputTensor, targetClass, targetLayer=None, device=None, numSamples=50, stdev=0.1):
     r'''
     Compute SmoothGrad by averaging saliency maps over noisy input samples.
 
@@ -2406,8 +2657,8 @@ class CAMExplainerPyTorch(object):
       targetClass (int): Target class index to explain.
       targetLayer (torch.nn.Module | None): Present for API compatibility but not used for SmoothGrad.
       device (torch.device | None): Device used for computation. If None uses the instance device.
-      samples (int): Number of noisy samples to average over.
-      noiseLevel (float): Standard deviation of Gaussian noise relative to input range [0,1].
+      numSamples (int): Number of noisy samples to average over.
+      stdev (float): Standard deviation of Gaussian noise relative to input range [0,1].
 
     Returns:
       numpy.ndarray: SmoothGrad saliency map normalized to [0,1].
@@ -2420,43 +2671,39 @@ class CAMExplainerPyTorch(object):
     model.eval()
     model.to(device)
 
-    xBase = inputTensor.to(device).detach()
-    accumulated = None
-    for i in range(max(1, int(samples))):
-      noise = torch.randn_like(xBase) * float(noiseLevel)
-      xNoisy = (xBase + noise).detach()
-      xNoisy.requires_grad_(True)
+    x = inputTensor.to(device).detach()
 
-      outputs = model(xNoisy)
+    with torch.no_grad():
+      outputs = model(x)
       if (isinstance(outputs, (list, tuple))):
         outputs = outputs[0]
-      if (outputs.dim() == 2):
-        logits = outputs[0]
-      elif (outputs.dim() == 1):
-        logits = outputs
-      else:
-        raise ValueError(f"Unexpected output shape: {outputs.shape}")
+      logits = outputs[0] if (outputs.dim() == 2) else outputs
+      targetClass = int(torch.argmax(logits).item()) if (targetClass is None) else targetClass
 
-      score = logits[targetClass]
-      model.zero_grad()
-      if (xNoisy.grad is not None):
-        xNoisy.grad.zero_()
-      score.backward(retain_graph=False)
+    noise = torch.randn(numSamples, *x.shape, device=device) * stdev
+    noisyInputs = x + noise
+    noisyInputs = torch.clamp(noisyInputs, 0, 1)
 
-      grad = xNoisy.grad.detach().cpu().numpy()[0]  # (C, H, W)
-      sal = np.mean(np.abs(grad), axis=0)
-      if (accumulated is None):
-        accumulated = np.zeros_like(sal, dtype=np.float32)
-      accumulated += sal.astype(np.float32)
+    gradients = []
+    for noisyInput in noisyInputs:
+      noisyInputReq = noisyInput.clone().detach().requires_grad_(True)
+      outputs = model(noisyInputReq)
+      if (isinstance(outputs, (list, tuple))):
+        outputs = outputs[0]
+      logits = outputs[0] if (outputs.dim() == 2) else outputs
+      targetScore = logits[targetClass]
+      targetScore.backward()
+      gradients.append(noisyInputReq.grad.detach())
 
-    if (accumulated is None):
-      return self.ComputeSaliencyMap(inputTensor, targetClass, targetLayer=targetLayer, device=device)
+    gradients = torch.stack(gradients)
+    avgGradient = gradients.mean(dim=0)
 
-    avg = accumulated / float(max(1, int(samples)))
-    avg = avg - avg.min() if avg.size else avg
-    if (avg.size and avg.max() > 0):
-      avg = avg / float(avg.max())
-    return avg.astype(np.float32)
+    saliency = (avgGradient * x).sum(dim=1, keepdim=True)
+    saliency = torch.relu(saliency)
+    saliency = saliency - saliency.min()
+    saliency = saliency / (saliency.max() + 1e-8)
+
+    return saliency.squeeze().cpu().numpy().astype(np.float32)
 
   def ComputeGradXInput(self, inputTensor, targetClass, targetLayer=None, device=None):
     r'''
@@ -2507,6 +2754,709 @@ class CAMExplainerPyTorch(object):
       sal = sal / float(sal.max())
     return sal.astype(np.float32)
 
+  def ComputeRISE(
+    self,
+    inputTensor,
+    targetClass,
+    targetLayer=None,
+    device=None,
+    numMasks=200,
+    maskResolution=16,
+    p1=0.5
+  ):
+    r'''
+    Compute RISE (Randomized Input Sampling for Explanation) heatmap.
+
+    Parameters:
+      inputTensor (torch.Tensor): Input tensor shaped (1, C, H, W).
+      targetClass (int): Target class index to explain.
+      targetLayer (torch.nn.Module | None): Present for API compatibility but not used for RISE.
+      device (torch.device | None): Device used for computation. If None uses the instance device.
+      numMasks (int): Number of random masks to generate.
+      maskResolution (int): Resolution of the low-res random masks.
+      p1 (float): Probability of keeping a pixel in the low-res mask.
+
+    Returns:
+      numpy.ndarray: RISE saliency map normalized to [0,1].
+    '''
+
+    # Assign the model to a local variable.
+    model = self.torchModel
+    # Check if the model is not available.
+    if (model is None):
+      # Raise a runtime error.
+      raise RuntimeError("No model available on the explainer instance for RISE.")
+    # Assign the device to a local variable.
+    device = device if (device is not None) else self.device
+    # Set the model to evaluation mode.
+    model.eval()
+    # Move the model to the specified device.
+    model.to(device)
+    # Move the input tensor to the device and detach it.
+    x = inputTensor.to(device).detach()
+    # Extract the spatial dimensions from the input tensor.
+    _, c, H, W = x.shape
+
+    # Disable gradient calculation for the initial prediction.
+    with torch.no_grad():
+      # Get the model outputs.
+      outputs = model(x)
+      # Check if the outputs are a list or tuple.
+      if (isinstance(outputs, (list, tuple))):
+        # Extract the first element.
+        outputs = outputs[0]
+      # Extract the logits based on the output dimension.
+      logits = outputs[0] if (outputs.dim() == 2) else outputs
+      # Determine the target class if it is not provided.
+      targetClass = int(torch.argmax(logits).item()) if (targetClass is None) else targetClass
+
+    # Initialize a zero tensor for the accumulated saliency.
+    saliency = torch.zeros((H, W), device=device)
+
+    # Iterate for the specified number of masks.
+    for _ in range(numMasks):
+      # Generate a random binary mask at low resolution.
+      mask = torch.bernoulli(torch.full((1, 1, maskResolution, maskResolution), p1, device=device))
+      # Upsample the mask to full image size using bilinear interpolation.
+      mask = torch.nn.functional.interpolate(mask, size=(H, W), mode="bilinear", align_corners=False)
+      # Apply the mask to the inputs.
+      maskedInputs = x * mask
+
+      # Get the model outputs for the masked inputs.
+      outputs = model(maskedInputs)
+      # Check if the outputs are a list or tuple.
+      if (isinstance(outputs, (list, tuple))):
+        # Extract the first element.
+        outputs = outputs[0]
+      # Compute softmax probabilities.
+      probs = torch.softmax(outputs, dim=1 if outputs.dim() == 2 else 0)
+      # Extract the target probability.
+      targetProb = probs[0, targetClass] if (probs.dim() == 2) else probs[targetClass]
+      # Accumulate weighted masks based on target probability.
+      saliency += mask.squeeze() * targetProb
+
+    # Normalize the saliency by the number of masks.
+    saliency = saliency / numMasks
+    # Detach and convert saliency to numpy array for OpenCV processing.
+    saliencyNp = saliency.detach().cpu().numpy()
+    # Apply Gaussian blur for better visualization and reduced noise.
+    saliencyNp = cv2.GaussianBlur(saliencyNp, (15, 15), 5)
+    # Convert the blurred array back to a tensor.
+    saliency = torch.from_numpy(saliencyNp).to(device)
+
+    # Normalize the saliency by subtracting the minimum value.
+    saliency = saliency - saliency.min()
+    # Normalize the saliency by dividing by the maximum value.
+    saliency = saliency / (saliency.max() + 1e-8)
+
+    # Detach, move to CPU, and return the saliency tensor as a numpy array.
+    return saliency.cpu().numpy().astype(np.float32)
+
+  def ComputeFeatureAblation(
+    self,
+    inputTensor,
+    targetClass,
+    targetLayer=None,
+    device=None,
+    windowSize=28,
+    stride=14,
+    baselineValue=0.0
+  ):
+    r'''
+    Compute Feature Ablation (Occlusion) heatmap by sliding a baseline window.
+
+    Parameters:
+      inputTensor (torch.Tensor): Input tensor shaped (1, C, H, W).
+      targetClass (int): Target class index to explain.
+      targetLayer (torch.nn.Module | None): Present for API compatibility but not used for Feature Ablation.
+      device (torch.device | None): Device used for computation. If None uses the instance device.
+      windowSize (int): Size of the square occlusion window.
+      stride (int): Stride to move the occlusion window.
+      baselineValue (float): Value to fill the occluded region.
+
+    Returns:
+      numpy.ndarray: Feature Ablation saliency map normalized to [0,1].
+    '''
+
+    # Assign the model to a local variable.
+    model = self.torchModel
+    # Check if the model is not available.
+    if (model is None):
+      # Raise a runtime error.
+      raise RuntimeError("No model available on the explainer instance for Feature Ablation.")
+    # Assign the device to a local variable.
+    device = device if (device is not None) else self.device
+    # Set the model to evaluation mode.
+    model.eval()
+    # Move the model to the specified device.
+    model.to(device)
+    # Move the input tensor to the device and detach it.
+    x = inputTensor.to(device).detach()
+    # Extract the spatial dimensions from the input tensor.
+    _, c, H, W = x.shape
+
+    # Disable gradient calculation for the baseline prediction.
+    with torch.no_grad():
+      # Get the model outputs.
+      outputs = model(x)
+      # Check if the outputs are a list or tuple.
+      if (isinstance(outputs, (list, tuple))):
+        # Extract the first element.
+        outputs = outputs[0]
+      # Extract the logits based on the output dimension.
+      logits = outputs[0] if (outputs.dim() == 2) else outputs
+      # Determine the target class if it is not provided.
+      targetClass = int(torch.argmax(logits).item()) if (targetClass is None) else targetClass
+      # Compute the baseline probability for the target class.
+      baselineProb = float(torch.softmax(logits, dim=0)[targetClass].item())
+
+    # Initialize a zero tensor for the accumulated saliency.
+    saliency = torch.zeros((H, W), device=device)
+    # Initialize a zero tensor for counting overlaps.
+    count = torch.zeros((H, W), device=device)
+    # Create a baseline tensor filled with the baseline value.
+    baselineTensor = torch.full_like(x, baselineValue).to(device)
+
+    # Disable gradient calculation for the occlusion loop.
+    with torch.no_grad():
+      # Iterate over the y-axis with the specified stride.
+      for y in range(0, H, stride):
+        # Iterate over the x-axis with the specified stride.
+        for xCoord in range(0, W, stride):
+          # Clone the inputs for occlusion.
+          occludedInput = x.clone()
+          # Calculate the end y-coordinate for the window.
+          yEnd = min(y + windowSize, H)
+          # Calculate the end x-coordinate for the window.
+          xEnd = min(xCoord + windowSize, W)
+          # Occlude the region with the baseline value.
+          occludedInput[:, :, y:yEnd, xCoord:xEnd] = baselineTensor[:, :, y:yEnd, xCoord:xEnd]
+
+          # Get the model outputs for the occluded input.
+          outputs = model(occludedInput)
+          # Check if the outputs are a list or tuple.
+          if (isinstance(outputs, (list, tuple))):
+            # Extract the first element.
+            outputs = outputs[0]
+          # Extract the logits based on the output dimension.
+          logitsOcc = outputs[0] if (outputs.dim() == 2) else outputs
+          # Compute the probability for the target class.
+          prob = float(torch.softmax(logitsOcc, dim=0)[targetClass].item())
+
+          # Calculate the importance as the drop in probability.
+          importance = max(0.0, baselineProb - prob)
+          # Accumulate the importance in the saliency map.
+          saliency[y:yEnd, xCoord:xEnd] += importance
+          # Accumulate the count of overlaps.
+          count[y:yEnd, xCoord:xEnd] += 1
+
+    # Add a small epsilon to avoid division by zero.
+    count = count + 1e-8
+    # Average the importance values.
+    saliency = saliency / count
+    # Detach and convert saliency to numpy array for OpenCV processing.
+    saliencyNp = saliency.detach().cpu().numpy()
+    # Apply Gaussian blur for better visualization.
+    saliencyNp = cv2.GaussianBlur(saliencyNp, (21, 21), 7)
+    # Convert the blurred array back to a tensor.
+    saliency = torch.from_numpy(saliencyNp).to(device)
+
+    # Normalize the saliency by subtracting the minimum value.
+    saliency = saliency - saliency.min()
+    # Normalize the saliency by dividing by the maximum value.
+    saliency = saliency / (saliency.max() + 1e-8)
+
+    # Detach, move to CPU, and return the saliency tensor as a numpy array.
+    return saliency.cpu().numpy().astype(np.float32)
+
+  def ComputeViTGradCamSaliency(self, inputTensor, targetClass, targetLayer=None, device=None):
+    r'''
+    Compute Grad-CAM heatmap for Vision Transformers using the instance model.
+
+    Parameters:
+      inputTensor (torch.Tensor): Input tensor shaped (1, C, H, W).
+      targetClass (int): Target class index to explain.
+      targetLayer (torch.nn.Module | str | None): Layer to attach hooks to for ViT Grad-CAM.
+      device (torch.device | None): Device used for computation. If None uses the instance device.
+
+    Returns:
+      numpy.ndarray: ViT Grad-CAM heatmap normalized to [0,1].
+    '''
+
+    # Assign the model to a local variable.
+    model = self.torchModel
+    # Check if the model is not available.
+    if (model is None):
+      # Raise a runtime error.
+      raise RuntimeError("No model available on the explainer instance for ViT Grad-CAM.")
+    # Assign the device to a local variable.
+    device = device if (device is not None) else self.device
+    # Set the model to evaluation mode.
+    model.eval()
+    # Move the model to the specified device.
+    model.to(device)
+    # Move the input tensor to the device and detach it.
+    x = inputTensor.to(device).detach()
+
+    # Initialize features variable.
+    features = None
+    # Initialize gradients variable.
+    gradients = None
+
+    # Define the forward hook function.
+    def forwardHook(module, inp, out):
+      # Assign the output to the features variable.
+      nonlocal features
+      features = (out[0] if isinstance(out, tuple) else out).detach()
+
+    # Define the backward hook function.
+    def backwardHook(module, gradIn, gradOut):
+      # Assign the gradient output to the gradients variable.
+      nonlocal gradients
+      gradients = (gradOut[0] if isinstance(gradOut, tuple) else gradOut).detach()
+
+    # Initialize the target module variable.
+    targetModule = None
+    # Check if the target layer is a string.
+    if (isinstance(targetLayer, str)):
+      # Iterate over named modules to find the target layer.
+      for name, module in model.named_modules():
+        # Check if the module name matches the target layer.
+        if (name == targetLayer):
+          # Assign the module to the target module variable.
+          targetModule = module
+          # Break the loop.
+          break
+    # Check if the target layer has a register_forward_hook attribute.
+    elif (hasattr(targetLayer, "register_forward_hook")):
+      # Assign the target layer to the target module variable.
+      targetModule = targetLayer
+    else:
+      # Initialize the last block name variable.
+      lastBlockName = None
+      # Iterate over named modules to find the last transformer block.
+      for name, module in model.named_modules():
+        # Check if the module is a transformer block.
+        if ("blocks." in name and module.__class__.__name__ == "Block"):
+          # Update the last block name.
+          lastBlockName = name
+      # Check if the last block name is still None.
+      if (lastBlockName is None):
+        # Fallback for EVA-02 base.
+        lastBlockName = "blocks.11"
+      # Iterate over named modules to find the target module.
+      for name, module in model.named_modules():
+        # Check if the module name matches the last block name.
+        if (name == lastBlockName):
+          # Assign the module to the target module variable.
+          targetModule = module
+          # Break the loop.
+          break
+
+    # Check if the target module is still None.
+    if (targetModule is None):
+      # Raise a runtime error.
+      raise RuntimeError("Target layer not found for ViT Grad-CAM.")
+
+    # Register the forward hook.
+    fh = targetModule.register_forward_hook(forwardHook)
+    # Register the full backward hook.
+    bh = targetModule.register_full_backward_hook(backwardHook)
+
+    try:
+      # Zero out the gradients of the model.
+      model.zero_grad()
+      # Get the model outputs.
+      outputs = model(x)
+      # Check if the outputs are a list or tuple.
+      if (isinstance(outputs, (list, tuple))):
+        # Extract the first element.
+        outputs = outputs[0]
+      # Extract the logits based on the output dimension.
+      logits = outputs[0] if (outputs.dim() == 2) else outputs
+      # Determine the target class if it is not provided.
+      targetClass = int(torch.argmax(logits).item()) if (targetClass is None) else targetClass
+
+      # Extract the target score.
+      targetScore = logits[targetClass]
+      # Perform backpropagation to compute gradients.
+      targetScore.backward()
+
+      # Check if features or gradients are None.
+      if (features is None or gradients is None):
+        # Raise a runtime error.
+        raise RuntimeError("ViT Grad-CAM hooks did not capture features/gradients.")
+
+      # Ensure features is 3D: (1, seqLen, hiddenDim).
+      if (features.dim() == 4):
+        b, c, h, w = features.shape
+        features = features.reshape(b, c, h * w).permute(0, 2, 1)
+      elif (features.dim() == 2):
+        features = features.unsqueeze(0)
+
+      # Ensure gradients is 3D: (1, seqLen, hiddenDim).
+      if (gradients.dim() == 4):
+        b, c, h, w = gradients.shape
+        gradients = gradients.reshape(b, c, h * w).permute(0, 2, 1)
+      elif (gradients.dim() == 2):
+        gradients = gradients.unsqueeze(0)
+
+      # Handle features and gradients based on their dimensions.
+      if (features.dim() == 4):
+        # CNN-like features: (B, C, H, W)
+        alpha = gradients.mean(dim=(2, 3), keepdim=True)
+        heatmap = torch.relu((alpha * features).sum(dim=1))
+        b, h, w = heatmap.shape
+        spatialH, spatialW = h, w
+      elif (features.dim() == 3):
+        # ViT-like features: (B, seqLen, C)
+        alpha = gradients.mean(dim=1, keepdim=True)
+        heatmap = torch.relu((alpha * features).sum(dim=-1))
+        b, seqLen = heatmap.shape
+        sqrtSeqLen = int(np.round(np.sqrt(seqLen)))
+        # Only remove CLS token if sequence length is not a perfect square.
+        if (sqrtSeqLen * sqrtSeqLen != seqLen):
+          heatmap = heatmap[:, 1:]
+          seqLen = heatmap.shape[1]
+          sqrtSeqLen = int(np.round(np.sqrt(seqLen)))
+        spatialH, spatialW = sqrtSeqLen, sqrtSeqLen
+      else:
+        raise RuntimeError(f"Unsupported features dimension: {features.dim()}")
+
+      # Reshape to (B, 1, H, W) for interpolation.
+      heatmap = heatmap.reshape(b, 1, spatialH, spatialW)
+
+      # Extract the spatial dimensions from the input tensor.
+      _, _, H, W = x.shape
+      # Upsample the heatmap to the input size.
+      heatmap = torch.nn.functional.interpolate(heatmap, size=(H, W), mode="bilinear", align_corners=False)
+      # Normalize the heatmap by subtracting the minimum value.
+      heatmap = heatmap - heatmap.min()
+      # Normalize the heatmap by dividing by the maximum value.
+      heatmap = heatmap / (heatmap.max() + 1e-8)
+
+      # Detach, move to CPU, and return the heatmap tensor as a numpy array.
+      return heatmap.squeeze().cpu().numpy().astype(np.float32)
+    finally:
+      # Remove the forward hook.
+      fh.remove()
+      # Remove the backward hook.
+      bh.remove()
+
+  def ComputeViTXGradCamSaliency(self, inputTensor, targetClass, targetLayer=None, device=None):
+    r'''
+    Compute XGrad-CAM heatmap for Vision Transformers using the instance model.
+
+    Parameters:
+      inputTensor (torch.Tensor): Input tensor shaped (1, C, H, W).
+      targetClass (int): Target class index to explain.
+      targetLayer (torch.nn.Module | str | None): Layer to attach hooks to for ViT XGrad-CAM.
+      device (torch.device | None): Device used for computation. If None uses the instance device.
+
+    Returns:
+      numpy.ndarray: ViT XGrad-CAM heatmap normalized to [0,1].
+    '''
+
+    # Assign the model to a local variable.
+    model = self.torchModel
+    # Check if the model is not available.
+    if (model is None):
+      # Raise a runtime error.
+      raise RuntimeError("No model available on the explainer instance for ViT XGrad-CAM.")
+    # Assign the device to a local variable.
+    device = device if (device is not None) else self.device
+    # Set the model to evaluation mode.
+    model.eval()
+    # Move the model to the specified device.
+    model.to(device)
+    # Move the input tensor to the device and detach it.
+    x = inputTensor.to(device).detach()
+
+    # Initialize features variable.
+    features = None
+    # Initialize gradients variable.
+    gradients = None
+
+    # Define the forward hook function.
+    def forwardHook(module, inp, out):
+      # Assign the output to the features variable.
+      nonlocal features
+      features = (out[0] if isinstance(out, tuple) else out).detach()
+
+    # Define the backward hook function.
+    def backwardHook(module, gradIn, gradOut):
+      # Assign the gradient output to the gradients variable.
+      nonlocal gradients
+      gradients = (gradOut[0] if isinstance(gradOut, tuple) else gradOut).detach()
+
+    # Initialize the target module variable.
+    targetModule = None
+    # Check if the target layer is a string.
+    if (isinstance(targetLayer, str)):
+      # Iterate over named modules to find the target layer.
+      for name, module in model.named_modules():
+        # Check if the module name matches the target layer.
+        if (name == targetLayer):
+          # Assign the module to the target module variable.
+          targetModule = module
+          # Break the loop.
+          break
+    # Check if the target layer has a register_forward_hook attribute.
+    elif (hasattr(targetLayer, "register_forward_hook")):
+      # Assign the target layer to the target module variable.
+      targetModule = targetLayer
+    else:
+      # Initialize the last block name variable.
+      lastBlockName = None
+      # Iterate over named modules to find the last transformer block.
+      for name, module in model.named_modules():
+        # Check if the module is a transformer block.
+        if ("blocks." in name and module.__class__.__name__ == "Block"):
+          # Update the last block name.
+          lastBlockName = name
+      # Check if the last block name is still None.
+      if (lastBlockName is None):
+        # Fallback for EVA-02 base.
+        lastBlockName = "blocks.11"
+      # Iterate over named modules to find the target module.
+      for name, module in model.named_modules():
+        # Check if the module name matches the last block name.
+        if (name == lastBlockName):
+          # Assign the module to the target module variable.
+          targetModule = module
+          # Break the loop.
+          break
+
+    # Check if the target module is still None.
+    if (targetModule is None):
+      # Raise a runtime error.
+      raise RuntimeError("Target layer not found for ViT XGrad-CAM.")
+
+    # Register the forward hook.
+    fh = targetModule.register_forward_hook(forwardHook)
+    # Register the full backward hook.
+    bh = targetModule.register_full_backward_hook(backwardHook)
+
+    try:
+      # Zero out the gradients of the model.
+      model.zero_grad()
+      # Get the model outputs.
+      outputs = model(x)
+      # Check if the outputs are a list or tuple.
+      if (isinstance(outputs, (list, tuple))):
+        # Extract the first element.
+        outputs = outputs[0]
+      # Extract the logits based on the output dimension.
+      logits = outputs[0] if (outputs.dim() == 2) else outputs
+      # Determine the target class if it is not provided.
+      targetClass = int(torch.argmax(logits).item()) if (targetClass is None) else targetClass
+
+      # Extract the target score.
+      targetScore = logits[targetClass]
+      # Perform backpropagation to compute gradients.
+      targetScore.backward()
+
+      # Check if features or gradients are None.
+      if (features is None or gradients is None):
+        # Raise a runtime error.
+        raise RuntimeError("ViT XGrad-CAM hooks did not capture features/gradients.")
+
+      # Ensure features is 3D: (1, seqLen, hiddenDim).
+      if (features.dim() == 4):
+        b, c, h, w = features.shape
+        features = features.reshape(b, c, h * w).permute(0, 2, 1)
+      elif (features.dim() == 2):
+        features = features.unsqueeze(0)
+
+      # Ensure gradients is 3D: (1, seqLen, hiddenDim).
+      if (gradients.dim() == 4):
+        b, c, h, w = gradients.shape
+        gradients = gradients.reshape(b, c, h * w).permute(0, 2, 1)
+      elif (gradients.dim() == 2):
+        gradients = gradients.unsqueeze(0)
+
+      # Handle features and gradients based on their dimensions.
+      if (features.dim() == 4):
+        # CNN-like features: (B, C, H, W)
+        alpha = (gradients * features).sum(dim=(2, 3), keepdim=True) / (features.sum(dim=(2, 3), keepdim=True) + 1e-8)
+        heatmap = torch.relu((alpha * features).sum(dim=1))
+        b, h, w = heatmap.shape
+        spatialH, spatialW = h, w
+      elif (features.dim() == 3):
+        # ViT-like features: (B, seqLen, C)
+        alpha = (gradients * features).sum(dim=-1, keepdim=True) / (features.sum(dim=-1, keepdim=True) + 1e-8)
+        heatmap = torch.relu((alpha * features).sum(dim=-1))
+        b, seqLen = heatmap.shape
+        sqrtSeqLen = int(np.round(np.sqrt(seqLen)))
+        # Only remove CLS token if sequence length is not a perfect square.
+        if (sqrtSeqLen * sqrtSeqLen != seqLen):
+          heatmap = heatmap[:, 1:]
+          seqLen = heatmap.shape[1]
+          sqrtSeqLen = int(np.round(np.sqrt(seqLen)))
+        spatialH, spatialW = sqrtSeqLen, sqrtSeqLen
+      else:
+        raise RuntimeError(f"Unsupported features dimension: {features.dim()}")
+
+      # Reshape to (B, 1, H, W) for interpolation.
+      heatmap = heatmap.reshape(b, 1, spatialH, spatialW)
+
+      # Extract the spatial dimensions from the input tensor.
+      _, _, H, W = x.shape
+      # Upsample the heatmap to the input size.
+      heatmap = torch.nn.functional.interpolate(heatmap, size=(H, W), mode="bilinear", align_corners=False)
+      # Normalize the heatmap by subtracting the minimum value.
+      heatmap = heatmap - heatmap.min()
+      # Normalize the heatmap by dividing by the maximum value.
+      heatmap = heatmap / (heatmap.max() + 1e-8)
+
+      # Detach, move to CPU, and return the heatmap tensor as a numpy array.
+      return heatmap.squeeze().cpu().numpy().astype(np.float32)
+    finally:
+      # Remove the forward hook.
+      fh.remove()
+      # Remove the backward hook.
+      bh.remove()
+
+  def ComputeViTEigenCamSaliency(self, inputTensor, targetClass=None, targetLayer=None, device=None):
+    r'''
+    Compute Eigen-CAM heatmap for Vision Transformers using activation PCA.
+
+    Parameters:
+      inputTensor (torch.Tensor): Input tensor shaped (1, C, H, W).
+      targetClass (int | None): Target class index (ignored for Eigen-CAM, kept for API consistency).
+      targetLayer (torch.nn.Module | str | None): Layer to attach hooks to for ViT Eigen-CAM.
+      device (torch.device | None): Device used for computation. If None uses the instance device.
+
+    Returns:
+      numpy.ndarray: ViT Eigen-CAM heatmap normalized to [0,1].
+    '''
+
+    # Assign the model to a local variable.
+    model = self.torchModel
+    # Check if the model is not available.
+    if (model is None):
+      # Raise a runtime error.
+      raise RuntimeError("No model available on the explainer instance for ViT Eigen-CAM.")
+    # Assign the device to a local variable.
+    device = device if (device is not None) else self.device
+    # Set the model to evaluation mode.
+    model.eval()
+    # Move the model to the specified device.
+    model.to(device)
+    # Move the input tensor to the device and detach it.
+    x = inputTensor.to(device).detach()
+
+    # Initialize features variable.
+    features = None
+
+    # Define the forward hook function.
+    def forwardHook(module, inp, out):
+      # Assign the output to the features variable.
+      nonlocal features
+      features = (out[0] if isinstance(out, tuple) else out).detach()
+
+    # Initialize the target module variable.
+    targetModule = None
+    # Check if the target layer is a string.
+    if (isinstance(targetLayer, str)):
+      # Iterate over named modules to find the target layer.
+      for name, module in model.named_modules():
+        # Check if the module name matches the target layer.
+        if (name == targetLayer):
+          # Assign the module to the target module variable.
+          targetModule = module
+          # Break the loop.
+          break
+    # Check if the target layer has a register_forward_hook attribute.
+    elif (hasattr(targetLayer, "register_forward_hook")):
+      # Assign the target layer to the target module variable.
+      targetModule = targetLayer
+    else:
+      # Initialize the last block name variable.
+      lastBlockName = None
+      # Iterate over named modules to find the last transformer block.
+      for name, module in model.named_modules():
+        # Check if the module is a transformer block.
+        if ("blocks." in name and module.__class__.__name__ == "Block"):
+          # Update the last block name.
+          lastBlockName = name
+      # Check if the last block name is still None.
+      if (lastBlockName is None):
+        # Fallback for EVA-02 base.
+        lastBlockName = "blocks.11"
+      # Iterate over named modules to find the target module.
+      for name, module in model.named_modules():
+        # Check if the module name matches the last block name.
+        if (name == lastBlockName):
+          # Assign the module to the target module variable.
+          targetModule = module
+          # Break the loop.
+          break
+
+    # Check if the target module is still None.
+    if (targetModule is None):
+      # Raise a runtime error.
+      raise RuntimeError("Target layer not found for ViT Eigen-CAM.")
+
+    # Register the forward hook.
+    fh = targetModule.register_forward_hook(forwardHook)
+
+    try:
+      # Disable gradient calculation for feature extraction.
+      with torch.no_grad():
+        # Get the model outputs.
+        _ = model(x)
+
+      # Check if features are None.
+      if (features is None):
+        # Raise a runtime error.
+        raise RuntimeError("ViT Eigen-CAM hook did not capture features.")
+
+      # Handle features based on their dimensions.
+      if (features.dim() == 4):
+        # CNN-like features: (B, C, H, W)
+        b, c, h, w = features.shape
+        featuresSqueezed = features.reshape(b, c, h * w).permute(0, 2, 1).squeeze(0)
+        spatialH, spatialW = h, w
+      elif (features.dim() == 3):
+        # ViT-like features: (B, seqLen, C)
+        featuresSqueezed = features.squeeze(0)
+        seqLen = featuresSqueezed.shape[0]
+        sqrtSeqLen = int(np.round(np.sqrt(seqLen)))
+        # Only remove CLS token if sequence length is not a perfect square.
+        if (sqrtSeqLen * sqrtSeqLen != seqLen):
+          featuresSqueezed = featuresSqueezed[1:]
+        spatialH = int(np.round(np.sqrt(featuresSqueezed.shape[0])))
+        spatialW = spatialH
+      else:
+        raise RuntimeError(f"Unsupported features dimension: {features.dim()}")
+
+      # Compute the first principal component using SVD.
+      uVec, sVec, vVec = torch.pca_lowrank(featuresSqueezed, q=1)
+      # Extract the principal component.
+      principalComponent = vVec[:, 0]
+
+      # Project activations onto the principal component.
+      heatmap = torch.abs(featuresSqueezed @ principalComponent)
+
+      # Reshape to (1, 1, H, W) for interpolation.
+      heatmap = heatmap.reshape(1, 1, spatialH, spatialW)
+
+      # Extract the spatial dimensions from the input tensor.
+      _, _, H, W = x.shape
+      # Upsample the heatmap to the input size.
+      heatmap = torch.nn.functional.interpolate(heatmap, size=(H, W), mode="bilinear", align_corners=False)
+      # Normalize the heatmap by subtracting the minimum value.
+      heatmap = heatmap - heatmap.min()
+      # Normalize the heatmap by dividing by the maximum value.
+      heatmap = heatmap / (heatmap.max() + 1e-8)
+
+      # Detach, move to CPU, and return the heatmap tensor as a numpy array.
+      return heatmap.cpu().numpy().astype(np.float32)
+    finally:
+      # Remove the forward hook.
+      fh.remove()
+
 
 class CAMExplainerTensorFlow(object):
   r'''
@@ -2534,7 +3484,7 @@ class CAMExplainerTensorFlow(object):
     fontSize (int): Base font size used in annotations.
     topN (int): Top-N value used for uncertainty/confidence tracking.
     debug (bool): Enable verbose debug prints if True.
-    targetLayer (tf.keras.layers.Layer | None): Default convolutional layer chosen as target.
+    targetLayer (tensorflow.keras.layers.Layer | None): Default convolutional layer chosen as target.
   '''
 
   AVAILABLE_CAM_METHODS = {
@@ -2551,6 +3501,13 @@ class CAMExplainerTensorFlow(object):
     "occlusion",
     "gradxinput",
     "smoothgradcampp",
+    "hirescam",
+    "attentionrollout",
+    "rise",
+    "featureablation",
+    "vitgradcam",
+    "vitxgradcam",
+    "viteigencam",
   }
 
   def __init__(
@@ -2617,7 +3574,7 @@ class CAMExplainerTensorFlow(object):
       model (tf.keras.Model | None): TensorFlow model to inspect.
 
     Returns:
-      tf.keras.layers.Layer | None: The last Conv2D layer found or None.
+      tensorflow.keras.layers.Layer | None: The last Conv2D layer found or None.
     '''
 
     # Return None if model is None.
@@ -2633,14 +3590,14 @@ class CAMExplainerTensorFlow(object):
 
   def ResolveTargetLayer(self, model, targetLayer):
     r'''
-    Resolve a target layer specification to a tf.keras.layers.Layer instance.
+    Resolve a target layer specification to a tensorflow.keras.layers.Layer instance.
 
     Parameters:
       model (tf.keras.Model): Model containing the target layer.
-      targetLayer (tf.keras.layers.Layer | int | str | None): Specification of the target layer.
+      targetLayer (tensorflow.keras.layers.Layer | int | str | None): Specification of the target layer.
 
     Returns:
-      tf.keras.layers.Layer | None: Resolved layer instance or None if not found.
+      tensorflow.keras.layers.Layer | None: Resolved layer instance or None if not found.
     '''
 
     # If user passed None, pick the last Conv2D layer using existing helper.
@@ -2699,6 +3656,13 @@ class CAMExplainerTensorFlow(object):
       "occlusion"          : "Occlusion",
       "gradxinput"         : "GradXInput",
       "smoothgradcampp"    : "SmoothGradCamPP",
+      "hirescam"           : "HiResCam",
+      "attentionrollout"   : "AttentionRollout",
+      "rise"               : "Rise",
+      "featureablation"    : "FeatureAblation",
+      "vitgradcam"         : "ViTGradCam",
+      "vitxgradcam"        : "ViTXGradCam",
+      "viteigencam"        : "ViTEigenCam",
     }
     # Return mapped name or title case fallback.
     return mapping.get(camTypeString.lower(), camTypeString.title())
@@ -2828,10 +3792,10 @@ class CAMExplainerTensorFlow(object):
     Dispatch to the requested CAM / attribution routine and return a heatmap.
 
     Parameters:
-      inputTensor (tf.Tensor): Input image tensor shaped (1, H, W, C).
+      inputTensor (tensorflow.Tensor): Input image tensor shaped (1, H, W, C).
       predictedClass (int): Index of the predicted class.
       targetForCam (int | None): Explicit target class index to explain.
-      targetLayer (tf.keras.layers.Layer | None): Convolutional layer to use for CAMs.
+      targetLayer (tensorflow.keras.layers.Layer | None): Convolutional layer to use for CAMs.
 
     Returns:
       numpy.ndarray: Heatmap normalized to [0,1].
@@ -2854,6 +3818,13 @@ class CAMExplainerTensorFlow(object):
       "occlusion"          : "ComputeOcclusion",
       "gradxinput"         : "ComputeGradXInput",
       "smoothgradcampp"    : "ComputeSmoothGradCamPlusPlusSaliency",
+      "hirescam"           : "ComputeHiResCamSaliency",
+      "attentionrollout"   : "ComputeAttentionRolloutSaliency",
+      "rise"               : "ComputeRISE",
+      "featureablation"    : "ComputeFeatureAblation",
+      "vitgradcam"         : "ComputeViTGradCamSaliency",
+      "vitxgradcam"        : "ComputeViTXGradCamSaliency",
+      "viteigencam"        : "ComputeViTEigenCamSaliency",
     }
     # Get the method name for the selected CAM type.
     chosen = funcMap.get(self.camType, "ComputeGradCamSaliency")
@@ -2874,9 +3845,9 @@ class CAMExplainerTensorFlow(object):
     Compute Grad-CAM heatmap for the predicted class.
 
     Parameters:
-      inputTensor (tf.Tensor): Input tensor shaped (1, H, W, C).
+      inputTensor (tensorflow.Tensor): Input tensor shaped (1, H, W, C).
       targetClass (int): Target class index to explain.
-      targetLayer (tf.keras.layers.Layer | None): Layer to hook for Grad-CAM.
+      targetLayer (tensorflow.keras.layers.Layer | None): Layer to hook for Grad-CAM.
 
     Returns:
       numpy.ndarray: Grad-CAM heatmap normalized to [0,1].
@@ -2960,9 +3931,9 @@ class CAMExplainerTensorFlow(object):
     Compute Grad-CAM++ heatmap for the predicted class.
 
     Parameters:
-      inputTensor (tf.Tensor): Input tensor shaped (1, H, W, C).
+      inputTensor (tensorflow.Tensor): Input tensor shaped (1, H, W, C).
       targetClass (int): Target class index to explain.
-      targetLayer (tf.keras.layers.Layer | None): Layer to hook for Grad-CAM++.
+      targetLayer (tensorflow.keras.layers.Layer | None): Layer to hook for Grad-CAM++.
 
     Returns:
       numpy.ndarray: Grad-CAM++ heatmap normalized to [0,1].
@@ -3045,9 +4016,9 @@ class CAMExplainerTensorFlow(object):
     Compute XGrad-CAM heatmap for the predicted class.
 
     Parameters:
-      inputTensor (tf.Tensor): Input tensor shaped (1, H, W, C).
+      inputTensor (tensorflow.Tensor): Input tensor shaped (1, H, W, C).
       targetClass (int): Target class index to explain.
-      targetLayer (tf.keras.layers.Layer | None): Layer to hook.
+      targetLayer (tensorflow.keras.layers.Layer | None): Layer to hook.
 
     Returns:
       numpy.ndarray: XGrad-CAM heatmap normalized to [0,1].
@@ -3116,8 +4087,8 @@ class CAMExplainerTensorFlow(object):
     Compute Eigen-CAM heatmap using activation PCA.
 
     Parameters:
-      inputTensor (tf.Tensor): Input tensor shaped (1, H, W, C).
-      targetLayer (tf.keras.layers.Layer | None): Layer to capture activations.
+      inputTensor (tensorflow.Tensor): Input tensor shaped (1, H, W, C).
+      targetLayer (tensorflow.keras.layers.Layer | None): Layer to capture activations.
 
     Returns:
       numpy.ndarray: Eigen-CAM heatmap normalized to [0,1].
@@ -3176,9 +4147,9 @@ class CAMExplainerTensorFlow(object):
     Compute Layer-CAM heatmap for the predicted class.
 
     Parameters:
-      inputTensor (tf.Tensor): Input tensor shaped (1, H, W, C).
+      inputTensor (tensorflow.Tensor): Input tensor shaped (1, H, W, C).
       targetClass (int): Target class index to explain.
-      targetLayer (tf.keras.layers.Layer | None): Layer to hook.
+      targetLayer (tensorflow.keras.layers.Layer | None): Layer to hook.
 
     Returns:
       numpy.ndarray: Layer-CAM heatmap normalized to [0,1].
@@ -3241,9 +4212,9 @@ class CAMExplainerTensorFlow(object):
     Compute Score-CAM heatmap (forward-based).
 
     Parameters:
-      inputTensor (tf.Tensor): Input tensor shaped (1, H, W, C).
+      inputTensor (tensorflow.Tensor): Input tensor shaped (1, H, W, C).
       targetClass (int): Target class index to explain.
-      targetLayer (tf.keras.layers.Layer | None): Layer to capture maps.
+      targetLayer (tensorflow.keras.layers.Layer | None): Layer to capture maps.
       topK (int): Number of top channels to consider.
 
     Returns:
@@ -3326,9 +4297,9 @@ class CAMExplainerTensorFlow(object):
     Compute Ablation-CAM heatmap by ablating top channels.
 
     Parameters:
-      inputTensor (tf.Tensor): Input tensor shaped (1, H, W, C).
+      inputTensor (tensorflow.Tensor): Input tensor shaped (1, H, W, C).
       targetClass (int): Target class index to explain.
-      targetLayer (tf.keras.layers.Layer | None): Layer to capture maps.
+      targetLayer (tensorflow.keras.layers.Layer | None): Layer to capture maps.
       topK (int): Number of top channels to ablate.
 
     Returns:
@@ -3392,9 +4363,9 @@ class CAMExplainerTensorFlow(object):
     Compute Integrated Gradients for the predicted class.
 
     Parameters:
-      inputTensor (tf.Tensor): Input tensor shaped (1, H, W, C).
+      inputTensor (tensorflow.Tensor): Input tensor shaped (1, H, W, C).
       targetClass (int): Target class index to explain.
-      targetLayer (tf.keras.layers.Layer | None): Not used.
+      targetLayer (tensorflow.keras.layers.Layer | None): Not used.
       steps (int): Number of interpolation steps.
 
     Returns:
@@ -3449,9 +4420,9 @@ class CAMExplainerTensorFlow(object):
     Compute Occlusion sensitivity map.
 
     Parameters:
-      inputTensor (tf.Tensor): Input tensor shaped (1, H, W, C).
+      inputTensor (tensorflow.Tensor): Input tensor shaped (1, H, W, C).
       targetClass (int): Target class index to explain.
-      targetLayer (tf.keras.layers.Layer | None): Not used.
+      targetLayer (tensorflow.keras.layers.Layer | None): Not used.
       patchSize (int): Size of square occlusion patch.
       stride (int): Stride to move the patch.
 
@@ -3502,9 +4473,9 @@ class CAMExplainerTensorFlow(object):
     Compute vanilla saliency map.
 
     Parameters:
-      inputTensor (tf.Tensor): Input tensor shaped (1, H, W, C).
+      inputTensor (tensorflow.Tensor): Input tensor shaped (1, H, W, C).
       targetClass (int): Target class index to explain.
-      targetLayer (tf.keras.layers.Layer | None): Not used.
+      targetLayer (tensorflow.keras.layers.Layer | None): Not used.
 
     Returns:
       numpy.ndarray: Saliency map normalized to [0,1].
@@ -3541,9 +4512,9 @@ class CAMExplainerTensorFlow(object):
     Compute SmoothGrad by averaging saliency maps.
 
     Parameters:
-      inputTensor (tf.Tensor): Input tensor shaped (1, H, W, C).
+      inputTensor (tensorflow.Tensor): Input tensor shaped (1, H, W, C).
       targetClass (int): Target class index to explain.
-      targetLayer (tf.keras.layers.Layer | None): Not used.
+      targetLayer (tensorflow.keras.layers.Layer | None): Not used.
       samples (int): Number of noisy samples.
       noiseLevel (float): Standard deviation of noise.
 
@@ -3578,9 +4549,9 @@ class CAMExplainerTensorFlow(object):
     Compute Grad x Input attributions.
 
     Parameters:
-      inputTensor (tf.Tensor): Input tensor shaped (1, H, W, C).
+      inputTensor (tensorflow.Tensor): Input tensor shaped (1, H, W, C).
       targetClass (int): Target class index to explain.
-      targetLayer (tf.keras.layers.Layer | None): Not used.
+      targetLayer (tensorflow.keras.layers.Layer | None): Not used.
 
     Returns:
       numpy.ndarray: Grad x Input attribution map normalized to [0,1].
@@ -3622,9 +4593,9 @@ class CAMExplainerTensorFlow(object):
     Compute SmoothGrad-CAM++ by averaging Grad-CAM++ maps.
 
     Parameters:
-      inputTensor (tf.Tensor): Input tensor shaped (1, H, W, C).
+      inputTensor (tensorflow.Tensor): Input tensor shaped (1, H, W, C).
       targetClass (int): Target class index to explain.
-      targetLayer (tf.keras.layers.Layer | None): Layer to hook.
+      targetLayer (tensorflow.keras.layers.Layer | None): Layer to hook.
       samples (int): Number of noisy samples.
       noiseLevel (float): Standard deviation of noise.
 
@@ -3657,6 +4628,687 @@ class CAMExplainerTensorFlow(object):
     if (avg.size and avg.max() > 0):
       avg = avg / float(avg.max())
     return avg.astype(np.float32)
+
+  def ComputeHiResCamSaliency(self, inputTensor, targetClass, targetLayer=None, device=None):
+    r'''
+    Compute HiRes-CAM heatmap for the predicted class using the instance model.
+
+    Parameters:
+      inputTensor (tensorflow.Tensor): Input tensor shaped (1, H, W, C).
+      targetClass (int): Target class index to explain.
+      targetLayer (tensorflow.keras.layers.Layer | None): Layer to extract activations and gradients from.
+      device (str | None): Device used for computation (ignored in TF, kept for API consistency).
+
+    Returns:
+      numpy.ndarray: HiRes-CAM heatmap normalized to [0, 1].
+    '''
+
+    model = self.tfModel
+    if (model is None):
+      raise RuntimeError("No model available on the explainer instance for HiRes-CAM.")
+
+    x = tf.convert_to_tensor(inputTensor, dtype=tf.float32)
+
+    resolvedLayer = self.ResolveTargetLayer(model, targetLayer) if (targetLayer is not None) else (
+      self.targetLayer if (self.targetLayer is not None) else self.GetLastConvLayer(model)
+    )
+    if (resolvedLayer is None):
+      raise RuntimeError("No Conv2D layer found for HiRes-CAM.")
+
+    # Create a model that outputs both the target layer's activation and the final logits.
+    tempModel = tf.keras.Model(inputs=model.inputs, outputs=[resolvedLayer.output, model.output])
+
+    with tf.GradientTape() as tape:
+      layerOut, logits = tempModel(x, training=False)
+
+      if (len(logits.shape) == 2):
+        score = logits[0, targetClass]
+      elif (len(logits.shape) == 1):
+        score = logits[targetClass]
+      else:
+        raise ValueError(f"Unexpected output shape: {logits.shape}")
+
+      # Compute gradients of the score with respect to the layer's output.
+      grad = tape.gradient(score, layerOut)
+      if (grad is None):
+        raise RuntimeError("HiRes-CAM failed to compute gradients for the target layer.")
+
+      # HiRes-CAM: element-wise product of gradient and activation, summed over channels, then ReLU.
+      # layerOut shape: (1, H, W, C).
+      # grad shape: (1, H, W, C).
+      # Multiply and sum over the channel axis (axis=-1).
+      hiResCam = tf.nn.relu(tf.reduce_sum(grad * layerOut, axis=-1, keepdims=True))
+
+      # Interpolate to input image size (H, W).
+      targetSize = (tf.shape(x)[1], tf.shape(x)[2])
+      hiResCam = tf.image.resize(hiResCam, targetSize, method=tf.image.ResizeMethod.BILINEAR)
+
+      # Normalize to [0, 1].
+      cam = hiResCam[0, :, :, 0].numpy()
+      cam = cam - np.min(cam)
+      if (np.max(cam) > 0):
+        cam = cam / np.max(cam)
+
+      return cam.astype(np.float32)
+
+  def ComputeAttentionRolloutSaliency(self, inputTensor, targetClass=None, targetLayer=None, device=None):
+    r'''
+    Compute Attention Rollout heatmap for Vision Transformers using the instance model.
+
+    Parameters:
+      inputTensor (tensorflow.Tensor): Input tensor shaped (1, H, W, C).
+      targetClass (int | None): Target class index (ignored for attention rollout, kept for API consistency).
+      targetLayer (tensorflow.keras.layers.Layer | None): Ignored for attention rollout.
+      device (str | None): Device used for computation (ignored in TF, kept for API consistency).
+
+    Returns:
+      numpy.ndarray: Attention Rollout heatmap normalized to [0, 1].
+    '''
+
+    model = self.tfModel
+    if (model is None):
+      raise RuntimeError("No model available on the explainer instance for Attention Rollout.")
+
+    x = tf.convert_to_tensor(inputTensor, dtype=tf.float32)
+
+    # Attempt to find attention layers.
+    attnLayers = []
+    for layer in model.layers:
+      if (isinstance(layer, tf.keras.layers.MultiHeadAttention) or
+        "attention" in layer.name.lower() or
+        hasattr(layer, "get_attention_weights")):
+        attnLayers.append(layer)
+
+    if (len(attnLayers) == 0):
+      raise RuntimeError(
+        "No attention layers found in the model for Attention Rollout. "
+        "Ensure your ViT model exposes attention weights "
+        "(e.g., via return_attention_scores=True or a custom attribute)."
+      )
+
+    attentions = []
+
+    # Perform a forward pass to populate any internal attention weight attributes.
+    _ = model(x, training=False)
+
+    for layer in attnLayers:
+      attn = None
+      if (hasattr(layer, "attention_weights")):
+        attn = layer.attention_weights
+      elif (hasattr(layer, "_attention_scores")):
+        attn = layer._attention_scores
+
+      if (attn is not None):
+        # Convert to tensor if it's a numpy array.
+        if (isinstance(attn, np.ndarray)):
+          attn = tf.convert_to_tensor(attn, dtype=tf.float32)
+        # Average over heads: (B, num_heads, seqLen, seqLen) -> (B, seqLen, seqLen).
+        if (len(attn.shape) == 4):
+          attn = tf.reduce_mean(attn, axis=1)
+        attentions.append(attn)
+
+    if (len(attentions) == 0):
+      raise RuntimeError(
+        "Attention hooks did not capture attention weights. "
+        "Your model must be configured to store or return attention weights "
+        "(e.g., setting return_attention_scores=True in MultiHeadAttention)."
+      )
+
+    # Attention Rollout algorithm.
+    # attentions is a list of tensors of shape (B, seqLen, seqLen).
+    B = tf.shape(attentions[0])[0]
+    seqLen = tf.shape(attentions[0])[1]
+
+    # Initialize rollout with identity matrix.
+    rollout = tf.eye(seqLen, batch_shape=[B], dtype=tf.float32)
+
+    for attn in attentions:
+      # Add residual connection.
+      attnWithResidual = attn + tf.eye(seqLen, batch_shape=[B], dtype=tf.float32)
+      # Normalize rows.
+      rowSums = tf.reduce_sum(attnWithResidual, axis=-1, keepdims=True)
+      attnWithResidual = attnWithResidual / (rowSums + 1e-8)
+      # Multiply.
+      rollout = tf.matmul(rollout, attnWithResidual)
+
+    # We want the attention from the CLS token (index 0) to all patch tokens.
+    # rollout shape: (B, seqLen, seqLen).
+    clsAttn = rollout[0, 0, 1:]  # Shape: (seqLen - 1,).
+
+    # Reshape to 2D spatial dimensions.
+    numPatches = tf.shape(clsAttn)[0]
+    gridSize = tf.cast(tf.round(tf.sqrt(tf.cast(numPatches, tf.float32))), tf.int32)
+
+    # Reshape to (1, gridSize, gridSize, 1).
+    cam = tf.reshape(clsAttn, [1, gridSize, gridSize, 1])
+
+    # Interpolate to input image size (H, W).
+    targetSize = (tf.shape(x)[1], tf.shape(x)[2])
+    cam = tf.image.resize(cam, targetSize, method=tf.image.ResizeMethod.BILINEAR)
+
+    # Normalize to [0, 1].
+    camNP = cam[0, :, :, 0].numpy()
+    camNP = camNP - np.min(camNP)
+    if (np.max(camNP) > 0):
+      camNP = camNP / np.max(camNP)
+
+    return camNP.astype(np.float32)
+
+  def ComputeRISE(
+    self, inputTensor, targetClass, targetLayer=None, device=None,
+    numMasks=200, maskResolution=16, p1=0.5
+  ):
+    r'''
+    Compute RISE (Randomized Input Sampling for Explanation) heatmap.
+
+    Parameters:
+      inputTensor (tensorflow.Tensor): Input tensor shaped (1, H, W, C).
+      targetClass (int): Target class index to explain.
+      targetLayer (tensorflow.keras.layers.Layer | None): Present for API compatibility but not used for RISE.
+      device (str | None): Device used for computation (ignored in TF, kept for API consistency).
+      numMasks (int): Number of random masks to generate.
+      maskResolution (int): Resolution of the low-res random masks.
+      p1 (float): Probability of keeping a pixel in the low-res mask.
+
+    Returns:
+      numpy.ndarray: RISE saliency map normalized to [0,1].
+    '''
+
+    # Assign the model to a local variable.
+    model = self.tfModel
+    # Check if the model is not available.
+    if (model is None):
+      # Raise a runtime error.
+      raise RuntimeError("No tf model available for RISE.")
+    # Extract the input shape.
+    inputShape = inputTensor.shape
+    # Extract the height dimension.
+    H = int(inputShape[1])
+    # Extract the width dimension.
+    W = int(inputShape[2])
+    # Convert the input tensor to a numpy array.
+    inputNp = inputTensor.numpy()[0]
+    # Initialize a zero tensor for the accumulated saliency.
+    saliency = np.zeros((H, W), dtype=np.float32)
+    # Get the base predictions.
+    preds = model(inputTensor)
+    # Check if the predictions are a list or tuple.
+    if (isinstance(preds, (list, tuple))):
+      # Extract the first element.
+      preds = preds[0]
+    # Extract the logits based on the output dimension.
+    logits = preds[0] if (len(preds.shape) == 2) else preds
+    # Determine the target class if it is not provided.
+    if (targetClass is None):
+      # Set the target class to the argmax of the logits.
+      targetClass = int(tf.argmax(logits[0] if len(logits.shape) == 2 else logits).numpy())
+    # Iterate for the specified number of masks.
+    for _ in range(numMasks):
+      # Generate a random binary mask at low resolution.
+      lowResMask = np.random.binomial(1, p1, size=(maskResolution, maskResolution)).astype(np.float32)
+      # Resize the mask to the full image size.
+      resizedMask = cv2.resize(lowResMask, (W, H), interpolation=cv2.INTER_LINEAR)
+      # Expand dimensions to match the input channels.
+      mask = np.expand_dims(resizedMask, axis=-1)
+      # Apply the mask to the input.
+      maskedInput = inputNp * mask
+      # Convert the masked input to a tensor.
+      maskedTensor = tf.convert_to_tensor(np.expand_dims(maskedInput, axis=0), dtype=tf.float32)
+      # Perform a forward pass with the masked input.
+      maskedPreds = model(maskedTensor)
+      # Check if the masked predictions are a list or tuple.
+      if (isinstance(maskedPreds, (list, tuple))):
+        # Extract the first element.
+        maskedPreds = maskedPreds[0]
+      # Extract the logits from the masked predictions.
+      maskedLogits = maskedPreds[0] if (len(maskedPreds.shape) == 2) else maskedPreds
+      # Compute the probability for the target class.
+      prob = float(tf.nn.softmax(maskedLogits, axis=-1)[0, targetClass].numpy()) if (
+        len(maskedLogits.shape) == 2) else float(tf.nn.softmax(maskedLogits, axis=-1)[targetClass].numpy())
+      # Accumulate the weighted mask based on the target probability.
+      saliency += resizedMask * prob
+    # Normalize the saliency by the number of masks.
+    saliency = saliency / numMasks
+    # Apply Gaussian blur for better visualization and reduced noise.
+    saliency = cv2.GaussianBlur(saliency, (15, 15), 5)
+    # Normalize the saliency by subtracting the minimum value.
+    saliency = saliency - saliency.min()
+    # Check if the maximum value is greater than zero.
+    if (saliency.max() > 0):
+      # Normalize the saliency by dividing by the maximum value.
+      saliency = saliency / saliency.max()
+    # Return the saliency map as a float32 numpy array.
+    return saliency.astype(np.float32)
+
+  def ComputeFeatureAblation(
+    self, inputTensor, targetClass, targetLayer=None, device=None,
+    windowSize=28, stride=14, baselineValue=0.0
+  ):
+    r'''
+    Compute Feature Ablation (Occlusion) heatmap by sliding a baseline window.
+
+    Parameters:
+      inputTensor (tensorflow.Tensor): Input tensor shaped (1, H, W, C).
+      targetClass (int): Target class index to explain.
+      targetLayer (tensorflow.keras.layers.Layer | None): Present for API compatibility but not used for Feature Ablation.
+      device (str | None): Device used for computation (ignored in TF, kept for API consistency).
+      windowSize (int): Size of the square occlusion window.
+      stride (int): Stride to move the occlusion window.
+      baselineValue (float): Value to fill the occluded region.
+
+    Returns:
+      numpy.ndarray: Feature Ablation saliency map normalized to [0,1].
+    '''
+
+    # Assign the model to a local variable.
+    model = self.tfModel
+    # Check if the model is not available.
+    if (model is None):
+      # Raise a runtime error.
+      raise RuntimeError("No tf model available for Feature Ablation.")
+    # Extract the input shape.
+    inputShape = inputTensor.shape
+    # Extract the height dimension.
+    H = int(inputShape[1])
+    # Extract the width dimension.
+    W = int(inputShape[2])
+    # Convert the input tensor to a numpy array.
+    inputNp = inputTensor.numpy()[0]
+    # Initialize a zero tensor for the accumulated saliency.
+    saliency = np.zeros((H, W), dtype=np.float32)
+    # Initialize a zero tensor for counting overlaps.
+    count = np.zeros((H, W), dtype=np.float32)
+    # Get the base predictions.
+    preds = model(inputTensor)
+    # Check if the predictions are a list or tuple.
+    if (isinstance(preds, (list, tuple))):
+      # Extract the first element.
+      preds = preds[0]
+    # Extract the logits based on the output dimension.
+    logits = preds[0] if (len(preds.shape) == 2) else preds
+    # Determine the target class if it is not provided.
+    if (targetClass is None):
+      # Set the target class to the argmax of the logits.
+      targetClass = int(tf.argmax(logits[0] if len(logits.shape) == 2 else logits).numpy())
+    # Compute the baseline probability for the target class.
+    baselineProb = float(tf.nn.softmax(logits, axis=-1)[0, targetClass].numpy()) if (len(logits.shape) == 2) else float(
+      tf.nn.softmax(logits, axis=-1)[targetClass].numpy())
+    # Iterate over the y-axis with the specified stride.
+    for y in range(0, H, stride):
+      # Iterate over the x-axis with the specified stride.
+      for xCoord in range(0, W, stride):
+        # Clone the input for occlusion.
+        occludedInput = inputNp.copy()
+        # Calculate the end y-coordinate for the window.
+        yEnd = min(y + windowSize, H)
+        # Calculate the end x-coordinate for the window.
+        xEnd = min(xCoord + windowSize, W)
+        # Occlude the region with the baseline value.
+        occludedInput[y:yEnd, xCoord:xEnd, :] = baselineValue
+        # Convert the occluded input to a tensor.
+        occludedTensor = tf.convert_to_tensor(np.expand_dims(occludedInput, axis=0), dtype=tf.float32)
+        # Perform a forward pass with the occluded input.
+        occludedPreds = model(occludedTensor)
+        # Check if the occluded predictions are a list or tuple.
+        if (isinstance(occludedPreds, (list, tuple))):
+          # Extract the first element.
+          occludedPreds = occludedPreds[0]
+        # Extract the logits from the occluded predictions.
+        occludedLogits = occludedPreds[0] if (len(occludedPreds.shape) == 2) else occludedPreds
+        # Compute the probability for the target class.
+        prob = float(tf.nn.softmax(occludedLogits, axis=-1)[0, targetClass].numpy()) if (
+          len(occludedLogits.shape) == 2) else float(tf.nn.softmax(occludedLogits, axis=-1)[targetClass].numpy())
+        # Calculate the importance as the drop in probability.
+        importance = max(0.0, baselineProb - prob)
+        # Accumulate the importance in the saliency map.
+        saliency[y:yEnd, xCoord:xEnd] += importance
+        # Accumulate the count of overlaps.
+        count[y:yEnd, xCoord:xEnd] += 1.0
+    # Add a small epsilon to avoid division by zero.
+    count[count == 0] = 1.0
+    # Average the importance values.
+    saliency = saliency / count
+    # Apply Gaussian blur for better visualization.
+    saliency = cv2.GaussianBlur(saliency, (21, 21), 7)
+    # Normalize the saliency by subtracting the minimum value.
+    saliency = saliency - saliency.min()
+    # Check if the maximum value is greater than zero.
+    if (saliency.max() > 0):
+      # Normalize the saliency by dividing by the maximum value.
+      saliency = saliency / saliency.max()
+    # Return the saliency map as a float32 numpy array.
+    return saliency.astype(np.float32)
+
+  def ComputeViTGradCamSaliency(self, inputTensor, targetClass, targetLayer=None, device=None):
+    r'''
+    Compute Grad-CAM heatmap for Vision Transformers using the instance model.
+
+    Parameters:
+      inputTensor (tensorflow.Tensor): Input tensor shaped (1, H, W, C).
+      targetClass (int): Target class index to explain.
+      targetLayer (tensorflow.keras.layers.Layer | None): Layer to attach hooks to for ViT Grad-CAM.
+      device (str | None): Device used for computation (ignored in TF, kept for API consistency).
+
+    Returns:
+      numpy.ndarray: ViT Grad-CAM heatmap normalized to [0,1].
+    '''
+
+    # Assign the model to a local variable.
+    model = self.tfModel
+    # Check if the model is not available.
+    if (model is None):
+      # Raise a runtime error.
+      raise RuntimeError("No tf model available for ViT Grad-CAM.")
+    # Resolve the target layer.
+    resolvedLayer = self.ResolveTargetLayer(model, targetLayer) if (targetLayer is not None) else (
+      self.targetLayer if (self.targetLayer is not None) else self.GetLastConvLayer(model))
+    # Check if the target layer is None and try to find a transformer block.
+    if (resolvedLayer is None):
+      # Initialize the last block name variable.
+      lastBlockName = None
+      # Iterate over layers to find the last transformer block.
+      for layer in model.layers:
+        # Check if the layer name contains 'block'.
+        if ("block" in layer.name.lower()):
+          # Update the last block name.
+          lastBlockName = layer.name
+      # Check if a block was found.
+      if (lastBlockName is not None):
+        # Find the layer by name.
+        for layer in model.layers:
+          # Check if the layer name matches.
+          if (layer.name == lastBlockName):
+            # Assign the layer to the resolved layer.
+            resolvedLayer = layer
+            # Break the loop.
+            break
+    # Check if the resolved layer is still None.
+    if (resolvedLayer is None):
+      # Raise a runtime error.
+      raise RuntimeError("Target layer not found for ViT Grad-CAM.")
+    # Convert the input tensor to float32.
+    x = tf.cast(inputTensor, tf.float32)
+    # Create a gradient tape for automatic differentiation.
+    with tf.GradientTape() as tape:
+      # Watch the input tensor.
+      tape.watch(x)
+      # Get the activations from the target layer.
+      try:
+        # Build a submodel for the target layer.
+        subModel = tf.keras.Model(inputs=model.inputs, outputs=resolvedLayer.output)
+        # Get activations.
+        activations = subModel(x)
+      except Exception:
+        # Raise a runtime error if submodel creation fails.
+        raise RuntimeError("Unable to obtain activations from target layer for ViT Grad-CAM.")
+      # Get the model predictions.
+      preds = model(x)
+      # Check if predictions are a list or tuple.
+      if (isinstance(preds, (list, tuple))):
+        # Extract the first element.
+        preds = preds[0]
+      # Extract the logits.
+      logits = preds[0] if (len(preds.shape) == 2) else preds
+      # Determine the target class if it is not provided.
+      if (targetClass is None):
+        # Set the target class to the argmax of the logits.
+        targetClass = int(tf.argmax(logits[0] if len(logits.shape) == 2 else logits).numpy())
+      # Extract the target score.
+      score = logits[0, targetClass] if (len(logits.shape) == 2) else logits[targetClass]
+    # Compute the gradients of the score with respect to the activations.
+    grads = tape.gradient(score, activations)
+    # Check if gradients are None.
+    if (grads is None):
+      # Raise a runtime error.
+      raise RuntimeError("ViT Grad-CAM hooks did not capture features/gradients.")
+    # Compute the global average pooling of gradients.
+    weights = tf.reduce_mean(grads, axis=-1, keepdims=True)
+    # Compute the weighted combination of features.
+    heatmap = tf.reduce_sum(weights * activations, axis=-1)
+    # Apply ReLU.
+    heatmap = tf.nn.relu(heatmap)
+    # Extract the sequence length.
+    seqLen = int(activations.shape[1])
+    # Calculate the spatial size.
+    spatialSize = int(np.round(np.sqrt(seqLen - 1)))
+    # Remove the CLS token and reshape.
+    heatmap = heatmap[:, 1:]
+    # Reshape to spatial dimensions.
+    heatmap = tf.reshape(heatmap, (1, spatialSize, spatialSize, 1))
+    # Extract the spatial dimensions from the input tensor.
+    targetH = int(inputTensor.shape[1])
+    targetW = int(inputTensor.shape[2])
+    # Upsample the heatmap to the input size.
+    heatmap = tf.image.resize(heatmap, (targetH, targetW), method="bilinear")
+    # Squeeze the extra dimensions.
+    heatmap = tf.squeeze(heatmap, axis=[0, -1])
+    # Convert the heatmap to a numpy array.
+    heatmapNp = heatmap.numpy()
+    # Normalize the heatmap by subtracting the minimum value.
+    heatmapNp = heatmapNp - heatmapNp.min()
+    # Check if the maximum value is greater than zero.
+    if (heatmapNp.max() > 0):
+      # Normalize the heatmap by dividing by the maximum value.
+      heatmapNp = heatmapNp / heatmapNp.max()
+    # Return the heatmap as a float32 numpy array.
+    return heatmapNp.astype(np.float32)
+
+  def ComputeViTXGradCamSaliency(self, inputTensor, targetClass, targetLayer=None, device=None):
+    r'''
+    Compute XGrad-CAM heatmap for Vision Transformers using the instance model.
+
+    Parameters:
+      inputTensor (tensorflow.Tensor): Input tensor shaped (1, H, W, C).
+      targetClass (int): Target class index to explain.
+      targetLayer (tensorflow.keras.layers.Layer | None): Layer to attach hooks to for ViT XGrad-CAM.
+      device (str | None): Device used for computation (ignored in TF, kept for API consistency).
+
+    Returns:
+      numpy.ndarray: ViT XGrad-CAM heatmap normalized to [0,1].
+    '''
+
+    # Assign the model to a local variable.
+    model = self.tfModel
+    # Check if the model is not available.
+    if (model is None):
+      # Raise a runtime error.
+      raise RuntimeError("No tf model available for ViT XGrad-CAM.")
+    # Resolve the target layer.
+    resolvedLayer = self.ResolveTargetLayer(model, targetLayer) if (targetLayer is not None) else (
+      self.targetLayer if (self.targetLayer is not None) else self.GetLastConvLayer(model))
+    # Check if the target layer is None and try to find a transformer block.
+    if (resolvedLayer is None):
+      # Initialize the last block name variable.
+      lastBlockName = None
+      # Iterate over layers to find the last transformer block.
+      for layer in model.layers:
+        # Check if the layer name contains 'block'.
+        if ("block" in layer.name.lower()):
+          # Update the last block name.
+          lastBlockName = layer.name
+      # Check if a block was found.
+      if (lastBlockName is not None):
+        # Find the layer by name.
+        for layer in model.layers:
+          # Check if the layer name matches.
+          if (layer.name == lastBlockName):
+            # Assign the layer to the resolved layer.
+            resolvedLayer = layer
+            # Break the loop.
+            break
+    # Check if the resolved layer is still None.
+    if (resolvedLayer is None):
+      # Raise a runtime error.
+      raise RuntimeError("Target layer not found for ViT XGrad-CAM.")
+    # Convert the input tensor to float32.
+    x = tf.cast(inputTensor, tf.float32)
+    # Create a gradient tape for automatic differentiation.
+    with tf.GradientTape() as tape:
+      # Watch the input tensor.
+      tape.watch(x)
+      # Get the activations from the target layer.
+      try:
+        # Build a submodel for the target layer.
+        subModel = tf.keras.Model(inputs=model.inputs, outputs=resolvedLayer.output)
+        # Get activations.
+        activations = subModel(x)
+      except Exception:
+        # Raise a runtime error if submodel creation fails.
+        raise RuntimeError("Unable to obtain activations from target layer for ViT XGrad-CAM.")
+      # Get the model predictions.
+      preds = model(x)
+      # Check if predictions are a list or tuple.
+      if (isinstance(preds, (list, tuple))):
+        # Extract the first element.
+        preds = preds[0]
+      # Extract the logits.
+      logits = preds[0] if (len(preds.shape) == 2) else preds
+      # Determine the target class if it is not provided.
+      if (targetClass is None):
+        # Set the target class to the argmax of the logits.
+        targetClass = int(tf.argmax(logits[0] if len(logits.shape) == 2 else logits).numpy())
+      # Extract the target score.
+      score = logits[0, targetClass] if (len(logits.shape) == 2) else logits[targetClass]
+    # Compute the gradients of the score with respect to the activations.
+    grads = tape.gradient(score, activations)
+    # Check if gradients are None.
+    if (grads is None):
+      # Raise a runtime error.
+      raise RuntimeError("ViT XGrad-CAM hooks did not capture features/gradients.")
+    # Scale gradients by activations to satisfy conservation axiom.
+    numerator = tf.reduce_sum(grads * activations, axis=-1, keepdims=True)
+    denominator = tf.reduce_sum(activations, axis=-1, keepdims=True) + 1e-8
+    alpha = numerator / denominator
+    # Compute the weighted combination of features.
+    heatmap = tf.reduce_sum(alpha * activations, axis=-1)
+    # Apply ReLU.
+    heatmap = tf.nn.relu(heatmap)
+    # Extract the sequence length.
+    seqLen = int(activations.shape[1])
+    # Calculate the spatial size.
+    spatialSize = int(np.round(np.sqrt(seqLen - 1)))
+    # Remove the CLS token and reshape.
+    heatmap = heatmap[:, 1:]
+    # Reshape to spatial dimensions.
+    heatmap = tf.reshape(heatmap, (1, spatialSize, spatialSize, 1))
+    # Extract the spatial dimensions from the input tensor.
+    targetH = int(inputTensor.shape[1])
+    targetW = int(inputTensor.shape[2])
+    # Upsample the heatmap to the input size.
+    heatmap = tf.image.resize(heatmap, (targetH, targetW), method="bilinear")
+    # Squeeze the extra dimensions.
+    heatmap = tf.squeeze(heatmap, axis=[0, -1])
+    # Convert the heatmap to a numpy array.
+    heatmapNp = heatmap.numpy()
+    # Normalize the heatmap by subtracting the minimum value.
+    heatmapNp = heatmapNp - heatmapNp.min()
+    # Check if the maximum value is greater than zero.
+    if (heatmapNp.max() > 0):
+      # Normalize the heatmap by dividing by the maximum value.
+      heatmapNp = heatmapNp / heatmapNp.max()
+    # Return the heatmap as a float32 numpy array.
+    return heatmapNp.astype(np.float32)
+
+  def ComputeViTEigenCamSaliency(self, inputTensor, targetClass=None, targetLayer=None, device=None):
+    r'''
+    Compute Eigen-CAM heatmap for Vision Transformers using activation PCA.
+
+    Parameters:
+      inputTensor (tensorflow.Tensor): Input tensor shaped (1, H, W, C).
+      targetClass (int | None): Target class index (ignored for Eigen-CAM, kept for API consistency).
+      targetLayer (tensorflow.keras.layers.Layer | None): Layer to attach hooks to for ViT Eigen-CAM.
+      device (str | None): Device used for computation (ignored in TF, kept for API consistency).
+
+    Returns:
+      numpy.ndarray: ViT Eigen-CAM heatmap normalized to [0,1].
+    '''
+
+    # Assign the model to a local variable.
+    model = self.tfModel
+    # Check if the model is not available.
+    if (model is None):
+      # Raise a runtime error.
+      raise RuntimeError("No tf model available for ViT Eigen-CAM.")
+    # Resolve the target layer.
+    resolvedLayer = self.ResolveTargetLayer(model, targetLayer) if (targetLayer is not None) else (
+      self.targetLayer if (self.targetLayer is not None) else self.GetLastConvLayer(model))
+    # Check if the target layer is None and try to find a transformer block.
+    if (resolvedLayer is None):
+      # Initialize the last block name variable.
+      lastBlockName = None
+      # Iterate over layers to find the last transformer block.
+      for layer in model.layers:
+        # Check if the layer name contains 'block'.
+        if ("block" in layer.name.lower()):
+          # Update the last block name.
+          lastBlockName = layer.name
+      # Check if a block was found.
+      if (lastBlockName is not None):
+        # Find the layer by name.
+        for layer in model.layers:
+          # Check if the layer name matches.
+          if (layer.name == lastBlockName):
+            # Assign the layer to the resolved layer.
+            resolvedLayer = layer
+            # Break the loop.
+            break
+    # Check if the resolved layer is still None.
+    if (resolvedLayer is None):
+      # Raise a runtime error.
+      raise RuntimeError("Target layer not found for ViT Eigen-CAM.")
+    # Convert the input tensor to float32.
+    x = tf.cast(inputTensor, tf.float32)
+    # Get the activations from the target layer without gradients.
+    try:
+      # Build a submodel for the target layer.
+      subModel = tf.keras.Model(inputs=model.inputs, outputs=resolvedLayer.output)
+      # Get activations.
+      activations = subModel(x)
+    except Exception:
+      # Raise a runtime error if submodel creation fails.
+      raise RuntimeError("ViT Eigen-CAM hook did not capture features.")
+    # Squeeze the batch dimension.
+    featuresSqueezed = activations[0]
+    # Center the features.
+    featuresCentered = featuresSqueezed - tf.reduce_mean(featuresSqueezed, axis=0, keepdims=True)
+    # Perform SVD.
+    try:
+      # Compute SVD.
+      s, u, v = tf.linalg.svd(featuresCentered, full_matrices=False)
+      # Extract the principal component.
+      principalComponent = v[:, 0]
+    except Exception:
+      # Raise a runtime error if SVD fails.
+      raise RuntimeError("SVD failed for ViT Eigen-CAM.")
+    # Project activations onto the principal component.
+    heatmap = tf.abs(tf.matmul(featuresCentered, tf.expand_dims(principalComponent, axis=-1)))
+    # Squeeze the last dimension.
+    heatmap = tf.squeeze(heatmap, axis=-1)
+    # Extract the sequence length.
+    seqLen = int(featuresSqueezed.shape[0])
+    # Calculate the spatial size.
+    spatialSize = int(np.round(np.sqrt(seqLen - 1)))
+    # Remove the CLS token and reshape.
+    heatmap = heatmap[1:]
+    # Reshape to spatial dimensions.
+    heatmap = tf.reshape(heatmap, (spatialSize, spatialSize, 1))
+    # Extract the spatial dimensions from the input tensor.
+    targetH = int(inputTensor.shape[1])
+    targetW = int(inputTensor.shape[2])
+    # Upsample the heatmap to the input size.
+    heatmap = tf.image.resize(heatmap, (targetH, targetW), method="bilinear")
+    # Squeeze the channel dimension.
+    heatmap = tf.squeeze(heatmap, axis=-1)
+    # Convert the heatmap to a numpy array.
+    heatmapNp = heatmap.numpy()
+    # Normalize the heatmap by subtracting the minimum value.
+    heatmapNp = heatmapNp - heatmapNp.min()
+    # Check if the maximum value is greater than zero.
+    if (heatmapNp.max() > 0):
+      # Normalize the heatmap by dividing by the maximum value.
+      heatmapNp = heatmapNp / heatmapNp.max()
+    # Return the heatmap as a float32 numpy array.
+    return heatmapNp.astype(np.float32)
 
   def ProcessImage(
     self,
@@ -4896,7 +6548,7 @@ def TFGradCam(
 
   Parameters:
     model (tensorflow.keras.Model): Trained Keras model.
-    imgTensor (numpy.ndarray or tf.Tensor): Shape (1,H,W,3) preprocessed input.
+    imgTensor (numpy.ndarray or tensorflow.Tensor): Shape (1,H,W,3) preprocessed input.
     classIdx (int or None): Target class index; if None uses model prediction.
     lastConvLayerName (str|None): Specify conv layer name; if None pick last Conv2D.
 
@@ -4988,14 +6640,14 @@ def SaveTFGradCamsForSamples(
   -------
   .. code-block:: python
 
-    from HMB.ExplainabilityHelper import SaveGradCamsForSamples
+    from HMB.ExplainabilityHelper import SaveTFGradCamsForSamples
 
     model = ...  # Load or build model.
     imgPaths = [...]  # List of image file paths.
     sampleIndices = [0, 5, 10]  # Indices of samples to visualize.
     outFolder = "GradCAM_Overlays"
 
-    SaveGradCamsForSamples(
+    SaveTFGradCamsForSamples(
       model,
       imgPaths,
       sampleIndices,
@@ -5159,132 +6811,215 @@ def ShapSummaryPlot(
     dpi (int): Dots per inch for saved figure resolution (default: 720).
   '''
 
+  # Import the shap library for generating summary plots.
   import shap
 
   # Create a new default_rng instance to avoid using the global RNG.
   rngObj = np.random.default_rng()
 
-  # Helper to save the current figure using the centralized helper and always
-  # ensure both PDF and PNG siblings are exported where possible.
-  def _SaveBase(name_base: str):
+  # Define a helper to save the current figure using the centralized helper.
+  def _SaveBase(nameBase: str):
+    # Attempt to save the figure with both PDF and PNG exports.
     try:
-      SaveMatplotlibFigure(name_base, fig=plt.gcf(), dpi=dpi, exportPdf=True, exportPng=True)
+      # Call the centralized figure saving utility.
+      SaveMatplotlibFigure(nameBase, fig=plt.gcf(), dpi=dpi, exportPdf=True, exportPng=True)
+    # Catch any exceptions during the primary save attempt.
     except Exception:
-      # Best-effort save: try minimal save without specifying extras.
+      # Attempt a minimal save without specifying extra formats.
       try:
-        SaveMatplotlibFigure(name_base, fig=plt.gcf())
+        # Call the centralized figure saving utility with default parameters.
+        SaveMatplotlibFigure(nameBase, fig=plt.gcf())
+      # Catch any exceptions during the fallback save attempt.
       except Exception:
+        # Silently ignore errors to prevent pipeline failure.
         pass
 
-  # Try summary plot first (preferred global view).
+  # Define a helper to normalize multi-class or list-based SHAP values.
+  def _NormalizeForPlot(sv):
+    # Extract the first element if the input is a list of explanations.
+    if (isinstance(sv, list)):
+      # Reassign the first element to the working variable.
+      sv = sv[0]
+    # Handle Explanation objects with 3D values representing multi-class outputs.
+    if (hasattr(sv, "values") and np.array(sv.values).ndim == 3):
+      # Retrieve the base values attribute from the explanation object.
+      baseVal = getattr(sv, "base_values", None)
+      # Extract the scalar base value for the first class to avoid ambiguous truth value errors.
+      if (isinstance(baseVal, np.ndarray) and baseVal.ndim > 0):
+        # Reassign the first element of the base values array.
+        baseVal = baseVal[0]
+      # Return a new Explanation object restricted to the first class.
+      return shap.Explanation(
+        values=sv.values[:, :, 0],
+        data=sv.data,
+        feature_names=getattr(sv, "feature_names", None),
+        base_values=baseVal
+      )
+    # Handle raw 3D numpy arrays by extracting the first class.
+    if (isinstance(sv, np.ndarray) and sv.ndim == 3):
+      # Return the sliced array for the first class.
+      return sv[:, :, 0]
+    # Return the input unchanged if it is already 2D.
+    return sv
+
+  # Normalize values for plots that require 2D data.
+  plotVals = _NormalizeForPlot(shapValues)
+
+  # Try the summary plot first as the preferred global view.
   try:
+    # Generate the SHAP summary plot with the random number generator.
     shap.summary_plot(shapValues, feature_names=featureNames, show=show, rng=rngObj)
+  # Fallback when shap.summary_plot does not accept the rng parameter.
   except TypeError:
-    # Fallback when shap.summary_plot does not accept rng parameter.
+    # Generate the SHAP summary plot without the random number generator.
     shap.summary_plot(shapValues, feature_names=featureNames, show=show)
 
-  # Save the main summary plot (base name without extension so both PDF and PNG are created).
+  # Save the main summary plot if a save path is provided.
   if (savePath is not None):
+    # Extract the base name without extension for saving multiple formats.
     base = os.path.splitext(str(savePath))[0]
+    # Save the summary plot using the helper function.
     _SaveBase(base + "_Summary")
+    # Close the current figure to free memory.
     plt.close()
 
-    # Attempt to create and save several commonly useful SHAP visualizations that users expect.
-    # Each plotting call is guarded to avoid failing the whole pipeline if a particular plot errors.
+    # Attempt to create and save the beeswarm plot.
     try:
-      # Beeswarm (global distribution of feature impacts)
-      shap.plots.beeswarm(shapValues, max_display=20, show=False)
+      # Generate the beeswarm plot showing the global distribution of feature impacts.
+      shap.plots.beeswarm(plotVals, max_display=20, show=False)
+      # Save the beeswarm plot using the helper function.
       _SaveBase(base + "_Beeswarm")
+      # Close the current figure to free memory.
       plt.close()
+    # Catch and print any exceptions during beeswarm plot creation.
     except Exception as ex:
+      # Print a warning message with the exception details.
       print(f"[WARN] Failed to create SHAP beeswarm plot: {ex}")
 
+    # Attempt to create and save the bar plot.
     try:
-      # Bar (mean absolute importance)
-      shap.plots.bar(shapValues, max_display=20, show=False)
+      # Generate the bar plot showing mean absolute importance.
+      shap.plots.bar(plotVals, max_display=20, show=False)
+      # Save the bar plot using the helper function.
       _SaveBase(base + "_Bar")
+      # Close the current figure to free memory.
       plt.close()
+    # Catch and print any exceptions during bar plot creation.
     except Exception as ex:
+      # Print a warning message with the exception details.
       print(f"[WARN] Failed to create SHAP bar plot: {ex}")
 
+    # Attempt to create and save the scatter plot.
     try:
-      # Scatter (feature vs SHAP value) - may be heavy for large datasets, use subset behaviour inside SHAP.
-      shap.plots.scatter(shapValues, show=False)
+      # Generate the scatter plot showing feature versus SHAP value.
+      shap.plots.scatter(plotVals, show=False)
+      # Save the scatter plot using the helper function.
       _SaveBase(base + "_Scatter")
+      # Close the current figure to free memory.
       plt.close()
+    # Catch and print any exceptions during scatter plot creation.
     except Exception as ex:
+      # Print a warning message with the exception details.
       print(f"[WARN] Failed to create SHAP scatter plot: {ex}")
 
+    # Attempt to create and save the decision plot.
     try:
-      # Decision plot for a subset of instances (up to 50) when available.
-      # Prepare shap_values and data if the object exposes .values / .data.
-      if (hasattr(shapValues, "values") and hasattr(shapValues, "data")):
-        nInst = min(50, int(np.array(shapValues.values).shape[0]))
+      # Check if the normalized values expose the required attributes for decision plotting.
+      if (hasattr(plotVals, "values") and hasattr(plotVals, "data")):
+        # Calculate the number of instances to plot, up to a maximum of fifty.
+        nInst = min(50, int(np.array(plotVals.values).shape[0]))
+        # Generate the decision plot for the subset of instances.
         shap.decision_plot(
-          getattr(shapValues, "base_values", None) or None,
-          shapValues.values[:nInst],
-          features=(shapValues.data[:nInst] if (hasattr(shapValues, "data")) else None),
+          getattr(plotVals, "base_values", None) or None,
+          plotVals.values[:nInst],
+          features=(plotVals.data[:nInst] if (hasattr(plotVals, "data")) else None),
           show=False
         )
+      # Use a generic fallback if the attributes are not exposed.
       else:
-        # Generic fallback: try decision_plot directly
-        shap.decision_plot(None, shapValues, show=False)
+        # Generate the decision plot directly with the normalized values.
+        shap.decision_plot(None, plotVals, show=False)
+      # Save the decision plot using the helper function.
       _SaveBase(base + "_Decision")
+      # Close the current figure to free memory.
       plt.close()
+    # Catch and print any exceptions during decision plot creation.
     except Exception as ex:
+      # Print a warning message with the exception details.
       print(f"[WARN] Failed to create SHAP decision plot: {ex}")
 
+    # Attempt to create and save dependence plots for the top features.
     try:
-      # Dependence plots for the top 3 features by mean |SHAP| when feature names are available.
-      if (featureNames is None and hasattr(shapValues, "data")):
-        featureNames = list(range(np.array(shapValues.values).shape[1]))
+      # Generate default feature names if they are not provided and data is available.
+      if (featureNames is None and hasattr(plotVals, "data")):
+        # Create a list of integer indices as feature names.
+        featureNames = list(range(np.array(plotVals.values).shape[1]))
+      # Attempt to calculate the mean absolute SHAP values to find top features.
       try:
-        meanAbs = np.abs(shapValues.values).mean(0)
+        # Calculate the mean absolute SHAP values across all instances.
+        meanAbs = np.abs(plotVals.values).mean(0)
+        # Find the indices of the top three features by mean absolute SHAP value.
         topIdx = np.argsort(meanAbs)[-3:][::-1]
+      # Catch any exceptions during the top feature calculation.
       except Exception:
+        # Set the top indices to None if calculation fails.
         topIdx = None
+      # Generate dependence plots if top indices were successfully calculated.
       if (topIdx is not None):
+        # Iterate over the indices of the top three features.
         for i in topIdx:
+          # Attempt to generate and save the dependence plot for the current feature.
           try:
-            shap.dependence_plot(int(i), shapValues.values, shapValues.data, interaction_index="auto", show=False)
+            # Generate the dependence plot for the current feature index.
+            shap.dependence_plot(int(i), plotVals.values, plotVals.data, interaction_index="auto", show=False)
+            # Save the dependence plot using the helper function.
             _SaveBase(f"{base}_Dependence_{i}")
+            # Close the current figure to free memory.
             plt.close()
+          # Catch and ignore any exceptions during dependence plot creation.
           except Exception:
+            # Continue to the next feature index if an error occurs.
             continue
+    # Catch and print any exceptions during the dependence plots creation.
     except Exception as ex:
+      # Print a warning message with the exception details.
       print(f"[WARN] Failed to create SHAP dependence plots: {ex}")
 
 
-def ExtractAttentionWeights(model: Any, xArray: np.ndarray, layerType: str = "MultiheadAttention") -> List[np.ndarray]:
+def ExtractAttentionWeights(model: Any, xArray: np.ndarray) -> List[np.ndarray]:
   r'''
   Extract attention weight tensors from transformer-like modules in a model.
 
   Parameters:
     model (Any): PyTorch model containing MultiheadAttention or TransformerEncoderLayer modules.
     xArray (numpy.ndarray): Input array to run a forward pass (shape depends on model).
-    layerType (str): String hint for layer type (default: "MultiheadAttention").
 
   Returns:
     List[numpy.ndarray]: List of attention weight arrays extracted from hooks.
   '''
 
-  # Ensure torch is available.
+  # Ensure that CUDA is available for the model.
   EnsureCUDAAvailable()
-  # Collect modules that appear to be attention layers.
+  # Initialize an empty list to collect attention modules.
   attnModules = []
-  # Iterate named modules in the model.
+  # Iterate over the named modules in the model.
   for nameModule, moduleObj in model.named_modules():
-    # Check module class name for Multihead-like attention.
-    if (moduleObj.__class__.__name__ == "MultiheadAttention") or (
-      "MultiHeadAttention" in moduleObj.__class__.__name__) or ("Multihead" in moduleObj.__class__.__name__):
+    # Check the module class name for Multihead-like attention.
+    if ((moduleObj.__class__.__name__ == "MultiheadAttention") or (
+      "MultiHeadAttention" in moduleObj.__class__.__name__) or ("Multihead" in moduleObj.__class__.__name__)):
+      # Append the matching module and its name to the list.
       attnModules.append((nameModule, moduleObj))
-  # If none found, search for TransformerEncoderLayer with self_attn attribute.
+  # Search for TransformerEncoderLayer with a self_attn attribute if none were found.
   if (len(attnModules) == 0):
+    # Iterate over the named modules in the model again.
     for nameModule, moduleObj in model.named_modules():
-      if (moduleObj.__class__.__name__ == "TransformerEncoderLayer") and (hasattr(moduleObj, "self_attn")):
+      # Check if the module is a TransformerEncoderLayer and has a self_attn attribute.
+      if ((moduleObj.__class__.__name__ == "TransformerEncoderLayer") and (hasattr(moduleObj, "self_attn"))):
+        # Append the self_attn module and its constructed name to the list.
         attnModules.append((nameModule + ".self_attn", moduleObj.self_attn))
-  # Raise when no attention-like modules were discovered.
+  # Raise an error when no attention-like modules were discovered.
   if (len(attnModules) == 0):
+    # Raise a RuntimeError with a descriptive message.
     raise RuntimeError(
       "No MultiheadAttention-like modules found to extract weights from. "
       "Consider modifying the model to expose attention weights or use hooks in the Transformer layers."
@@ -5292,22 +7027,24 @@ def ExtractAttentionWeights(model: Any, xArray: np.ndarray, layerType: str = "Mu
 
   # Prepare a dictionary to collect attention weight outputs.
   attnWeightsCollected = {name: [] for (name, _) in attnModules}
-  # Prepare a list for hook handles.
+  # Prepare an empty list for hook handles.
   hookHandles = []
 
   # Create a forward hook factory that captures attention weight outputs.
   def MakeHook(hookName: str):
-    # Define the actual hook function.
+    # Define the actual hook function to capture outputs.
     def Hook(module, inputVals, outputVals):
-      # Output typically contains attn_output and attn_output_weights for nn.MultiheadAttention.
+      # Check if the output is a tuple with at least two elements.
       if (isinstance(outputVals, tuple) and (len(outputVals) >= 2)):
-        # Select the attention weight tensor.
+        # Select the attention weight tensor from the second element.
         w = outputVals[1]
+        # Attempt to detach and convert the tensor to a numpy array.
         try:
-          # Detach and convert to numpy when possible.
+          # Append the converted numpy array to the collected weights.
           attnWeightsCollected[hookName].append(w.detach().cpu().numpy())
+        # Fallback to numpy conversion for unknown types.
         except Exception:
-          # Fallback to numpy conversion for unknown types.
+          # Append the array converted via numpy to the collected weights.
           attnWeightsCollected[hookName].append(np.array(w))
 
     # Return the constructed hook function.
@@ -5315,29 +7052,34 @@ def ExtractAttentionWeights(model: Any, xArray: np.ndarray, layerType: str = "Mu
 
   # Register hooks on each attention-like module.
   for (nameModule, moduleObj) in attnModules:
+    # Append the registered forward hook handle to the list.
     hookHandles.append(moduleObj.register_forward_hook(MakeHook(nameModule)))
 
-  # Run a forward pass in evaluation mode to trigger hooks.
+  # Set the model to evaluation mode to trigger hooks.
   model.eval()
+  # Disable gradient calculation for the forward pass.
   with torch.no_grad():
-    # Convert numpy input to tensor and send to model device.
+    # Convert the numpy input to a tensor and send it to the model device.
     xTensor = torch.from_numpy(xArray).float().to(next(model.parameters()).device)
     # Execute the model forward pass.
     _ = model(xTensor)
 
-  # Remove all registered hooks.
+  # Remove all registered hooks from the model.
   for h in hookHandles:
+    # Remove the current hook handle.
     h.remove()
 
-  # Aggregate collected outputs into a results list.
+  # Initialize an empty list to aggregate collected outputs.
   resultsList = []
+  # Iterate over the keys in the collected weights dictionary.
   for nameKey in attnWeightsCollected:
-    # Retrieve captured arrays for this module.
+    # Retrieve the captured arrays for the current module.
     arrs = attnWeightsCollected[nameKey]
     # Skip modules that produced no outputs.
     if (len(arrs) == 0):
+      # Continue to the next module if no outputs were captured.
       continue
-    # Concatenate along the batch/forward dimension and append to results.
+    # Concatenate the arrays along the batch dimension and append to results.
     resultsList.append(np.concatenate([np.asarray(a) for a in arrs], axis=0))
   # Return the collected attention weight arrays.
   return resultsList

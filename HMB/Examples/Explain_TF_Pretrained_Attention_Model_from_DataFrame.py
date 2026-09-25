@@ -10,23 +10,7 @@ from HMB.ExplainabilityHelper import (
   UMAPFeaturesExplainability
 )
 from HMB.Initializations import UpdateMatplotlibSettings
-
-# Ensure all prints flush by default to make logs appear promptly.
-# Save the original built-in print function for delegation.
-_original_print = builtins.print
-
-
-# Define a wrapper that sets flush=True when not explicitly provided.
-def print(*args, **kwargs):
-  # Ensure flush is True by default when not provided.
-  if ("flush" not in kwargs):
-    kwargs["flush"] = True
-  # Delegate to the original print implementation.
-  return _original_print(*args, **kwargs)
-
-
-# Override the built-in print with our wrapper to ensure all prints are flushed immediately.
-builtins.print = print
+from HMB.Utils import fprint
 
 
 def PrepareDataFrame(basePaths, categories):
@@ -159,10 +143,10 @@ def Explain(args):
   inputShape = (args.imgSize, args.imgSize, 3)
   numClasses = len(labelEncoder.classes_)
 
-  print("Base Model String:", baseModelString)
-  print("Attention Block String:", attentionBlockStr)
-  print("Input Shape:", inputShape)
-  print("Num Classes:", numClasses)
+  fprint("Base Model String:", baseModelString)
+  fprint("Attention Block String:", attentionBlockStr)
+  fprint("Input Shape:", inputShape)
+  fprint("Num Classes:", numClasses)
 
   model = BuildPretrainedAttentionModel(
     baseModelString,
@@ -265,6 +249,13 @@ def Explain(args):
         "occlusion",
         "gradxinput",
         "smoothgradcampp",
+        "hirescam",
+        "attentionrollout",
+        "rise",
+        "featureablation",
+        "vitgradcam",
+        "vitxgradcam",
+        "viteigencam",
       ]
     else:
       camTypes = [args.camType]
@@ -292,9 +283,9 @@ def Explain(args):
             classNames=classNames,
           )
         except Exception as ex:
-          print(f"Warning: CAM failed for {imgPath}: {ex}")
+          fprint(f"Warning: CAM failed for {imgPath}: {ex}")
 
-  print("Saved visualizations to", outDir)
+  fprint("Saved visualizations to", outDir)
 
 
 def ParseArgs():

@@ -82,3 +82,4 @@ patchify==0.2.3
 codecarbon==3.2.6
 av==17.0.1
 language_tool_python==3.4.0
+imagecodecs==2026.1.14

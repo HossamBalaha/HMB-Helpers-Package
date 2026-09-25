@@ -1,13 +1,14 @@
-import torch, os, argparse, json, builtins, shutil, tqdm
+import torch, os, argparse, json, shutil, tqdm
 import numpy as np
 import pandas as pd
-from collections import Counter
+from pathlib import Path
 from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import train_test_split
 from torch.utils.data import TensorDataset, DataLoader
+from HMB.Utils import fprint
 from HMB.PyTorchHelper import LoadModel
 from HMB.PyTorchTabularModelsZoo import GetModel
-from HMB.DatasetsHelper import TabularPreprocessor
+from HMB.DatasetsHelper import TabularPreprocessor, SafeReadCsv
 from HMB.PyTorchClassificationLosses import FocalLossAlt
 from HMB.Initializations import UpdateMatplotlibSettings, DoRandomSeeding
 from HMB.PyTorchTrainingPipeline import PyTorchClassificationTrainingPipeline
@@ -19,23 +20,6 @@ from HMB.PerformanceMetrics import (
   CalculatePerformanceMetrics, PlotMultiTrialROCAUC,
   PlotMultiTrialPRCurve, HistoryPlotter
 )
-
-# Ensure all prints flush by default to make logs appear promptly.
-# Save the original built-in print function for delegation.
-_original_print = builtins.print
-
-
-# Define a wrapper that sets flush=True when not explicitly provided.
-def print(*args, **kwargs):
-  # Ensure flush is True by default when not provided.
-  if ("flush" not in kwargs):
-    kwargs["flush"] = True
-  # Delegate to the original print implementation.
-  return _original_print(*args, **kwargs)
-
-
-# Override the built-in print with our wrapper to ensure all prints are flushed immediately.
-builtins.print = print
 
 
 def GetArgs():
@@ -98,6 +82,18 @@ def GetArgs():
     action="store_true",
     help="Whether to only run the fused model phase without running individual model training or statistical analysis."
   )
+  parser.add_argument(
+    "--crossExperimentStats",
+    action="store_true",
+    help="Whether to perform statistical analysis across different models/experiments (not just within trials)."
+  )
+  parser.add_argument(
+    "--groupBy",
+    type=str,
+    default="model",
+    choices=("model", "dataset", "both"),
+    help="How to group experiments for cross-analysis: by model, dataset, or both."
+  )
   args = parser.parse_args()
   return args
 
@@ -135,8 +131,8 @@ def WeightedMajorityVote(
   # Convert the input weights list into a numpy array for mathematical operations.
   weightsArr = np.array(weightsList, dtype=float)
   if (verbose):
-    print(f"Performing weighted majority vote with predictions: {predsList} and weights: {weightsArr}")
-    print(f"Unique classes considered for voting: {uniqueClasses}")
+    fprint(f"Performing weighted majority vote with predictions: {predsList} and weights: {weightsArr}")
+    fprint(f"Unique classes considered for voting: {uniqueClasses}")
   # Create an accumulator array initialized to zero for weighted class votes.
   classVotes = np.zeros(len(uniqueClasses), dtype=float)
   # Calculate the total sum of the provided weights for normalization.
@@ -150,7 +146,7 @@ def WeightedMajorityVote(
   # Normalize the weights to ensure they sum to unity for averaging.
   normWeights = weightsArr / totalWeight
   if (verbose):
-    print(f"Normalized weights for voting: {normWeights}")
+    fprint(f"Normalized weights for voting: {normWeights}")
   # Iterate through each model's prediction and its corresponding normalized weight.
   for pred, w in zip(predsList, normWeights):
     # Check if the predicted class is among the unique classes considered for voting.
@@ -160,13 +156,13 @@ def WeightedMajorityVote(
       # Accumulate the normalized weight for the predicted class index.
       classVotes[classIdx] += w
   if (verbose):
-    print(f"Accumulated class votes: {classVotes}")
+    fprint(f"Accumulated class votes: {classVotes}")
   # Determine the index of the class with the highest accumulated vote.
   fusedClassIdx = np.argmax(classVotes)
   # Retrieve the class name corresponding to the fused class index.
   fusedClass = uniqueClasses[fusedClassIdx]
   if (verbose):
-    print(f"Fused prediction: {fusedClass} with index: {fusedClassIdx}")
+    fprint(f"Fused prediction: {fusedClass} with index: {fusedClassIdx}")
   # If probability vectors are provided, compute the weighted average probability vector.
   fusedProbVec = None
   if (probsList is not None):
@@ -182,21 +178,21 @@ def WeightedMajorityVote(
           # Accumulate the weighted probabilities for each class index.
           probAccumulator += w * probArr
     if (verbose):
-      print(f"Accumulated weighted probabilities: {probAccumulator}")
+      fprint(f"Accumulated weighted probabilities: {probAccumulator}")
     # Normalize the accumulated probabilities to ensure they sum to 1.
     if (probAccumulator.sum() > 0):
       fusedProbVec = (probAccumulator / probAccumulator.sum()).tolist()
       if (verbose):
-        print(f"Normalized fused probability vector: {fusedProbVec}")
+        fprint(f"Normalized fused probability vector: {fusedProbVec}")
       fusedClass = uniqueClasses[np.argmax(fusedProbVec)]
       if (verbose):
-        print(f"Fused prediction based on probabilities: {fusedClass} (index: {np.argmax(fusedProbVec)})")
+        fprint(f"Fused prediction based on probabilities: {fusedClass} (index: {np.argmax(fusedProbVec)})")
     else:
       if (verbose):
-        print("Warning: Sum of accumulated probabilities is zero; cannot normalize.")
+        fprint("Warning: Sum of accumulated probabilities is zero; cannot normalize.")
 
   if (verbose):
-    print(f"Final fused prediction: {fusedClass} (index: {fusedClassIdx}), fused probability vector: {fusedProbVec}")
+    fprint(f"Final fused prediction: {fusedClass} (index: {fusedClassIdx}), fused probability vector: {fusedProbVec}")
   return fusedClass, fusedProbVec
 
 
@@ -261,15 +257,15 @@ def FuseModelsFromData(
   outModelName="FusedModel"
 ):
   # Print the dataset directory currently being processed.
-  print(f"Processing dataset folder: {experimentPath}.")
+  fprint(f"Processing dataset folder: {experimentPath}.")
   # Initialize a list to store models that actually exist in the directory.
   existingModels = [m for m in models if (os.path.isdir(os.path.join(experimentPath, m)))]
   # Warn the user if some configured models are missing from the directory.
   if (len(existingModels) < len(models)):
-    print(f"Warning: some configured models are missing under {experimentPath}. Found: {existingModels}.")
+    fprint(f"Warning: some configured models are missing under {experimentPath}. Found: {existingModels}.")
   # Skip processing if no models were found in the directory.
   if (len(existingModels) == 0):
-    print("No models found for this dataset. Skipping.")
+    fprint("No models found for this dataset. Skipping.")
     return
   # Initialize a list to hold the set of trials for each model.
   trialsSets = []
@@ -290,10 +286,10 @@ def FuseModelsFromData(
   commonTrials = sorted(list(commonTrials))
   # Skip processing if no common trials were found across the models.
   if (len(commonTrials) == 0):
-    print(f"No common Trial_x folders found across models in {experimentPath}. Skipping.")
+    fprint(f"No common Trial_x folders found across models in {experimentPath}. Skipping.")
     return
   # Print the list of common trials that will be fused.
-  print(f"Common trials to fuse: {commonTrials}.")
+  fprint(f"Common trials to fuse: {commonTrials}.")
   # Construct the output directory path for the fused model.
   outModelDir = os.path.join(experimentPath, outModelName)
   # Create the output model directory if it does not already exist.
@@ -354,7 +350,7 @@ def FuseModelsFromData(
           continue
       # Compose the path to the expected best-checkpoint file produced during training.
       checkpointPath = os.path.join(experimentPath, m, trial, "Checkpoints", bestCheck)
-      print(f"Model {m} in trial {trial}: best checkpoint found: {checkpointPath} with loss: {bestLoss}.")
+      fprint(f"Model {m} in trial {trial}: best checkpoint found: {checkpointPath} with loss: {bestLoss}.")
       # Construct the path to the raw dataset file for this trial.
       rawDataPath = os.path.join(experimentPath, m, trial, "AllRaw.csv")
       # Check if both the checkpoint and raw data files exist.
@@ -363,10 +359,10 @@ def FuseModelsFromData(
         modelPredictions.append({"ModelName": m, "CheckpointPath": checkpointPath, "DataPath": rawDataPath})
       else:
         # Print a warning if required files are missing for the model.
-        print(f"Warning: missing checkpoint or data for model {m} in {trial}. Skipping model.")
+        fprint(f"Warning: missing checkpoint or data for model {m} in {trial}. Skipping model.")
     # Skip the trial if no valid models were found for fusion.
     if (len(modelPredictions) == 0):
-      print(f"No valid models found for trial {trial}. Skipping trial.")
+      fprint(f"No valid models found for trial {trial}. Skipping trial.")
       continue
     configsPath = os.path.join(experimentPath, existingModels[0], trial, "ConfigsJson.json")
     configs = ReadProjectConfig(configsPath) if os.path.isfile(configsPath) else {}
@@ -377,17 +373,17 @@ def FuseModelsFromData(
     )
     # Load the preprocessor artifacts from the first model Trial_1 directory.
     preprocessor.Load(os.path.join(experimentPath, existingModels[0], "Trial_1"))
-    print(f"Loaded preprocessor for trial {trial} from {os.path.join(experimentPath, existingModels[0], 'Trial_1')}.")
-    print(f"Is preprocessor loaded successfully? {preprocessor.IsLoaded()}.")
+    fprint(f"Loaded preprocessor for trial {trial} from {os.path.join(experimentPath, existingModels[0], 'Trial_1')}.")
+    fprint(f"Is preprocessor loaded successfully? {preprocessor.IsLoaded()}.")
     # Read the raw dataset using pandas.
     rawDataFrame = pd.read_csv(modelPredictions[0]["DataPath"], low_memory=False)
-    print(
+    fprint(
       f"Loaded raw data for trial {trial} from {modelPredictions[0]['DataPath']}: "
       f"shape: {rawDataFrame.shape}, columns: {rawDataFrame.columns.tolist()}."
     )
     # Transform the raw data into features and labels using the preprocessor.
     featuresArray, labelsArray = preprocessor.Transform(rawDataFrame, labelColumn="Label")
-    print(
+    fprint(
       f"Transformed raw data for trial {trial} into features and labels: "
       f"features shape: {featuresArray.shape}, labels shape: {labelsArray.shape}."
     )
@@ -395,7 +391,7 @@ def FuseModelsFromData(
     featuresTensor = torch.from_numpy(featuresArray).float()
     # Convert the labels array to a PyTorch tensor for dataset creation.
     labelsTensor = torch.from_numpy(labelsArray).long()
-    print(
+    fprint(
       f"Converted features and labels to PyTorch tensors for trial {trial}: "
       f"features tensor shape: {featuresTensor.shape}, labels tensor shape: {labelsTensor.shape}."
     )
@@ -405,14 +401,14 @@ def FuseModelsFromData(
     inferenceLoader = DataLoader(inferenceDataset, batch_size=256, shuffle=False)
     # Initialize a list to hold aligned true labels for the trial.
     allTrueIndices = labelsArray.tolist()
-    print(
+    fprint(
       f"Prepared true class indices for trial {trial}: {len(allTrueIndices)} samples, "
       f"unique classes: {set(allTrueIndices)}."
     )
     # Initialize a list to hold aligned true class names using the encoder.
     encObj = preprocessor.labelEncoder
     allTrueNames = [encObj.inverse_transform([idx])[0] for idx in allTrueIndices]
-    print(
+    fprint(
       f"Prepared inference data for trial {trial}: {len(allTrueIndices)} samples, "
       f"feature dimension: {featuresArray.shape[1]}, "
       f"number of classes: {len(set(allTrueIndices))}."
@@ -427,7 +423,7 @@ def FuseModelsFromData(
     inferenceDevice = torch.device("cuda" if (torch.cuda.is_available()) else "cpu")
     # Iterate through each model to perform inference and collect predictions.
     for modelEntry in modelPredictions:
-      print(
+      fprint(
         f"Processing model {modelEntry['ModelName']} for trial {trial}: "
         f"checkpoint: {modelEntry['CheckpointPath']}, data: {modelEntry['DataPath']}."
       )
@@ -465,7 +461,7 @@ def FuseModelsFromData(
           tempPredIndices.extend(predictedIndices.cpu().numpy().tolist())
           # Convert the probability batch to a list and extend the collection.
           tempProbVectors.extend(probabilitiesBatch.cpu().numpy().tolist())
-      print(
+      fprint(
         f"Model {currentModelName} in trial {trial}: collected predictions and probabilities: "
         f"{len(tempPredIndices)} samples, {len(tempProbVectors)} probability vectors."
       )
@@ -486,7 +482,7 @@ def FuseModelsFromData(
       currentF1Score = currentMetrics.get("Weighted F1", 0.0)
       # Store the F1 score in the weights dictionary keyed by model name.
       modelWeightsDict[currentModelName] = currentF1Score
-      print(
+      fprint(
         f"Model {currentModelName} in trial {trial}: computed metrics: "
         f"Weighted F1 score: {currentF1Score}, assigned voting weight: {currentF1Score}."
       )
@@ -525,7 +521,7 @@ def FuseModelsFromData(
         if (name == votedClassName):
           votedClassIndex = idx
           break
-      # print(
+      # fprint(
       #   f"Sample index {sampleIdx} in trial {trial}: "
       #   f"Model predictions: {currentSamplePreds}, "
       #   f"Model weights: {currentSampleWeights}, "
@@ -556,7 +552,7 @@ def FuseModelsFromData(
     # Save the fused predictions DataFrame to a CSV file.
     outDataFrame.to_csv(os.path.join(outTrialPredDir, "Predictions.csv"), index=False)
     # Print confirmation that the fused predictions were saved successfully.
-    print(f"Saved fused predictions to: {os.path.join(outTrialPredDir, 'Predictions.csv')}.")
+    fprint(f"Saved fused predictions to: {os.path.join(outTrialPredDir, 'Predictions.csv')}.")
     # Attempt to compute and save the fused metrics summary.
     try:
       # Convert the true indices list to a numpy integer array.
@@ -574,10 +570,10 @@ def FuseModelsFromData(
         # Dump the summary dictionary to the JSON file with indentation.
         json.dump(summaryDict, f, indent=4)
       # Print confirmation that the fused summary was saved successfully.
-      print(f"Saved fused summary to: {os.path.join(outTrialPredDir, 'FusedSummary.json')}.")
+      fprint(f"Saved fused summary to: {os.path.join(outTrialPredDir, 'FusedSummary.json')}.")
     except Exception as e:
       # Print a warning if metric computation or saving fails.
-      print(f"Warning: failed to compute/save fused metrics for trial {trial}: {e}.")
+      fprint(f"Warning: failed to compute/save fused metrics for trial {trial}: {e}.")
 
 
 def RunStatisticalPhase(
@@ -589,16 +585,16 @@ def RunStatisticalPhase(
   # Check if the save directory for the statistical phase exists.
   if (not os.path.exists(saveDirLocal)):
     # Print a message indicating the save directory is missing.
-    print(f"Save directory for statistical phase does not exist: {saveDirLocal}")
+    fprint(f"Save directory for statistical phase does not exist: {saveDirLocal}")
     # Print guidance to ensure training phase was completed before running statistical analysis.
-    print("Ensure that the training phase was completed and the directory structure is correct.")
+    fprint("Ensure that the training phase was completed and the directory structure is correct.")
     # Exit the function early when required artifacts are not available.
     return
 
   # Announce the start of the statistical analysis phase for the given model and CSV.
-  print(f"Running statistical analysis phase for model: {modelName} on dataset: {csvPath}")
+  fprint(f"Running statistical analysis phase for model: {modelName} on dataset: {csvPath}")
   # Announce the directory where trial data will be searched.
-  print(f"Looking for trial directories in: {saveDirLocal}")
+  fprint(f"Looking for trial directories in: {saveDirLocal}")
   # List all entries in the save directory to search for trial subfolders.
   allTrials = os.listdir(saveDirLocal)
   # Filter the directory entries to those that match the expected trial naming pattern.
@@ -609,11 +605,11 @@ def RunStatisticalPhase(
   ]
 
   # Report how many trial directories were discovered for analysis.
-  print(f"Found {len(summaryFiles)} trial directories for statistical analysis: {summaryFiles}")
+  fprint(f"Found {len(summaryFiles)} trial directories for statistical analysis: {summaryFiles}")
   # If no trial directories are found, warn and exit the function.
   if (len(summaryFiles) <= 0):
     # Print a descriptive warning about missing trial directories.
-    print(
+    fprint(
       "No trial directories found for statistical analysis; "
       "ensure that the training phase was completed with multiple trials."
     )
@@ -636,7 +632,7 @@ def RunStatisticalPhase(
   # Iterate over each detected trial directory and extract prediction artifacts.
   for trial in summaryFiles:
     # Print which trial directory is currently being processed.
-    print(f"Extracting data for statistical analysis from trial: {trial}")
+    fprint(f"Extracting data for statistical analysis from trial: {trial}")
     # Compose the expected path to the trial's predictions CSV file.
     summaryPath = os.path.join(saveDirLocal, trial, "TabularEvalPredResults", "Predictions.csv")
     # Check whether the predictions file exists at the expected location.
@@ -682,7 +678,7 @@ def RunStatisticalPhase(
       allMetrics.append(metrics)
     else:
       # Warn when a trial's predictions CSV cannot be found at the expected path.
-      print(f"Warning: Summary file not found for trial {trial} at expected path: {summaryPath}")
+      fprint(f"Warning: Summary file not found for trial {trial} at expected path: {summaryPath}")
 
   # Create the Statistics output folder inside the save directory if it does not exist.
   statsFolder = os.path.join(saveDirLocal, "Statistics")
@@ -701,19 +697,19 @@ def RunStatisticalPhase(
     classes = list(processor.labelEncoder.classes_)
   else:
     # Warn that the label encoder could not be loaded and fall back to index-based names.
-    print("Warning: Could not load label encoder from preprocessor artifacts; using class indices as class names.")
+    fprint("Warning: Could not load label encoder from preprocessor artifacts; using class indices as class names.")
     # Build fallback class names from unique true class indices aggregated across trials.
     classes = [f"Class_{i}" for i in range(len(set(np.concatenate(allTrueIdx))))]
 
   # Print the class names that will be used for plotting and analysis.
-  print(f"Classes for statistical analysis: {classes}")
+  fprint(f"Classes for statistical analysis: {classes}")
   # Read the DPI configuration value for saved plots from the configs dictionary.
   dpi = configs.get("PlotDPI", 300)
   # Read the font size configuration value for plots from the configs dictionary.
   fontSize = configs.get("FontSize", 15)
 
   # Print a concise summary of the number of trials' data prepared for analysis.
-  print(
+  fprint(
     f"Prepared data for statistical analysis: "
     f"{len(allTrueLabels)} trials with true labels, {len(allPredLabels)} trials with predicted labels, "
     f"{len(allProbabilities)} trials with probabilities."
@@ -722,7 +718,7 @@ def RunStatisticalPhase(
   # Print small samples of labels and probabilities for each trial to aid debugging.
   for trial in range(len(allTrueLabels)):
     # Print a short sample of true labels, predicted labels, and probabilities for the trial.
-    print(
+    fprint(
       f"Trial {trial + 1}: True labels sample: {allTrueLabels[trial][:5]}, "
       f"Predicted labels sample: {allPredLabels[trial][:5]}, "
       f"Probabilities sample: {allProbabilities[trial][:2]}"
@@ -834,7 +830,7 @@ def RunStatisticalPhase(
   # Iterate through the collected metrics for each trial and clean them for CSV output.
   for i in range(len(allMetrics)):
     # Print a message indicating which trial's metrics are being processed.
-    print(f"Processing metrics for trial {i + 1} for CSV output.")
+    fprint(f"Processing metrics for trial {i + 1} for CSV output.")
     # Retrieve the metrics dictionary for the trial.
     weightedMetrics = allMetrics[i]
     # Keep only keys corresponding to weighted averages for consistent CSV columns.
@@ -869,9 +865,9 @@ def RunStatisticalPhase(
   dfMetrics.to_csv(trialMetricsComparisonFile, index=False)
 
   # Print the path where the trial metrics comparison CSV was saved.
-  print(f"Trial metrics comparison saved to: {trialMetricsComparisonFile}")
+  fprint(f"Trial metrics comparison saved to: {trialMetricsComparisonFile}")
   # Print the DataFrame containing the trial metrics comparison for quick inspection.
-  print(f"Trial Metrics Comparison:\n{dfMetrics}")
+  fprint(f"Trial Metrics Comparison:\n{dfMetrics}")
 
   # Extract plotting history, plot names, and metric dictionaries from the saved summary CSV.
   history, names, metrics = ExtractDataFromSummaryFile(trialMetricsComparisonFile)
@@ -906,9 +902,9 @@ def RunStatisticalPhase(
     )
 
   # Indicate that performance plots have been generated successfully.
-  print("\u2713 Performance plots generated.")
+  fprint("\u2713 Performance plots generated.")
   # Announce that generation of the statistical analysis report is starting.
-  print("\nGenerating statistical analysis report...")
+  fprint("\nGenerating statistical analysis report...")
   # Initialize a list to accumulate the statistical analysis entries for each metric.
   overallReport = []
   # Iterate over each metric name to compute statistical tests and compile the report entries.
@@ -933,8 +929,317 @@ def RunStatisticalPhase(
   # Save the statistical analysis report DataFrame to CSV.
   reportDF.to_csv(reportCsvPath, index=False)
   # Print confirmation that the statistical analysis report has been saved to disk.
-  print(f"\u2713 Statistical analysis report saved: {reportCsvPath}")
+  fprint(f"\u2713 Statistical analysis report saved: {reportCsvPath}")
 
+
+def RunCrossExperimentStatisticalAnalysis(
+  experimentsRoot,
+  modelsNames,
+  csvFiles,
+  configs,
+  groupBy="model",
+  saveDir="Experiments"
+):
+  # Print a header for the cross-experiment statistical analysis.
+  fprint("\n" + ("=" * 80))
+  # Announce the start of the cross-experiment analysis.
+  fprint("Running Cross-Experiment Statistical Analysis.")
+  # Print the grouping strategy.
+  fprint(f"Grouping by: {groupBy}.")
+  # Print the models to compare.
+  fprint(f"Models to compare: {modelsNames}.")
+  # Print the experiments root directory.
+  fprint(f"Experiments root: {experimentsRoot}.")
+
+  # Create the output directory for cross-experiment analysis.
+  crossStatsDir = os.path.join(saveDir, "CrossExperimentStatistics")
+  # Make the directory if it does not exist.
+  os.makedirs(crossStatsDir, exist_ok=True)
+
+  # Initialize a dictionary to collect metrics across experiments.
+  allMetricsData = {}
+
+  # Iterate through each CSV dataset to collect metrics.
+  for csvFile in csvFiles:
+    # Extract the base file name from the CSV path.
+    baseFileName = os.path.splitext(os.path.basename(csvFile))[0]
+    # Print the current dataset being processed.
+    fprint(f"\nProcessing dataset: {baseFileName}.")
+
+    # Iterate through each model to collect its metrics.
+    for modelName in modelsNames:
+      # Construct the path to the model's experiment directory.
+      modelExpDir = os.path.join(experimentsRoot, baseFileName, modelName)
+
+      # Check if the model experiment directory exists.
+      if (not os.path.isdir(modelExpDir)):
+        # Warn if the directory is missing.
+        fprint(f"  Warning: Experiment directory not found: {modelExpDir}.")
+        # Skip to the next model.
+        continue
+
+      # Find all trial directories for this model.
+      trialDirs = [
+        d for d in os.listdir(modelExpDir)
+        if (os.path.isdir(os.path.join(modelExpDir, d)) and d.startswith("Trial_"))
+      ]
+
+      # Check if any trial directories were found.
+      if (len(trialDirs) == 0):
+        # Warn if no trials are found.
+        fprint(f"  Warning: No trial directories found for {modelName}.")
+        # Skip to the next model.
+        continue
+
+      # Print the number of trials found.
+      fprint(f"  Found {len(trialDirs)} trials for model {modelName}.")
+
+      # Initialize a list to hold metrics for all trials of this model.
+      trialMetrics = []
+
+      # Iterate through each trial directory to extract metrics.
+      for trial in trialDirs:
+        # Construct the path to the predictions CSV file.
+        summaryPath = os.path.join(modelExpDir, trial, "TabularEvalPredResults", "Predictions.csv")
+        # Check if the predictions file exists.
+        if (os.path.exists(summaryPath)):
+          try:
+            # Read the predictions CSV into a pandas DataFrame.
+            data = pd.read_csv(summaryPath, low_memory=False)
+            # Extract the true class indices.
+            trueIdx = data["TrueClassIndex"].values.tolist()
+            # Extract the predicted class indices.
+            predIdx = data["PredictedClassIndex"].values.tolist()
+            # Compute the confusion matrix.
+            cm = confusion_matrix(trueIdx, predIdx)
+            # Calculate performance metrics from the confusion matrix.
+            metrics = CalculatePerformanceMetrics(
+              cm,
+              eps=configs.get("Eps", 1e-10),
+              addWeightedAverage=True,
+              addPerClass=False,
+            )
+            # Extract weighted metrics and clean the keys.
+            weightedMetrics = {
+              k.replace("Weighted ", ""): v
+              for k, v in metrics.items()
+              if (k.startswith("Weighted ") and ("Average" not in k))
+            }
+            # Append the cleaned metrics to the trial list.
+            trialMetrics.append(weightedMetrics)
+          except Exception as e:
+            # Warn if loading metrics fails.
+            fprint(f"    Warning: Failed to load metrics for {trial}: {e}.")
+
+      # Check if any metrics were collected for this model.
+      if (len(trialMetrics) > 0):
+        # Determine the grouping key based on the groupBy parameter.
+        if (groupBy == "model"):
+          # Assign the model name as the key.
+          key = modelName
+        elif (groupBy == "dataset"):
+          # Assign the dataset name as the key.
+          key = baseFileName
+        else:
+          # Assign a tuple of dataset and model names as the key.
+          key = (baseFileName, modelName)
+
+        # Initialize the key in the dictionary if it does not exist.
+        if (key not in allMetricsData):
+          allMetricsData[key] = []
+        # Extend the list with the collected trial metrics.
+        allMetricsData[key].extend(trialMetrics)
+
+  # Check if any metrics were collected across all experiments.
+  if (len(allMetricsData) == 0):
+    # Print a message and exit if no data is available.
+    fprint("No metrics collected for cross-experiment analysis.")
+    # Return early.
+    return
+
+  # Print the number of groups collected.
+  fprint(f"\nCollected metrics for {len(allMetricsData)} groups.")
+
+  # Define the list of metrics to analyze and plot.
+  metricsList = ["Precision", "Recall", "F1", "Accuracy", "Specificity", "BAC"]
+
+  # Initialize a list to hold data formatted for the PlotMetrics helper.
+  plotMetricsData = []
+  # Initialize a list to hold the names for the PlotMetrics helper.
+  plotMetricsNames = []
+
+  # Iterate through each group to prepare data for statistical testing and plotting.
+  for key in sorted(allMetricsData.keys()):
+    # Initialize a dictionary to hold metric values for the current group.
+    groupMetrics = {}
+    # Iterate through each metric to aggregate values.
+    for metric in metricsList:
+      # Extract the metric values for the current group, ignoring NaNs.
+      metricValues = [m.get(metric, np.nan) for m in allMetricsData[key]]
+      # Filter out NaN values.
+      validValues = [v for v in metricValues if (not np.isnan(v))]
+      # Store the valid values in the group dictionary.
+      groupMetrics[metric] = {
+        "Trials": validValues,
+        "Mean"  : np.mean(validValues) if (len(validValues) > 0) else 0.0
+      }
+      # Print a summary of the metric for the current group.
+      fprint(
+        f"  {key} - {metric}: {len(validValues)} trials, mean={np.mean(validValues):.4f}, "
+        f"std={np.std(validValues):.4f}."
+      )
+
+    # Append the group metrics to the plot data list.
+    plotMetricsData.append(groupMetrics)
+    # Append the group name to the plot names list.
+    plotMetricsNames.append(str(key))
+
+  # Generate comparative visualizations using the PlotMetrics helper.
+  fprint(f"\n{'-' * 60}")
+  # Announce the generation of comparative visualizations.
+  fprint("Generating comparative visualizations using PlotMetrics helper.")
+  # Print the separator line.
+  fprint(f"{'-' * 60}")
+
+  try:
+    # Define the output folder for the performance metric plots.
+    newFolderName = os.path.join(crossStatsDir, "PerformanceMetricsPlots")
+    # Create the folder if it does not exist.
+    os.makedirs(newFolderName, exist_ok=True)
+
+    # Call the PlotMetrics helper to generate comprehensive plots.
+    PlotMetrics(
+      plotMetricsData,
+      plotMetricsNames,
+      metricsList,
+      factor=5,
+      keyword="CrossExperiment",
+      dpi=configs.get("PlotDPI", 300),
+      xTicksRotation=45,
+      whichToPlot=["BoxPlots", "ViolinPlots", "BarPlots", "RaincloudPlots"],
+      fontSize=configs.get("FontSize", 15),
+      showFigures=False,
+      storeInsideNewFolder=True,
+      newFolderName=newFolderName,
+      noOfPlotsPerRow=3,
+      cmap="viridis",
+      differentColors=True,
+      fixedTicksColors=True,
+      fixedTicksColor="black",
+      extension=".pdf",
+    )
+    # Print confirmation that the plots were generated.
+    fprint(f"  Saved comparative plots to: {newFolderName}.")
+  except Exception as e:
+    # Warn if the visualization generation fails.
+    fprint(f"Warning: Failed to generate visualizations with PlotMetrics: {e}.")
+    # Import traceback for debugging.
+    import traceback
+    # Print the traceback.
+    traceback.print_exc()
+
+  # Perform pairwise statistical comparisons between groups.
+  fprint(f"\n{'-' * 60}")
+  # Announce the start of pairwise statistical comparisons.
+  fprint("Performing pairwise statistical comparisons.")
+  # Print the separator line.
+  fprint(f"{'-' * 60}")
+
+  # Iterate through each metric to perform statistical tests.
+  for metric in metricsList:
+    # Print the metric being analyzed.
+    fprint(f"\nAnalyzing metric: {metric}.")
+
+    # Initialize a dictionary to hold data for statistical testing.
+    groupsData = {}
+    # Iterate through each group to extract metric values.
+    for key in sorted(allMetricsData.keys()):
+      # Extract the metric values for the current group.
+      metricValues = [m.get(metric, np.nan) for m in allMetricsData[key]]
+      # Filter out NaN values and store in the dictionary.
+      groupsData[str(key)] = [v for v in metricValues if (not np.isnan(v))]
+
+    # Check if there are at least two groups to compare.
+    if (len(groupsData) >= 2):
+      # Initialize a list to hold the comparison report.
+      comparisonReport = []
+      # Get the list of group keys.
+      groupKeys = list(groupsData.keys())
+
+      # Iterate through all unique pairs of groups.
+      for i in range(len(groupKeys)):
+        # Iterate through the remaining groups to form pairs.
+        for j in range(i + 1, len(groupKeys)):
+          # Get the names of the two groups.
+          group1, group2 = groupKeys[i], groupKeys[j]
+          # Get the data for the two groups.
+          data1, data2 = groupsData[group1], groupsData[group2]
+
+          # Check if both groups have enough data for a t-test.
+          if ((len(data1) >= 2) and (len(data2) >= 2)):
+            try:
+              # Import scipy stats for the t-test.
+              from scipy import stats
+              # Perform an independent t-test.
+              tStat, pValue = stats.ttest_ind(data1, data2)
+
+              # Calculate the pooled standard deviation for effect size.
+              pooledStd = np.sqrt((np.std(data1) ** 2 + np.std(data2) ** 2) / 2)
+              # Calculate Cohen's d.
+              cohensD = (np.mean(data1) - np.mean(data2)) / pooledStd if (pooledStd > 0) else 0
+
+              # Append the results to the comparison report.
+              comparisonReport.append({
+                "Metric"     : metric,
+                "Group1"     : group1,
+                "Group2"     : group2,
+                "Group1_Mean": np.mean(data1),
+                "Group1_Std" : np.std(data1),
+                "Group1_N"   : len(data1),
+                "Group2_Mean": np.mean(data2),
+                "Group2_Std" : np.std(data2),
+                "Group2_N"   : len(data2),
+                "T_Statistic": tStat,
+                "P_Value"    : pValue,
+                "Cohens_D"   : cohensD,
+                "Significant": pValue < 0.05,
+              })
+            except Exception as e:
+              # Warn if the statistical test fails.
+              fprint(f"  Warning: Statistical test failed for {group1} vs {group2}: {e}.")
+
+      # Check if any comparisons were successfully computed.
+      if (len(comparisonReport) > 0):
+        # Convert the report to a pandas DataFrame.
+        reportDF = pd.DataFrame(comparisonReport)
+        # Construct the output path for the comparison report.
+        reportPath = os.path.join(crossStatsDir, f"CrossExperiment_{metric}_Comparison.csv")
+        # Save the report to a CSV file.
+        reportDF.to_csv(reportPath, index=False)
+        # Print confirmation of the saved report.
+        fprint(f"  Saved comparison report: {reportPath}.")
+
+        # Filter the report for significant differences.
+        significant = reportDF[reportDF["Significant"] == True]
+        # Check if there are any significant differences.
+        if (len(significant) > 0):
+          # Print the number of significant differences found.
+          fprint(f"  Found {len(significant)} significant differences (p < 0.05).")
+          # Iterate through the significant differences to print them.
+          for _, row in significant.iterrows():
+            # Extract the details of the significant difference.
+            group1Name = row["Group1"]
+            # Extract the second group name.
+            group2Name = row["Group2"]
+            # Extract the p-value.
+            pVal = row["P_Value"]
+            # Extract the Cohen's d value.
+            dVal = row["Cohens_D"]
+            # Print the details of the significant difference.
+            fprint(f"    {group1Name} vs {group2Name}: p={pVal:.4f}, d={dVal:.3f}.")
+
+  # Print a final message indicating the completion of the analysis.
+  fprint(f"\nCross-experiment analysis completed. Results saved to: {crossStatsDir}.")
 
 def RunTabularPipelineForCSV(
   modelName,
@@ -943,57 +1248,94 @@ def RunTabularPipelineForCSV(
   saveDirLocal,
   labelColumn="Label",
   dropFirstColumn=False,
+  trainPath=None,
+  testPath=None,
 ):
   # Ensure deterministic behavior by setting random seeds.
   DoRandomSeeding()
 
-  # Compute the base file name for this CSV without extension.
-  baseFileName = os.path.splitext(os.path.basename(csvPath))[0]
-  # Print which CSV file is about to be processed and its derived dataset name.
-  print(f"\nProcessing CSV: {csvPath} -> Dataset name: {baseFileName}")
+  if (csvPath is not None):
+    # Compute the base file name for this CSV without extension.
+    baseFileName = os.path.splitext(os.path.basename(csvPath))[0]
+    # Print which CSV file is about to be processed and its derived dataset name.
+    fprint(f"\nProcessing CSV: {csvPath} -> Dataset name: {baseFileName}")
 
-  # Load the entire CSV into a pandas DataFrame with an optional row limit from configs.
-  dfAll = pd.read_csv(csvPath, nrows=configs.get("MaxRows", None), low_memory=False)
+    # Load the entire CSV into a pandas DataFrame with an optional row limit from configs.
+    dfAll = SafeReadCsv(csvPath, nrows=configs.get("MaxRows", None))
 
-  # Decide whether stratified splitting should use the provided label column.
-  if (labelColumn in dfAll.columns):
-    # Use the label column series as the stratification key for splits.
-    stratifyCol = dfAll[labelColumn]
+    # Decide whether stratified splitting should use the provided label column.
+    if (labelColumn in dfAll.columns):
+      # Use the label column series as the stratification key for splits.
+      stratifyCol = dfAll[labelColumn]
+    else:
+      # Assign None to stratifyCol when no label column is present.
+      stratifyCol = None
+
+    # Optionally remove the first column of the dataset when requested by the caller.
+    if (dropFirstColumn):
+      # Drop the first column which may represent indices or non-informative IDs.
+      dfAll = dfAll.iloc[:, 1:]
+      # Inform the user that the first column was dropped as requested.
+      fprint("Dropped the first column of the dataset as per argument.")
+
+    # Split the dataset into training and temporary sets according to configured train fraction.
+    dfTrain, dfTemp = train_test_split(
+      dfAll,
+      stratify=stratifyCol,
+      train_size=configs["TrainFraction"],
+      random_state=np.random.randint(0, 10000),
+    )
+
+    # Split the temporary set into validation and test sets while preserving class distribution.
+    dfVal, dfTest = train_test_split(
+      dfTemp,
+      stratify=(dfTemp[labelColumn] if (labelColumn in dfTemp.columns) else None),
+      test_size=(configs["TestFraction"] / (configs["ValFraction"] + configs["TestFraction"])),
+      random_state=np.random.randint(0, 10000),
+    )
+
+    # Persist the raw, unprocessed splits to CSV files for traceability.
+    dfTrain.to_csv(os.path.join(saveDirLocal, "TrainRaw.csv"), index=False)
+    dfVal.to_csv(os.path.join(saveDirLocal, "ValRaw.csv"), index=False)
+    dfTest.to_csv(os.path.join(saveDirLocal, "TestRaw.csv"), index=False)
+    dfAll.to_csv(os.path.join(saveDirLocal, "AllRaw.csv"), index=False)
+
+    # Print the sizes of the generated splits to help the user verify the operation.
+    fprint(f"Data split sizes (rows) for {baseFileName}: Train={len(dfTrain)} Val={len(dfVal)} Test={len(dfTest)}")
   else:
-    # Assign None to stratifyCol when no label column is present.
-    stratifyCol = None
-
-  # Optionally remove the first column of the dataset when requested by the caller.
-  if (dropFirstColumn):
-    # Drop the first column which may represent indices or non-informative IDs.
-    dfAll = dfAll.iloc[:, 1:]
-    # Inform the user that the first column was dropped as requested.
-    print("Dropped the first column of the dataset as per argument.")
-
-  # Split the dataset into training and temporary sets according to configured train fraction.
-  dfTrain, dfTemp = train_test_split(
-    dfAll,
-    stratify=stratifyCol,
-    train_size=configs["TrainFraction"],
-    random_state=np.random.randint(0, 10000),
-  )
-
-  # Split the temporary set into validation and test sets while preserving class distribution.
-  dfVal, dfTest = train_test_split(
-    dfTemp,
-    stratify=(dfTemp[labelColumn] if (labelColumn in dfTemp.columns) else None),
-    test_size=(configs["TestFraction"] / (configs["ValFraction"] + configs["TestFraction"])),
-    random_state=np.random.randint(0, 10000),
-  )
-
-  # Persist the raw, unprocessed splits to CSV files for traceability.
-  dfTrain.to_csv(os.path.join(saveDirLocal, "TrainRaw.csv"), index=False)
-  dfVal.to_csv(os.path.join(saveDirLocal, "ValRaw.csv"), index=False)
-  dfTest.to_csv(os.path.join(saveDirLocal, "TestRaw.csv"), index=False)
-  dfAll.to_csv(os.path.join(saveDirLocal, "AllRaw.csv"), index=False)
-
-  # Print the sizes of the generated splits to help the user verify the operation.
-  print(f"Data split sizes (rows) for {baseFileName}: Train={len(dfTrain)} Val={len(dfVal)} Test={len(dfTest)}")
+    # If no CSV path is provided, attempt to load pre-split datasets from specified paths.
+    if (trainPath is None or testPath is None):
+      # Warn the user that both train and test paths must be provided when CSV is not used.
+      fprint("Error: When `csvPath` is None, both `trainPath` and `testPath` must be provided.")
+      return
+    trainPath = Path(trainPath).resolve()
+    testPath = Path(testPath).resolve()
+    baseFileName = os.path.splitext(os.path.basename(trainPath))[0]
+    # Load the training dataset from the provided path.
+    dfTrain = SafeReadCsv(trainPath)
+    # Load the testing dataset from the provided path.
+    dfTest = SafeReadCsv(testPath)
+    # Optionally drop the first column of both datasets if requested.
+    if (dropFirstColumn):
+      dfTrain = dfTrain.iloc[:, 1:]
+      dfTest = dfTest.iloc[:, 1:]
+      fprint("Dropped the first column of the datasets as per argument.")
+    # Create a validation set by splitting a fraction of the training data.
+    dfTrain, dfVal = train_test_split(
+      dfTrain,
+      stratify=(dfTrain[labelColumn] if (labelColumn in dfTrain.columns) else None),
+      test_size=configs["ValFraction"],
+      random_state=np.random.randint(0, 10000),
+    )
+    # Concatenate all the data into a single DataFrame.
+    allRaw = pd.concat([dfTrain, dfVal, dfTest], ignore_index=True)
+    # Create the Data directory if it doesn't exist.
+    os.makedirs(os.path.join(saveDirLocal, "Data"), exist_ok=True)
+    # Save the raw datasets to CSV files for reproducibility and traceability.
+    allRaw.to_csv(os.path.join(saveDirLocal, "Data", "AllRaw.csv"), index=False)
+    # Print the sizes of the loaded and split datasets for user verification.
+    fprint(f"Data split sizes (rows) for {baseFileName}: Train={len(dfTrain)} Val={len(dfVal)} Test={len(dfTest)}")
+    fprint(f"Total raw data size (rows) for {baseFileName}: {len(allRaw)}")
 
   # Instantiate a tabular preprocessor responsible for scaling and label encoding.
   preprocessor = TabularPreprocessor(
@@ -1013,7 +1355,7 @@ def RunTabularPipelineForCSV(
     # If any expected numeric columns are missing, mark artifacts as incompatible.
     if (len(missingCols) > 0):
       # Warn the user about the missing numeric columns in the loaded artifacts.
-      print(f"Preprocessor artifact numeric columns missing in training data: {missingCols}")
+      fprint(f"Preprocessor artifact numeric columns missing in training data: {missingCols}")
       # Mark the artifacts as incompatible so they will be re-fitted.
       compatible = False
     # Validate that any saved label encoder covers the labels present in the training partition.
@@ -1026,7 +1368,7 @@ def RunTabularPipelineForCSV(
         # If the encoder does not cover all training labels, mark as incompatible.
         if (not trainLabels.issubset(encClasses)):
           # Inform the user about the mismatch between encoder classes and training labels.
-          print("Label encoder classes in artifacts do not cover training labels.")
+          fprint("Label encoder classes in artifacts do not cover training labels.")
           # Mark the artifacts as incompatible to trigger re-fitting.
           compatible = False
       except Exception:
@@ -1036,10 +1378,10 @@ def RunTabularPipelineForCSV(
     # If artifacts passed validation checks, keep using them.
     if (compatible):
       # Inform the user that preprocessor artifacts were loaded and validated successfully.
-      print("Preprocessor artifacts loaded from disk and validated as compatible with training data.")
+      fprint("Preprocessor artifacts loaded from disk and validated as compatible with training data.")
     else:
       # Inform the user that artifacts are incompatible and will be re-fitted.
-      print("Preprocessor artifacts are incompatible with this training split; re-fitting on training data.")
+      fprint("Preprocessor artifacts are incompatible with this training split; re-fitting on training data.")
       # Instantiate a fresh preprocessor and fit it on the training partition.
       preprocessor = TabularPreprocessor(
         ignoreCategorical=configs.get("IgnoreCategorical", True),
@@ -1049,14 +1391,14 @@ def RunTabularPipelineForCSV(
       # Persist the newly fitted preprocessor artifacts for reproducibility.
       preprocessor.Save(saveDirLocal)
       # Inform the user that the new artifacts were saved successfully.
-      print("Preprocessor fitted on training data and saved successfully.")
+      fprint("Preprocessor fitted on training data and saved successfully.")
   else:
     # Fit a new preprocessor when no artifacts were present on disk.
     preprocessor.Fit(dfTrain, labelColumn=labelColumn)
     # Save the fitted artifacts to the save directory for future runs.
     preprocessor.Save(saveDirLocal)
     # Notify the user the preprocessor was fitted and saved.
-    print("Preprocessor fitted on training data and saved successfully.")
+    fprint("Preprocessor fitted on training data and saved successfully.")
 
   # Transform the training data into numeric matrices and label vectors using the preprocessor.
   xTrain, yTrain = preprocessor.Transform(dfTrain, labelColumn=labelColumn)
@@ -1068,13 +1410,13 @@ def RunTabularPipelineForCSV(
   # Validate transformed arrays for NaN values and warn the user if any are present.
   if (xTrain is not None and np.isnan(xTrain).any()):
     # Warn about NaNs detected in the training features and suggest imputation.
-    print(f"Warning: NaN values found in xTrain for {baseFileName}. Consider adding imputation to the pipeline.")
+    fprint(f"Warning: NaN values found in xTrain for {baseFileName}. Consider adding imputation to the pipeline.")
   if (xVal is not None and np.isnan(xVal).any()):
     # Warn about NaNs detected in the validation features and suggest imputation.
-    print(f"Warning: NaN values found in xVal for {baseFileName}. Consider adding imputation to the pipeline.")
+    fprint(f"Warning: NaN values found in xVal for {baseFileName}. Consider adding imputation to the pipeline.")
   if (xTest is not None and np.isnan(xTest).any()):
     # Warn about NaNs detected in the test features and suggest imputation.
-    print(f"Warning: NaN values found in xTest for {baseFileName}. Consider adding imputation to the pipeline.")
+    fprint(f"Warning: NaN values found in xTest for {baseFileName}. Consider adding imputation to the pipeline.")
 
   # Build pandas DataFrames for the transformed feature matrices using preprocessor feature names.
   trainDF = pd.DataFrame(xTrain, columns=preprocessor.GetFeatureNames())
@@ -1084,16 +1426,9 @@ def RunTabularPipelineForCSV(
   trainDF["Label"] = yTrain
   valDF["Label"] = yVal
   testDF["Label"] = yTest
-  # Concatenate train, val, and test DataFrames to create a combined dataset view.
-  allDF = pd.concat([trainDF, valDF, testDF], ignore_index=True)
-  # Save the processed DataFrames to CSV files inside the save directory for reproducibility.
-  trainDF.to_csv(os.path.join(saveDirLocal, "TrainData.csv"), index=False)
-  valDF.to_csv(os.path.join(saveDirLocal, "ValData.csv"), index=False)
-  testDF.to_csv(os.path.join(saveDirLocal, "TestData.csv"), index=False)
-  allDF.to_csv(os.path.join(saveDirLocal, "AllData.csv"), index=False)
 
   # Print the shapes of transformed arrays and label vectors for user inspection.
-  print(
+  fprint(
     f"Transformed data shapes for {baseFileName}: Xtrain={xTrain.shape if (xTrain is not None) else None}, "
     f"ytrain={yTrain.shape if (yTrain is not None) else None} | "
     f"Xval={xVal.shape if (xVal is not None) else None}, yval={yVal.shape if (yVal is not None) else None} | "
@@ -1105,7 +1440,7 @@ def RunTabularPipelineForCSV(
   except Exception:
     featureNamesPreview = []
   # Print the feature names or indicate N/A when none are available.
-  print(
+  fprint(
     f"Columns after preprocessing: "
     f"{featureNamesPreview if len(featureNamesPreview) > 0 else (preprocessor.GetFeatureNames() if (preprocessor.IsLoaded()) else 'N/A')}"
   )
@@ -1116,7 +1451,7 @@ def RunTabularPipelineForCSV(
   # If no numeric features were discovered during preprocessing, warn and skip this dataset.
   if (xTrain is None):
     # Warn that there are no numeric features and abort processing of this CSV.
-    print(f"Warning: No numeric features found after preprocessing on {baseFileName}; skipping.")
+    fprint(f"Warning: No numeric features found after preprocessing on {baseFileName}; skipping.")
     return
 
   # Build PyTorch TensorDataset objects for train, validation, and test splits with appropriate dtypes.
@@ -1132,7 +1467,7 @@ def RunTabularPipelineForCSV(
   classesSet = set(np.concatenate([yTrain, yVal, yTest]))
 
   # Print the number of batches for each DataLoader to give the user execution context.
-  print(
+  fprint(
     f"DataLoaders created for {baseFileName}: "
     f"Train batches={len(trainLoader)}, "
     f"Val batches={len(valLoader)}, "
@@ -1152,9 +1487,9 @@ def RunTabularPipelineForCSV(
 
   # Print device selection and model architecture summary for diagnostic purposes.
   print((f"Using device: {device} for dataset {baseFileName}"))
-  print(f"Model architecture for {baseFileName}:\n{model}")
+  fprint(f"Model architecture for {baseFileName}:\n{model}")
   # Print the total number of model parameters to give a sense of model size.
-  print(f"Model parameters: {sum(p.numel() for p in model.parameters())}")
+  fprint(f"Model parameters: {sum(p.numel() for p in model.parameters())}")
 
   # Create the Adam optimizer using the learning rate supplied in the configs.
   optimizer = torch.optim.Adam(model.parameters(), lr=configs["LearningRate"])
@@ -1199,6 +1534,8 @@ def RunTabularPipelineForCSV(
     configs=configs,  # Pass configs to save to outputDir/ConfigsUsed.json.
   )
 
+  # Concatenate train, val, and test DataFrames to create a combined dataset view.
+  allDF = pd.concat([trainDF, valDF, testDF], ignore_index=True)
   # Persist processed DataFrames using the pipeline helper for consistency.
   pipeline.SaveDataFrames(trainDF, valDF, testDF, allDF)
 
@@ -1230,7 +1567,7 @@ def RunTabularPipelineForCSV(
       smoothFactor=configs.get("PlotSmoothFactor", 0.6)
     )
     # Inform the user that the training history plot was saved.
-    print(f"Saved training history plot to {os.path.join(saveDirLocal, 'History.png')}.")
+    fprint(f"Saved training history plot to {os.path.join(saveDirLocal, 'History.png')}.")
 
   # Perform optional explainability steps such as SHAP and surrogate tree generation when enabled.
   if (configs.get("Explain", False)):
@@ -1249,7 +1586,7 @@ def RunTabularPipelineForCSV(
     # Select a subset of test samples to compute SHAP explanations on.
     xSample = xTest[:sampleN]
     # Inform the user that SHAP computation is starting and may take time.
-    print("Computing SHAP values (this may be slow)...")
+    fprint("Computing SHAP values (this may be slow)...")
     # Compute SHAP values for the model predictions with the chosen background and sample data.
     shapVals = ComputeShapValues(
       model,
@@ -1265,7 +1602,7 @@ def RunTabularPipelineForCSV(
       savePath=os.path.join(explainDir, "ShapSummary.png")
     )
     # Inform the user that the SHAP summary plot was persisted.
-    print("Saved SHAP summary to explain artifacts.")
+    fprint("Saved SHAP summary to explain artifacts.")
     # Train a surrogate decision tree on model predictions to extract interpretable rules.
     surrogateSampleN = min(sampleN, xTrain.shape[0])
     surrogateIdx = np.random.choice(xTrain.shape[0], surrogateSampleN, replace=False)
@@ -1276,7 +1613,7 @@ def RunTabularPipelineForCSV(
     with open(os.path.join(explainDir, "SurrogateRules.txt"), "w") as f:
       f.write(rules)
     # Inform the user that surrogate rules were saved to disk.
-    print("Saved surrogate rules to explain artifacts.")
+    fprint("Saved surrogate rules to explain artifacts.")
 
   # Backfill a copy of the configs used for this run if the pipeline did not already save them.
   if (configs is not None and not os.path.exists(os.path.join(saveDirLocal, "ConfigsUsed.json"))):
@@ -1291,10 +1628,10 @@ def RunTabularPipelineForCSV(
     with open(os.path.join(saveDirLocal, "ConfigsUsed.json"), "w") as f:
       json.dump(configsCopy, f, indent=4)
     # Inform the user that a copy of the configs was saved.
-    print(f"Saved a copy of the configs used for this dataset to {os.path.join(saveDirLocal, 'ConfigsUsed.json')}.")
+    fprint(f"Saved a copy of the configs used for this dataset to {os.path.join(saveDirLocal, 'ConfigsUsed.json')}.")
 
   # Print a header indicating that a post-training evaluation on the full dataset is about to run.
-  print(f"\n=== Post-training evaluation on AllData.csv for {baseFileName}_{modelName} ===")
+  fprint(f"\n=== Post-training evaluation on AllData.csv for {baseFileName}_{modelName} ===")
   try:
     # Find the best model by looking for the checkpoint file saved during training in the Checkpoints subdirectory.
     # The best checkpoint is expected to have the lowest loss value.
@@ -1312,7 +1649,7 @@ def RunTabularPipelineForCSV(
         lossStr = check.split("_Metric_")[-1].replace(".pt", "").replace("_", ".")
         lossVal = float(lossStr)
         # Update the best checkpoint if a lower loss value is found.
-        if (lossVal < bestLoss):
+        if (lossVal <= bestLoss):
           bestLoss = lossVal
           bestCheck = check
       except Exception:
@@ -1332,18 +1669,19 @@ def RunTabularPipelineForCSV(
         weightsOnly=False,
       )
       # Inform the user the best model checkpoint was successfully loaded.
-      print("Loaded best model for post-training evaluation.")
+      fprint("Loaded best model for post-training evaluation.")
     else:
       # Fall back to the in-memory model when the checkpoint file is not available.
       evalModel = model
       # Inform the user that the checkpoint was not found and the in-memory model will be used.
-      print("Best checkpoint not found; using in-memory model for evaluation.")
+      fprint("Best checkpoint not found; using in-memory model for evaluation.")
 
     # Evaluate the selected model on the full raw dataset and export artifacts to disk.
     evalResults = GenericTabularEvaluatePredictPlotSubset(
-      dataPath=os.path.join(saveDirLocal, "AllRaw.csv"),
+      dataPath=os.path.join(saveDirLocal, "Data", "AllRaw.csv"),
+      dataLabelIsEncoded=False,
       model=evalModel,
-      targetColumn="Label",
+      targetColumn=labelColumn,
       featureColumns=featureNames if (featureNames) else None,
       subset=None,  # Evaluate all samples in the file.
       prefix=None,
@@ -1369,18 +1707,18 @@ def RunTabularPipelineForCSV(
       probs, confs, records, classNamesEval, cmEval
     ) = evalResults
     # Print summary metrics returned by the evaluation routine for quick review.
-    print(f"Post-training evaluation metrics on AllData.csv for {baseFileName}:")
+    fprint(f"Post-training evaluation metrics on AllData.csv for {baseFileName}:")
     for key, value in weightedMetrics.items():
       # Format numeric metric values to four decimal places and print others directly.
       if (isinstance(value, (int, float))):
-        print(f"  {key}: {value:.4f}")
+        fprint(f"  {key}: {value:.4f}")
       else:
-        print(f"  {key}: {value}")
+        fprint(f"  {key}: {value}")
     # Inform the user where the predictions CSV was saved by the evaluator.
-    print(f"Predictions CSV saved to: {predsCsvPath}")
+    fprint(f"Predictions CSV saved to: {predsCsvPath}")
   except Exception as evalErr:
     # Catch and print any errors that occurred during post-training evaluation.
-    print(f"Warning: Post-training evaluation failed for {baseFileName}: {evalErr}")
+    fprint(f"Warning: Post-training evaluation failed for {baseFileName}: {evalErr}")
 
 
 def RunExplainabilityPhase(
@@ -1393,16 +1731,15 @@ def RunExplainabilityPhase(
 ):
   # Explainability phase uses saved artifacts (preprocessor + checkpoint) to compute SHAP and surrogate rules.
   if (not os.path.exists(saveDirLocal)):
-    print(f"Explainability: save directory not found: {saveDirLocal}")
+    fprint(f"Explainability: save directory not found: {saveDirLocal}")
     return
 
-  print(f"Running explainability for {modelName} on {csvPath} -> using artifacts in {saveDirLocal}")
+  fprint(f"Running explainability for {modelName} on {csvPath} -> using artifacts in {saveDirLocal}")
 
   # Try to load raw data and preprocessor artifacts.
   rawCandidates = [
-    os.path.join(saveDirLocal, "AllRaw.csv"),
-    os.path.join(saveDirLocal, "AllData.csv"),
-    os.path.join(saveDirLocal, "AllRaw.csv")
+    os.path.join(saveDirLocal, "Data", "AllRaw.csv"),
+    os.path.join(saveDirLocal, "Data", "AllData.csv"),
   ]
   rawPath = None
   for p in rawCandidates:
@@ -1410,13 +1747,13 @@ def RunExplainabilityPhase(
       rawPath = p
       break
   if (rawPath is None):
-    print(f"No raw/data CSV found in {saveDirLocal}. Looked for: {rawCandidates}")
+    fprint(f"No raw/data CSV found in {saveDirLocal}. Looked for: {rawCandidates}")
     return
 
   try:
     dfAll = pd.read_csv(rawPath, low_memory=False)
   except Exception as e:
-    print(f"Failed to read data file {rawPath}: {e}")
+    fprint(f"Failed to read data file {rawPath}: {e}")
     return
 
   preprocessor = TabularPreprocessor(
@@ -1451,11 +1788,11 @@ def RunExplainabilityPhase(
         xAll = dfAll.values
         yAll = np.zeros(xAll.shape[0], dtype=int)
     except Exception as e:
-      print(f"Failed to prepare features for explainability: {e}")
+      fprint(f"Failed to prepare features for explainability: {e}")
       return
 
   if (xAll is None or xAll.size == 0):
-    print("No features available for explainability.")
+    fprint("No features available for explainability.")
     return
 
   featureNames = preprocessor.GetFeatureNames() if preprocessor.IsLoaded() else None
@@ -1473,7 +1810,7 @@ def RunExplainabilityPhase(
       try:
         lossStr = check.split("_Metric_")[-1].replace('.pt', '').replace('_', '.')
         lossVal = float(lossStr)
-        if (lossVal < bestLoss):
+        if (lossVal <= bestLoss):
           bestLoss = lossVal
           bestCheck = check
       except Exception:
@@ -1489,7 +1826,7 @@ def RunExplainabilityPhase(
     model.to(modelDevice)
     model.eval()
   except Exception as e:
-    print(f"Failed to instantiate/load model for explainability: {e}")
+    fprint(f"Failed to instantiate/load model for explainability: {e}")
     return
 
   explainDir = configs.get("ExplainSaveDir", os.path.join(saveDirLocal, "ExplainArtifacts"))
@@ -1502,15 +1839,16 @@ def RunExplainabilityPhase(
   xSample = xAll[:sampleN]
 
   try:
-    print("Computing SHAP values for explainability (may be slow)...")
+    fprint("Computing SHAP values for explainability (may be slow)...")
     shapVals = ComputeShapValues(
-      model, background, xSample, featureNames=featureNames,
+      model, background, xSample,
+      featureNames=featureNames,
       nsamples=configs.get("ExplainSamples", 500)
     )
     ShapSummaryPlot(shapVals, featureNames=featureNames, savePath=os.path.join(explainDir, "ShapSummary.png"))
-    print(f"Saved SHAP summary to {explainDir}")
+    fprint(f"Saved SHAP summary to {explainDir}")
   except Exception as e:
-    print(f"SHAP computation failed: {e}")
+    fprint(f"SHAP computation failed: {e}")
 
   try:
     surrogateSampleN = min(sampleN, xAll.shape[0])
@@ -1518,9 +1856,9 @@ def RunExplainabilityPhase(
     clf, rules = TrainSurrogateTree(model, surrogateX, maxDepth=configs.get("SurrogateMaxDepth", 3))
     with open(os.path.join(explainDir, "SurrogateRules.txt"), "w") as f:
       f.write(rules)
-    print(f"Saved surrogate tree rules to {os.path.join(explainDir, 'SurrogateRules.txt')}")
+    fprint(f"Saved surrogate tree rules to {os.path.join(explainDir, 'SurrogateRules.txt')}")
   except Exception as e:
-    print(f"Surrogate tree training failed: {e}")
+    fprint(f"Surrogate tree training failed: {e}")
 
 
 # If executed as a script, run the Run function.
@@ -1561,7 +1899,7 @@ if (__name__ == "__main__"):
       for csvFile in csvFiles:
         try:
           # Print a header announcing which model and dataset are being processed.
-          print(f"\n\n=== Running pipeline for model: {modelName} on dataset: {csvFile} ===")
+          fprint(f"\n\n=== Running pipeline for model: {modelName} on dataset: {csvFile} ===")
           # Compute a base file name for the dataset from the CSV filename.
           baseFileName = os.path.splitext(os.path.basename(csvFile))[0]
           # Determine the base save directory for this dataset and model.
@@ -1582,31 +1920,36 @@ if (__name__ == "__main__"):
             # Ensure the trial save directory exists on disk.
             os.makedirs(trialSaveDir, exist_ok=True)
             # Print which trial is starting and where outputs will be saved.
-            print(f"--> Trial {t + 1}/{noOfTrials}: saving to {trialSaveDir}")
+            fprint(f"--> Trial {t + 1}/{noOfTrials}: saving to {trialSaveDir}")
             # Execute the per-CSV tabular pipeline for the current trial folder.
             RunTabularPipelineForCSV(modelName, csvFile, configs, trialSaveDir, labelColumn, dropFirstColumn)
         except Exception as e:
           # Print any exception that occurs while processing a model/dataset combination.
-          print(f"Error occurred while processing: {e}")
+          fprint(f"Error occurred while processing: {e}")
+          import traceback
+
+          # Print the full traceback for debugging purposes.
+          traceback.print_exc()
+
     # Inform the user that the training phase has completed for all requested runs.
-    print("Training phase completed for all models and CSV files.")
+    fprint("Training phase completed for all models and CSV files.")
 
   # Execute only the statistical analysis phase when specified by the CLI argument.
   elif (phase == "statistical"):
     if (args.addFusedModel):
       # If the fused model flag is set, add a "FusedModel" entry to the list of models for analysis.
       modelsNames.append("FusedModel")
-      print("Added 'FusedModel' to the list of models for statistical analysis.")
+      fprint("Added 'FusedModel' to the list of models for statistical analysis.")
     if (args.fusedModelOnly):
       # If the fused model only flag is set, restrict the list of models to just "FusedModel".
       modelsNames = ["FusedModel"]
-      print("Restricted statistical analysis to 'FusedModel' only.")
+      fprint("Restricted statistical analysis to 'FusedModel' only.")
     # Iterate through configured models for performing statistical aggregation.
     for modelName in modelsNames:
       # Iterate through each CSV dataset to run statistics for their results.
       for csvFile in csvFiles:
         # Print a header announcing the statistical phase for the model and dataset.
-        print(f"\n\n=== Running statistical phase for model: {modelName} on dataset: {csvFile} ===")
+        fprint(f"\n\n=== Running statistical phase for model: {modelName} on dataset: {csvFile} ===")
         # Determine the base file name for the dataset from its CSV path.
         baseFileName = os.path.splitext(os.path.basename(csvFile))[0]
         # Compute the base save directory for the dataset and model combination.
@@ -1619,7 +1962,23 @@ if (__name__ == "__main__"):
         # Run the statistical analysis phase using the assembled save directory path.
         RunStatisticalPhase(modelName, csvFile, configs, baseSaveDir)
     # Inform the user that the statistical phase completed for all requested runs.
-    print("Statistical phase completed for all models and CSV files.")
+    fprint("Statistical phase completed for all models and CSV files.")
+
+    # Execute cross-experiment statistical analysis when requested.
+    if (args.crossExperimentStats):
+      # Determine the experiments root directory.
+      experimentsRoot = saveDir if (saveDir is not None) else "Experiments"
+      # Run the cross-experiment statistical analysis.
+      RunCrossExperimentStatisticalAnalysis(
+        experimentsRoot,
+        modelsNames,
+        csvFiles,
+        configs,
+        groupBy=args.groupBy,
+        saveDir=experimentsRoot
+      )
+      # Print completion message.
+      fprint("Cross-experiment statistical analysis completed.")
 
   # Execute the fusion phase when specified by the CLI argument.
   elif (phase == "fused"):
@@ -1636,12 +1995,16 @@ if (__name__ == "__main__"):
       if (not os.path.isdir(experimentPath)):
         continue
       try:
-        print(f"\n\n=== Running fusion for: {experimentPath} ===")
+        fprint(f"\n\n=== Running fusion for: {experimentPath} ===")
         FuseModelsFromData(experimentPath, modelsNames, outModelName=outModelName)
       except Exception as e:
-        print(f"Warning: fusion failed for {experimentPath}: {e}")
+        fprint(f"Warning: fusion failed for {experimentPath}: {e}")
+        import traceback
 
-    print("Fusion phase completed for all datasets.")
+        # Print the full traceback for debugging purposes.
+        traceback.print_exc()
+
+    fprint("Fusion phase completed for all datasets.")
 
   # Execute the explainability phase when specified by the CLI argument.
   elif (phase == "explain"):
@@ -1651,7 +2014,7 @@ if (__name__ == "__main__"):
       for csvFile in csvFiles:
         try:
           # Print a header announcing which model and dataset are being processed for explainability.
-          print(f"\n\n=== Running explainability for model: {modelName} on dataset: {csvFile} ===")
+          fprint(f"\n\n=== Running explainability for model: {modelName} on dataset: {csvFile} ===")
           # Compute a base file name for the dataset from the CSV filename.
           baseFileName = os.path.splitext(os.path.basename(csvFile))[0]
           # Determine the base save directory for this dataset and model.
@@ -1676,10 +2039,14 @@ if (__name__ == "__main__"):
           # Run the explainability phase for each trial directory found, which will look for artifacts in those directories.
           for t, trialDir in enumerate(trialDirs):
             # Ensure path exists (RunExplainabilityPhase will check), and announce the trial.
-            print(f"--> Explainability for Trial {t + 1}/{len(trialDirs)}: looking for artifacts in {trialDir}")
+            fprint(f"--> Explainability for Trial {t + 1}/{len(trialDirs)}: looking for artifacts in {trialDir}")
             RunExplainabilityPhase(modelName, csvFile, configs, trialDir, labelColumn, dropFirstColumn)
         except Exception as e:
           # Print any exception that occurs while processing a model/dataset combination for explainability.
-          print(f"Error occurred while processing for explainability: {e}")
+          fprint(f"Error occurred while processing for explainability: {e}")
+          import traceback
+
+          # Print the full traceback for debugging purposes.
+          traceback.print_exc()
     # Inform the user that the explainability phase has completed for all requested runs.
-    print("Explainability phase completed for all models and CSV files.")
+    fprint("Explainability phase completed for all models and CSV files.")

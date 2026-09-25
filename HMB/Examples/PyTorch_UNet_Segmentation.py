@@ -1,14 +1,12 @@
 from HMB.Initializations import CheckInstalledModules
 
 if __name__ == "__main__":
-  CheckInstalledModules(["torch", "numpy", "matplotlib", "PIL", "tqdm", "tensorboard", "sklearn"])
+  CheckInstalledModules(["torch", "numpy", "matplotlib", "PIL", "tensorboard", "sklearn"])
 
 # ------------------------------------------------------------------------- #
 
 import os, torch, cv2, argparse, builtins
 import numpy as np
-from tqdm import tqdm
-from typing import Dict
 import torch.nn as nn
 from PIL import Image
 import torch.optim as optim
@@ -16,23 +14,7 @@ from HMB.PyTorchHelper import GetOptimizer, PyTorchUNetSegmentationTrainingPipel
 from HMB.DatasetsHelper import CreateSegmentationDataLoaders
 from HMB.Initializations import IgnoreWarnings, DoRandomSeeding
 from HMB.PyTorchUNetModelsZoo import GetUNetModel
-from HMB.Utils import DumpJsonFile
-
-# Ensure all prints flush by default to make logs appear promptly.
-# Save the original built-in print function for delegation.
-_original_print = builtins.print
-
-
-# Define a wrapper that sets flush=True when not explicitly provided.
-def print(*args, **kwargs):
-  # Ensure flush is True by default when not provided.
-  if ("flush" not in kwargs):
-    kwargs["flush"] = True
-  # Delegate to the original print implementation.
-  return _original_print(*args, **kwargs)
-
-# Override the built-in print with our wrapper to ensure all prints are flushed immediately.
-builtins.print = print
+from HMB.Utils import DumpJsonFile, fprint
 
 # Define default hyperparameters dictionary with CamelCase keys.
 # This dictionary uses camelCase variable name to follow project conventions.
@@ -188,9 +170,9 @@ def ParseArgs():
   os.makedirs(hparams.get("OutputDir", "Output"), exist_ok=True)
 
   # Print parsed hyperparameters for verification.
-  print("Parsed Hyperparameters:")
+  fprint("Parsed Hyperparameters:")
   for key, value in hparams.items():
-    print(f"  {key}: {value}")
+    fprint(f"  {key}: {value}")
 
   return hparams
 
@@ -220,7 +202,7 @@ def Run():
     # Fall back to CPU device when CUDA is not available or not requested.
     device = torch.device("cpu")
   # Print which device will be used.
-  print(f"Using device: {device}")
+  fprint(f"Using device: {device}")
 
   # Create or obtain training, validation and combined loaders as before.
   trainLoader, valLoader, allLoader = CreateSegmentationDataLoaders(
@@ -231,7 +213,7 @@ def Run():
     numClasses=hparams.get("NumClasses", 1)
   )
   # Print counts for sanity.
-  print(f"Training samples: {len(trainLoader.dataset)}, Validation samples: {len(valLoader.dataset)}")
+  fprint(f"Training samples: {len(trainLoader.dataset)}, Validation samples: {len(valLoader.dataset)}")
 
   # Validate created dataloaders.
   if ((trainLoader is None) or (valLoader is None)):
@@ -244,7 +226,7 @@ def Run():
   # Get the min, max, and mean pixel values from the training dataset.
   # pixelStats = trainLoader.dataset.GetPixelStats()
   # for statName, statValue in pixelStats.items():
-  #   print(f"{statName}: {statValue}")
+  #   fprint(f"{statName}: {statValue}")
 
   # Instantiate the requested model via the factory.
   model = GetUNetModel(
@@ -253,7 +235,7 @@ def Run():
     numClasses=hparams.get("NumClasses", 1)
   )
   # Print which model was instantiated.
-  print(f"Model {hparams.get('ModelName', 'UNet')} instantiated.")
+  fprint(f"Model {hparams.get('ModelName', 'UNet')} instantiated.")
   # Move the model to the selected device.
   model.to(device)
 
@@ -268,12 +250,12 @@ def Run():
     weightDecay=hparams.get("WeightDecay", 1e-6)
   )
   # Print which optimizer was created.
-  print(f"Optimizer {hparams.get('Optimizer', 'Adam')} created.")
+  fprint(f"Optimizer {hparams.get('Optimizer', 'Adam')} created.")
 
   # Create a scheduler; use ReduceLROnPlateau by default.
   scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
   # Print scheduler creation message.
-  print("Scheduler ReduceLROnPlateau created.")
+  fprint("Scheduler ReduceLROnPlateau created.")
 
   # Select an appropriate loss function depending on number of classes.
   if (hparams.get("NumClasses", 1) == 1):
@@ -283,7 +265,7 @@ def Run():
     # Use cross-entropy for multi-class segmentation.
     lossFn = nn.CrossEntropyLoss()
   # Print loss function creation message.
-  print("Loss function created.")
+  fprint("Loss function created.")
 
   # Create Trainer instance to run training.
   segObj = PyTorchUNetSegmentationTrainingPipeline(
@@ -304,36 +286,36 @@ def Run():
     # Load checkpoint into trainer if requested.
     segObj.LoadCheckpoint(hparams.get("ResumeCheckpoint"))
     # Print checkpoint resume message.
-    print("Resumed from checkpoint:", hparams.get("ResumeCheckpoint"))
+    fprint("Resumed from checkpoint:", hparams.get("ResumeCheckpoint"))
 
   # Check if the output directory already exists and contains checkpoints.
   if (os.path.exists(segObj.checkpointDir) and os.path.isdir(segObj.checkpointDir)):
     requiredFile = "CheckpointBest.pth"
     checkpointFiles = os.listdir(segObj.checkpointDir)
     if (requiredFile in checkpointFiles):
-      print(f"Warning: Checkpoint directory {segObj.checkpointDir} already contains {requiredFile}.")
+      fprint(f"Warning: Checkpoint directory {segObj.checkpointDir} already contains {requiredFile}.")
       # Load the existing checkpoint to avoid overwriting and to continue training or inference.
       existingCheckpointPath = os.path.join(segObj.checkpointDir, requiredFile)
       segObj.LoadCheckpoint(existingCheckpointPath)
-      print(f"Loaded existing checkpoint from {existingCheckpointPath} to continue training/inference.")
+      fprint(f"Loaded existing checkpoint from {existingCheckpointPath} to continue training/inference.")
     else:
-      print(f"No existing checkpoint found in {segObj.checkpointDir}. Starting fresh.")
+      fprint(f"No existing checkpoint found in {segObj.checkpointDir}. Starting fresh.")
   else:
-    print(f"Checkpoint directory {segObj.checkpointDir} does not exist. Starting fresh.")
+    fprint(f"Checkpoint directory {segObj.checkpointDir} does not exist. Starting fresh.")
 
   # Check if the requested phase is Train or Infer and execute accordingly.
   # If the requested phase is Train, run training and return.
   if (hparams.get("Phase", "Infer") == "Train"):
-    print("Starting training...")
+    fprint("Starting training...")
     # Run training for the specified number of epochs.
     segObj.Train(hparams.get("NumEpochs", 50))
-    print("Training completed.")
+    fprint("Training completed.")
 
   elif (hparams.get("Phase", "Infer") == "Infer"):
-    print("Starting inference...")
+    fprint("Starting inference...")
     # Run inference to save predicted masks and compute metrics.
     segObj.Inference()
-    print("Inference completed.")
+    fprint("Inference completed.")
 
 
 # Execute the inference runner when this script is run directly.

@@ -1,4 +1,4 @@
-import argparse, os, timm, torch, json, builtins
+import argparse, os, timm, torch, json
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -15,23 +15,7 @@ from HMB.ExplainabilityHelper import CAMExplainerPyTorch
 from HMB.PyTorchHelper import LoadPyTorchDict, EvaluateModelOnPerturbations
 from HMB.Initializations import IMAGE_SUFFIXES
 from HMB.PyTorchModelMemoryProfiler import PyTorchModelMemoryProfiler
-
-# Ensure all prints flush by default to make logs appear promptly.
-# Save the original built-in print function for delegation.
-_original_print = builtins.print
-
-
-# Define a wrapper that sets flush=True when not explicitly provided.
-def print(*args, **kwargs):
-  # Ensure flush is True by default when not provided.
-  if ("flush" not in kwargs):
-    kwargs["flush"] = True
-  # Delegate to the original print implementation.
-  return _original_print(*args, **kwargs)
-
-
-# Override the built-in print with our wrapper to ensure all prints are flushed immediately.
-builtins.print = print
+from HMB.Utils import fprint
 
 
 # Define a function to parse command line arguments for this statistics analysis script.
@@ -179,9 +163,9 @@ def ValidateArgs(args):
 
   # Print parsed args when verbose to aid debugging.
   if (args.verbose):
-    print("Parsed arguments:")
+    fprint("Parsed arguments:")
     for k, v in vars(args).items():
-      print(f"  {k}: {v}")
+      fprint(f"  {k}: {v}")
 
   return args
 
@@ -189,10 +173,10 @@ def ValidateArgs(args):
 # Create and configure the model for the current task.
 def CreateModel(modelName, numClasses):
   # Notify that model creation has started.
-  print("Creating model...")
+  fprint("Creating model...")
   # Instantiate the timm model with the requested number of classes.
   model = timm.create_model(modelName, pretrained=True, num_classes=numClasses)
-  print(f"Model {modelName} created with {numClasses} output classes.")
+  fprint(f"Model {modelName} created with {numClasses} output classes.")
   # Return the constructed model object.
   return model
 
@@ -218,14 +202,14 @@ def VerifyExperimentStructure(baseExpDir, predCSVFileFix, subsets, verbose=False
   issues = {}
   # Ensure baseExpDir exists and is a directory.
   if (not os.path.exists(baseExpDir) or not os.path.isdir(baseExpDir)):
-    print(f"Error: base experiments directory does not exist or is not a directory: {baseExpDir}")
+    fprint(f"Error: base experiments directory does not exist or is not a directory: {baseExpDir}")
     return False
 
   systems = [el for el in sorted(os.listdir(baseExpDir)) if os.path.isdir(os.path.join(baseExpDir, el))]
   # Remove the "PerformanceMetricsPlots" directory from the list of systems if it exists, as it's not a system folder.
   systems = [s for s in systems if "PerformanceMetricsPlots" not in s]
   if (len(systems) == 0):
-    print(f"Error: No systems (subdirectories) found in base experiments directory: {baseExpDir}")
+    fprint(f"Error: No systems (subdirectories) found in base experiments directory: {baseExpDir}")
     return False
 
   for system in systems:
@@ -261,15 +245,15 @@ def VerifyExperimentStructure(baseExpDir, predCSVFileFix, subsets, verbose=False
       issues[system] = systemIssues
 
   if (len(issues) > 0):
-    print("Experiment structure verification FAILED. Issues detected:")
+    fprint("Experiment structure verification FAILED. Issues detected:")
     for system, sysIssues in issues.items():
-      print(f"  System: {system}")
+      fprint(f"  System: {system}")
       for it in sysIssues:
-        print(f"    - {it}")
+        fprint(f"    - {it}")
     return False
 
   if (verbose):
-    print(f"Experiment structure verification succeeded for base directory: {baseExpDir}")
+    fprint(f"Experiment structure verification succeeded for base directory: {baseExpDir}")
   return True
 
 
@@ -385,7 +369,7 @@ def Main():
       trialDir = os.path.join(baseOutputDir, trial)
       if (not os.path.isdir(trialDir)):
         if (verbose):
-          print(f"Skipping non-directory item: {trialDir}")
+          fprint(f"Skipping non-directory item: {trialDir}")
         continue  # Skip non-directory files.
 
       # Save the args used for this trial to a JSON file within the trial directory for traceability.
@@ -399,11 +383,11 @@ def Main():
       imgSize = 224  # Default image size if not found in training args.
       if (not os.path.exists(argsJsonPath)):
         if (verbose):
-          print(f"Warning: `TrainingArgs.json` not found for trial '{trial}' at expected path: {argsJsonPath}")
+          fprint(f"Warning: `TrainingArgs.json` not found for trial '{trial}' at expected path: {argsJsonPath}")
         modelName = None
       else:
         if (verbose):
-          print(f"Found `TrainingArgs.json` for trial '{trial}': {argsJsonPath}")
+          fprint(f"Found `TrainingArgs.json` for trial '{trial}': {argsJsonPath}")
         # Optionally, you could load and inspect the training arguments here if needed.
         with open(argsJsonPath, "r") as f:
           trainingArgs = json.load(f)
@@ -411,10 +395,10 @@ def Main():
         # Use image size from training args if available.
         imgSize = trainingArgs.get("imageSize", imgSize)
         if (verbose):
-          print(f"Trial '{trial}' - Extracted model name from training args: {modelName}, image size: {imgSize}")
+          fprint(f"Trial '{trial}' - Extracted model name from training args: {modelName}, image size: {imgSize}")
       if (modelName is None):
         if (verbose):
-          print(
+          fprint(
             f"No model name found in training args for trial '{trial}'. "
             f"Attempting to infer from trial name..."
           )
@@ -427,7 +411,7 @@ def Main():
         }
         modelObject = lut.get(parentDirName, None)
         if (verbose):
-          print(
+          fprint(
             f"Parent directory name for trial '{trial}': '{parentDirName}'. "
             f"Looking up in LUT for model name and image size..."
           )
@@ -435,13 +419,13 @@ def Main():
           modelName = modelObject[0]
           imgSize = modelObject[1]
           if (verbose):
-            print(
+            fprint(
               f"Inferred model name '{modelName}' and image size {imgSize} for "
               f"trial '{trial}' from LUT based on trial name."
             )
         else:
           if (verbose):
-            print(
+            fprint(
               f"No model name found in training args or LUT for trial '{trial}'. "
               f"Explainability will be skipped for this trial."
             )
@@ -463,18 +447,18 @@ def Main():
         if (len(checkpointsMetrics) == 0):
           raise ValueError(f"No checkpoints found in output directory: {trialDir}")
         elif (len(checkpointsMetrics) == 1):
-          print(f"Only one checkpoint found. Using: {allCheckpoints[0]}")
+          fprint(f"Only one checkpoint found. Using: {allCheckpoints[0]}")
           bestIndex = 0
           fileToSelect = allCheckpoints[bestIndex]
           judgeBy = trainingArgs.get("judgeBy", "both")
-          print(f"Best checkpoint based on {judgeBy}: {fileToSelect}")
+          fprint(f"Best checkpoint based on {judgeBy}: {fileToSelect}")
         else:
           # Convert to float for comparison and find the index of the best checkpoint.
           checkpointsMetrics = [float(metric) for metric in checkpointsMetrics]
           bestIndex = checkpointsMetrics.index(max(checkpointsMetrics))
           fileToSelect = allCheckpoints[bestIndex]
           judgeBy = trainingArgs.get("judgeBy", "both")
-          print(f"Best checkpoint based on {judgeBy}: {fileToSelect}")
+          fprint(f"Best checkpoint based on {judgeBy}: {fileToSelect}")
 
         bestModelPath = os.path.join(trialDir, fileToSelect)
         numClasses = trainingArgs.get("numClasses", 4)
@@ -489,7 +473,7 @@ def Main():
 
         model.load_state_dict(modelStateDict)
         if (verbose):
-          print(f"Model loaded from checkpoint: {bestModelPath}")
+          fprint(f"Model loaded from checkpoint: {bestModelPath}")
 
         modelTransform, modelExpectedImgSize = CereateModelTransforms(model)
         # Prefer the model's expected input size over a user/training-specified imgSize
@@ -498,14 +482,14 @@ def Main():
         # adjustment is made.
         if (imgSize != modelExpectedImgSize):
           if (verbose):
-            print(
+            fprint(
               f"Note: trial '{trial}' requested image size {imgSize}x{imgSize} but the model "
               f"expects {modelExpectedImgSize}x{modelExpectedImgSize}. Using the model's expected size."
             )
           imgSize = modelExpectedImgSize
         else:
           if (verbose):
-            print(f"Model transform created for model '{modelName}' with expected input size {imgSize}x{imgSize}.")
+            fprint(f"Model transform created for model '{modelName}' with expected input size {imgSize}x{imgSize}.")
 
         # Create profiler instance with standard ImageNet input dimensions.
         profiler = PyTorchModelMemoryProfiler(
@@ -530,7 +514,7 @@ def Main():
           )
         except Exception as e:
           if (verbose):
-            print(f"Error during memory profiling for trial '{trial}': {e}")
+            fprint(f"Error during memory profiling for trial '{trial}': {e}")
           memoryReport = profiler.ProfileModelMemory(
             optimizerType="Adam",
             optimizerKwargs={"amsgrad": True},
@@ -553,7 +537,7 @@ def Main():
 
         callable = CreatePredictCallable(model, modelTransform, device, imgSize)
         if (verbose):
-          print(f"Created prediction callable for model '{modelName}' on trial '{trial}'")
+          fprint(f"Created prediction callable for model '{modelName}' on trial '{trial}'")
 
         if (explainDatasetDir is not None and maxPerturbImages is not None and maxPerturbImages > 0):
           storeDir = os.path.join(trialDir, "Perturbation_Evaluation")
@@ -572,7 +556,7 @@ def Main():
           )
         else:
           if (verbose):
-            print(
+            fprint(
               f"Perturbation evaluation skipped for trial '{trial}' because "
               f"explainDatasetDir is '{explainDatasetDir}' and maxPerturbImages is {maxPerturbImages}."
             )
@@ -580,7 +564,7 @@ def Main():
         if (explainDatasetDir is not None and explainMethods and maxExplainImages > 0):
           for method in explainMethods:
             if (verbose):
-              print(f"Initializing CAM explainer for method '{method}' on trial '{trial}' with model '{modelName}'")
+              fprint(f"Initializing CAM explainer for method '{method}' on trial '{trial}' with model '{modelName}'")
             try:
               expl = CAMExplainerPyTorch(
                 torchModel=model,
@@ -595,7 +579,7 @@ def Main():
               classes = sorted(os.listdir(explainDatasetDir))
               for cls in classes:
                 if (verbose):
-                  print(f"Processing class '{cls}' for explainability with method '{method}' in trial '{trial}'")
+                  fprint(f"Processing class '{cls}' for explainability with method '{method}' in trial '{trial}'")
                 clsDir = os.path.join(explainDatasetDir, cls)
                 if (not os.path.isdir(clsDir)):
                   continue
@@ -604,17 +588,17 @@ def Main():
                 for imgFile in imgFiles:
                   imgPath = os.path.join(clsDir, imgFile)
                   if (verbose):
-                    print(f"Processing explainability for image: {imgPath} with method '{method}'")
+                    fprint(f"Processing explainability for image: {imgPath} with method '{method}'")
                   result = expl.ProcessImage(imgPath, classNames={i: cls for i, cls in enumerate(classes)})
                   if (verbose):
-                    print(f"Processed explainability for image: {imgPath} with method '{method}'. Result: {result}")
+                    fprint(f"Processed explainability for image: {imgPath} with method '{method}'. Result: {result}")
 
             except Exception as e:
               if (verbose):
-                print(f"Failed to initialize CAM explainer for method '{method}': {e}")
+                fprint(f"Failed to initialize CAM explainer for method '{method}': {e}")
         else:
           if (verbose):
-            print(
+            fprint(
               f"Explainability skipped for trial '{trial}' because explainDatasetDir is '{explainDatasetDir}', "
               f"explainMethods is {explainMethods}, and maxExplainImages is {maxExplainImages}."
             )
@@ -633,11 +617,11 @@ def Main():
         ]
         if (len(predCSVFile) == 0):
           if (verbose):
-            print(f"No prediction CSV file found for trial '{trial}' and subset '{subset}'.")
+            fprint(f"No prediction CSV file found for trial '{trial}' and subset '{subset}'.")
           continue  # Skip if no prediction file is found.
         elif (len(predCSVFile) > 1):
           if (verbose):
-            print(
+            fprint(
               f"Multiple prediction CSV files found for trial '{trial}' and "
               f"subset '{subset}': {predCSVFile}. Skipping this subset."
             )
@@ -652,7 +636,7 @@ def Main():
           trialPredictions.extend(dfList)  # Add to the trial predictions.
         else:
           if (verbose):
-            print(f"Prediction CSV file does not exist: {predCSVFile}")
+            fprint(f"Prediction CSV file does not exist: {predCSVFile}")
       # ---------------------------------------------------------------------------------- #
 
       # Convert list of dictionaries back to DataFrame.
@@ -661,8 +645,8 @@ def Main():
       concDF.rename(columns={col: f"{col}_{trial}" for col in concDF.columns if (col != "image")}, inplace=True)
 
       if (verbose):
-        print(f"Trial '{trial}' - Concatenated predictions shape: {concDF.shape}")
-        print(f"Trial '{trial}' - Sample of concatenated predictions:\n{concDF.head()}")
+        fprint(f"Trial '{trial}' - Concatenated predictions shape: {concDF.shape}")
+        fprint(f"Trial '{trial}' - Sample of concatenated predictions:\n{concDF.head()}")
 
       if (allPredictions is None):
         # Update `trialPredictions` with the concatenated DataFrame.
@@ -676,13 +660,13 @@ def Main():
           how="outer",  # Use outer join to keep all images across trials.
         )
         if (verbose):
-          print(f"After merging trial '{trial}', combined predictions shape: {allPredictions.shape}")
+          fprint(f"After merging trial '{trial}', combined predictions shape: {allPredictions.shape}")
 
     # Concatenate all trial predictions into a single DataFrame for analysis.
     # Guard against the case where no trial produced any predictions (allPredictions may be None).
     if (allPredictions is None or (isinstance(allPredictions, pd.DataFrame) and allPredictions.shape[0] == 0)):
       if (verbose):
-        print("No predictions were found across all trials. No combined CSV file created.")
+        fprint("No predictions were found across all trials. No combined CSV file created.")
       # Return empty structures so the caller can skip this system gracefully.
       return pd.DataFrame(), [], [], {}
     else:
@@ -693,7 +677,7 @@ def Main():
         index=False,
       )
       if (verbose):
-        print(f"Combined predictions saved to: {os.path.join(baseOutputDir, 'Combined_Predictions.csv')}")
+        fprint(f"Combined predictions saved to: {os.path.join(baseOutputDir, 'Combined_Predictions.csv')}")
 
     metrics = {}
     allProbs = []
@@ -701,9 +685,9 @@ def Main():
     actualColID = allPredictions[f"{actualColIDColName}_{trials[0]}"]
 
     if (verbose):
-      print(f"Trial '{trials[0]}' - Extracted actual labels for metrics calculation and ROC/PR curves.")
-      print(f"Trial '{trials[0]}' - Sample actual labels: {actualCol.head()}")
-      print(f"Trial '{trials[0]}' - Sample actual label indices: {actualColID.head()}")
+      fprint(f"Trial '{trials[0]}' - Extracted actual labels for metrics calculation and ROC/PR curves.")
+      fprint(f"Trial '{trials[0]}' - Sample actual labels: {actualCol.head()}")
+      fprint(f"Trial '{trials[0]}' - Sample actual label indices: {actualColID.head()}")
 
     for trial in trials:
       predCol = f"{predictionColName}_{trial}"
@@ -713,13 +697,13 @@ def Main():
         trialMetrics = CalculatePerformanceMetrics(cm, addWeightedAverage=True, eps=1e-10)
         metrics[trial] = {k: v for k, v in trialMetrics.items() if ("Weighted" in k)}
         if (verbose):
-          print(f"Trial '{trial}' - Performance Metrics:")
+          fprint(f"Trial '{trial}' - Performance Metrics:")
           for key, value in trialMetrics.items():
             if ("Weighted" in key):
-              print(f"  {key}: {np.round(value, 4)}")
+              fprint(f"  {key}: {np.round(value, 4)}")
       else:
         if (verbose):
-          print(
+          fprint(
             f"Prediction column '{predCol}' not found in combined predictions. "
             f"Skipping metrics calculation for trial '{trial}'."
           )
@@ -731,8 +715,8 @@ def Main():
         probs = [eval(p) if isinstance(p, str) else p for p in probs]
         allProbs.append(probs)
         if (verbose):
-          print(f"Trial '{trial}' - Extracted predicted probabilities for ROC/PR curves.")
-          print(f"Trial '{trial}' - Sample predicted probabilities: {probs[:5]}")
+          fprint(f"Trial '{trial}' - Extracted predicted probabilities for ROC/PR curves.")
+          fprint(f"Trial '{trial}' - Sample predicted probabilities: {probs[:5]}")
 
         # Plot calibration curve for this trial using the per-trial probabilities and the true label indices.
         # Convert probabilities and labels to numpy arrays suitable for the calibration plotting function.
@@ -743,7 +727,7 @@ def Main():
         # Only plot if the number of probability rows matches the number of labels.
         if (probsNp.shape[0] != labelsNp.shape[0]):
           if (verbose):
-            print(
+            fprint(
               f"Skipping calibration plot for trial '{trial}' because number of probability "
               f"rows ({probsNp.shape[0]}) ''"
               f"does not match number of labels ({labelsNp.shape[0]})."
@@ -764,7 +748,7 @@ def Main():
             color="green"
           )
           if (verbose):
-            print(f"Saved calibration curve for trial '{trial}': {calibFile}")
+            fprint(f"Saved calibration curve for trial '{trial}': {calibFile}")
 
           # --- Monte Carlo Dirichlet sampling and ECE plotting for this trial ---
           # Sample Monte Carlo Dirichlet distributions from the predicted probabilities.
@@ -800,17 +784,17 @@ def Main():
               applyXYLimits=True
             )
             if (verbose):
-              print(f"Saved ECE/reliability plot for trial '{trial}': {eceFile}")
-              print(f"Trial '{trial}' - ECE: {ece}")
+              fprint(f"Saved ECE/reliability plot for trial '{trial}': {eceFile}")
+              fprint(f"Trial '{trial}' - ECE: {ece}")
           else:
             if (verbose):
-              print(
+              fprint(
                 f"Skipping ECE plot for trial '{trial}' because shapes do not match: "
                 f"confidences {confidences.shape}, predicted {predictedIdx.shape}, labels {trueLabels.shape}"
               )
       else:
         if (verbose):
-          print(
+          fprint(
             f"Probability column '{probCol}' not found in combined predictions. "
             f"Skipping probability extraction and ROC/PR curves for trial '{trial}'."
           )
@@ -819,8 +803,8 @@ def Main():
     classes = sorted(allPredictions[f"{actualColName}_{trials[0]}"].unique())
 
     if (verbose):
-      print(f"Classes identified for ROC/PR curves: {classes}")
-      print(f"Sample of actual label indices for ROC/PR curves: {actualColID[:5]}")
+      fprint(f"Classes identified for ROC/PR curves: {classes}")
+      fprint(f"Sample of actual label indices for ROC/PR curves: {actualColID[:5]}")
 
     for which in ["CI", "SD"]:
       fileName = os.path.join(baseOutputDir, f"{which}_MultiTrial_PRC_Curve.pdf")
@@ -899,8 +883,8 @@ def Main():
     trialMetricsComparisonFile = os.path.join(baseOutputDir, "Trial_Metrics_Comparison.csv")
     dfMetrics.to_csv(trialMetricsComparisonFile, index=False)
     if (verbose):
-      print(f"Trial metrics comparison saved to: {trialMetricsComparisonFile}")
-      print(f"Trial Metrics Comparison:\n{dfMetrics}")
+      fprint(f"Trial metrics comparison saved to: {trialMetricsComparisonFile}")
+      fprint(f"Trial Metrics Comparison:\n{dfMetrics}")
 
     newFolderName = os.path.join(baseOutputDir, "PerformanceMetricsPlots")
     os.makedirs(newFolderName, exist_ok=True)  # Create the folder if it doesn't exist.
@@ -926,8 +910,8 @@ def Main():
     # Clear figures to free up memory after processing each file.
     plt.close("all")
 
-    print("\u2713 Performance plots generated.")
-    print("\nGenerating statistical analysis report...")
+    fprint("\u2713 Performance plots generated.")
+    fprint("\nGenerating statistical analysis report...")
     overallReport = []
     for metric in metrics:
       for index, data in enumerate(history):
@@ -942,15 +926,15 @@ def Main():
     reportDF = pd.DataFrame(overallReport)
     reportCsvPath = os.path.join(baseOutputDir, "Statistical_Analysis_Report.csv")
     reportDF.to_csv(reportCsvPath, index=False)
-    print(f"\u2713 Statistical analysis report saved: {reportCsvPath}")
+    fprint(f"\u2713 Statistical analysis report saved: {reportCsvPath}")
 
     if (verbose):
-      print(f"Names of the metrics plotted: {names}")
-      print(f"Metrics plotted: {metrics}")
-      print(f"History of metric values plotted:")
-      print(history)
-      print(f"Generated performance metric plots saved in: {newFolderName}")
-      print(f"Finished processing system: {system} ({idx + 1}/{len(foundSystems)})")
+      fprint(f"Names of the metrics plotted: {names}")
+      fprint(f"Metrics plotted: {metrics}")
+      fprint(f"History of metric values plotted:")
+      fprint(history)
+      fprint(f"Generated performance metric plots saved in: {newFolderName}")
+      fprint(f"Finished processing system: {system} ({idx + 1}/{len(foundSystems)})")
 
     return dfMetrics, history, names, metrics
 
@@ -981,14 +965,14 @@ def Main():
   ]
 
   if (verbose):
-    print(f"Found systems in base experiment directory '{baseExpDir}': {foundSystems}")
+    fprint(f"Found systems in base experiment directory '{baseExpDir}': {foundSystems}")
   # Verify the expected experiments folder structure and presence of prediction CSVs before processing.
   structureOk = VerifyExperimentStructure(baseExpDir, predCSVFileFix, subsets, verbose=verbose)
   if (not structureOk):
-    print("Please fix the issues above in the experiments folder structure and re-run the script.")
+    fprint("Please fix the issues above in the experiments folder structure and re-run the script.")
     exit(1)
   if (len(foundSystems) == 0):
-    print(f"No systems found in base experiment directory: {baseExpDir}. Please check the path and try again.")
+    fprint(f"No systems found in base experiment directory: {baseExpDir}. Please check the path and try again.")
     exit(1)  # Exit with an error code if no systems are found.
 
   # Example of the file structure (if you have multiple systems):
@@ -1005,7 +989,7 @@ def Main():
   dataOnly = None
 
   for idx, system in enumerate(foundSystems):
-    print(f"System {idx + 1}/{len(foundSystems)}: {system}")
+    fprint(f"System {idx + 1}/{len(foundSystems)}: {system}")
     baseOutputDir = os.path.join(baseExpDir, system)
     dfMetrics, history, names, metrics = ProcessSystem(
       subsets, predCSVFileFix, baseOutputDir,
@@ -1020,7 +1004,7 @@ def Main():
     # If ProcessSystem returned empty results (no predictions), skip this system.
     if ((dfMetrics is None) or (isinstance(dfMetrics, pd.DataFrame) and dfMetrics.empty)):
       if (verbose):
-        print(f"Skipping system '{system}' because no predictions/metrics were produced.")
+        fprint(f"Skipping system '{system}' because no predictions/metrics were produced.")
       continue
 
     # Drop the first row.
@@ -1036,21 +1020,21 @@ def Main():
       noOfRows = dfMetrics.shape[0]
       if (noOfRows != dataOnly.shape[0]):
         if (verbose):
-          print(
+          fprint(
             f"Warning: Number of rows in metrics for system '{system}' ({noOfRows}) does not match "
             f"the number of rows in previous systems ({dataOnly.shape[0]}). "
             f"This may indicate inconsistent metric extraction."
           )
         if (noOfRows < dataOnly.shape[0]):
           if (verbose):
-            print(
+            fprint(
               f"System '{system}' has fewer metric rows ({noOfRows}) than previous systems ({dataOnly.shape[0]}). "
               f"Some metrics may be missing for this system."
             )
           continue
         else:
           if (verbose):
-            print(
+            fprint(
               f"System '{system}' has more metric rows ({noOfRows}) than previous systems ({dataOnly.shape[0]}). "
               f"Some metrics may be extra for this system."
             )
@@ -1067,9 +1051,9 @@ def Main():
       systemsRowNames.extend([system] + [""] * (len(names) - 1))
 
   if (verbose):
-    print(f"Metrics row names (metric names): {metricsRowNames}")
-    print(f"Systems row names (system names): {systemsRowNames}")
-    print(f"Data only (metric values for all systems):\n{dataOnly}")
+    fprint(f"Metrics row names (metric names): {metricsRowNames}")
+    fprint(f"Systems row names (system names): {systemsRowNames}")
+    fprint(f"Data only (metric values for all systems):\n{dataOnly}")
 
   # Create a DataFrame to store the metrics for all systems, with the first row containing metric names and
   # the second row containing system names.
@@ -1088,8 +1072,8 @@ def Main():
   allSystemsMetricsComparisonFile = os.path.join(baseExpDir, "All_Systems_Metrics_Comparison.csv")
   dfAllMetrics.to_csv(allSystemsMetricsComparisonFile, index=False)
   if (verbose):
-    print(f"All systems metrics comparison saved to: {allSystemsMetricsComparisonFile}")
-    print(f"All Systems Metrics Comparison:\n{dfAllMetrics}")
+    fprint(f"All systems metrics comparison saved to: {allSystemsMetricsComparisonFile}")
+    fprint(f"All Systems Metrics Comparison:\n{dfAllMetrics}")
 
   # Generate performance metric plots for all systems combined.
   newFolderName = os.path.join(baseExpDir, "All_Systems_PerformanceMetricsPlots")
@@ -1116,8 +1100,8 @@ def Main():
   # Clear figures to free up memory after processing each file.
   plt.close("all")
 
-  print("\u2713 Performance plots generated.")
-  print("\nGenerating statistical analysis report...")
+  fprint("\u2713 Performance plots generated.")
+  fprint("\nGenerating statistical analysis report...")
   overallReport = []
   for metric in metrics:
     for index, data in enumerate(history):
@@ -1132,11 +1116,11 @@ def Main():
   reportDF = pd.DataFrame(overallReport)
   reportCsvPath = os.path.join(baseExpDir, "All_Systems_Statistical_Analysis_Report.csv")
   reportDF.to_csv(reportCsvPath, index=False)
-  print(f"\u2713 Statistical analysis report saved: {reportCsvPath}")
+  fprint(f"\u2713 Statistical analysis report saved: {reportCsvPath}")
 
   if (verbose):
-    print(f"Generated combined performance metric plots for all systems saved in: {newFolderName}")
-    print("Finished processing all systems.")
+    fprint(f"Generated combined performance metric plots for all systems saved in: {newFolderName}")
+    fprint("Finished processing all systems.")
 
 
 if (__name__ == "__main__"):

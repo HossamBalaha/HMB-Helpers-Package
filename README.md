@@ -15,7 +15,7 @@
 [![Modules](https://img.shields.io/badge/modules-40%2B-orange.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package/tree/main/HMB)
 [![Contributions](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package/blob/main/CONTRIBUTING.md)
 [![Maintenance](https://img.shields.io/badge/maintained-yes-green.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package)
-[![Release](https://img.shields.io/badge/release-v0.3.0-blue.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package/releases)
+[![Release](https://img.shields.io/badge/release-v0.4.0-blue.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package/releases)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21378674.svg)](https://doi.org/10.5281/zenodo.21378674)
 
 A comprehensive collection of helper modules for image processing, segmentation, deep learning workflows, text/PDF

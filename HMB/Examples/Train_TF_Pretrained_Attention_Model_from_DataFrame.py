@@ -5,7 +5,7 @@ if __name__ == "__main__":
 
 # ------------------------------------------------------------------------- #
 
-import os, builtins
+import os
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 from HMB.TFHelper import (
@@ -14,23 +14,7 @@ from HMB.TFHelper import (
   StatisticsPretrainedAttentionModelFromDataFrame
 )
 from HMB.DatasetsHelper import RawImageFolder
-
-# Ensure all prints flush by default to make logs appear promptly.
-# Save the original built-in print function for delegation.
-_original_print = builtins.print
-
-
-# Define a wrapper that sets flush=True when not explicitly provided.
-def print(*args, **kwargs):
-  # Ensure flush is True by default when not provided.
-  if ("flush" not in kwargs):
-    kwargs["flush"] = True
-  # Delegate to the original print implementation.
-  return _original_print(*args, **kwargs)
-
-# Override the built-in print with our wrapper to ensure all prints are flushed immediately.
-builtins.print = print
-
+from HMB.Utils import fprint
 
 if (__name__ == "__main__"):
   # Set to "TRAINING", "TESTING", "STATISTICS", "REPORTING", "EXPLAINABILITY", or "ALL"
@@ -51,7 +35,6 @@ if (__name__ == "__main__"):
   noOfTrials = 10  # Number of trials to run for training and evaluation.
   dpi = 300  # Set the DPI for saving evaluation results.
   ensureCUDA = True  # Set to True to ensure CUDA is available for training.
-
 
   # Define the dataset base paths using camelCase naming for clarity.
   baseDir = r"/path/to/the/project/Dataset"
@@ -81,7 +64,7 @@ if (__name__ == "__main__"):
 
   if (CURRENT_PHASE in ["TRAINING", "TESTING", "ALL"]):
     for trial in range(1, noOfTrials + 1):
-      print(f"Starting trial {trial} with model {baseModelString} and attention block {attentionBlockStr}...")
+      fprint(f"Starting trial {trial} with model {baseModelString} and attention block {attentionBlockStr}...")
       expDir = os.path.join(expFolderPath, f"Trial_{trial}")
       os.makedirs(expDir, exist_ok=True)
       modelPath = os.path.join(expDir, "BestModel.keras")

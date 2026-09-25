@@ -10,16 +10,15 @@ import matplotlib.pyplot as plt
 from torch.amp import autocast, GradScaler
 from sklearn.metrics import confusion_matrix
 from torch.utils.data import TensorDataset, DataLoader
-from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, CosineAnnealingLR
-from HMB.Initializations import IMAGE_SUFFIXES, DoRandomSeeding
+from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR
+from HMB.Utils import fprint
+from HMB.Initializations import IMAGE_SUFFIXES
 from HMB.PerformanceMetrics import *
 from HMB.DatasetsHelper import PyTorchCustomDataset, TabularPreprocessor
 from HMB.PyTorchHelper import (
-  SavePyTorchDict, LoadPyTorchDict, MixupFn, MixupCriterion, LoadModel,
-  EnableMixedPrecision, EarlyStopping, CheckpointSaver, ExponentialMovingAverage,
-  PreparePredTensorToNumpy
+  SavePyTorchDict, LoadPyTorchDict, LoadModel,
+  EnableMixedPrecision, EarlyStopping, CheckpointSaver, PreparePredTensorToNumpy
 )
-from HMB.PerformanceMetrics import HistoryPlotter
 from HMB import ImageSegmentationMetrics as ISM
 from HMB.Utils import DumpJsonFile
 
@@ -94,7 +93,7 @@ def TrainEvaluateClassificationModel(
     from torch import nn, optim
     from torch.amp import GradScaler
     from torch.utils.data import DataLoader
-    from HMB.PyTorchHelper import TrainEvaluateModel
+    from HMB.PyTorchTrainingPipeline import TrainEvaluateClassificationModel
 
     # Prepare the data loaders.
     # Replace with actual dataset and DataLoader code.
@@ -115,11 +114,11 @@ def TrainEvaluateClassificationModel(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Train and evaluate the model.
-    history = TrainEvaluateModel(
+    history = TrainEvaluateClassificationModel(
       model,
       criterion,
       device,
-      bestModelStoragePath="best_model.pth",
+      bestModelStoragePath="BestModel.pth",
       noOfClasses=10,
       numEpochs=25,
       optimizer=optimizer,
@@ -128,7 +127,7 @@ def TrainEvaluateClassificationModel(
       trainLoader=trainLoader,
       valLoader=valLoader,
       resumeFromCheckpoint=False,
-      finalModelStoragePath="final_model.pth",
+      finalModelStoragePath="FinalModel.pth",
       judgeBy="both",
       earlyStoppingPatience=None,
       verbose=True,
@@ -141,6 +140,8 @@ def TrainEvaluateClassificationModel(
       saveEvery=None
     )
   '''
+
+  from HMB.PerformanceMetrics import HistoryPlotter
 
   # Validate required arguments.
   if (trainLoader is None):
@@ -198,15 +199,18 @@ def TrainEvaluateClassificationModel(
       mode="min" if (judgeBy == "val_loss") else "max",
       verbose=verbose
     )
+    if (verbose):
+      fprint(f"CheckpointSaver initialized to save best model to {bestModelStoragePath}")
 
   if (useEma):
+    from HMB.PyTorchHelper import ExponentialMovingAverage
     ema = ExponentialMovingAverage(model, decay=0.9999, device=device)
   else:
     ema = None
 
   # If resuming from checkpoint, load the model and optimizer state.
   if (resumeFromCheckpoint and os.path.exists(bestModelStoragePath)):
-    print(f"Resuming from checkpoint: {resumeFromCheckpoint}")
+    fprint(f"Resuming from checkpoint: {resumeFromCheckpoint}")
     stateDict = LoadPyTorchDict(bestModelStoragePath, device=device)
     if (stateDict):
       model.load_state_dict(stateDict["model_state_dict"])
@@ -220,29 +224,29 @@ def TrainEvaluateClassificationModel(
       bestValAccuracy = stateDict.get("best_val_accuracy", 0.0)
 
       if (verbose):
-        print(
+        fprint(
           f"Loaded checkpoint from {bestModelStoragePath} with epoch {stateDict.get('epoch', 'N/A')}, "
           f"best val loss {bestValLoss:.4f}, and best val accuracy {bestValAccuracy:.4f}."
         )
-        print("Training will resume from the next epoch.")
+        fprint("Training will resume from the next epoch.")
     else:
       if (verbose):
-        print("Failed to load checkpoint. Starting training from scratch.")
+        fprint("Failed to load checkpoint. Starting training from scratch.")
 
     if (verbose):
-      print(f"Resumed training from epoch {startEpoch}.")
+      fprint(f"Resumed training from epoch {startEpoch}.")
       if (startEpoch >= numEpochs):
-        print("Warning: `startEpoch` is greater than or equal to `numEpochs`. No training will be performed.")
+        fprint("Warning: `startEpoch` is greater than or equal to `numEpochs`. No training will be performed.")
   else:
     if (verbose):
-      print("Starting training from scratch.")
+      fprint("Starting training from scratch.")
 
   currentPatience = 0  # Initialize patience counter for early stopping.
 
   # Training loop for the specified number of epochs.
   for epoch in range(startEpoch, numEpochs):
     if (verbose):
-      print(f"Starting epoch {epoch + 1}/{numEpochs}")
+      fprint(f"Starting epoch {epoch + 1}/{numEpochs}")
 
     # Train for one epoch.
     avgTrainEpochLoss, avgTrainEpochTrain = TrainOneEpoch(
@@ -273,7 +277,7 @@ def TrainEvaluateClassificationModel(
     )
 
     if (verbose):
-      print(
+      fprint(
         f"Epoch {epoch + 1}/{numEpochs} - "
         f"Train Loss: {avgTrainEpochLoss:.4f}, Val Loss: {avgValEpochLoss:.4f}, "
         f"Train Accuracy: {avgTrainEpochTrain:.4f}, Val Accuracy: {avgValEpochAccuracy:.4f}"
@@ -320,7 +324,7 @@ def TrainEvaluateClassificationModel(
         "best_val_accuracy"    : bestValAccuracy,
       }, filename=bestModelStoragePath)
       if (verbose):
-        print(
+        fprint(
           f"Saved new best model with val loss: {bestValLoss:.4f} "
           f"and val accuracy: {bestValAccuracy:.4f} "
           f"at epoch {epoch + 1} to {bestModelStoragePath}"
@@ -332,7 +336,7 @@ def TrainEvaluateClassificationModel(
       monitorMetric = avgValEpochLoss if (judgeBy == "val_loss") else avgValEpochAccuracy
       if (earlyStopping(monitorMetric)):
         if (verbose):
-          print(f"Training stopped early at epoch {epoch + 1}.")
+          fprint(f"Training stopped early at epoch {epoch + 1}.")
         break
     else:
       # Fallback to original inline early stopping logic.
@@ -340,7 +344,7 @@ def TrainEvaluateClassificationModel(
         currentPatience += 1
         if (currentPatience >= earlyStoppingPatience):
           if (verbose):
-            print(
+            fprint(
               f"Early stopping triggered after {earlyStoppingPatience} epochs "
               f"without improvement."
             )
@@ -357,7 +361,7 @@ def TrainEvaluateClassificationModel(
           scheduler.step()
       except Exception as e:
         if (verbose):
-          print(f"Warning: Failed to step the scheduler. Error: {e}. Continuing without stepping.")
+          fprint(f"Warning: Failed to step the scheduler. Error: {e}. Continuing without stepping.")
 
     if (saveEvery is not None and (epoch + 1) % saveEvery == 0):
       epochPath = os.path.join(
@@ -375,40 +379,38 @@ def TrainEvaluateClassificationModel(
         "best_val_accuracy"    : bestValAccuracy,
       }, filename=epochPath)
       if (verbose):
-        print(f"Saved model at epoch {epoch + 1} to {epochPath}")
+        fprint(f"Saved model at epoch {epoch + 1} to {epochPath}")
 
-  # Save the final model after training if a path is provided.
+  # Check if the final model storage path is provided.
   if (finalModelStoragePath):
-    # Use CheckpointSaver if available for consistent metadata handling.
-    if (checkpointSaver is not None):
-      # Save final checkpoint and capture the returned filepath.
-      finalCheckpointPath = checkpointSaver(
-        model=model,
-        currentMetric=bestValLoss if (judgeBy == "val_loss") else bestValAccuracy,
-        epoch=numEpochs
-      )
-      # Copy the saved checkpoint to the final path if available.
-      if (finalCheckpointPath is not None and os.path.exists(finalCheckpointPath)):
-        shutil.copy(finalCheckpointPath, finalModelStoragePath)
-        if (verbose):
-          print(f"Copied final checkpoint from {finalCheckpointPath} to {finalModelStoragePath}")
-    else:
-      # Fallback to inline saving.
-      SavePyTorchDict({
-        "model_state_dict"     : model.state_dict(),
-        "ema_state_dict"       : ema.state_dict() if (useEma and ema is not None) else None,
-        "ema_module_state_dict": ema.module.state_dict() if (useEma and ema is not None) else None,
-        "optimizer_state_dict" : optimizer.state_dict(),
-        "epoch"                : numEpochs,
-        "scaler_state_dict"    : scaler.state_dict(),
-        "best_val_loss"        : bestValLoss,
-        "best_val_accuracy"    : bestValAccuracy,
-      }, filename=finalModelStoragePath)
+    # Save the final model state directly to ensure the file always exists.
+    SavePyTorchDict({
+      # Store the model state dictionary using CamelCase for the dict key.
+      "ModelStateDict"    : model.state_dict(),
+      # Store the EMA state dictionary if EMA is used.
+      "EmaStateDict"      : ema.state_dict() if (useEma and ema is not None) else None,
+      # Store the EMA module state dictionary if EMA is used.
+      "EmaModuleStateDict": ema.module.state_dict() if (useEma and ema is not None) else None,
+      # Store the optimizer state dictionary if the optimizer exists.
+      "OptimizerStateDict": optimizer.state_dict() if (optimizer is not None) else None,
+      # Store the current epoch number.
+      "Epoch"             : numEpochs,
+      # Store the scaler state dictionary if the scaler exists.
+      "ScalerStateDict"   : scaler.state_dict() if (scaler is not None) else None,
+      # Store the best validation loss achieved during training.
+      "BestValLoss"       : bestValLoss,
+      # Store the best validation accuracy achieved during training.
+      "BestValAccuracy"   : bestValAccuracy,
+      # Pass the final model storage path to the dictionary saving function.
+    }, filename=finalModelStoragePath)
+    # Check if verbose logging is enabled for the training pipeline.
     if (verbose):
-      print(f"Saved final model after {numEpochs} epochs to {finalModelStoragePath}")
+      # Print the confirmation message indicating the final model was saved.
+      fprint(f"Saved final model after {numEpochs} epochs to {finalModelStoragePath}")
 
   if (verbose):
-    print("Training complete. Plotting training history...")
+    fprint("Training complete. Plotting training history...")
+
   HistoryPlotter(
     history,  # Dictionary containing training history.
     title="Training and Validation History",  # Title of the plot.
@@ -427,15 +429,15 @@ def TrainEvaluateClassificationModel(
     smoothFactor=0.6,  # Smoothing factor for curves (0 to 1).
   )
   if (verbose):
-    print("Training history plot saved.")
-    print("Saving training history to CSV file...")
+    fprint("Training history plot saved.")
+    fprint("Saving training history to CSV file...")
   # Saving the training history to a CSV file for future reference.
   historyCsvPath = os.path.join(os.path.dirname(bestModelStoragePath), "TrainingHistory.csv")
   df = pd.DataFrame(history)
   df.to_csv(historyCsvPath, index=False)
   if (verbose):
-    print(f"Training history saved to {historyCsvPath}")
-    print("Training and evaluation process completed.")
+    fprint(f"Training history saved to {historyCsvPath}")
+    fprint("Training and evaluation process completed.")
 
   return history
 
@@ -516,6 +518,7 @@ def TrainOneEpoch(
 
     if (useMixupFn):
       # Apply MixUp data augmentation.
+      from HMB.PyTorchHelper import MixupFn
       data, labels = MixupFn(data, labels, alpha=mixUpAlpha, numClasses=noOfClasses)
 
     # Use automatic mixed precision for the forward pass.
@@ -525,6 +528,7 @@ def TrainOneEpoch(
       # Check if labels are soft/one-hot for MixUp.
       if (useMixupFn and isinstance(labels, torch.Tensor) and labels.dim() > 1):
         # Compute the MixUp loss.
+        from HMB.PyTorchHelper import MixupCriterion
         loss = MixupCriterion(outputs, labels)
       else:
         # Compute the loss using the specified criterion.
@@ -586,12 +590,12 @@ def TrainOneEpoch(
         ema.update(model)
       except Exception as e:
         if (verbose):
-          print(f"EMA update failed: {e}")
+          fprint(f"EMA update failed: {e}")
         try:
           ema.update(model.module)
         except Exception as e2:
           if (verbose):
-            print(f"EMA update on model.module also failed: {e2}")
+            fprint(f"EMA update on model.module also failed: {e2}")
 
   # Calculate average loss and accuracy for the epoch.
   avgTrainLoss = totalEpochLoss / max(1, len(dataLoader))
@@ -735,7 +739,7 @@ def ImageryInferenceWithPlots(
 
   if (len(expDirs) == 0):
     if (verbose):
-      print("No experiment directories provided.")
+      fprint("No experiment directories provided.")
     return
 
   # Set device.
@@ -744,7 +748,7 @@ def ImageryInferenceWithPlots(
 
   if (not transform):
     if (verbose):
-      print("No transform provided. Using default transform.")
+      fprint("No transform provided. Using default transform.")
 
     if (useDefaultTransform):
       # Prepare image transform.
@@ -759,7 +763,7 @@ def ImageryInferenceWithPlots(
   dataloader = DataLoader(dataset, batch_size=batchSize, shuffle=False)
 
   if (verbose):
-    print(f"Dataset contains {len(dataset)} images across {len(dataset.classToIdx)} classes.")
+    fprint(f"Dataset contains {len(dataset)} images across {len(dataset.classToIdx)} classes.")
 
   # Initialize overall history.
   overallHistory = []
@@ -768,11 +772,11 @@ def ImageryInferenceWithPlots(
   for expDirPath in expDirs:
     if (not os.path.exists(expDirPath)):
       if (verbose):
-        print(f"Experiment directory not found: {expDirPath}")
+        fprint(f"Experiment directory not found: {expDirPath}")
       continue
 
     if (verbose):
-      print(f"Processing directory: {expDirPath}")
+      fprint(f"Processing directory: {expDirPath}")
 
     if (modelCheckpointName):
       modelPath = os.path.join(expDirPath, modelCheckpointName)
@@ -933,7 +937,7 @@ def ImageryInferenceWithPlots(
     df = df[["File"] + [col for col in df.columns if col != "File"]]
     df.to_csv(overallResultsPath, index=False)
     if (verbose):
-      print(f"Overall results saved to {overallResultsPath}.")
+      fprint(f"Overall results saved to {overallResultsPath}.")
   else:
     # Append overall metrics to existing CSV.
     if (os.path.exists(overallResultsPath)):
@@ -943,7 +947,7 @@ def ImageryInferenceWithPlots(
       dfCombined = pd.concat([dfExisting, dfNew], ignore_index=True)
       dfCombined.to_csv(overallResultsPath, index=False)
       if (verbose):
-        print(f"Overall results appended to {overallResultsPath}.")
+        fprint(f"Overall results appended to {overallResultsPath}.")
 
 
 def GenericImageryEvaluatePredictPlotSubset(
@@ -1039,7 +1043,7 @@ def GenericImageryEvaluatePredictPlotSubset(
     for splitDir in splitDirs:
       # Skip if the split directory does not exist.
       if (not splitDir.exists()):
-        print(f"Warning: Split directory does not exist, skipping: {splitDir}")
+        fprint(f"Warning: Split directory does not exist, skipping: {splitDir}")
         continue
 
       # Get sorted list of class subdirectories.
@@ -1049,15 +1053,15 @@ def GenericImageryEvaluatePredictPlotSubset(
         if (directory.is_dir())
       ])
       if (len(classDirs) == 0):
-        print(f"Warning: No class subdirectories found in split: {splitDir}")
+        fprint(f"Warning: No class subdirectories found in split: {splitDir}")
         continue
 
       # Set class names from the first valid split encountered.
       if (len(classNames) == 0):
         classNames = [directory.name for directory in classDirs]
       numClasses = len(classDirs)
-      print(f"Processing split: {splitDir.name} with {numClasses} classes.")
-      print(f"Class names: {classNames}")
+      fprint(f"Processing split: {splitDir.name} with {numClasses} classes.")
+      fprint(f"Class names: {classNames}")
 
       # Process each class directory.
       for trueClassIndex, classDir in enumerate(classDirs):
@@ -1068,21 +1072,21 @@ def GenericImageryEvaluatePredictPlotSubset(
           if (p.is_file() and (p.suffix.lower() in IMAGE_SUFFIXES))
         ]
         if (len(imageFiles) == 0):
-          print(f"Warning: No image files found in class directory, skipping: {classDir}")
+          fprint(f"Warning: No image files found in class directory, skipping: {classDir}")
           continue
 
         # Apply per-class sampling limit if maxSamples is set.
         if (maxSamples is not None):
           currentMax = max(1, maxSamples // max(1, numClasses))
           imageFiles = imageFiles[:currentMax]
-          print(f"Limiting to {len(imageFiles)} samples from class {classDir.name}")
+          fprint(f"Limiting to {len(imageFiles)} samples from class {classDir.name}")
 
         # Process each image in the class.
         for imagePath in imageFiles:
           # Load image using OpenCV (BGR format).
           img = cv2.imread(str(imagePath))
           if (img is None):
-            print(f"Warning: could not read image, skipping: {imagePath}")
+            fprint(f"Warning: could not read image, skipping: {imagePath}")
             continue
 
           # Convert BGR to RGB.
@@ -1114,7 +1118,7 @@ def GenericImageryEvaluatePredictPlotSubset(
             probList = probs.tolist()
 
           except Exception as predErr:
-            print(f"Prediction failed for {imagePath}: {predErr}")
+            fprint(f"Prediction failed for {imagePath}: {predErr}")
             predictedClassIndex = -1
             predictedConfidence = None
             probList = []
@@ -1160,13 +1164,13 @@ def GenericImageryEvaluatePredictPlotSubset(
           })
 
       # Log progress after each split.
-      print(f"Prediction collection completed for split: {splitDir.name}")
-      print(f"Collected predictions for {len(allGtsIndices)} samples across {numClasses} classes.")
-      print(f"Total samples collected for confusion matrix: {len(allGtsIndices)}")
-      print(f"{'-' * 60}")
+      fprint(f"Prediction collection completed for split: {splitDir.name}")
+      fprint(f"Collected predictions for {len(allGtsIndices)} samples across {numClasses} classes.")
+      fprint(f"Total samples collected for confusion matrix: {len(allGtsIndices)}")
+      fprint(f"{'-' * 60}")
 
     # Finalize collection.
-    print("Finished collecting predictions for all specified splits.")
+    fprint("Finished collecting predictions for all specified splits.")
 
     # Perform basic consistency checks on collected data.
     assert len(allPredsIndices) == len(allGtsIndices), "Mismatch in predictions and ground truths count."
@@ -1175,8 +1179,8 @@ def GenericImageryEvaluatePredictPlotSubset(
     assert len(allGtsIndices) == len(allGtsNames), "Mismatch in ground truths and names count."
     assert len(allPredsIndices) == len(allPredsConfidences), "Mismatch in predictions and confidences count."
     assert len(predictionsRecords) == len(allGtsIndices), "Mismatch in prediction records and ground truths count."
-    print(f"Total samples collected: {len(allGtsIndices)}")
-    print(f"{'-' * 60}")
+    fprint(f"Total samples collected: {len(allGtsIndices)}")
+    fprint(f"{'-' * 60}")
 
     # Compute confusion matrix and metrics if data exists.
     if ((len(allPredsIndices) > 0) and (len(allGtsIndices) > 0)):
@@ -1188,15 +1192,15 @@ def GenericImageryEvaluatePredictPlotSubset(
         addPerClass=False
       )
       weightedMetrics = {key: value for key, value in metricResults.items() if key.startswith("Weighted")}
-      print(f"Computed weighted metrics from confusion matrix on {len(allGtsIndices)} samples.")
+      fprint(f"Computed weighted metrics from confusion matrix on {len(allGtsIndices)} samples.")
     else:
       weightedMetrics = {}
-      print("Warning: No predictions collected for confusion matrix computation.")
+      fprint("Warning: No predictions collected for confusion matrix computation.")
 
   except Exception as ex:
     # Handle any unexpected errors during evaluation.
     weightedMetrics = {}
-    print(f"Error during prediction collection or metric computation: {ex}")
+    fprint(f"Error during prediction collection or metric computation: {ex}")
 
   # Apply prefix to metric keys if provided.
   if (prefix):
@@ -1211,7 +1215,7 @@ def GenericImageryEvaluatePredictPlotSubset(
   # Create storage directory if saving artifacts.
   if (saveArtifacts):
     storageDir.mkdir(parents=True, exist_ok=True)
-    print(f"Using storage directory: {storageDir}")
+    fprint(f"Using storage directory: {storageDir}")
 
   # Save full predictions to CSV if enabled.
   storageFilePath = None
@@ -1221,9 +1225,9 @@ def GenericImageryEvaluatePredictPlotSubset(
     try:
       dfPreds = pd.DataFrame(predictionsRecords)
       dfPreds.to_csv(storageFilePath, index=False)
-      print(f"Predictions for subset '{subset}' saved to: {storageFilePath}")
+      fprint(f"Predictions for subset '{subset}' saved to: {storageFilePath}")
     except Exception as saveErr:
-      print(f"Warning: Could not save predictions CSV: {saveErr}")
+      fprint(f"Warning: Could not save predictions CSV: {saveErr}")
 
   # Export misclassified samples if requested.
   if (exportFailureCases):
@@ -1237,33 +1241,33 @@ def GenericImageryEvaluatePredictPlotSubset(
         failureFileName = f"{prefix}_Misclassified_Samples.csv" if (prefix) else "Misclassified_Samples.csv"
         failureFilePath = storageDir / failureFileName
         dfFailures.to_csv(failureFilePath, index=False)
-        print(f"Misclassified samples exported to: {failureFilePath}")
+        fprint(f"Misclassified samples exported to: {failureFilePath}")
       else:
-        print("No misclassified samples to export.")
+        fprint("No misclassified samples to export.")
     except Exception as failErr:
-      print(f"Warning: Could not export misclassified samples: {failErr}")
+      fprint(f"Warning: Could not export misclassified samples: {failErr}")
 
   # Recompute final confusion matrix.
   try:
     cm = confusion_matrix(allGtsIndices, allPredsIndices) if (
       len(allGtsIndices) > 0 and len(allPredsIndices) > 0) else None
-    print("Confusion matrix computed.")
-    print(cm)
+    fprint("Confusion matrix computed.")
+    fprint(cm)
   except Exception as cmErr:
-    print(f"Warning: could not compute final confusion matrix: {cmErr}")
+    fprint(f"Warning: could not compute final confusion matrix: {cmErr}")
     cm = None
 
   # Print diagnostic summaries.
-  print("Class names:")
-  print(classNames)
-  print("All collected ground truth indices (first 10):")
-  print(allGtsIndices[:10], "..." if len(allGtsIndices) > 10 else "")
-  print("All collected predicted indices (first 10):")
-  print(allPredsIndices[:10], "..." if len(allPredsIndices) > 10 else "")
-  print("All collected predicted probabilities (first 3 samples):")
+  fprint("Class names:")
+  fprint(classNames)
+  fprint("All collected ground truth indices (first 10):")
+  fprint(allGtsIndices[:10], "..." if len(allGtsIndices) > 10 else "")
+  fprint("All collected predicted indices (first 10):")
+  fprint(allPredsIndices[:10], "..." if len(allPredsIndices) > 10 else "")
+  fprint("All collected predicted probabilities (first 3 samples):")
   for probs in allPredsProbs[:3]:
-    print(probs)
-  print(f"{'-' * 60}")
+    fprint(probs)
+  fprint(f"{'-' * 60}")
 
   # Save confusion matrix plot.
   if (saveArtifacts):
@@ -1286,9 +1290,9 @@ def GenericImageryEvaluatePredictPlotSubset(
         returnFig=False,
         dpi=dpi,
       )
-      print(f"Confusion matrix figure saved to: {storageDir / filename}")
+      fprint(f"Confusion matrix figure saved to: {storageDir / filename}")
     except Exception as figErr:
-      print(f"Warning: Could not generate confusion matrix figure: {figErr}")
+      fprint(f"Warning: Could not generate confusion matrix figure: {figErr}")
 
     # Store the metrics as CSV file.
     try:
@@ -1296,9 +1300,9 @@ def GenericImageryEvaluatePredictPlotSubset(
       metricsFilePath = storageDir / filename
       dfMetrics = pd.DataFrame([weightedMetrics])
       dfMetrics.to_csv(metricsFilePath, index=False)
-      print(f"Metrics saved to: {metricsFilePath}")
+      fprint(f"Metrics saved to: {metricsFilePath}")
     except Exception as metricsErr:
-      print(f"Warning: Could not save metrics CSV: {metricsErr}")
+      fprint(f"Warning: Could not save metrics CSV: {metricsErr}")
 
   # Save ROC and PRC curves if heavy metrics are enabled.
   if (saveArtifacts and heavy):
@@ -1322,9 +1326,9 @@ def GenericImageryEvaluatePredictPlotSubset(
         returnFig=False,
         dpi=dpi,
       )
-      print(f"ROC AUC figure saved to: {storageDir / filename}")
+      fprint(f"ROC AUC figure saved to: {storageDir / filename}")
     except Exception as rocErr:
-      print(f"Warning: Could not generate ROC AUC figure: {rocErr}")
+      fprint(f"Warning: Could not generate ROC AUC figure: {rocErr}")
 
     try:
       filename = f"{prefix}_PRC.pdf" if (prefix) else "PRC.pdf"
@@ -1345,25 +1349,25 @@ def GenericImageryEvaluatePredictPlotSubset(
         returnFig=False,
         dpi=dpi,
       )
-      print(f"PRC figure saved to: {storageDir / filename}")
+      fprint(f"PRC figure saved to: {storageDir / filename}")
     except Exception as prcErr:
-      print(f"Warning: Could not generate PRC figure: {prcErr}")
+      fprint(f"Warning: Could not generate PRC figure: {prcErr}")
   else:
-    print("Heavy metrics and plots skipped as per configuration.")
+    fprint("Heavy metrics and plots skipped as per configuration.")
 
   # Compute overall ECE if requested.
   if (computeECE):
     try:
       ece = ComputeECE(allPredsProbs, allGtsIndices)
       weightedMetrics["ECE"] = ece
-      print("Expected Calibration Error (ECE):", ece)
+      fprint("Expected Calibration Error (ECE):", ece)
     except Exception as eceErr:
-      print(f"Warning: Could not compute ECE: {eceErr}")
+      fprint(f"Warning: Could not compute ECE: {eceErr}")
 
   # Record total evaluation time.
   endAll = time.perf_counter()
   duration = endAll - startAll
-  print(f"Total evaluation and prediction time: {duration:.2f} seconds.")
+  fprint(f"Total evaluation and prediction time: {duration:.2f} seconds.")
   weightedMetrics["Total Evaluation Time (s)"] = duration
 
   # Return all collected results.
@@ -1382,6 +1386,7 @@ def GenericImageryEvaluatePredictPlotSubset(
 
 def GenericTabularEvaluatePredictPlotSubset(
   dataPath: str,
+  dataLabelIsEncoded: bool,
   model,
   targetColumn: str = "Label",
   featureColumns: Optional[List[str]] = None,
@@ -1403,7 +1408,7 @@ def GenericTabularEvaluatePredictPlotSubset(
   dpi: int = 720,
   fontSize: int = 13,
   device=None,
-  figSize=(10, 10),
+  figSize=(8, 8),
 ) -> Tuple[
   Optional[str],
   Dict[str, float],
@@ -1423,6 +1428,7 @@ def GenericTabularEvaluatePredictPlotSubset(
 
   Parameters:
     dataPath (str): Path to the CSV file containing the tabular dataset.
+    dataLabelIsEncoded (bool): Whether the target labels in the CSV are already encoded as integers.
     model (callable): A callable that takes a NumPy array (N, D) of features
       and returns a 1D array of class probabilities of shape (N, numClasses).
     targetColumn (str): Name of the column containing the target labels. Defaults to "Label".
@@ -1466,6 +1472,8 @@ def GenericTabularEvaluatePredictPlotSubset(
       - numpy.ndarray|None: Confusion matrix as a 2D numpy array, or None if not computable.
   '''
 
+  from HMB.Initializations import DoRandomSeeding
+
   # Set global random seeds for reproducibility using configuration value.
   DoRandomSeeding()
 
@@ -1480,19 +1488,19 @@ def GenericTabularEvaluatePredictPlotSubset(
   # Compute the base file name for this CSV without extension.
   baseFileName = os.path.splitext(os.path.basename(dataPath))[0]
   # Inform user which CSV is being processed.
-  print(f"\nProcessing CSV: {dataPath} -> Dataset name: {baseFileName}")
+  fprint(f"\nProcessing CSV: {dataPath} -> Dataset name: {baseFileName}")
 
   # Load the CSV into a DataFrame using pandas with optional row limit.
   try:
     df = pd.read_csv(dataPath, nrows=maxRowsToRead, low_memory=False)
   except Exception as loadErr:
-    print(f"Error loading dataset from {dataPath}: {loadErr}")
+    fprint(f"Error loading dataset from {dataPath}: {loadErr}")
     return (None, {}, [], [], [], [], [], [], None)
 
   # Optionally drop the first column if requested.
   if (dropFirstColumn):
     df = df.iloc[:, 1:]
-    print("Dropped the first column of the dataset as per configuration.")
+    fprint("Dropped the first column of the dataset as per configuration.")
 
   # Filter by subset if a "split" column exists.
   if ("split" in df.columns and subset not in ("all", None)):
@@ -1503,6 +1511,7 @@ def GenericTabularEvaluatePredictPlotSubset(
     preprocessor = TabularPreprocessor(ignoreCategorical=ignoreCategorical, numericScaler=numericScaler)
     # Attempt to load existing preprocessor artifacts from the save directory.
     preprocessor.Load(tabularProcessorDir)
+    saveDirLocal = Path(tabularProcessorDir)
     # If preprocessor artifacts are loaded, validate compatibility with training data.
     if (preprocessor.IsLoaded()):
       # Assume compatibility until checks determine otherwise.
@@ -1513,19 +1522,29 @@ def GenericTabularEvaluatePredictPlotSubset(
       # If any expected numeric columns are missing, mark artifacts as incompatible.
       if (len(missingCols) > 0):
         # Inform user about missing numeric columns in the training partition.
-        print(f"Preprocessor artifact numeric columns missing in training data: {missingCols}")
+        fprint(f"Preprocessor artifact numeric columns missing in training data: {missingCols}")
         compatible = False
       # If a label encoder artifact exists, ensure it covers labels present in training data.
       if ((targetColumn in df.columns) and (getattr(preprocessor, "labelEncoder", None) is not None)):
         try:
-          # Get classes from the label encoder artifact.
-          encClasses = set(preprocessor.labelEncoder.classes_)
           # Get unique labels from the training DataFrame as strings.
           labels = set(df[targetColumn].astype(str).unique())
+          fprint(f"Unique labels in training data: {labels}")
+          if (dataLabelIsEncoded):
+            # Get classes from the label encoder artifact.
+            numericLabels = preprocessor.labelEncoder.transform(preprocessor.labelEncoder.classes_)
+            encLabels = [str(label) for label in numericLabels]
+            encClasses = set(preprocessor.labelEncoder.classes_)
+            fprint(f"Label encoder classes from artifacts: {encClasses}")
+            fprint(f"Label encoder labels from artifacts: {encLabels}")
+          else:
+            # Get classes from the label encoder artifact.
+            encLabels = set(preprocessor.labelEncoder.classes_)
+            fprint(f"Label encoder classes from artifacts: {encLabels}")
           # If encoder classes do not cover training labels, mark as incompatible.
-          if (not labels.issubset(encClasses)):
+          if (not labels.issubset(encLabels)):
             # Inform user about label encoder mismatch.
-            print("Label encoder classes in artifacts do not cover training labels.")
+            fprint("Label encoder classes in artifacts do not cover training labels.")
             compatible = False
         except Exception:
           # Treat exceptions during validation as incompatibility.
@@ -1534,7 +1553,7 @@ def GenericTabularEvaluatePredictPlotSubset(
       # If artifacts are compatible, proceed using them.
       if (compatible):
         # Inform user that artifacts were loaded and validated successfully.
-        print("Preprocessor artifacts loaded from disk and validated as compatible with training data.")
+        fprint("Preprocessor artifacts loaded from disk and validated as compatible with training data.")
       else:
         raise RuntimeError(
           f"Preprocessor artifacts found in {saveDirLocal} but are not compatible with the current training data. "
@@ -1547,15 +1566,33 @@ def GenericTabularEvaluatePredictPlotSubset(
         f"Please run the pipeline once to generate artifacts before reusing them."
       )
 
+    if (dataLabelIsEncoded):
+      # Replace the target column content with string representations to ensure compatibility with the label encoder.
+      # The content should be the real labels as strings, not numeric indices.
+      encClasses = preprocessor.labelEncoder.classes_ if (getattr(preprocessor, "labelEncoder", None) is not None) else []
+      if (len(encClasses) > 0):
+        numericLabels = preprocessor.labelEncoder.transform(preprocessor.labelEncoder.classes_)
+        # Create a mapping from encoder classes to their string representations.
+        classToStr = {str(numericLabels[i]): encClasses[i] for i in range(len(encClasses))}
+        fprint(f"Mapping of numeric labels to string classes for target column '{targetColumn}': {classToStr}")
+        # Replace the target column values with their string representations.
+        df[targetColumn] = df[targetColumn].astype(str).map(classToStr).fillna(df[targetColumn].astype(str))
+        fprint(f"Target column '{targetColumn}' values replaced with string representations for label encoding.")
+      fprint(f"Unique labels in target column after replacement: {df[targetColumn].unique()}")
+      fprint(f"Target column '{targetColumn}' values: {df[targetColumn].values}")
+    else:
+      fprint(f"Target column '{targetColumn}' values are assumed to be raw labels (not encoded).")
+      fprint(f"Unique labels in target column: {df[targetColumn].unique()}")
+
     X, y = preprocessor.Transform(df, labelColumn=targetColumn)
-    print(
+    fprint(
       f"After loading preprocessor artifacts, transformed full dataset shape: "
       f"X={X.shape if (X is not None) else None}, y={y.shape if (y is not None) else None}"
     )
-    print("Labels:", np.unique(df[targetColumn].values))
+    fprint("Labels:", np.unique(df[targetColumn].values))
     encoder = preprocessor.labelEncoder
     mappings = dict(zip(encoder.classes_, encoder.transform(encoder.classes_))) if (encoder is not None) else {}
-    print(f"Label encoder mappings: {mappings}")
+    fprint(f"Label encoder mappings: {mappings}")
     classNames = encoder.classes_.tolist() if (encoder is not None) else []
 
   else:
@@ -1571,21 +1608,21 @@ def GenericTabularEvaluatePredictPlotSubset(
       # Identify non-numeric columns in features.
       nonNumericCols = [i for i, col in enumerate(featureColumns) if not np.issubdtype(df[col].dtype, np.number)]
       if (len(nonNumericCols) > 0):
-        print(
+        fprint(
           f"Warning: Ignoring non-numeric feature columns at indices "
           f"{nonNumericCols} -> {[featureColumns[i] for i in nonNumericCols]}"
         )
         # Remove non-numeric columns from features and update feature columns list.
         X = np.delete(X, nonNumericCols, axis=1)
         featureColumns = [col for i, col in enumerate(featureColumns) if i not in nonNumericCols]
-        print(f"Updated features shape after removing non-numeric columns: {X.shape}")
-        print(f"Remaining feature columns: {featureColumns}")
+        fprint(f"Updated features shape after removing non-numeric columns: {X.shape}")
+        fprint(f"Remaining feature columns: {featureColumns}")
 
-    print(
+    fprint(
       f"Extracted features and labels from DataFrame. "
       f"Features shape: {X.shape}, Labels shape: {y.shape}"
     )
-    print("Unique labels in target column:", np.unique(y))
+    fprint("Unique labels in target column:", np.unique(y))
     encoder = None
 
     # Map class labels to indices if they are not already integers.
@@ -1601,19 +1638,19 @@ def GenericTabularEvaluatePredictPlotSubset(
       y = y.astype(int)
 
     mappings = {name: idx for idx, name in enumerate(classNames)}
-    print(f"Class names: {classNames}")
-    print(f"Class to index mapping: {mappings}")
+    fprint(f"Class names: {classNames}")
+    fprint(f"Class to index mapping: {mappings}")
 
   # Determine number of classes.
   numClasses = len(classNames)
-  print(f"Number of classes determined: {numClasses}")
+  fprint(f"Number of classes determined: {numClasses}")
 
   # Apply sampling limit if maxSamples is set.
   if ((maxSamplesToEval is not None) and (len(X) > maxSamplesToEval)):
     currentMax = max(1, maxSamplesToEval)
     X = X[:currentMax]
     y = y[:currentMax]
-    print(f"Limiting evaluation to the first {len(X)} samples as per configuration.")
+    fprint(f"Limiting evaluation to the first {len(X)} samples as per configuration.")
 
     # # Randomly sample without replacement.
     # sampleIdx = np.random.choice(len(X), size=maxSamplesToEval, replace=False)
@@ -1631,15 +1668,15 @@ def GenericTabularEvaluatePredictPlotSubset(
   if (device is not None):
     try:
       model.to(device)
-      print(f"Model moved to device: {device}")
+      fprint(f"Model moved to device: {device}")
     except Exception as deviceErr:
-      print(f"Warning: Could not move model to device {device}: {deviceErr}")
+      fprint(f"Warning: Could not move model to device {device}: {deviceErr}")
 
   # Create PyTorch TensorDataset for the data with correct dtypes.
   dataset = TensorDataset(torch.from_numpy(X).float(), torch.from_numpy(y).long())
   # Create DataLoader for the dataset with configured batch size and shuffling.
   loader = DataLoader(dataset, batch_size=batchSize, shuffle=True)
-  print(f"DataLoader created with batch size {batchSize} and shuffle=True. Total batches: {len(loader)}")
+  fprint(f"DataLoader created with batch size {batchSize} and shuffle=True. Total batches: {len(loader)}")
 
   try:
     model.eval()
@@ -1685,13 +1722,13 @@ def GenericTabularEvaluatePredictPlotSubset(
     else:
       eceValues = [None] * len(allGtsIndices)
 
-    print("Finished collecting predictions for all batches.")
-    print("Total GT indices collected:", len(allGtsIndices))
-    print("Total Predicted indices collected:", len(allPredsIndices))
-    print("Total Predicted probabilities collected:", len(allPredsProbs))
-    print("Total Predicted confidences collected:", len(allPredsConfidences))
-    print("Total class names:", len(classNames))
-    print("Total samples collected for confusion matrix:", len(allGtsIndices))
+    fprint("Finished collecting predictions for all batches.")
+    fprint("Total GT indices collected:", len(allGtsIndices))
+    fprint("Total Predicted indices collected:", len(allPredsIndices))
+    fprint("Total Predicted probabilities collected:", len(allPredsProbs))
+    fprint("Total Predicted confidences collected:", len(allPredsConfidences))
+    fprint("Total class names:", len(classNames))
+    fprint("Total samples collected for confusion matrix:", len(allGtsIndices))
 
     predictionsRecords = {
       "Index"              : list(range(len(allGtsIndices))),
@@ -1707,9 +1744,9 @@ def GenericTabularEvaluatePredictPlotSubset(
     }
 
     # Log progress.
-    print(f"Prediction collection completed for {len(allGtsIndices)} samples across {numClasses} classes.")
-    print(f"Total samples collected for confusion matrix: {len(allGtsIndices)}")
-    print(f"{'-' * 60}")
+    fprint(f"Prediction collection completed for {len(allGtsIndices)} samples across {numClasses} classes.")
+    fprint(f"Total samples collected for confusion matrix: {len(allGtsIndices)}")
+    fprint(f"{'-' * 60}")
 
     # Perform basic consistency checks on collected data.
     assert len(allPredsIndices) == len(allGtsIndices), "Mismatch in predictions and ground truths count."
@@ -1717,8 +1754,8 @@ def GenericTabularEvaluatePredictPlotSubset(
     assert len(allPredsIndices) == len(allPredsNames), "Mismatch in predictions and names count."
     assert len(allGtsIndices) == len(allGtsNames), "Mismatch in ground truths and names count."
     assert len(allPredsIndices) == len(allPredsConfidences), "Mismatch in predictions and confidences count."
-    print(f"Total samples collected: {len(allGtsIndices)}")
-    print(f"{'-' * 60}")
+    fprint(f"Total samples collected: {len(allGtsIndices)}")
+    fprint(f"{'-' * 60}")
 
     # Resolve storage directory.
     if (storageDir is None):
@@ -1730,7 +1767,7 @@ def GenericTabularEvaluatePredictPlotSubset(
     # Create storage directory if saving artifacts.
     if (saveArtifacts):
       storageDir.mkdir(parents=True, exist_ok=True)
-      print(f"Using storage directory: {storageDir}")
+      fprint(f"Using storage directory: {storageDir}")
 
     # Compute confusion matrix and metrics if data exists.
     if ((len(allPredsIndices) > 0) and (len(allGtsIndices) > 0)):
@@ -1742,17 +1779,17 @@ def GenericTabularEvaluatePredictPlotSubset(
         addPerClass=True,  # Whether to include per-class metrics in the output.
       )
       weightedMetrics = {key: value for key, value in metricResults.items() if key.startswith("Weighted")}
-      print(f"Computed weighted metrics from confusion matrix on {len(allGtsIndices)} samples.")
+      fprint(f"Computed weighted metrics from confusion matrix on {len(allGtsIndices)} samples.")
     else:
       metricResults = {}
       weightedMetrics = {}
-      print("Warning: No predictions collected for confusion matrix computation.")
+      fprint("Warning: No predictions collected for confusion matrix computation.")
 
   except Exception as ex:
     # Handle any unexpected errors during evaluation.
     metricResults = {}
     weightedMetrics = {}
-    print(f"Error during prediction collection or metric computation: {ex}")
+    fprint(f"Error during prediction collection or metric computation: {ex}")
 
   # Apply prefix to metric keys if provided.
   if (prefix):
@@ -1773,9 +1810,9 @@ def GenericTabularEvaluatePredictPlotSubset(
     try:
       dfPreds = pd.DataFrame(predictionsRecords)
       dfPreds.to_csv(storageFilePath, index=False)
-      print(f"Predictions for subset '{subset}' saved to: {storageFilePath}")
+      fprint(f"Predictions for subset '{subset}' saved to: {storageFilePath}")
     except Exception as saveErr:
-      print(f"Warning: Could not save predictions CSV: {saveErr}")
+      fprint(f"Warning: Could not save predictions CSV: {saveErr}")
 
   # Export misclassified samples if requested.
   if (exportFailureCases):
@@ -1789,33 +1826,33 @@ def GenericTabularEvaluatePredictPlotSubset(
         failureFileName = f"{prefix}_Misclassified_Samples.csv" if (prefix) else "Misclassified_Samples.csv"
         failureFilePath = storageDir / failureFileName
         dfFailures.to_csv(failureFilePath, index=False)
-        print(f"Misclassified samples exported to: {failureFilePath}")
+        fprint(f"Misclassified samples exported to: {failureFilePath}")
       else:
-        print("No misclassified samples to export.")
+        fprint("No misclassified samples to export.")
     except Exception as failErr:
-      print(f"Warning: Could not export misclassified samples: {failErr}")
+      fprint(f"Warning: Could not export misclassified samples: {failErr}")
 
   # Recompute final confusion matrix.
   try:
     cm = confusion_matrix(allGtsIndices, allPredsIndices) if (
       len(allGtsIndices) > 0 and len(allPredsIndices) > 0) else None
-    print("Confusion matrix computed.")
-    print(cm)
+    fprint("Confusion matrix computed.")
+    fprint(cm)
   except Exception as cmErr:
-    print(f"Warning: could not compute final confusion matrix: {cmErr}")
+    fprint(f"Warning: could not compute final confusion matrix: {cmErr}")
     cm = None
 
   # Print diagnostic summaries.
-  print("Class names:")
-  print(classNames)
-  print("All collected ground truth indices (first 10):")
-  print(allGtsIndices[:10], "..." if len(allGtsIndices) > 10 else "")
-  print("All collected predicted indices (first 10):")
-  print(allPredsIndices[:10], "..." if len(allPredsIndices) > 10 else "")
-  print("All collected predicted probabilities (first 3 samples):")
+  fprint("Class names:")
+  fprint(classNames)
+  fprint("All collected ground truth indices (first 10):")
+  fprint(allGtsIndices[:10], "..." if len(allGtsIndices) > 10 else "")
+  fprint("All collected predicted indices (first 10):")
+  fprint(allPredsIndices[:10], "..." if len(allPredsIndices) > 10 else "")
+  fprint("All collected predicted probabilities (first 3 samples):")
   for probs in allPredsProbs[:3]:
-    print(probs)
-  print(f"{'-' * 60}")
+    fprint(probs)
+  fprint(f"{'-' * 60}")
 
   cmaps = [
     plt.cm.Blues,
@@ -1847,9 +1884,9 @@ def GenericTabularEvaluatePredictPlotSubset(
         returnFig=False,
         dpi=dpi,
       )
-      print(f"Confusion matrix figure saved to: {storageDir / filename}")
+      fprint(f"Confusion matrix figure saved to: {storageDir / filename}")
     except Exception as figErr:
-      print(f"Warning: Could not generate confusion matrix figure: {figErr}")
+      fprint(f"Warning: Could not generate confusion matrix figure: {figErr}")
 
     # Store the metrics as CSV file.
     try:
@@ -1857,9 +1894,9 @@ def GenericTabularEvaluatePredictPlotSubset(
       metricsFilePath = storageDir / filename
       dfMetrics = pd.DataFrame([weightedMetrics])
       dfMetrics.to_csv(metricsFilePath, index=False)
-      print(f"Metrics saved to: {metricsFilePath}")
+      fprint(f"Metrics saved to: {metricsFilePath}")
     except Exception as metricsErr:
-      print(f"Warning: Could not save metrics CSV: {metricsErr}")
+      fprint(f"Warning: Could not save metrics CSV: {metricsErr}")
 
   # Save ROC and PRC curves if heavy metrics are enabled.
   if (saveArtifacts and heavy):
@@ -1883,7 +1920,7 @@ def GenericTabularEvaluatePredictPlotSubset(
         returnFig=False,
         dpi=dpi,
       )
-      print(f"ROC AUC figure saved to: {storageDir / filename}")
+      fprint(f"ROC AUC figure saved to: {storageDir / filename}")
 
       filename = f"{prefix}_PRC.pdf" if (prefix) else "PRC.pdf"
       PlotPRCCurve(
@@ -1903,7 +1940,7 @@ def GenericTabularEvaluatePredictPlotSubset(
         returnFig=False,
         dpi=dpi,
       )
-      print(f"PRC figure saved to: {storageDir / filename}")
+      fprint(f"PRC figure saved to: {storageDir / filename}")
 
       filename = f"{prefix}_Calibration_Curve.pdf" if (prefix) else "Calibration_Curve.pdf"
       PlotCalibrationCurve(
@@ -1920,7 +1957,7 @@ def GenericTabularEvaluatePredictPlotSubset(
         returnFig=False,
         color="purple",
       )
-      print(f"Calibration curve figure saved to: {storageDir / filename}")
+      fprint(f"Calibration curve figure saved to: {storageDir / filename}")
 
       filename = f"{prefix}_TopK_Accuracy_Curve.pdf" if (prefix) else "TopK_Accuracy_Curve.pdf"
       PlotTopKAccuracyCurve(
@@ -1937,7 +1974,7 @@ def GenericTabularEvaluatePredictPlotSubset(
         dpi=dpi,
         color="green",
       )
-      print(f"Top-k accuracy curve figure saved to: {storageDir / filename}")
+      fprint(f"Top-k accuracy curve figure saved to: {storageDir / filename}")
 
       filename = f"{prefix}_Error_Analysis.pdf" if (prefix) else "Error_Analysis.pdf"
       PlotErrorAnalysis(
@@ -1954,7 +1991,7 @@ def GenericTabularEvaluatePredictPlotSubset(
         dpi=dpi,
         returnFig=False,
       )
-      print(f"Error analysis figure saved to: {storageDir / filename}")
+      fprint(f"Error analysis figure saved to: {storageDir / filename}")
 
       if (len(classNames) > 2):
         filename = f"{prefix}_Classwise_PRF_Bar.pdf" if (prefix) else "Classwise_PRF_Bar.pdf"
@@ -1976,14 +2013,14 @@ def GenericTabularEvaluatePredictPlotSubset(
         cm,
         classNames=classNames,
         fontSize=fontSize,
-        figsize=(10, 10),
+        figsize=figSize,
         display=False,
         save=True,
         fileName=str(storageDir / filename),
         dpi=dpi,
         returnFig=False,
       )
-      print(f"Error matrix figure saved to: {storageDir / filename}")
+      fprint(f"Error matrix figure saved to: {storageDir / filename}")
 
       filename = f"{prefix}_Misclassification_Examples.pdf" if (prefix) else "Misclassification_Examples.pdf"
       PlotMisclassificationExamples(
@@ -1999,7 +2036,7 @@ def GenericTabularEvaluatePredictPlotSubset(
         dpi=dpi,
         returnFig=False,
       )
-      print(f"Misclassification examples figure saved to: {storageDir / filename}")
+      fprint(f"Misclassification examples figure saved to: {storageDir / filename}")
 
       filename = f"{prefix}_Prediction_Confidence_Histogram.pdf" if (prefix) else "Prediction_Confidence_Histogram.pdf"
       PlotPredictionConfidenceHistogram(
@@ -2014,7 +2051,7 @@ def GenericTabularEvaluatePredictPlotSubset(
         dpi=dpi,
         returnFig=False,
       )
-      print(f"Prediction confidence histogram figure saved to: {storageDir / filename}")
+      fprint(f"Prediction confidence histogram figure saved to: {storageDir / filename}")
 
       T = 500  # Temperature scaling factor for Monte Carlo sampling.
       probsMC = SampleMonteCarloDirichletFromProbs(allPredsProbs, T=T, concentration=30.0)
@@ -2042,11 +2079,11 @@ def GenericTabularEvaluatePredictPlotSubset(
         cmap="Blues",
         applyXYLimits=True
       )
-      print(f"ECE plot saved to: {storageDir / filename}")
-      print(f"ECE: {ece}")
-      print(f"Bin Accuracies: {binAcc}")
-      print(f"Bin Confidences: {binConf}")
-      print(f"Bin Counts: {binCounts}")
+      fprint(f"ECE plot saved to: {storageDir / filename}")
+      fprint(f"ECE: {ece}")
+      fprint(f"Bin Accuracies: {binAcc}")
+      fprint(f"Bin Confidences: {binConf}")
+      fprint(f"Bin Counts: {binCounts}")
 
       filename = f"{prefix}_Risk_Coverage_Curve.pdf" if (prefix) else "Risk_Coverage_Curve.pdf"
       RiskCoverageCurve(
@@ -2062,10 +2099,10 @@ def GenericTabularEvaluatePredictPlotSubset(
         returnFig=False,
         color="blue",
       )
-      print(f"Risk-Coverage curve saved to: {storageDir / filename}")
+      fprint(f"Risk-Coverage curve saved to: {storageDir / filename}")
 
       brierScore = ComputeBrierScore(confidences, correctness)
-      print(f"Brier Score: {brierScore}")
+      fprint(f"Brier Score: {brierScore}")
 
       # Ensure the prefix is a valid string for metric key formatting.
       if (prefix is None):
@@ -2083,17 +2120,17 @@ def GenericTabularEvaluatePredictPlotSubset(
       metricsFilePath = storageDir / filename
       dfMetrics = pd.DataFrame([metricResults])
       dfMetrics.to_csv(metricsFilePath, index=False)
-      print(f"Extended metrics including Brier Score and ECE saved to: {metricsFilePath}")
+      fprint(f"Extended metrics including Brier Score and ECE saved to: {metricsFilePath}")
       # Store also as JSON for easier parsing.
       jsonFilePath = storageDir / f"{filename.replace('.csv', '.json')}"
       dfMetrics.to_json(jsonFilePath, orient="records", lines=False)
-      print(f"Extended metrics also saved as JSON to: {jsonFilePath}")
+      fprint(f"Extended metrics also saved as JSON to: {jsonFilePath}")
 
 
     except Exception as prcErr:
-      print(f"Warning: Could not generate curves: {prcErr}")
+      fprint(f"Warning: Could not generate curves: {prcErr}")
   else:
-    print("Heavy metrics and plots skipped as per configuration.")
+    fprint("Heavy metrics and plots skipped as per configuration.")
 
   # Compute overall expected calibration error only if it was not already calculated during heavy metrics evaluation.
   if (computeECE and "ECE" not in weightedMetrics):
@@ -2103,15 +2140,15 @@ def GenericTabularEvaluatePredictPlotSubset(
       # Store the computed expected calibration error in the weighted metrics dictionary.
       weightedMetrics["ECE"] = ece
       # Print the expected calibration error value to the console.
-      print("Expected Calibration Error (ECE):", ece)
+      fprint("Expected Calibration Error (ECE):", ece)
     except Exception as eceErr:
       # Print a warning message when expected calibration error computation fails.
-      print(f"Warning: Could not compute ECE: {eceErr}")
+      fprint(f"Warning: Could not compute ECE: {eceErr}")
 
   # Record total evaluation time.
   endAll = time.perf_counter()
   duration = endAll - startAll
-  print(f"Total evaluation, prediction, and plotting time: {duration:.2f} seconds.")
+  fprint(f"Total evaluation, prediction, and plotting time: {duration:.2f} seconds.")
   weightedMetrics["Total Evaluation Time (s)"] = duration
 
   # Return all collected results.
@@ -2301,6 +2338,7 @@ class PyTorchClassificationTrainingPipeline:
     r'''
     Save the configuration dictionary to outputDir/ConfigsUsed.json.
     '''
+
     if (self.configs is None):
       return
     # Create a copy to avoid modifying the original.
@@ -2315,10 +2353,10 @@ class PyTorchClassificationTrainingPipeline:
       with open(configPath, "w") as f:
         json.dump(configsCopy, f, indent=4)
       if (self.verbose):
-        print(f"Saved configs to {configPath}")
+        fprint(f"Saved configs to {configPath}")
     except Exception as e:
       if (self.verbose):
-        print(f"Warning: Failed to save configs: {e}")
+        fprint(f"Warning: Failed to save configs: {e}")
 
   def SaveDataFrames(self, trainDF, valDF, testDF, allDF=None):
     r'''
@@ -2330,28 +2368,53 @@ class PyTorchClassificationTrainingPipeline:
       testDF (pd.DataFrame): Test DataFrame with features and labels.
       allDF (pd.DataFrame | None): Optional combined DataFrame of all splits.
     '''
+
     if (not self.saveDataFrames):
       return
     try:
-      trainDF.to_csv(os.path.join(self.dataDir, "TrainData.csv"), index=False)
-      valDF.to_csv(os.path.join(self.dataDir, "ValData.csv"), index=False)
-      testDF.to_csv(os.path.join(self.dataDir, "TestData.csv"), index=False)
+      trainDF.to_csv(os.path.join(self.dataDir, "TrainDataPreprocessed.csv"), index=False)
+      valDF.to_csv(os.path.join(self.dataDir, "ValDataPreprocessed.csv"), index=False)
+      testDF.to_csv(os.path.join(self.dataDir, "TestDataPreprocessed.csv"), index=False)
       if (allDF is not None):
-        allDF.to_csv(os.path.join(self.dataDir, "AllData.csv"), index=False)
+        allDF.to_csv(os.path.join(self.dataDir, "AllDataPreprocessed.csv"), index=False)
       if (self.verbose):
-        print(f"Saved DataFrames to {self.dataDir}")
+        fprint(f"Saved DataFrames to {self.dataDir}")
     except Exception as e:
       if (self.verbose):
-        print(f"Warning: Failed to save DataFrames: {e}")
+        fprint(f"Warning: Failed to save DataFrames: {e}")
 
   # Save a checkpoint to disk with a given tag.
   def SaveCheckpoint(self, epoch: int, tag: str = "latest"):
+    r'''
+    Save the current model and optimizer state to a checkpoint file.
+
+    Parameters:
+      epoch (int): The current epoch number to save in the checkpoint.
+      tag (str): A string tag to identify the checkpoint (default: "latest").
+
+    Returns:
+      str: The file path of the saved checkpoint.
+    '''
+
+    from HMB.PyTorchHelper import SaveCheckpoint
     filePath = os.path.join(self.checkpointDir, f"Checkpoint{tag.lower().capitalize()}.pth")
     SaveCheckpoint(self.model, self.optimizer, filePath, epoch=epoch, hparams=None)
     return filePath
 
   # Load checkpoint from disk and restore model and optimizer states.
   def LoadCheckpoint(self, filePath: str, strict: bool = True) -> int:
+    r'''
+    Load a checkpoint from disk and restore the model and optimizer states.
+
+    Parameters:
+      filePath (str): Path to the checkpoint file to load.
+      strict (bool): Whether to strictly enforce that the keys in state_dict match the model's keys (default: True).
+
+    Returns:
+      int: The epoch number restored from the checkpoint (0 if not found).
+    '''
+
+    from HMB.PyTorchHelper import LoadCheckpoint
     checkpoint = LoadCheckpoint(
       filePath,
       self.model,
@@ -2365,11 +2428,18 @@ class PyTorchClassificationTrainingPipeline:
 
   # Run the full training loop for a given number of epochs.
   def Train(self, numEpochs: int):
+    r'''
+    Run the training loop for the specified number of epochs, including training, validation, logging, checkpointing, and early stopping.
+
+    Parameters:
+      numEpochs (int): Total number of epochs to train the model.
+    '''
+
     # Loop over epochs from 1 to numEpochs inclusive.
     loader = tqdm.tqdm(range(1, numEpochs + 1), desc="Training epochs", unit="epoch")
     for epoch in loader:
       if (self.verbose):
-        print(f"Starting epoch {epoch}/{numEpochs}")
+        fprint(f"Starting epoch {epoch}/{numEpochs}")
 
       # Run a training epoch and obtain average loss and accuracy.
       trainLoss, trainAcc = self.TrainEpoch(epoch)
@@ -2391,7 +2461,7 @@ class PyTorchClassificationTrainingPipeline:
             self.scheduler.step()
         except Exception as e:
           if (self.verbose):
-            print(f"Warning: Failed to step scheduler. Error: {e}")
+            fprint(f"Warning: Failed to step scheduler. Error: {e}")
 
       # Determine metric to monitor based on judgeBy parameter.
       monitorMetric = valLoss if (self.judgeBy == "val_loss") else valAcc
@@ -2404,12 +2474,12 @@ class PyTorchClassificationTrainingPipeline:
       if (self.earlyStopping is not None):
         if (self.earlyStopping(monitorMetric)):
           if (self.verbose):
-            print(f"Early stopping triggered at epoch {epoch}.")
+            fprint(f"Early stopping triggered at epoch {epoch}.")
           break
 
       # Print epoch summary.
       if (self.verbose):
-        print(
+        fprint(
           f"Epoch {epoch}/{numEpochs} - Train Loss: {trainLoss:.4f}, Val Loss: {valLoss:.4f} - "
           f"Train Acc: {trainAcc:.4f}, Val Acc: {valAcc:.4f}"
         )
@@ -2542,6 +2612,15 @@ class PyTorchClassificationTrainingPipeline:
     Run inference on the entire dataset using the allLoader and save predictions and metrics to disk.
     '''
 
+    # Load the best checkpoint if available.
+    # Fetch for all checkpoints in the checkpoint directory and load the best one based on the monitored metric.
+    bestCheckpointPath = self.checkpointSaver.GetBestCheckpointPath()
+    if (bestCheckpointPath is not None):
+      self.LoadCheckpoint(bestCheckpointPath)
+      fprint(f"Loaded best checkpoint from: {bestCheckpointPath}")
+    else:
+      fprint("No best checkpoint found. Using current model state for inference.")
+
     # Set the model to evaluation mode to disable training-specific layers.
     self.model.eval()
     # Initialize a global counter for saved prediction files.
@@ -2604,7 +2683,7 @@ class PyTorchClassificationTrainingPipeline:
           for r in perSampleMetrics:
             writer.writerow(r)
       except Exception as e:
-        print(f"Failed to write metrics CSV: {e}")
+        fprint(f"Failed to write metrics CSV: {e}")
 
     # Compute the overall summary statistics for all samples.
     totalSamples = len(perSampleMetrics)
@@ -2620,10 +2699,10 @@ class PyTorchClassificationTrainingPipeline:
     DumpJsonFile(metricsSummaryPath, overallSummary)
 
     # Print final status messages about saved files.
-    # print(f"Saved {globalIdx} predictions to: {self.predsDir}.")
-    print(f"Per-sample metrics: {metricsCsvPath}")
-    print(f"Metrics summary: {metricsSummaryPath}")
-    print(f"Overall accuracy: {overallAccuracy:.4f}")
+    # fprint(f"Saved {globalIdx} predictions to: {self.predsDir}.")
+    fprint(f"Per-sample metrics: {metricsCsvPath}")
+    fprint(f"Metrics summary: {metricsSummaryPath}")
+    fprint(f"Overall accuracy: {overallAccuracy:.4f}")
 
 
 class PyTorchUNetSegmentationTrainingPipeline:
@@ -2704,6 +2783,8 @@ class PyTorchUNetSegmentationTrainingPipeline:
       checkpointSaver (CheckpointSaver | None): Optional callback for saving checkpoints with custom logic (default: None).
       verbose (bool): Whether to print verbose logs during training and validation (default: True).
     '''
+
+    from torch.utils.tensorboard import SummaryWriter
 
     # Store references to the model and device.
     self.model = model
@@ -2811,12 +2892,14 @@ class PyTorchUNetSegmentationTrainingPipeline:
 
   # Save a checkpoint to disk with a given tag.
   def SaveCheckpoint(self, epoch: int, tag: str = "latest"):
+    from HMB.PyTorchHelper import SaveCheckpoint
     filePath = os.path.join(self.checkpointDir, f"Checkpoint{tag.lower().capitalize()}.pth")
     SaveCheckpoint(self.model, self.optimizer, filePath, epoch=epoch, hparams=None)
     return filePath
 
   # Load checkpoint from disk and restore model and optimizer states.
   def LoadCheckpoint(self, filePath: str, strict: bool = True) -> int:
+    from HMB.PyTorchHelper import LoadCheckpoint
     checkpoint = LoadCheckpoint(
       filePath,
       self.model,
@@ -2833,7 +2916,7 @@ class PyTorchUNetSegmentationTrainingPipeline:
     # Loop over epochs from 1 to numEpochs inclusive.
     for epoch in range(1, numEpochs + 1):
       if (self.verbose):
-        print(f"Starting epoch {epoch}/{numEpochs}")
+        fprint(f"Starting epoch {epoch}/{numEpochs}")
 
       # Run a training epoch and obtain average loss.
       trainLoss = self.TrainEpoch(epoch)
@@ -2854,7 +2937,7 @@ class PyTorchUNetSegmentationTrainingPipeline:
             self.scheduler.step()
         except Exception as e:
           if (self.verbose):
-            print(f"Warning: Failed to step scheduler. Error: {e}")
+            fprint(f"Warning: Failed to step scheduler. Error: {e}")
 
       # Determine metric to monitor based on judgeBy parameter.
       monitorMetric = (
@@ -2870,12 +2953,12 @@ class PyTorchUNetSegmentationTrainingPipeline:
       if (self.earlyStopping is not None):
         if (self.earlyStopping(monitorMetric)):
           if (self.verbose):
-            print(f"Early stopping triggered at epoch {epoch}.")
+            fprint(f"Early stopping triggered at epoch {epoch}.")
           break
 
       # Print epoch summary.
       if (self.verbose):
-        print(
+        fprint(
           f"Epoch {epoch}/{numEpochs} - Train Loss: {trainLoss:.4f} - "
           f"Val Loss: {valMetrics.get('Loss', 0.0):.4f} - "
           f"Val Dice: {valMetrics.get('MeanDice', 0.0):.4f} - "
@@ -2896,7 +2979,7 @@ class PyTorchUNetSegmentationTrainingPipeline:
     Visualize the input image, ground truth mask, and predicted mask side by side.
 
     This function prepares the input image, ground truth mask, and predicted mask for visualization.
-    It handles both single-channel and multi-channel images, normalizes them for display,
+    It handles both single-channel and multichannel images, normalizes them for display,
     and saves a combined figure showing the image, mask, and prediction. If the model outputs binary
     logits, it also saves the probability map as a separate image for inspection.
 
@@ -2961,16 +3044,16 @@ class PyTorchUNetSegmentationTrainingPipeline:
       predTensor = pred.detach().cpu()
       predNp = predTensor.numpy()
     except Exception:
-      predNp = np.array(preds[i].cpu())
+      predNp = np.array(pred.cpu())
 
     # Ensure prediction is 2D.
     if (predNp.ndim == 3 and predNp.shape[0] == 1):
       predNp = predNp.squeeze(0)
 
     # If logits are binary, save the probability map for inspection.
-    if (logits.shape[1] == 1):
+    if (logits.shape[0] == 1):
       # Convert the per-sample probability map to numpy.
-      probNp = probs[i].cpu().numpy()
+      probNp = torch.sigmoid(logits).detach().cpu().numpy()
       # Squeeze a leading channel dimension if present.
       if (probNp.ndim == 3 and probNp.shape[0] == 1):
         probNp = probNp.squeeze(0)
@@ -3027,7 +3110,7 @@ class PyTorchUNetSegmentationTrainingPipeline:
       image (torch.Tensor): The input image tensor to run inference on. Expected shape is [C, H, W] or [H, W].
 
     Returns:
-      torch.Tensor: The predicted mask tensor. Shape will be [H, W] for single-channel output or [C, H, W] for multi-channel output.
+      torch.Tensor: The predicted mask tensor. Shape will be [H, W] for single-channel output or [C, H, W] for multichannel output.
     '''
 
     # Set model to evaluation mode.
@@ -3537,7 +3620,7 @@ class PyTorchUNetSegmentationTrainingPipeline:
             outRow["AggregateScore"] = r.get("AggregateScore")
             writer.writerow(outRow)
       except Exception as e:
-        print(f"Failed to write metrics CSV: {e}")
+        fprint(f"Failed to write metrics CSV: {e}")
 
     # Compute the overall summary statistics for all images.
     overallSummary = {"NImages": len(perImageMetrics), "NFailed": len(failedImages), "Mean": {}, "Std": {}}
@@ -3545,8 +3628,8 @@ class PyTorchUNetSegmentationTrainingPipeline:
       vals = [r.get(mname) for r in perImageMetrics if (r.get(mname) is not None)]
       if (len(vals) > 0):
         arr = np.array(vals, dtype=float)
-        # print(f"Metric {mname} - Mean: {np.nanmean(arr):.4f}, Std: {np.nanstd(arr):.4f}")
-        # print(np.mean(arr), np.std(arr))
+        # fprint(f"Metric {mname} - Mean: {np.nanmean(arr):.4f}, Std: {np.nanstd(arr):.4f}")
+        # fprint(np.mean(arr), np.std(arr))
         overallSummary["Mean"][mname] = float(np.nanmean(arr))
         overallSummary["Std"][mname] = float(np.nanstd(arr))
       else:
@@ -3572,7 +3655,7 @@ class PyTorchUNetSegmentationTrainingPipeline:
             outRow["AggregateScore"] = r.get("AggregateScore")
             writer.writerow(outRow)
       except Exception as e:
-        print(f"Failed to write {subsetName} CSV: {e}")
+        fprint(f"Failed to write {subsetName} CSV: {e}")
 
       # Compute summary averages for this subset.
       subsetSummary = {"NImages": len(rows), "Mean": {}, "Std": {}}
@@ -3600,25 +3683,25 @@ class PyTorchUNetSegmentationTrainingPipeline:
       WriteSubsetFiles(worst10Rows, worst10CsvPath, worst10SummaryPath, "Worst10Percent")
 
     # Print final status messages about saved files.
-    print(f"Saved {globalIdx} predicted masks to: {self.predsDir}.")
-    print(f"Per-image metrics: {metricsCsvPath}")
-    print(f"Metrics summary: {metricsSummaryPath}")
-    print(f"Top 75% metrics: {top75CsvPath} and {top75SummaryPath}")
-    print(f"Worst 10% metrics: {worst10CsvPath} and {worst10SummaryPath}")
+    fprint(f"Saved {globalIdx} predicted masks to: {self.predsDir}.")
+    fprint(f"Per-image metrics: {metricsCsvPath}")
+    fprint(f"Metrics summary: {metricsSummaryPath}")
+    fprint(f"Top 75% metrics: {top75CsvPath} and {top75SummaryPath}")
+    fprint(f"Worst 10% metrics: {worst10CsvPath} and {worst10SummaryPath}")
 
 
 if (__name__ == "__main__"):
   # Run comprehensive tests for classification and segmentation training.
-  print("\n" + "=" * 60)
-  print("PyTorchHelper Training Test Suite")
-  print("=" * 60)
+  fprint("\n" + "=" * 60)
+  fprint("PyTorchHelper Training Test Suite")
+  fprint("=" * 60)
 
   # ========================================================================
   # CLASSIFICATION TRAINING TEST
   # ========================================================================
-  print("\n" + "-" * 60)
-  print("Testing Classification Training...")
-  print("-" * 60)
+  fprint("\n" + "-" * 60)
+  fprint("Testing Classification Training...")
+  fprint("-" * 60)
 
   try:
     # Create dummy classification data.
@@ -3637,8 +3720,8 @@ if (__name__ == "__main__"):
       def __init__(self, X, y):
         self.X = X
         self.y = y
-        # Create dummy image paths for Inference() compatibility.
-        self.imagePaths = [f"dummy_image_{i}.png" for i in range(len(X))]
+        # Create dummy image paths for `Inference()` compatibility.
+        self.imagePaths = [f"DummyImage_{i}.png" for i in range(len(X))]
 
       def __len__(self):
         return len(self.X)
@@ -3713,7 +3796,7 @@ if (__name__ == "__main__"):
     # Verify training completed successfully.
     assert len(history["train_loss"]) == 10, "Training history length mismatch"
     assert len(history["val_loss"]) == 10, "Validation history length mismatch"
-    print("✅ Classification training test passed.")
+    fprint("✅ Classification training test passed.")
 
     # Clean up test files.
     import shutil
@@ -3722,14 +3805,14 @@ if (__name__ == "__main__"):
       shutil.rmtree("TestClassificationOutput")
 
   except Exception as e:
-    print(f"❌ Classification training test failed: {e}")
+    fprint(f"❌ Classification training test failed: {e}")
 
   # ========================================================================
   # CLASSIFICATION CLASS TRAINING TEST
   # ========================================================================
-  print("\n" + "-" * 60)
-  print("Testing Classification Class Training...")
-  print("-" * 60)
+  fprint("\n" + "-" * 60)
+  fprint("Testing Classification Class Training...")
+  fprint("-" * 60)
 
   try:
     # Create dummy classification data.
@@ -3803,7 +3886,7 @@ if (__name__ == "__main__"):
     assert os.path.exists("TestClassificationPipelineOutput/Checkpoints"), "Checkpoint directory not created"
     assert os.path.exists("TestClassificationPipelineOutput/Preds"), "Predictions directory not created"
     assert os.path.exists("TestClassificationPipelineOutput/Metrics"), "Metrics directory not created"
-    print("✅ Classification class training test passed.")
+    fprint("✅ Classification class training test passed.")
 
     # Clean up test files.
     import shutil
@@ -3812,14 +3895,14 @@ if (__name__ == "__main__"):
       shutil.rmtree("TestClassificationPipelineOutput")
 
   except Exception as e:
-    print(f"❌ Classification class training test failed: {e}")
+    fprint(f"❌ Classification class training test failed: {e}")
 
   # ========================================================================
   # SEGMENTATION CLASS TRAINING TEST
   # ========================================================================
-  print("\n" + "-" * 60)
-  print("Testing Segmentation Training...")
-  print("-" * 60)
+  fprint("\n" + "-" * 60)
+  fprint("Testing Segmentation Training...")
+  fprint("-" * 60)
 
   try:
     # Create dummy segmentation data.
@@ -3850,7 +3933,7 @@ if (__name__ == "__main__"):
           nn.Conv2d(16, 32, kernel_size=3, padding=1),
           nn.ReLU(),
         )
-        # Use Conv2d instead of ConvTranspose2d to preserve spatial dimensions.
+        # Use Conv2D instead of ConvTranspose2d to preserve spatial dimensions.
         self.decoder = nn.Sequential(
           nn.Conv2d(32, 16, kernel_size=3, padding=1),  # No upsampling
           nn.ReLU(),
@@ -3894,7 +3977,7 @@ if (__name__ == "__main__"):
     # Verify output directories were created.
     assert os.path.exists("TestSegmentationOutput/Checkpoints"), "Checkpoint directory not created"
     assert os.path.exists("TestSegmentationOutput/Preds"), "Predictions directory not created"
-    print("✅ Segmentation training test passed.")
+    fprint("✅ Segmentation training test passed.")
 
     # Clean up test files.
     import shutil
@@ -3903,21 +3986,21 @@ if (__name__ == "__main__"):
       shutil.rmtree("TestSegmentationOutput")
 
   except Exception as e:
-    print(f"❌ Segmentation training test failed: {e}")
+    fprint(f"❌ Segmentation training test failed: {e}")
 
   # ========================================================================
   # CALLBACK INTEGRATION TEST
   # ========================================================================
-  print("\n" + "-" * 60)
-  print("Testing Callback Integration...")
-  print("-" * 60)
+  fprint("\n" + "-" * 60)
+  fprint("Testing Callback Integration...")
+  fprint("-" * 60)
 
   try:
     # Test EnableMixedPrecision.
     model = SimpleClassifier(100, 10)
     scaler = EnableMixedPrecision(model)
     assert scaler is not None, "EnableMixedPrecision returned None"
-    print("✅ EnableMixedPrecision test passed.")
+    fprint("✅ EnableMixedPrecision test passed.")
 
     # Test EarlyStopping.
     earlyStopping = EarlyStopping(patience=3, mode="min", verbose=False)
@@ -3928,7 +4011,7 @@ if (__name__ == "__main__"):
     for _ in range(3):
       earlyStopping(0.4)
     assert earlyStopping.earlyStop, "EarlyStopping should trigger after patience"
-    print("✅ EarlyStopping test passed.")
+    fprint("✅ EarlyStopping test passed.")
 
     # Test CheckpointSaver.
     import tempfile
@@ -3938,16 +4021,16 @@ if (__name__ == "__main__"):
       filepath = saver(model=model, currentMetric=0.5, epoch=1)
       assert filepath is not None, "CheckpointSaver returned None"
       assert os.path.exists(filepath), "Checkpoint file not saved"
-      print("✅ CheckpointSaver test passed.")
+      fprint("✅ CheckpointSaver test passed.")
 
   except Exception as e:
-    print(f"❌ Callback integration test failed: {e}")
+    fprint(f"❌ Callback integration test failed: {e}")
 
   # ========================================================================
   # FINAL SUMMARY
   # ========================================================================
-  print("\n" + "=" * 60)
-  print("Test Suite Complete")
-  print("=" * 60)
-  print("All tests executed. Review output above for pass/fail status.")
-  print("Note: Test files were cleaned up after successful runs.")
+  fprint("\n" + "=" * 60)
+  fprint("Test Suite Complete")
+  fprint("=" * 60)
+  fprint("All tests executed. Review output above for pass/fail status.")
+  fprint("Note: Test files were cleaned up after successful runs.")

@@ -285,6 +285,336 @@ class FocalLossAlt(nn.Module):
     return loss
 
 
+import torch
+import torch.nn as nn
+
+
+class FocalLossRobust(torch.nn.Module):
+  r'''
+  Focal Loss implementation with class-balanced alpha for histopathology.
+
+  Parameters:
+    gamma (float): focusing parameter.
+    alpha (None|float|list|Tensor): balancing factor. If None, class-balanced alpha is calculated if numClasses and classCounts are provided.
+    reduction (str): "mean", "sum" or "none".
+    numClasses (int|None): number of classes for automatic alpha calculation.
+    classCounts (list|None): list of class counts for automatic alpha calculation.
+  '''
+
+  # Initialize the loss function.
+  def __init__(self, gamma=2.0, alpha=None, reduction="mean", numClasses=None, classCounts=None):
+    # Call parent constructor.
+    super(FocalLossRobust, self).__init__()
+    # Store gamma.
+    self.gamma = gamma
+    # Store reduction method.
+    self.reduction = reduction
+
+    # Calculate class-balanced alpha if not provided.
+    if (alpha is None and numClasses is not None and classCounts is not None):
+      # Convert counts to tensor.
+      counts = torch.tensor(classCounts, dtype=torch.float32)
+      # Calculate inverse frequency.
+      alpha = 1.0 / (counts + 1e-6)
+      # Normalize alpha.
+      alpha = alpha / alpha.sum()
+      # Register alpha as a buffer so it moves to device automatically.
+      self.register_buffer("alpha", alpha)
+    # Check if alpha is provided explicitly.
+    elif (alpha is not None):
+      # Convert provided alpha to tensor if it is a list.
+      if (isinstance(alpha, list)):
+        # Create tensor from the list.
+        alpha = torch.tensor(alpha, dtype=torch.float32)
+      # Register alpha as a buffer.
+      self.register_buffer("alpha", alpha)
+    # Handle the case where no alpha is provided or calculated.
+    else:
+      # Set alpha to None.
+      self.alpha = None
+
+  # Define the forward pass.
+  def forward(self, inputs, targets):
+    r'''
+    Compute focal loss with support for soft and hard labels.
+
+    Parameters:
+      inputs (Tensor): logits of shape (N, C).
+      targets (Tensor): long tensor of shape (N,) with class indices or one-hot tensor of shape (N, C).
+
+    Returns:
+      torch.Tensor: computed loss.
+    '''
+
+    # Ensure alpha is on the same device as inputs.
+    if (self.alpha is not None and self.alpha.device != inputs.device):
+      # Move alpha to the correct device.
+      self.alpha = self.alpha.to(inputs.device)
+
+    # Check if targets are one-hot encoded from Mixup or Cutmix.
+    if (targets.dim() > 1):
+      # Compute log probabilities.
+      logProbs = torch.nn.functional.log_softmax(inputs, dim=1)
+      # Compute cross entropy manually for soft labels.
+      ceLoss = -torch.sum(targets * logProbs, dim=1)
+      # Compute probabilities.
+      probs = torch.softmax(inputs, dim=1)
+      # Gather the probabilities of the true classes using soft labels.
+      pt = torch.sum(targets * probs, dim=1)
+    # Handle standard hard labels.
+    else:
+      # Compute cross entropy loss for hard labels.
+      ceLoss = torch.nn.functional.cross_entropy(inputs, targets, reduction="none")
+      # Compute probabilities.
+      probs = torch.softmax(inputs, dim=1)
+      # Gather the probabilities of the true classes.
+      pt = probs.gather(1, targets.unsqueeze(1)).squeeze(1)
+
+    # Compute focal weight.
+    focalWeight = (1 - pt) ** self.gamma
+
+    # Apply alpha balancing if available.
+    if (self.alpha is not None):
+      # Check if targets are one-hot or hard labels.
+      if (targets.dim() > 1):
+        # Use dot product for soft labels.
+        alphaFactor = torch.sum(targets * self.alpha, dim=1)
+      # Handle hard labels.
+      else:
+        # Index alpha for hard labels.
+        alphaFactor = self.alpha[targets]
+      # Multiply focal weight by alpha.
+      focalWeight = focalWeight * alphaFactor
+
+    # Compute focal loss.
+    focalLoss = focalWeight * ceLoss
+
+    # Apply reduction.
+    if (self.reduction == "mean"):
+      # Return mean.
+      return focalLoss.mean()
+    # Check for sum reduction.
+    elif (self.reduction == "sum"):
+      # Return sum.
+      return focalLoss.sum()
+    # Return unreduced loss.
+    return focalLoss
+
+
+class WassersteinTopologicalLoss(torch.nn.Module):
+  r'''
+  Composite loss combining Wasserstein contrastive loss and topological regularization.
+
+  Parameters:
+    numClasses (int): number of classes for prototype initialization.
+    featureDim (int): feature dimension for prototype initialization.
+    epsilon (float): entropic regularization parameter for Sinkhorn.
+    lambdaTopo (float): weighting factor for the topological penalty.
+    lambdaContrastive (float): weighting factor for the contrastive Wasserstein loss.
+  '''
+
+  # Initialize the Wasserstein and Topological loss module.
+  def __init__(self, numClasses, featureDim, epsilon=0.1, lambdaTopo=0.1, lambdaContrastive=0.1):
+    # Call the parent neural network module constructor.
+    super(WassersteinTopologicalLoss, self).__init__()
+    # Store the number of classes for prototype initialization.
+    self.numClasses = numClasses
+    # Store the feature dimension for prototype initialization.
+    self.featureDim = featureDim
+    # Store the entropic regularization parameter for Sinkhorn.
+    self.epsilon = epsilon
+    # Store the weighting factor for the topological penalty.
+    self.lambdaTopo = lambdaTopo
+    # Store the weighting factor for the contrastive Wasserstein loss.
+    self.lambdaContrastive = lambdaContrastive
+    # Initialize the class prototypes as a non-trainable buffer.
+    self.register_buffer("classPrototypes", torch.randn(numClasses, featureDim))
+    # Initialize the prototype momentum for exponential moving average updates.
+    self.prototypeMomentum = 0.99
+
+  # Define the forward pass for the composite loss.
+  def forward(self, featureMaps, targetLabels, spatialPriors):
+    r'''
+    Compute the composite Wasserstein and topological loss.
+
+    Parameters:
+      featureMaps (Tensor): feature maps of shape (N, D).
+      targetLabels (Tensor): long tensor of shape (N,) with class indices.
+      spatialPriors (Tensor): spatial prior distribution of shape (N,).
+
+    Returns:
+      dict: dictionary containing "TotalLoss", "ContrastiveLoss", and "TopologicalLoss".
+    '''
+
+    # Check if the prototypes have been initialized with the correct feature dimension.
+    if (self.classPrototypes.size(1) != featureMaps.size(1)):
+      # Re-initialize the class prototypes with the correct feature dimension.
+      self.classPrototypes = torch.randn(self.numClasses, featureMaps.size(1), device=featureMaps.device)
+    # Determine the batch size from the feature maps.
+    batchSize = featureMaps.size(0)
+    # Verify that the batch size is strictly greater than zero.
+    if (batchSize == 0):
+      # Raise a value error if the batch is empty.
+      raise ValueError("Batch size cannot be zero.")
+    # Calculate the contrastive Wasserstein loss against class prototypes.
+    contrastiveLoss = self.ComputeWassersteinContrastiveLoss(featureMaps, targetLabels)
+    # Calculate the topological regularization penalty from spatial priors.
+    topoLoss = self.ComputeTopologicalPenalty(featureMaps, spatialPriors)
+    # Aggregate the contrastive loss and the topological penalty.
+    totalLoss = (self.lambdaContrastive * contrastiveLoss) + (self.lambdaTopo * topoLoss)
+    # Return a dictionary containing the decomposed loss components.
+    return {"TotalLoss": totalLoss, "ContrastiveLoss": contrastiveLoss, "TopologicalLoss": topoLoss}
+
+  # Define the method to compute the Wasserstein contrastive loss.
+  def ComputeWassersteinContrastiveLoss(self, featureMaps, targetLabels):
+    r'''
+    Compute the Wasserstein contrastive loss for the given features and labels.
+
+    Parameters:
+      featureMaps (Tensor): feature maps of shape (N, D).
+      targetLabels (Tensor): long tensor of shape (N,) with class indices.
+
+    Returns:
+      torch.Tensor: normalized contrastive loss value.
+    '''
+
+    # Initialize a list to collect losses for each class to avoid inplace accumulation issues.
+    lossList = []
+
+    # Iterate over each unique class present in the current batch.
+    for currentLabel in torch.unique(targetLabels):
+      # Create a boolean mask for the current class.
+      classMask = (targetLabels == currentLabel)
+      # Extract the feature maps belonging to the current class.
+      classFeatures = featureMaps[classMask]
+
+      # Retrieve a cloned prototype for the current class to decouple it from buffer version tracking.
+      prototype = self.classPrototypes[currentLabel].clone().unsqueeze(0)
+
+      # Compute the cost matrix between class features and the prototype.
+      costMatrix = torch.cdist(classFeatures, prototype, p=2)
+
+      # Compute the regularized optimal transport plan using Sinkhorn iterations.
+      transportPlan = self.SinkhornIteration(costMatrix, self.epsilon)
+
+      # Calculate the Wasserstein distance for the positive class.
+      positiveCost = torch.sum(transportPlan * costMatrix)
+
+      # Create a mask to exclude the positive class for negative sampling.
+      negativeMask = torch.ones(self.numClasses, dtype=torch.bool, device=featureMaps.device)
+      # Set the positive class index to false in the negative mask.
+      negativeMask[currentLabel] = False
+
+      # Initialize class loss with the positive cost.
+      classLoss = positiveCost
+
+      # Check if there are negative classes available.
+      if (negativeMask.sum() > 0):
+        # Extract cloned negative prototypes to prevent version tracking issues.
+        negativePrototypes = self.classPrototypes[negativeMask].clone()
+        # Compute the cost matrix between class features and negative prototypes.
+        negativeCostMatrix = torch.cdist(classFeatures, negativePrototypes, p=2)
+        # Compute the optimal transport plan for negative prototypes.
+        negativeTransportPlan = self.SinkhornIteration(negativeCostMatrix, self.epsilon)
+        # Calculate the minimum Wasserstein distance among negative classes.
+        minNegativeCost = torch.min(torch.sum(negativeTransportPlan * negativeCostMatrix, dim=1))
+        # Define the margin for the hinge loss formulation.
+        margin = 1.0
+        # Add the hinge loss for the current class.
+        classLoss = classLoss + torch.relu(positiveCost - minNegativeCost + margin)
+
+      # Append the computed loss for this class.
+      lossList.append(classLoss)
+
+      # Update the class prototype using exponential moving average.
+      self.UpdatePrototype(currentLabel, classFeatures.detach())
+
+    # Stack and average the losses to safely compute the final value.
+    if (len(lossList) > 0):
+      # Calculate the mean of the stacked losses.
+      normalizedContrastiveLoss = torch.stack(lossList).mean()
+    # Handle the case where the loss list is empty.
+    else:
+      # Create a zero tensor with gradient tracking enabled.
+      normalizedContrastiveLoss = torch.tensor(0.0, device=featureMaps.device, requires_grad=True)
+
+    # Return the normalized contrastive loss value.
+    return normalizedContrastiveLoss
+
+  # Define the method to update class prototypes.
+  @torch.no_grad()
+  def UpdatePrototype(self, classIndex, classFeatures):
+    r'''
+    Update the class prototype using exponential moving average.
+
+    Parameters:
+      classIndex (int): index of the class to update.
+      classFeatures (Tensor): feature maps of the current class batch.
+    '''
+
+    # Compute the mean feature vector for the current class batch.
+    batchMean = classFeatures.mean(dim=0)
+    # Compute the new prototype value.
+    newVal = (self.prototypeMomentum * self.classPrototypes.data[classIndex]) + (
+        (1 - self.prototypeMomentum) * batchMean)
+    # Use copy_ to safely update the buffer data without triggering autograd version errors.
+    self.classPrototypes.data[classIndex].copy_(newVal)
+
+  # Define the Sinkhorn iteration method for optimal transport.
+  def SinkhornIteration(self, costMatrix, epsilon):
+    r'''
+    Compute the regularized optimal transport plan using Sinkhorn iterations.
+
+    Parameters:
+      costMatrix (Tensor): cost matrix of shape (N, M).
+      epsilon (float): entropic regularization parameter.
+
+    Returns:
+      torch.Tensor: regularized optimal transport plan.
+    '''
+
+    # Compute the Gibbs kernel matrix from the cost matrix and regularization parameter.
+    kernelMatrix = torch.exp(-costMatrix / epsilon)
+    # Add a small epsilon to prevent division by zero.
+    kernelMatrix = kernelMatrix + 1e-8
+    # Initialize the dual variable u as a uniform distribution.
+    u = torch.ones(kernelMatrix.size(0), 1, device=costMatrix.device) / kernelMatrix.size(0)
+    # Initialize the dual variable v as a uniform distribution.
+    v = torch.ones(kernelMatrix.size(1), 1, device=costMatrix.device) / kernelMatrix.size(1)
+    # Iterate a fixed number of times to converge the Sinkhorn algorithm.
+    for iteration in range(5):
+      # Update the dual variable u based on the current v and kernel matrix.
+      u = 1.0 / torch.matmul(kernelMatrix, v)
+      # Update the dual variable v based on the current u and transposed kernel matrix.
+      v = 1.0 / torch.matmul(kernelMatrix.T, u)
+    # Construct the final transport plan using the converged dual variables.
+    transportPlan = u * kernelMatrix * v.T
+    # Return the regularized optimal transport plan.
+    return transportPlan
+
+  # Define the method to compute the topological penalty.
+  def ComputeTopologicalPenalty(self, featureMaps, spatialPriors):
+    r'''
+    Compute the topological regularization penalty from spatial priors.
+
+    Parameters:
+      featureMaps (Tensor): feature maps of shape (N, D, H, W).
+      spatialPriors (Tensor): spatial prior distribution of shape (N, H, W).
+
+    Returns:
+      torch.Tensor: computed topological penalty.
+    '''
+
+    # Compute the L2 norm of the feature maps to represent activation intensity.
+    spatialActivations = torch.norm(featureMaps, p=2, dim=1)
+    # Normalize the spatial activations to form a probability distribution.
+    spatialDistribution = torch.nn.functional.softmax(spatialActivations, dim=0)
+    # Compute the Wasserstein distance proxy between the spatial distribution and the prior.
+    topoPenalty = torch.sum(torch.abs(spatialDistribution - spatialPriors))
+    # Return the computed topological penalty.
+    return topoPenalty
+
+
 if __name__ == "__main__":
   # Quick smoke tests for the implemented losses.
   # Multi-class example.

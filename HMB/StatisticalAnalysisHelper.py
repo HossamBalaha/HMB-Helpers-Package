@@ -136,7 +136,7 @@ class GeneralStatisticsHelper(object):
   --------
   .. code-block:: python
 
-    from HMB.GeneralStatisticsHelper import GeneralStatisticsHelper
+    from HMB.StatisticalAnalysisHelper import GeneralStatisticsHelper
 
     statsHelper = GeneralStatisticsHelper()
     data = np.random.normal(loc=0, scale=1, size=1000)
@@ -3503,6 +3503,7 @@ def PlotDistributionEDA(
         labels=labels,  # Set x-tick labels to the unique values.
         rotation=45,  # Rotate x-axis labels for better readability.
         fontsize=12,  # Set font size for x-axis labels.
+        ha="right"  # Align x-axis labels to the right.
       )
       # Set the grid behind the bars for better visibility.
       # Add grid lines for better readability.
@@ -3567,6 +3568,7 @@ def PlotMetrics(
   storeInsideNewFolder=False,  # Whether to store the plots inside a new folder.
   newFolderName="PerformanceMetricsPlots",  # Name of the folder to store the plots.
   noOfPlotsPerRow=3,  # Number of plots per row in the subplot grid.
+  xLabelAlignment="center",  # Alignment of x-axis labels (e.g., "center", "right", "left").
   cmap="viridis",  # Color map for the plots.
   differentColors=True,  # Whether to use different colors for different plots.
   fixedTicksColors=True,  # Whether to use fixed ticks colors for consistency across plots.
@@ -3592,6 +3594,7 @@ def PlotMetrics(
     storeInsideNewFolder (bool, optional): Whether to store the plots inside a new folder.
     newFolderName (str, optional): Name of the folder to store the plots.
     noOfPlotsPerRow (int, optional): Number of plots per row in the subplot grid.
+    xLabelAlignment (str, optional): Alignment of x-axis labels (e.g., "center", "right", "left").
     cmap (str, optional): Color map to use for the plots (default: "viridis").
     differentColors (bool, optional): Whether to use different colors for different plots. Default is True.
     fixedTicksColors (bool, optional): Whether to use fixed ticks colors for consistency across plots. Default is True.
@@ -3816,7 +3819,7 @@ def PlotMetrics(
                   color=cmapColors[j]
                 )
                 plt.grid(True, alpha=0.5)
-                plt.xticks(color=GetTickColor(j))
+                plt.xticks(color=GetTickColor(j), rotation=xTicksRotation, ha=xLabelAlignment)
                 plt.yticks(color=GetTickColor(j))
                 plotIdx += 1
               except Exception as e:
@@ -3901,7 +3904,7 @@ def PlotMetrics(
                   f"Q-Q Plot of Residuals\n{metric} - {names[j]}",
                   color=cmapColors[j]
                 )
-                plt.xticks(color=GetTickColor(j))
+                plt.xticks(color=GetTickColor(j), rotation=xTicksRotation, ha=xLabelAlignment)
                 plt.yticks(color=GetTickColor(j))
                 # Labels are usually set by sm.qqplot, but ensure they are present.
                 if (not plt.gca().get_ylabel()):
@@ -3986,7 +3989,7 @@ def PlotMetrics(
                     f"Bland-Altman: {metric1} vs {metric2}\n({names[k]})",
                     color=cmapColors[k]
                   )
-                  plt.xticks(color=GetTickColor(k))
+                  plt.xticks(color=GetTickColor(k), rotation=xTicksRotation, ha=xLabelAlignment)
                   plt.yticks(color=GetTickColor(k))
                   plt.legend()
                   plt.grid(True)
@@ -4033,7 +4036,7 @@ def PlotMetrics(
         )
         plt.xlabel("Performance Metric", color=GetTickColor(i))
         plt.ylabel("Frequency", color=GetTickColor(i))
-        plt.xticks(color=GetTickColor(i))
+        plt.xticks(color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
         plt.yticks(color=GetTickColor(i))
         plt.legend()
       plt.tight_layout()
@@ -4088,7 +4091,8 @@ def PlotMetrics(
           list(range(1, noOfDatasets + 1)),
           names,
           rotation=xTicksRotation,
-          color=GetTickColor(i)
+          color=GetTickColor(i),
+          ha=xLabelAlignment
         )
         plt.yticks(color=GetTickColor(i))
         plt.ylabel("Performance Metric", color=GetTickColor(i))
@@ -4132,7 +4136,10 @@ def PlotMetrics(
           f"Violin Plot of {metric} Results",
           color=color
         )
-        plt.xticks(list(range(1, noOfDatasets + 1)), names, rotation=xTicksRotation, color=GetTickColor(i))
+        plt.xticks(
+          list(range(1, noOfDatasets + 1)), names, rotation=xTicksRotation,
+          color=GetTickColor(i), ha=xLabelAlignment
+        )
         plt.yticks(color=GetTickColor(i))
         plt.ylabel("Performance Metric", color=GetTickColor(i))
       plt.tight_layout()
@@ -4169,7 +4176,7 @@ def PlotMetrics(
         )
         plt.xlabel("Theoretical Quantiles", color=GetTickColor(i))
         plt.ylabel("Sample Quantiles", color=GetTickColor(i))
-        plt.xticks(color=GetTickColor(i))
+        plt.xticks(color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
         plt.yticks(color=GetTickColor(i))
       plt.tight_layout()
       keywordRep = keyword.replace("\n", "_")
@@ -4232,7 +4239,7 @@ def PlotMetrics(
         )
         plt.xlabel("Performance Metric", color=GetTickColor(i))
         plt.ylabel("Density", color=GetTickColor(i))
-        plt.xticks(color=GetTickColor(i))
+        plt.xticks(color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
         plt.yticks(color=GetTickColor(i))
         plt.legend()
       plt.tight_layout()
@@ -4294,7 +4301,7 @@ def PlotMetrics(
           )
           plt.xlabel(metric1, color=GetTickColor(i))
           plt.ylabel(metric2, color=GetTickColor(j))
-          plt.xticks(color=GetTickColor(i))
+          plt.xticks(color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
           plt.yticks(color=GetTickColor(j))
           if (noOfDatasets > 1):
             plt.legend()
@@ -4338,7 +4345,7 @@ def PlotMetrics(
         )
         plt.xlabel("Trial", color=GetTickColor(i))
         plt.ylabel("Performance Metric", color=GetTickColor(i))
-        plt.xticks(color=GetTickColor(i))
+        plt.xticks(color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
         plt.yticks(color=GetTickColor(i))
         plt.legend()
       plt.tight_layout()
@@ -4374,7 +4381,7 @@ def PlotMetrics(
         )
         plt.xlabel("Dataset", color=GetTickColor(i))
         plt.ylabel("Mean Performance Metric", color=GetTickColor(i))
-        plt.xticks(color=GetTickColor(i))
+        plt.xticks(color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
         plt.yticks(color=GetTickColor(i))
       plt.tight_layout()
       keywordRep = keyword.replace("\n", "_")
@@ -4403,7 +4410,7 @@ def PlotMetrics(
         corr = df.corr()
         sns.heatmap(corr, annot=True, cmap=cmap, fmt=".2f", square=True)
         plt.title(f"Correlation Heatmap for {names[i]}")
-        plt.xticks(color=GetTickColor(i))
+        plt.xticks(color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
         plt.yticks(color=GetTickColor(i))
         keywordRep = keyword.replace("\n", "_")
         plt.savefig(f"CorrelationHeatmap_{names[i]}_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
@@ -4431,7 +4438,7 @@ def PlotMetrics(
         df = pd.DataFrame({metric: dataset[metric]["Trials"] for metric in metrics})
         sns.pairplot(df)
         plt.suptitle(f"Pair Plot for {names[i]}", y=1.02)
-        plt.xticks(color=GetTickColor(i))
+        plt.xticks(color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
         plt.yticks(color=GetTickColor(i))
         keywordRep = keyword.replace("\n", "_")
         plt.savefig(f"PairPlot_{names[i]}_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
@@ -4466,7 +4473,7 @@ def PlotMetrics(
         )
         plt.xlabel("Performance Metric", color=GetTickColor(i))
         plt.ylabel("Cumulative Probability", color=GetTickColor(i))
-        plt.xticks(color=GetTickColor(i))
+        plt.xticks(color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
         plt.yticks(color=GetTickColor(i))
         plt.legend()
       plt.tight_layout()
@@ -4503,7 +4510,7 @@ def PlotMetrics(
         )
         plt.xlabel("Performance Metric", color=GetTickColor(i))
         plt.ylabel("Empirical Cumulative Probability", color=GetTickColor(i))
-        plt.xticks(color=GetTickColor(i))
+        plt.xticks(color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
         plt.yticks(color=GetTickColor(i))
         plt.legend()
       plt.tight_layout()
@@ -4541,7 +4548,11 @@ def PlotMetrics(
         )
         color = cmapColors[i]
         plt.title(f"Swarm Plot of {metric} Results", color=color)
-        plt.xticks(range(len(names)), names, rotation=xTicksRotation, color=GetTickColor(i))
+        plt.xticks(
+          range(len(names)), names,
+          rotation=xTicksRotation, color=GetTickColor(i),
+          ha=xLabelAlignment
+        )
         plt.yticks(color=GetTickColor(i))
         plt.ylabel("Performance Metric", color=GetTickColor(i))
       plt.tight_layout()
@@ -4605,7 +4616,7 @@ def PlotMetrics(
         )
         plt.xlabel("", color=GetTickColor(i))
         plt.ylabel("", color=GetTickColor(i))
-        plt.xticks(color=GetTickColor(i))
+        plt.xticks(color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
         plt.yticks(color=GetTickColor(i))
         # Equal aspect ratio ensures that pie is drawn as a circle.
         plt.axis("equal")
@@ -4648,7 +4659,7 @@ def PlotMetrics(
         )
         plt.xlabel("Trial", color=GetTickColor(i))
         plt.ylabel("Performance Metric", color=GetTickColor(i))
-        plt.xticks(color=GetTickColor(i))
+        plt.xticks(color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
         plt.yticks(color=GetTickColor(i))
         plt.legend()
       plt.tight_layout()
@@ -4717,14 +4728,14 @@ def PlotMetrics(
             )
             plt.xlabel(metric1, color=GetTickColor(i))
             plt.ylabel(metric2, color=GetTickColor(j))
-            plt.xticks(color=GetTickColor(i))
+            plt.xticks(color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
             plt.yticks(color=GetTickColor(j))
             plt.colorbar(hb, ax=plt.gca(), label="Count")
           else:
             plt.title(f"Hexbin Plot: {metric1} vs {metric2}\n(No Data)", color="orange")
             plt.xlabel(metric1, color=GetTickColor(i))
             plt.ylabel(metric2, color=GetTickColor(j))
-            plt.xticks(color=GetTickColor(i))
+            plt.xticks(color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
             plt.yticks(color=GetTickColor(j))
 
         plt.tight_layout()
@@ -4761,7 +4772,7 @@ def PlotMetrics(
         plt.title(f"Contour Plot for {names[i]}")
         plt.xlabel(metrics[0], color=GetTickColor(i))
         plt.ylabel(metrics[1], color=GetTickColor(i))
-        plt.xticks(color=GetTickColor(i))
+        plt.xticks(color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
         plt.yticks(color=GetTickColor(i))
         keywordRep = keyword.replace("\n", "_")
         plt.savefig(f"ContourPlot_{names[i]}_{keywordRep}{extension}", dpi=dpi, bbox_inches="tight")
@@ -4799,7 +4810,7 @@ def PlotMetrics(
         )
         color = cmapColors[i]
         plt.title(f"Strip Plot of {metric} Results", color=color)
-        plt.xticks(range(len(names)), names, rotation=xTicksRotation, color=GetTickColor(i))
+        plt.xticks(range(len(names)), names, color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
         plt.yticks(color=GetTickColor(i))
         plt.ylabel("Performance Metric", color=GetTickColor(i))
       plt.tight_layout()
@@ -4831,7 +4842,7 @@ def PlotMetrics(
           plt.plot(x, y, "o", color=cmapColors[j], alpha=0.7, label=names[j] if i == 0 else None)
         color = cmapColors[i]
         plt.title(f"Dot Plot of {metric} Results", color=color)
-        plt.xticks(range(len(names)), names, rotation=xTicksRotation, color=GetTickColor(i))
+        plt.xticks(range(len(names)), names, color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
         plt.yticks(color=GetTickColor(i))
         plt.ylabel("Performance Metric", color=GetTickColor(i))
       plt.tight_layout()
@@ -4866,7 +4877,7 @@ def PlotMetrics(
       # Set the y-axis label for the stacked bar plot.
       plt.ylabel("Cumulative Mean", color="black")
       # Set the x-tick colors for the stacked bar plot.
-      plt.xticks(color="black")
+      plt.xticks(color="black", rotation=xTicksRotation, ha=xLabelAlignment)
       # Set the y-tick colors for the stacked bar plot.
       plt.yticks(color="black")
       # Add legend to the stacked bar plot.
@@ -4915,7 +4926,7 @@ def PlotMetrics(
         # Set the y-axis label for the stacked area plot.
         plt.ylabel("Metric Value (Cumulative)", color=GetTickColor(i))
         # Set the x-tick colors for the stacked area plot.
-        plt.xticks(color=GetTickColor(i))
+        plt.xticks(color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
         # Set the y-tick colors for the stacked area plot.
         plt.yticks(color=GetTickColor(i))
         # Add legend to the stacked area plot.
@@ -4980,7 +4991,7 @@ def PlotMetrics(
           # Set the y-axis label for the current subplot.
           plt.ylabel(metric2, color=GetTickColor(j))
           # Set the x-tick colors for the current subplot.
-          plt.xticks(color=GetTickColor(i))
+          plt.xticks(color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
           # Set the y-tick colors for the current subplot.
           plt.yticks(color=GetTickColor(j))
           # Add a colorbar to the current subplot.
@@ -5035,7 +5046,7 @@ def PlotMetrics(
         # Set the y-axis label for the current subplot.
         plt.ylabel("Performance Metric", color=GetTickColor(i))
         # Set the x-tick colors for the current subplot.
-        plt.xticks(color=GetTickColor(i))
+        plt.xticks(color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
         # Set the y-tick colors for the current subplot.
         plt.yticks(color=GetTickColor(i))
         # Add legend to the current subplot.
@@ -5092,7 +5103,7 @@ def PlotMetrics(
           plt.title(f"Raincloud Plot of {metric}", color=cmapColors[i])
           plt.xlabel("Group", fontsize=fontSize)
           plt.ylabel("Metric", fontsize=fontSize)
-          plt.xticks(color=GetTickColor(i))
+          plt.xticks(color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
           plt.yticks(color=GetTickColor(i))
           plt.tight_layout()
           keywordRep = keyword.replace("\n", "_")
@@ -5131,7 +5142,7 @@ def PlotMetrics(
           plt.title(f"Raincloud Plot of {metric}", color=cmapColors[i])
           plt.xlabel("Group", fontsize=fontSize)
           plt.ylabel("Metric", fontsize=fontSize)
-          plt.xticks(color=GetTickColor(i), rotation=xTicksRotation)
+          plt.xticks(color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
           plt.yticks(color=GetTickColor(i))
         plt.tight_layout()
         keywordRep = keyword.replace("\n", "_")
@@ -5311,7 +5322,7 @@ def PlotMetrics(
           alpha=0.8,  # Transparency for better visibility.
         )
         plt.title(f"Boxen Plot of {metric} Results", color=cmapColors[i])
-        plt.xticks(range(len(names)), names, rotation=xTicksRotation, color=GetTickColor(i))
+        plt.xticks(range(len(names)), names, color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
         plt.yticks(color=GetTickColor(i))
         plt.ylabel("Performance Metric", color=GetTickColor(i))
       plt.tight_layout()
@@ -5338,7 +5349,7 @@ def PlotMetrics(
         plt.subplot(noRows, noCols, i + 1)
         means = [np.mean(dataset[metric]["Trials"]) for dataset in data]
         plt.stem(range(len(names)), means, basefmt=" ", linefmt="-", markerfmt="o")
-        plt.xticks(range(len(names)), names, rotation=xTicksRotation, color=GetTickColor(i))
+        plt.xticks(range(len(names)), names, color=GetTickColor(i), rotation=xTicksRotation, ha=xLabelAlignment)
         plt.title(f"Lollipop Plot of {metric} Means", color=cmapColors[i])
         plt.ylabel("Mean Performance Metric", color=GetTickColor(i))
         plt.yticks(color=GetTickColor(i))
@@ -5366,7 +5377,7 @@ def PlotMetrics(
         y1 = np.mean(dataset[metrics[0]]["Trials"])
         y2 = np.mean(dataset[metrics[1]]["Trials"])
         plt.plot([0, 1], [y1, y2], marker="o", color=cmapColors[i])
-        plt.xticks([0, 1], [metrics[0], metrics[1]])
+        plt.xticks([0, 1], [metrics[0], metrics[1]], rotation=xTicksRotation, ha=xLabelAlignment)
         plt.title(f"Slope Chart for {names[i]}: {metrics[0]} vs {metrics[1]}", color=cmapColors[i])
         plt.ylabel("Mean Value")
         plt.tight_layout()
@@ -5394,7 +5405,7 @@ def PlotMetrics(
         y2 = np.mean(dataset[metrics[1]]["Trials"])
         plt.plot([0, 1], [y1, y2], "o-", color=cmapColors[i], linewidth=2)
         plt.hlines(y=[y1, y2], xmin=0, xmax=1, colors=cmapColors[i], linestyles="dotted")
-        plt.xticks([0, 1], [metrics[0], metrics[1]])
+        plt.xticks([0, 1], [metrics[0], metrics[1]], rotation=xTicksRotation, ha=xLabelAlignment)
         plt.title(f"Dumbbell Plot for {names[i]}: {metrics[0]} vs {metrics[1]}", color=cmapColors[i])
         plt.ylabel("Mean Value")
         plt.tight_layout()

@@ -1,5 +1,6 @@
 import os
 import random
+import pandas
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -1967,3 +1968,763 @@ def GenerateDistributionCountFigure(
   plt.savefig(pngPath, format="png", dpi=dpi, bbox_inches="tight")
   # Close the figure to free memory.
   plt.close()
+
+
+class EfficiencyPlotter:
+  r'''
+  Class for generating comprehensive visualization plots from model efficiency
+  profiling results. Creates multiple plots including Pareto fronts, memory
+  breakdowns, latency comparisons, and throughput analysis.
+
+  Parameters:
+    resultsDataFrame (pandas.DataFrame):  DataFrame containing profiling results
+      with columns: ModelName, Accuracy, AverageLatencyMs, PeakMemoryMb,
+      TrainingMemoryMb, TotalGFLOPs, InferenceSamplesPerSec, ParameterCount,
+      MemoryProfile.
+    outputDirectory (str):  Directory path where plots will be saved.
+    dpi (int):  The resolution of the saved plots in dots per inch.
+  '''
+
+  def __init__(
+    self,
+    resultsDataFrame,
+    outputDirectory,
+    dpi=720,
+  ):
+    # Store the results DataFrame for plotting.
+    self.resultsDataFrame = resultsDataFrame
+    # Convert output directory to Path object.
+    self.outputPath = Path(outputDirectory)
+    # Store the desired DPI for saved plots.
+    self.dpi = dpi
+    # Create the output directory if it does not exist.
+    self.outputPath.mkdir(parents=True, exist_ok=True)
+    # Set the plotting style for consistency.
+    plt.style.use("seaborn-v0_8-whitegrid")
+
+    # Validate that the required columns exist in the DataFrame.
+    requiredColumns = [
+      "ModelName", "Accuracy", "AverageLatencyMs", "PeakMemoryMb",
+      "TrainingMemoryMb", "TotalGFLOPs", "InferenceSamplesPerSec",
+      "ParameterCount", "MemoryProfile"
+    ]
+    missingColumns = [
+      col for col in requiredColumns
+      if (col not in self.resultsDataFrame.columns)
+    ]
+    if (missingColumns):
+      raise ValueError(f"Missing required columns in resultsDataFrame: {missingColumns}")
+
+  def PlotParetoFrontMultiMetric(self):
+    r'''
+    Create an enhanced Pareto front visualization showing multiple metrics
+    when test accuracy is the same across models. Uses latency vs memory
+    and adds additional information like GFLOPs and throughput.
+    '''
+
+    # Create a figure with subplots for multiple Pareto views.
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+
+    # Extract data for plotting.
+    models = self.resultsDataFrame["ModelName"]
+    latency = self.resultsDataFrame["AverageLatencyMs"]
+    accuracy = self.resultsDataFrame["Accuracy"]
+    memory = self.resultsDataFrame["PeakMemoryMb"]
+    gflops = self.resultsDataFrame["TotalGFLOPs"]
+    throughput = self.resultsDataFrame["InferenceSamplesPerSec"]
+
+    # Plot 1: Latency vs Memory (primary trade-off).
+    ax1 = axes[0, 0]
+    scatter1 = ax1.scatter(
+      latency, memory, c=accuracy, cmap="viridis",
+      s=200, alpha=0.7, edgecolors="black", linewidth=1.5
+    )
+    # Add model labels.
+    for i, model in enumerate(models):
+      ax1.annotate(model, (latency.iloc[i], memory.iloc[i]),
+                   xytext=(5, 5), textcoords="offset points",
+                   fontsize=10, fontweight="bold")
+      # Add value labels.
+      ax1.text(
+        latency.iloc[i], memory.iloc[i] * 1.02,
+        f"{latency.iloc[i]:.2f}ms\n{memory.iloc[i]:.0f}MB",
+        ha="center", fontsize=8,
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.7)
+      )
+    ax1.set_xlabel("Inference Latency (ms)", fontsize=11, fontweight="bold")
+    ax1.set_ylabel("Peak Memory (MB)", fontsize=11, fontweight="bold")
+    ax1.set_title("Pareto Front: Latency vs Memory", fontsize=12, fontweight="bold")
+    ax1.grid(True, linestyle="--", alpha=0.7)
+
+    # Plot 2: GFLOPs vs Latency.
+    ax2 = axes[0, 1]
+    scatter2 = ax2.scatter(
+      latency, gflops, c=memory, cmap="plasma",
+      s=200, alpha=0.7, edgecolors="black", linewidth=1.5
+    )
+    # Add model labels.
+    for i, model in enumerate(models):
+      ax2.annotate(
+        model, (latency.iloc[i], gflops.iloc[i]),
+        xytext=(5, 5), textcoords="offset points",
+        fontsize=10, fontweight="bold"
+      )
+      # Add value labels.
+      ax2.text(
+        latency.iloc[i], gflops.iloc[i] * 1.02,
+        f"{gflops.iloc[i]:.2f} GFLOPs",
+        ha="center", fontsize=8,
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="lightblue", alpha=0.7)
+      )
+    ax2.set_xlabel("Inference Latency (ms)", fontsize=11, fontweight="bold")
+    ax2.set_ylabel("Total GFLOPs", fontsize=11, fontweight="bold")
+    ax2.set_title("Compute Complexity vs Latency", fontsize=12, fontweight="bold")
+    ax2.grid(True, linestyle="--", alpha=0.7)
+
+    # Plot 3: Throughput vs Memory.
+    ax3 = axes[1, 0]
+    scatter3 = ax3.scatter(
+      throughput, memory, c=latency, cmap="coolwarm",
+      s=200, alpha=0.7, edgecolors="black", linewidth=1.5
+    )
+    # Add model labels.
+    for i, model in enumerate(models):
+      ax3.annotate(
+        model, (throughput.iloc[i], memory.iloc[i]),
+        xytext=(5, 5), textcoords="offset points",
+        fontsize=10, fontweight="bold"
+      )
+      # Add value labels.
+      ax3.text(
+        throughput.iloc[i], memory.iloc[i] * 1.02,
+        f"{throughput.iloc[i]:.0f} img/s",
+        ha="center", fontsize=8,
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgreen", alpha=0.7)
+      )
+    ax3.set_xlabel("Throughput (images/sec)", fontsize=11, fontweight="bold")
+    ax3.set_ylabel("Peak Memory (MB)", fontsize=11, fontweight="bold")
+    ax3.set_title("Throughput vs Memory Efficiency", fontsize=12, fontweight="bold")
+    ax3.grid(True, linestyle="--", alpha=0.7)
+
+    # Plot 4: Radar chart for multi-metric comparison.
+    ax4 = axes[1, 1]
+    ax4.remove()
+    ax4 = fig.add_subplot(2, 2, 4, projection="polar")
+    # Define metrics for radar chart (normalized).
+    categories = ["Latency\n(lower)", "Memory\n(lower)", "GFLOPs\n(lower)", "Throughput\n(higher)"]
+    numVars = len(categories)
+    angles = [n / float(numVars) * 2 * np.pi for n in range(numVars)]
+    angles += angles[:1]
+    # Normalize metrics (0-1 scale, lower is better except throughput).
+    latencyNorm = latency / latency.max()
+    memoryNorm = memory / memory.max()
+    gflopsNorm = gflops / gflops.max()
+    throughputNorm = 1 - (throughput / throughput.max())  # Invert for radar
+    # Plot each model.
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c"]
+    for i, model in enumerate(models):
+      values = [
+        latencyNorm.iloc[i], memoryNorm.iloc[i],
+        gflopsNorm.iloc[i], throughputNorm.iloc[i]
+      ]
+      values += values[:1]
+      ax4.plot(
+        angles, values, linewidth=2, linestyle="solid",
+        label=model, color=colors[i % len(colors)]
+      )
+      ax4.fill(angles, values, alpha=0.25, color=colors[i % len(colors)])
+    ax4.set_xticks(angles[:-1])
+    ax4.set_xticklabels(categories, fontsize=9)
+    ax4.set_ylim(0, 1)
+    ax4.set_title("Multi-Metric Comparison", fontsize=12, fontweight="bold",
+                  pad=20)
+    ax4.legend(loc="upper right", bbox_to_anchor=(1.3, 1.0), fontsize=9)
+    ax4.grid(True)
+
+    # Adjust layout and save.
+    plt.tight_layout()
+    plt.savefig(self.outputPath / "ParetoFront.png", dpi=self.dpi, bbox_inches="tight")
+    plt.savefig(self.outputPath / "ParetoFront.pdf", dpi=self.dpi, bbox_inches="tight")
+    plt.close()
+    # Print completion message.
+    print("Enhanced Pareto front saved to " + str(self.outputPath / "ParetoFront"))
+
+  # Plot parameter count comparison.
+  def PlotParameterCount(self):
+    r'''
+    Create a bar chart comparing the total parameter count across models
+    with values displayed above each bar.
+    '''
+
+    # Create a new figure for parameter count visualization.
+    plt.figure(figsize=(10, 6))
+    # Extract model names and parameter counts.
+    models = self.resultsDataFrame["ModelName"]
+    params = self.resultsDataFrame["ParameterCount"]
+    # Create bar chart with colors.
+    bars = plt.bar(
+      models, params, color=["#1f77b4", "#ff7f0e", "#2ca02c"],
+      edgecolor="black", linewidth=1.5, alpha=0.8
+    )
+    # Add values above bars.
+    for bar, param in zip(bars, params):
+      height = bar.get_height()
+      # Format parameter count for readability.
+      if (param >= 1e6):
+        labelText = f"{param / 1e6:.2f}M"
+      elif (param >= 1e3):
+        labelText = f"{param / 1e3:.1f}K"
+      else:
+        labelText = f"{param}"
+      plt.text(
+        bar.get_x() + bar.get_width() / 2., height,
+        labelText, ha="center", va="bottom", fontsize=11,
+        fontweight="bold",
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8)
+      )
+    # Set labels and title.
+    plt.xlabel("Model", fontsize=11, fontweight="bold")
+    plt.ylabel("Number of Parameters", fontsize=11, fontweight="bold")
+    plt.title("Model Parameter Count Comparison", fontsize=13, fontweight="bold")
+    plt.xticks(fontsize=10)
+    plt.yticks(fontsize=10)
+    plt.grid(True, axis="y", linestyle="--", alpha=0.7)
+    # Adjust layout and save.
+    plt.tight_layout()
+    plt.savefig(self.outputPath / "ParameterCount.png", dpi=self.dpi, bbox_inches="tight")
+    plt.savefig(self.outputPath / "ParameterCount.pdf", dpi=self.dpi, bbox_inches="tight")
+    plt.close()
+    # Print completion message.
+    print("Parameter count plot saved to " + str(self.outputPath / "ParameterCount"))
+
+  # Plot latency comparison across models.
+  def PlatencyComparison(self):
+    r'''
+    Create a bar chart comparing inference latency across models with
+    values displayed above each bar.
+    '''
+
+    # Create a new figure for latency comparison.
+    plt.figure(figsize=(10, 6))
+    # Extract model names and latency values.
+    models = self.resultsDataFrame["ModelName"]
+    latency = self.resultsDataFrame["AverageLatencyMs"]
+    # Create horizontal bar chart.
+    bars = plt.barh(
+      models, latency, color=["#1f77b4", "#ff7f0e", "#2ca02c"],
+      edgecolor="black", linewidth=1.5, alpha=0.8
+    )
+    # Add values above bars.
+    for bar, lat in zip(bars, latency):
+      width = bar.get_width()
+      labelText = f"{lat:.3f} ms"
+      plt.text(
+        width, bar.get_y() + bar.get_height() / 2.,
+        labelText, ha="left", va="center", fontsize=11,
+        fontweight="bold",
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8)
+      )
+    # Set labels and title.
+    plt.xlabel("Inference Latency (ms)", fontsize=11, fontweight="bold")
+    plt.ylabel("Model", fontsize=11, fontweight="bold")
+    plt.title("Model Inference Latency Comparison", fontsize=13, fontweight="bold")
+    plt.xticks(fontsize=10)
+    plt.yticks(fontsize=10)
+    plt.grid(True, axis="x", linestyle="--", alpha=0.7)
+    # Adjust layout and save.
+    plt.tight_layout()
+    plt.savefig(self.outputPath / "LatencyComparison.png", dpi=self.dpi, bbox_inches="tight")
+    plt.savefig(self.outputPath / "LatencyComparison.pdf", dpi=self.dpi, bbox_inches="tight")
+    plt.close()
+    # Print completion message.
+    print("Latency comparison plot saved to " + str(self.outputPath / "LatencyComparison"))
+
+  # Plot stacked memory breakdown comparison.
+  def PlotMemoryBreakdownStacked(self):
+    r'''
+    Create a stacked bar chart showing memory breakdown by component
+    (parameters, activations, optimizer state, gradients) for each model.
+    '''
+
+    # Create a new figure for memory breakdown.
+    fig, ax = plt.subplots(figsize=(12, 7))
+    # Extract model names.
+    models = self.resultsDataFrame["ModelName"]
+    # Define memory components to plot.
+    memoryComponents = [
+      "ParameterMemory", "ActivationMemory",
+      "OptimizerStateMemory", "GradientMemory"
+    ]
+    # Define colors for each component.
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]
+    # Initialize bottom array for stacking.
+    bottom = np.zeros(len(models))
+    # Create stacked bars.
+    barsList = []
+    for i, component in enumerate(memoryComponents):
+      # Extract component values from memory profiles.
+      values = []
+      for _, row in self.resultsDataFrame.iterrows():
+        memoryProfile = row["MemoryProfile"]
+        value = memoryProfile["MemoryBreakdownMB"].get(component, 0)
+        values.append(value)
+      # Create stacked bar for this component.
+      bars = ax.bar(
+        models, values, bottom=bottom, label=component,
+        color=colors[i], edgecolor="black", linewidth=1, alpha=0.8
+      )
+      barsList.append(bars)
+      # Add value labels on bars.
+      for j, (bar, value) in enumerate(zip(bars, values)):
+        if (value > 0):
+          height = bottom[j] + value / 2
+          labelText = f"{value:.0f}"
+          ax.text(bar.get_x() + bar.get_width() / 2., height,
+                  labelText, ha="center", va="center", fontsize=9,
+                  fontweight="bold", color="white")
+      # Update bottom for next component.
+      bottom += np.array(values)
+    # Set labels and title.
+    ax.set_xlabel("Model", fontsize=11, fontweight="bold")
+    ax.set_ylabel("Memory (MB)", fontsize=11, fontweight="bold")
+    ax.set_title("Memory Breakdown by Component", fontsize=13, fontweight="bold")
+    ax.legend(loc="upper right", fontsize=10)
+    ax.grid(True, axis="y", linestyle="--", alpha=0.7)
+    plt.xticks(fontsize=10)
+    plt.yticks(fontsize=10)
+    # Adjust layout and save.
+    plt.tight_layout()
+    plt.savefig(self.outputPath / "MemoryBreakdownStacked.png", dpi=self.dpi, bbox_inches="tight")
+    plt.savefig(self.outputPath / "MemoryBreakdownStacked.pdf", dpi=self.dpi, bbox_inches="tight")
+    plt.close()
+    # Print completion message.
+    print("Stacked memory breakdown saved to " + str(self.outputPath / "MemoryBreakdownStacked"))
+
+  # Plot GFLOPs comparison.
+  def PlotGFLOPsComparison(self):
+    r'''
+    Create a bar chart comparing computational complexity (GFLOPs) across
+    models with values displayed above each bar.
+    '''
+
+    # Create a new figure for GFLOPs comparison.
+    plt.figure(figsize=(10, 6))
+    # Extract model names and GFLOPs.
+    models = self.resultsDataFrame["ModelName"]
+    gflops = self.resultsDataFrame["TotalGFLOPs"]
+    # Create bar chart.
+    bars = plt.bar(models, gflops, color=["#1f77b4", "#ff7f0e", "#2ca02c"],
+                   edgecolor="black", linewidth=1.5, alpha=0.8)
+    # Add values above bars.
+    for bar, gflop in zip(bars, gflops):
+      height = bar.get_height()
+      labelText = f"{gflop:.2f} GFLOPs"
+      plt.text(
+        bar.get_x() + bar.get_width() / 2., height,
+        labelText, ha="center", va="bottom", fontsize=11,
+        fontweight="bold",
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8)
+      )
+    # Set labels and title.
+    plt.xlabel("Model", fontsize=11, fontweight="bold")
+    plt.ylabel("Computational Complexity (GFLOPs)", fontsize=11, fontweight="bold")
+    plt.title("Model GFLOPs Comparison", fontsize=13, fontweight="bold")
+    plt.xticks(fontsize=10)
+    plt.yticks(fontsize=10)
+    plt.grid(True, axis="y", linestyle="--", alpha=0.7)
+    # Adjust layout and save.
+    plt.tight_layout()
+    plt.savefig(self.outputPath / "GFLOPsComparison.png", dpi=self.dpi, bbox_inches="tight")
+    plt.savefig(self.outputPath / "GFLOPsComparison.pdf", dpi=self.dpi, bbox_inches="tight")
+    plt.close()
+    # Print completion message.
+    print("GFLOPs comparison saved to " + str(self.outputPath / "GFLOPsComparison"))
+
+  # Plot throughput comparison.
+  def PlotThroughputComparison(self):
+    r'''
+    Create a bar chart comparing inference throughput (images/sec) across
+    models with values displayed above each bar.
+    '''
+
+    # Create a new figure for throughput comparison.
+    plt.figure(figsize=(10, 6))
+    # Extract model names and throughput values.
+    models = self.resultsDataFrame["ModelName"]
+    throughput = self.resultsDataFrame["InferenceSamplesPerSec"]
+    # Create bar chart.
+    bars = plt.bar(
+      models, throughput, color=["#1f77b4", "#ff7f0e", "#2ca02c"],
+      edgecolor="black", linewidth=1.5, alpha=0.8
+    )
+    # Add values above bars.
+    for bar, tp in zip(bars, throughput):
+      height = bar.get_height()
+      if (tp is not None and not np.isnan(tp)):
+        labelText = f"{tp:.1f} img/s"
+      else:
+        labelText = "N/A"
+      plt.text(
+        bar.get_x() + bar.get_width() / 2., height,
+        labelText, ha="center", va="bottom", fontsize=11,
+        fontweight="bold",
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8)
+      )
+    # Set labels and title.
+    plt.xlabel("Model", fontsize=11, fontweight="bold")
+    plt.ylabel("Throughput (images/sec)", fontsize=11, fontweight="bold")
+    plt.title("Model Inference Throughput Comparison", fontsize=13, fontweight="bold")
+    plt.xticks(fontsize=10)
+    plt.yticks(fontsize=10)
+    plt.grid(True, axis="y", linestyle="--", alpha=0.7)
+    # Adjust layout and save.
+    plt.tight_layout()
+    plt.savefig(self.outputPath / "ThroughputComparison.png", dpi=self.dpi, bbox_inches="tight")
+    plt.savefig(self.outputPath / "ThroughputComparison.pdf", dpi=self.dpi, bbox_inches="tight")
+    plt.close()
+    # Print completion message.
+    print("Throughput comparison saved to " + str(self.outputPath / "ThroughputComparison"))
+
+  # Plot memory efficiency (parameters per MB).
+  def PlotMemoryEfficiency(self):
+    r'''
+    Create a bar chart showing memory efficiency metric: how many parameters
+    per MB of memory each model requires.
+    '''
+
+    # Create a new figure for memory efficiency.
+    plt.figure(figsize=(10, 6))
+    # Extract model names and calculate efficiency.
+    models = self.resultsDataFrame["ModelName"]
+    params = self.resultsDataFrame["ParameterCount"]
+    memory = self.resultsDataFrame["PeakMemoryMb"]
+    # Calculate efficiency: parameters per MB.
+    efficiency = params / memory
+    # Create bar chart.
+    bars = plt.bar(
+      models, efficiency, color=["#1f77b4", "#ff7f0e", "#2ca02c"],
+      edgecolor="black", linewidth=1.5, alpha=0.8
+    )
+    # Add values above bars.
+    for bar, eff in zip(bars, efficiency):
+      height = bar.get_height()
+      labelText = f"{eff / 1e6:.2f}M params/MB"
+      plt.text(
+        bar.get_x() + bar.get_width() / 2., height,
+        labelText, ha="center", va="bottom", fontsize=10,
+        fontweight="bold",
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8)
+      )
+    # Set labels and title.
+    plt.xlabel("Model", fontsize=11, fontweight="bold")
+    plt.ylabel("Parameters per MB", fontsize=11, fontweight="bold")
+    plt.title("Memory Efficiency Comparison", fontsize=13, fontweight="bold")
+    plt.xticks(fontsize=10)
+    plt.yticks(fontsize=10)
+    plt.grid(True, axis="y", linestyle="--", alpha=0.7)
+    # Adjust layout and save.
+    plt.tight_layout()
+    plt.savefig(self.outputPath / "MemoryEfficiency.png", dpi=self.dpi, bbox_inches="tight")
+    plt.savefig(self.outputPath / "MemoryEfficiency.pdf", dpi=self.dpi, bbox_inches="tight")
+    plt.close()
+    # Print completion message.
+    print("Memory efficiency plot saved to " + str(self.outputPath / "MemoryEfficiency"))
+
+  def PlotTrainingVsInferenceMemory(self):
+    r'''
+    Create a grouped bar chart comparing training and inference memory
+    consumption across models with values displayed above each bar.
+    '''
+
+    # Create a new figure for memory comparison.
+    plt.figure(figsize=(10, 6))
+    # Extract model names.
+    models = self.resultsDataFrame["ModelName"]
+    # Extract training and inference memory values.
+    trainingMemory = self.resultsDataFrame["TrainingMemoryMb"]
+    inferenceMemory = self.resultsDataFrame["PeakMemoryMb"]
+    # Set the bar width for grouped bars.
+    barWidth = 0.35
+    # Set the positions for the bars.
+    positions = np.arange(len(models))
+    # Create bars for training memory.
+    bars1 = plt.bar(
+      positions, trainingMemory, barWidth, label="Training Memory",
+      color="#1f77b4", edgecolor="black", linewidth=1.5, alpha=0.8
+    )
+    # Create bars for inference memory.
+    bars2 = plt.bar(
+      [p + barWidth for p in positions], inferenceMemory, barWidth,
+      label="Inference Memory", color="#ff7f0e", edgecolor="black",
+      linewidth=1.5, alpha=0.8
+    )
+    # Add values above training memory bars.
+    for bar, mem in zip(bars1, trainingMemory):
+      height = bar.get_height()
+      labelText = f"{mem:.0f} MB"
+      plt.text(
+        bar.get_x() + bar.get_width() / 2., height,
+        labelText, ha="center", va="bottom", fontsize=10,
+        fontweight="bold",
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8)
+      )
+    # Add values above inference memory bars.
+    for bar, mem in zip(bars2, inferenceMemory):
+      height = bar.get_height()
+      labelText = f"{mem:.0f} MB"
+      plt.text(
+        bar.get_x() + bar.get_width() / 2., height,
+        labelText, ha="center", va="bottom", fontsize=10,
+        fontweight="bold",
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8)
+      )
+    # Set the x-axis tick positions and labels.
+    plt.xticks(
+      [p + barWidth / 2 for p in positions], models, fontsize=10
+    )
+    # Set the y-axis label.
+    plt.ylabel("Memory Consumption (MB)", fontsize=11, fontweight="bold")
+    # Set the plot title.
+    plt.title("Training vs. Inference Memory Comparison", fontsize=13, fontweight="bold")
+    # Add a legend to the plot.
+    plt.legend(fontsize=10)
+    # Add a grid to the y-axis.
+    plt.grid(True, axis="y", linestyle="--", alpha=0.7)
+    # Adjust layout and save.
+    plt.tight_layout()
+    plt.savefig(
+      self.outputPath / "TrainingVsInferenceMemory.png",
+      dpi=self.dpi, bbox_inches="tight"
+    )
+    plt.savefig(
+      self.outputPath / "TrainingVsInferenceMemory.pdf",
+      dpi=self.dpi, bbox_inches="tight"
+    )
+    plt.close()
+    # Print completion message.
+    print("Training vs inference memory plot saved to " + str(self.outputPath / "TrainingVsInferenceMemory"))
+
+  def PlotMetricsCorrelationHeatmap(self):
+    r'''
+    Create a correlation heatmap showing the relationships between
+    numerical efficiency metrics across the evaluated models.
+    '''
+
+    # Import seaborn for the heatmap visualization.
+    import seaborn as sns
+    # Define the numerical columns to include in the correlation.
+    numericalColumns = [
+      "ParameterCount", "AverageLatencyMs", "PeakMemoryMb",
+      "TotalGFLOPs", "InferenceSamplesPerSec"
+    ]
+    # Extract the numerical data from the DataFrame.
+    correlationData = self.resultsDataFrame[numericalColumns]
+    # Compute the correlation matrix.
+    correlationMatrix = correlationData.corr()
+    # Create a new figure for the heatmap.
+    plt.figure(figsize=(10, 8))
+    # Generate the heatmap using seaborn.
+    sns.heatmap(
+      correlationMatrix, annot=True, cmap="coolwarm", vmin=-1, vmax=1,
+      center=0, square=True, linewidths=1, cbar_kws={"shrink": 0.8},
+      fmt=".2f", annot_kws={"size": 10, "weight": "bold"}
+    )
+    # Set the plot title.
+    plt.title("Correlation Matrix of Efficiency Metrics", fontsize=13, fontweight="bold")
+    # Adjust the y-axis tick labels to be horizontal.
+    plt.yticks(rotation=0, fontsize=10)
+    # Adjust the x-axis tick labels.
+    plt.xticks(fontsize=10)
+    # Adjust layout and save.
+    plt.tight_layout()
+    plt.savefig(
+      self.outputPath / "MetricsCorrelationHeatmap.png",
+      dpi=self.dpi, bbox_inches="tight"
+    )
+    plt.savefig(
+      self.outputPath / "MetricsCorrelationHeatmap.pdf",
+      dpi=self.dpi, bbox_inches="tight"
+    )
+    plt.close()
+    # Print completion message.
+    print("Metrics correlation heatmap saved to " + str(self.outputPath / "MetricsCorrelationHeatmap"))
+
+  def PlotTopLayersFlops(self):
+    r'''
+    Create a horizontal bar chart showing the top layers consuming the most
+    FLOPs across all evaluated models to identify computational bottlenecks.
+    '''
+
+    # Initialize a list to store layer FLOPs data.
+    layerFlopsData = []
+    # Iterate through each model in the results DataFrame.
+    for _, row in self.resultsDataFrame.iterrows():
+      # Extract the model name.
+      modelName = row["ModelName"]
+      # Extract the FLOPs estimate from the memory profile.
+      flopsEstimate = row["MemoryProfile"]["FLOPsEstimate"]
+      # Extract the per-layer FLOPs list.
+      perLayerFlops = flopsEstimate.get("PerLayerFLOPs", [])
+      # Iterate through each layer entry.
+      for layerEntry in perLayerFlops:
+        # Create a dictionary with model name, layer name, and FLOPs.
+        layerFlopsData.append({
+          "ModelName" : modelName,
+          "LayerName" : layerEntry.get("ModuleName", "Unknown"),
+          "LayerFLOPs": layerEntry.get("EstimatedFLOPs", 0)
+        })
+    # Convert the layer FLOPs data to a pandas DataFrame.
+    layerFlopsDataFrame = pandas.DataFrame(layerFlopsData)
+    # Check if the DataFrame is empty.
+    if (layerFlopsDataFrame.empty):
+      # Print a warning message.
+      print("No layer-wise FLOPs data available to plot.")
+      # Return early from the function.
+      return
+    # Group by layer name and sum the FLOPs, then sort and get the top 10.
+    topLayers = (
+      layerFlopsDataFrame.groupby("LayerName")["LayerFLOPs"]
+      .sum().sort_values(ascending=True).tail(10)
+    )
+    # Create a new figure for the top layers FLOPs plot.
+    plt.figure(figsize=(10, 8))
+    # Create a horizontal bar chart.
+    bars = plt.barh(
+      topLayers.index, topLayers.values,
+      color="#2ca02c", edgecolor="black", linewidth=1.5, alpha=0.8
+    )
+    # Add values to the right of the bars.
+    for bar, flops in zip(bars, topLayers.values):
+      width = bar.get_width()
+      labelText = f"{width / 1e9:.2f} GFLOPs"
+      plt.text(
+        width, bar.get_y() + bar.get_height() / 2.,
+        labelText, ha="left", va="center", fontsize=9,
+        fontweight="bold",
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8)
+      )
+    # Set the x-axis label.
+    plt.xlabel("Total FLOPs", fontsize=11, fontweight="bold")
+    # Set the y-axis label.
+    plt.ylabel("Layer Name", fontsize=11, fontweight="bold")
+    # Set the plot title.
+    plt.title("Top 10 Computationally Intensive Layers", fontsize=13, fontweight="bold")
+    # Add a grid to the x-axis.
+    plt.grid(True, axis="x", linestyle="--", alpha=0.7)
+    # Adjust layout and save.
+    plt.tight_layout()
+    plt.savefig(
+      self.outputPath / "TopLayersFlops.png",
+      dpi=self.dpi, bbox_inches="tight"
+    )
+    plt.savefig(
+      self.outputPath / "TopLayersFlops.pdf",
+      dpi=self.dpi, bbox_inches="tight"
+    )
+    plt.close()
+    # Print completion message.
+    print("Top layers FLOPs plot saved to " + str(self.outputPath / "TopLayersFlops"))
+
+  def PlotEfficiencySummaryDashboard(self):
+    r'''
+    Create a comprehensive 2x2 dashboard summarizing key efficiency
+    trade-offs in a single publication-ready figure.
+    '''
+
+    # Create a figure with a 2x2 grid of subplots.
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    # Extract data for plotting.
+    models = self.resultsDataFrame["ModelName"]
+    latency = self.resultsDataFrame["AverageLatencyMs"]
+    memory = self.resultsDataFrame["PeakMemoryMb"]
+    trainingMemory = self.resultsDataFrame["TrainingMemoryMb"]
+    gflops = self.resultsDataFrame["TotalGFLOPs"]
+    throughput = self.resultsDataFrame["InferenceSamplesPerSec"]
+    params = self.resultsDataFrame["ParameterCount"]
+    # Define colors for the models.
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c"]
+
+    # Plot 1: Parameters vs. Latency.
+    ax1 = axes[0, 0]
+    ax1.scatter(
+      params, latency, c=colors[:len(models)], s=150,
+      edgecolors="black", linewidth=1.5, zorder=5
+    )
+    for i, model in enumerate(models):
+      ax1.annotate(
+        model, (params.iloc[i], latency.iloc[i]),
+        xytext=(5, 5), textcoords="offset points",
+        fontsize=10, fontweight="bold"
+      )
+    ax1.set_xlabel("Parameter Count", fontsize=11, fontweight="bold")
+    ax1.set_ylabel("Inference Latency (ms)", fontsize=11, fontweight="bold")
+    ax1.set_title("Parameters vs. Latency", fontsize=12, fontweight="bold")
+    ax1.grid(True, linestyle="--", alpha=0.7)
+
+    # Plot 2: Memory vs. Throughput.
+    ax2 = axes[0, 1]
+    ax2.scatter(
+      memory, throughput, c=colors[:len(models)], s=150,
+      edgecolors="black", linewidth=1.5, zorder=5
+    )
+    for i, model in enumerate(models):
+      ax2.annotate(
+        model, (memory.iloc[i], throughput.iloc[i]),
+        xytext=(5, 5), textcoords="offset points",
+        fontsize=10, fontweight="bold"
+      )
+    ax2.set_xlabel("Peak Memory (MB)", fontsize=11, fontweight="bold")
+    ax2.set_ylabel("Throughput (img/s)", fontsize=11, fontweight="bold")
+    ax2.set_title("Memory vs. Throughput", fontsize=12, fontweight="bold")
+    ax2.grid(True, linestyle="--", alpha=0.7)
+
+    # Plot 3: Training vs. Inference Memory.
+    ax3 = axes[1, 0]
+    barWidth = 0.35
+    positions = np.arange(len(models))
+    ax3.bar(
+      positions, trainingMemory, barWidth, label="Training",
+      color="#1f77b4", edgecolor="black", alpha=0.8
+    )
+    ax3.bar(
+      [p + barWidth for p in positions], memory, barWidth,
+      label="Inference", color="#ff7f0e", edgecolor="black", alpha=0.8
+    )
+    ax3.set_xticks([p + barWidth / 2 for p in positions])
+    ax3.set_xticklabels(models, fontsize=10)
+    ax3.set_ylabel("Memory (MB)", fontsize=11, fontweight="bold")
+    ax3.set_title("Training vs. Inference Memory", fontsize=12, fontweight="bold")
+    ax3.legend(fontsize=9)
+    ax3.grid(True, axis="y", linestyle="--", alpha=0.7)
+
+    # Plot 4: GFLOPs vs. Throughput.
+    ax4 = axes[1, 1]
+    ax4.scatter(
+      gflops, throughput, c=colors[:len(models)], s=150,
+      edgecolors="black", linewidth=1.5, zorder=5
+    )
+    for i, model in enumerate(models):
+      ax4.annotate(
+        model, (gflops.iloc[i], throughput.iloc[i]),
+        xytext=(5, 5), textcoords="offset points",
+        fontsize=10, fontweight="bold"
+      )
+    ax4.set_xlabel("Total GFLOPs", fontsize=11, fontweight="bold")
+    ax4.set_ylabel("Throughput (img/s)", fontsize=11, fontweight="bold")
+    ax4.set_title("Compute vs. Throughput", fontsize=12, fontweight="bold")
+    ax4.grid(True, linestyle="--", alpha=0.7)
+
+    # Adjust the overall layout.
+    plt.tight_layout()
+    # Save the dashboard figure.
+    plt.savefig(
+      self.outputPath / "EfficiencySummaryDashboard.png",
+      dpi=self.dpi, bbox_inches="tight"
+    )
+    plt.savefig(
+      self.outputPath / "EfficiencySummaryDashboard.pdf",
+      dpi=self.dpi, bbox_inches="tight"
+    )
+    plt.close()
+    # Print completion message.
+    print("Efficiency summary dashboard saved to " + str(self.outputPath / "EfficiencySummaryDashboard"))

@@ -1,5 +1,5 @@
 # Import the required libraries.
-import PIL, cv2, os, tqdm
+import PIL, cv2, os, tqdm, torch
 import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
@@ -2989,3 +2989,118 @@ if (__name__ == "__main__"):
   else:
     # Inform the user that the region tiling example was skipped due to a missing slide.
     print(f"Skipping `ExtractRegionTiles` example; slide not found: {regionTileSlidePath}.")
+
+
+def ColorDeconvolution(imgArray):
+  r'''
+  Perform color deconvolution on an RGB image to separate Hematoxylin and Eosin stains.
+
+  Parameters:
+    imgArray (numpy.ndarray): Input RGB image as a NumPy array of shape (H, W, 3) with dtype uint8 or float32 in the range [0, 255] or [0, 1].
+
+  Returns:
+    numpy.ndarray: A NumPy array of shape (H, W, 3) containing the separated stain channels in normalized intensity space.
+  '''
+
+  # Check if image is grayscale or has wrong dimensions.
+  if (imgArray.ndim != 3 or imgArray.shape[2] < 3):
+    # Return original if not valid RGB.
+    return imgArray
+
+  # Convert RGB to OD (Optical Density) space.
+  # Avoid log(0) by adding small epsilon.
+  imgOD = -numpy.log(numpy.clip(imgArray[..., :3], 1e-6, 1.0))
+
+  # Define the standard H&E stain matrix (from Ruifrok et al.).
+  # Columns represent H, E, DAB (we ignore DAB/residual for now or use as 3rd channel).
+  stainMatrix = numpy.array([
+    [0.65, 0.70, 0.29],  # Hematoxylin.
+    [0.07, 0.99, 0.11],  # Eosin.
+    [0.27, 0.57, 0.78]  # Residual/DAB.
+  ])
+
+  try:
+    # Invert the stain matrix to unmix colors.
+    invStainMatrix = numpy.linalg.inv(stainMatrix)
+    # Reshape image OD to (pixels, 3).
+    h, w, c = imgOD.shape
+    imgODReshaped = imgOD.reshape(-1, 3)
+    # Perform matrix multiplication to separate stains.
+    unmixed = numpy.dot(imgODReshaped, invStainMatrix.T)
+    # Reshape back to (H, W, 3).
+    unmixed = unmixed.reshape(h, w, 3)
+    # Convert back from OD to intensity space for visualization/model input.
+    # Clip to avoid negative values after exp.
+    unmixedImg = numpy.exp(-unmixed)
+    # Normalize each channel to [0, 1] individually for better contrast.
+    for i in range(3):
+      minVal = unmixedImg[:, :, i].min()
+      maxVal = unmixedImg[:, :, i].max()
+      if (maxVal > minVal):
+        unmixedImg[:, :, i] = (unmixedImg[:, :, i] - minVal) / (maxVal - minVal)
+      else:
+        unmixedImg[:, :, i] = 0.0
+    # Return the separated channels.
+    return unmixedImg.astype(numpy.float32)
+  except numpy.linalg.LinAlgError:
+    # Return original if inversion fails.
+    return imgArray[..., :3]
+
+
+class StainJitter(torch.nn.Module):
+  r'''
+  Applies random jittering to H&E stain channels to simulate lab variations.
+
+  Parameters:
+    brightness (float): Maximum brightness jitter factor (default: 0.2).
+    contrast (float): Maximum contrast jitter factor (default: 0.2).
+    saturation (float): Maximum saturation jitter factor (default: 0.2).
+    hue (float): Maximum hue jitter factor (default: 0.1).
+  '''
+
+  def __init__(self, brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1):
+    r'''
+    Initialize the StainJitter module with specified jitter parameters.
+
+    Parameters:
+      brightness (float): Maximum brightness jitter factor (default: 0.2).
+      contrast (float): Maximum contrast jitter factor (default: 0.2).
+      saturation (float): Maximum saturation jitter factor (default: 0.2).
+      hue (float): Maximum hue jitter factor (default: 0.1).
+    '''
+
+    # Call parent constructor.
+    super().__init__()
+    # Store parameters.
+    self.brightness = brightness
+    self.contrast = contrast
+    self.saturation = saturation
+    self.hue = hue
+
+  def forward(self, img):
+    r'''
+    Forward pass to apply color jittering to the input image.
+
+    Parameters:
+      img (PIL.Image or torch.Tensor): Input image to be augmented. If a tensor is provided, it will be converted to a PIL Image for processing.
+
+    Returns:
+      PIL.Image: Augmented image after applying color jittering. The output remains a PIL Image to allow for further transformations in the pipeline.
+    '''
+
+    # Check if input is a Tensor.
+    if (isinstance(img, torch.Tensor)):
+      # Convert tensor to PIL Image for color jitter.
+      img = transforms.ToPILImage()(img)
+
+    # Apply color jittering.
+    img = transforms.ColorJitter(
+      brightness=self.brightness,
+      contrast=self.contrast,
+      saturation=self.saturation,
+      hue=self.hue
+    )(img)
+
+    # Return the augmented PIL Image.
+    # Do NOT convert back to Tensor here; let the final ToTensor() in the pipeline do it.
+    return img

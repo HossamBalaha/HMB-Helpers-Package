@@ -122,16 +122,40 @@ def LoadModel(model, filename="model.pth", device="cuda", weightsOnly=False):
 
   # Check if the model file exists before loading.
   if (not os.path.exists(filename)):
+    # Print a message indicating the model file was not found.
     print(f"Model file not found: {filename}")
-    return
+    # Return None to indicate the loading process failed.
+    return None
 
   # Load the state dictionary from a file and map it to the specified device.
   stateDict = LoadPyTorchDict(filename, device=device, weightsOnly=weightsOnly)
 
-  if ((stateDict) and (isinstance(stateDict, dict)) and ("model_state_dict" in stateDict)):
-    model.load_state_dict(stateDict["model_state_dict"])
+  # Determine the correct key for the nested state dictionary.
+  nestedKey = "ModelStateDict" if ("ModelStateDict" in stateDict) else "model_state_dict"
+
+  # Extract the actual state dictionary if it is nested under a specific key.
+  if ((stateDict) and (isinstance(stateDict, dict)) and (nestedKey in stateDict)):
+    # Assign the nested state dictionary to a new variable.
+    actualStateDict = stateDict[nestedKey]
   else:
-    model.load_state_dict(stateDict)
+    # Assign the loaded dictionary directly if it is not nested.
+    actualStateDict = stateDict
+
+  # Initialize a new dictionary to store the cleaned state dictionary.
+  cleanedStateDict = {}
+
+  # Iterate over the items in the actual state dictionary to clean the keys.
+  for key, value in actualStateDict.items():
+    # Check if the key starts with the "model." prefix.
+    if (key.startswith("model.")):
+      # Remove the "model." prefix and add it to the cleaned dictionary.
+      cleanedStateDict[key[len("model."):]] = value
+    else:
+      # Add the key as is if it does not have the prefix.
+      cleanedStateDict[key] = value
+
+  # Load the cleaned state dictionary into the model.
+  model.load_state_dict(cleanedStateDict)
 
   # Move the model to the specified device.
   model.to(device)
@@ -139,6 +163,7 @@ def LoadModel(model, filename="model.pth", device="cuda", weightsOnly=False):
   # Print confirmation message with filename and device.
   print(f"Model loaded from {filename} and moved to {device}.")
 
+  # Return the model with the loaded state.
   return model
 
 
@@ -240,7 +265,12 @@ def LoadCheckpoint(checkpointFile, model, optimizer, lr, device, strict=True, ve
   checkpoint = torch.load(checkpointFile, map_location=device)
 
   # Extract the state dict from the checkpoint.
-  stateDict = checkpoint["state_dict"]
+  if ("state_dict" in checkpoint):
+    stateDict = checkpoint.get("state_dict", checkpoint)
+  elif ("model_state_dict" in checkpoint):
+    stateDict = checkpoint.get("model_state_dict", checkpoint)
+  else:
+    stateDict = checkpoint
 
   # Initial load with strict=False to identify mismatches without raising an error.
   loadReport = model.load_state_dict(stateDict, strict=False)
@@ -367,10 +397,147 @@ def GetOptimizer(model, optimizerType="adamw", learningRate=1e-4, weightDecay=1e
     optimizer = optim.RMSprop(model.parameters(), lr=learningRate, weight_decay=weightDecay)
   elif (optimizerType.lower() == "adadelta"):
     optimizer = optim.Adadelta(model.parameters(), lr=learningRate, weight_decay=weightDecay)
+  elif (optimizerType.lower() == "radam"):
+    optimizer = optim.RAdam(model.parameters(), lr=learningRate)
+  elif (optimizerType.lower() == "lion"):
+    # Import the Lion optimizer from lion_pytorch.
+    from lion_pytorch import Lion
+    optimizer = Lion(model.parameters(), lr=learningRate)
+  elif (optimizerType.lower() == "prodigy"):
+    # Import the Prodigy optimizer from prodigyopt.
+    from prodigyopt import Prodigy
+    optimizer = Prodigy(model.parameters(), lr=1.0)
+  elif (optimizerType.lower() == "schedulefreeadamw"):
+    # Import the AdamWScheduleFree optimizer from schedulefree.
+    from schedulefree import AdamWScheduleFree
+    optimizer = AdamWScheduleFree(model.parameters(), lr=learningRate)
+  elif (optimizerType.lower() == "sophia"):
+    optimizer = SophiaG(model.parameters(), lr=learningRate)
   else:
     raise ValueError(f"Unsupported optimizer type: {optimizerType}")
+
   return optimizer
 
+class SophiaG(torch.optim.Optimizer):
+  r'''
+  SophiaG Optimizer implementation to avoid external package conflicts.
+
+  Parameters:
+    params (iterable): iterable of parameters to optimize or dicts defining parameter groups.
+    lr (float): learning rate.
+    betas (tuple): coefficients used for computing running averages of gradient and its square.
+    rho (float): clipping parameter for the Sophia update rule.
+    weight_decay (float): weight decay coefficient.
+  '''
+
+  # Initialize the optimizer.
+  def __init__(self, params, lr=1e-4, betas=(0.965, 0.99), rho=1e-1, weight_decay=1e-1):
+    # Validate the learning rate parameter.
+    if (not 0.0 <= lr):
+      # Raise an error for an invalid learning rate.
+      raise ValueError(f"Invalid learning rate: {lr}")
+    # Validate the first beta parameter.
+    if (not 0.0 <= betas[0] < 1.0):
+      # Raise an error for an invalid beta1 parameter.
+      raise ValueError(f"Invalid beta parameter at index 0: {betas[0]}")
+    # Validate the second beta parameter.
+    if (not 0.0 <= betas[1] < 1.0):
+      # Raise an error for an invalid beta2 parameter.
+      raise ValueError(f"Invalid beta parameter at index 1: {betas[1]}")
+    # Set the default parameter dictionary with CamelCase keys.
+    defaults = dict(Lr=lr, Betas=betas, Rho=rho, WeightDecay=weight_decay)
+    # Call the parent optimizer constructor.
+    super(SophiaG, self).__init__(params, defaults)
+
+  # Define the step function for parameter updates.
+  @torch.no_grad()
+  def step(self, closure=None):
+    r'''
+    Perform a single optimization step.
+
+    Parameters:
+      closure (callable, optional): a closure that reevaluates the model and returns the loss.
+
+    Returns:
+      torch.Tensor or None: the computed loss if closure is provided, otherwise None.
+    '''
+
+    # Initialize the loss variable to None.
+    loss = None
+    # Check if a closure function is provided.
+    if (closure is not None):
+      # Enable gradient computation for the closure execution.
+      with torch.enable_grad():
+        # Compute the loss value using the closure.
+        loss = closure()
+
+    # Iterate through each parameter group in the optimizer.
+    for group in self.param_groups:
+      # Extract the beta parameters from the group dictionary.
+      beta1, beta2 = group["Betas"]
+      # Iterate through each parameter in the current group.
+      for p in group["Params"]:
+        # Check if the gradient for the parameter exists.
+        if (p.grad is None):
+          # Continue to the next parameter if no gradient is present.
+          continue
+        # Get the gradient tensor for the current parameter.
+        grad = p.grad
+        # Check if the gradient tensor is sparse.
+        if (grad.is_sparse):
+          # Raise a runtime error for unsupported sparse gradients.
+          raise RuntimeError("SophiaG does not support sparse gradients")
+
+        # Get the state dictionary for the current parameter.
+        state = self.state[p]
+        # Check if the state dictionary is empty.
+        if (len(state) == 0):
+          # Initialize the step counter in the state dictionary.
+          state["Step"] = 0
+          # Initialize the first moment estimate in the state dictionary.
+          state["ExpAvg"] = torch.zeros_like(p, memory_format=torch.preserve_format)
+          # Initialize the second moment estimate in the state dictionary.
+          state["ExpAvgSq"] = torch.zeros_like(p, memory_format=torch.preserve_format)
+
+        # Get the first moment estimate from the state dictionary.
+        expAvg = state["ExpAvg"]
+        # Get the second moment estimate from the state dictionary.
+        expAvgSq = state["ExpAvgSq"]
+        # Increment the step counter in the state dictionary.
+        state["Step"] += 1
+        # Retrieve the current step count.
+        step = state["Step"]
+
+        # Apply weight decay if the coefficient is not zero.
+        if (group["WeightDecay"] != 0):
+          # Update the parameter data with weight decay.
+          p.data.mul_(1 - group["Lr"] * group["WeightDecay"])
+
+        # Update the biased first moment estimate.
+        expAvg.mul_(beta1).add_(grad, alpha=1 - beta1)
+        # Update the biased second moment estimate using the absolute gradient.
+        expAvgSq.mul_(beta2).add_(grad.abs(), alpha=1 - beta2)
+
+        # Compute the bias correction for the first moment.
+        biasCorrection1 = 1 - beta1 ** step
+        # Compute the bias correction for the second moment.
+        biasCorrection2 = 1 - beta2 ** step
+
+        # Compute the bias-corrected first moment estimate.
+        mHat = expAvg / biasCorrection1
+        # Compute the bias-corrected second moment estimate.
+        vHat = expAvgSq / biasCorrection2
+
+        # Compute the Sophia update rule by dividing moments and adding epsilon.
+        update = mHat / (vHat + 1e-8)
+        # Clamp the update value to the specified rho range.
+        update = torch.clamp(update, -group["Rho"], group["Rho"])
+
+        # Update the parameter data using the computed update.
+        p.data.add_(update, alpha=-group["Lr"])
+
+    # Return the computed loss value.
+    return loss
 
 class PyTorchCrossAttentionHead(nn.Module):
   r'''
@@ -790,6 +957,7 @@ def ApplyDynamicQuantizationTorch(modelPath: str, outputPath: str, exampleInput=
 
       class CustomUnpickler(WeightsUnpickler):
         def find_class(self, module, name):
+          import pickle
           if (
             module == "torch.nn.modules.container" and
             name in ["Sequential", "ModuleList", "ModuleDict"]
@@ -1380,20 +1548,21 @@ def EvaluateModelOnPerturbations(
   mceVals = [rec["MceLike"] for rec in extendedMetrics["PerPerturbMetrics"]]
   names = [rec["Perturbation"] for rec in extendedMetrics["PerPerturbMetrics"]]
   if (names and any(v is not None for v in mceVals)):
-    mcePath = storeDir / "McePerPerturbation.png"
-    PlotBarChart(
-      values=mceVals,
-      labels=names,
-      title="mCE-like Metric by Perturbation",
-      ylabel="Mean relative error (mCE-like)",
-      savePath=mcePath,
-      color="tab:orange",
-      alpha=0.9,
-      dpi=dpi,
-      display=False,
-      save=True,
-      annotate=True,
-    )
+    for ext in [".png", ".pdf"]:
+      mcePath = storeDir / f"McePerPerturbation{ext}"
+      PlotBarChart(
+        values=mceVals,
+        labels=names,
+        title="mCE-like Metric by Perturbation",
+        ylabel="Mean relative error (mCE-like)",
+        savePath=mcePath,
+        color="tab:orange",
+        alpha=0.9,
+        dpi=dpi,
+        display=False,
+        save=True,
+        annotate=True
+      )
 
   # ECE Heatmap.
   if (perLevelRows and perturbNames and orderedLevelLabels):
@@ -1425,6 +1594,7 @@ def EvaluateModelOnPerturbations(
     ecePath = storeDir / "EceHeatmap.png"
     figEce.tight_layout()
     figEce.savefig(str(ecePath), dpi=dpi, bbox_inches="tight")
+    figEce.savefig(str(storeDir / "EceHeatmap.pdf"), dpi=dpi, bbox_inches="tight")
     plt.close(figEce)
     print(f"ECE heatmap saved to: {ecePath}")
 
@@ -1497,6 +1667,7 @@ def EvaluateModelOnPerturbations(
               relPath = storeDir / "Reliability" / f"{pName}_{lvlLabel}_Reliability.png"
               figRel.tight_layout()
               figRel.savefig(str(relPath), dpi=dpi, bbox_inches="tight")
+              figRel.savefig(str(relPath).replace(".png", ".pdf"), dpi=dpi, bbox_inches="tight")
               plt.close(figRel)
               print(f"Reliability diagram saved for {pName} level {lvlLabel}")
         except Exception as relEx:
@@ -1530,23 +1701,24 @@ def EvaluateModelOnPerturbations(
     # Filename-safe perturbation name.
     pertName = (pname[0].upper() + pname[1:]) if (isinstance(pname, str) and pname) else "Perturbation"
     safeName = "".join(ch if (ch.isalnum() or ch in ("_", "-")) else "_" for ch in pertName)
-    figPath = storeDir / "BarCharts" / f"{safeName}_Accuracy.png"
 
-    # Call the project's `PlotBarChart` with the same style/params as the existing call.
-    PlotBarChart(
-      values=yAccs,
-      labels=xLabels,
-      title=f"Robustness Accuracy by Level - {pertName}",
-      ylabel="Top-1 Accuracy",
-      savePath=figPath,
-      colors=COLORS,
-      alpha=0.85,
-      dpi=dpi,
-      display=False,
-      save=True,
-      annotate=True,
-    )
-    print(f"Interpretation figure written to: {figPath}")
+    for ext in [".png", ".pdf"]:
+      figPath = storeDir / "BarCharts" / f"{safeName}_Accuracy{ext}"
+      # Call the project's `PlotBarChart` with the same style/params as the existing call.
+      PlotBarChart(
+        values=yAccs,
+        labels=xLabels,
+        title=f"Robustness Accuracy by Level - {pertName}",
+        ylabel="Top-1 Accuracy",
+        savePath=figPath,
+        colors=COLORS,
+        alpha=0.85,
+        dpi=dpi,
+        display=False,
+        save=True,
+        annotate=True,
+      )
+      print(f"Interpretation figure written to: {figPath}")
 
   perturbations = results["Perturbations"]
   baselineRecord = [p for p in perturbations if (p["Perturbation"] == "baseline")]
@@ -2070,16 +2242,19 @@ class CheckpointSaver:
     self.verbose = verbose
     # Initialize best metric tracking.
     self.bestMetric = None
+    # Initialize a variable for the best checkpoint path (optional).
+    self.bestCheckpointPath = None
 
   def __call__(self, model: nn.Module, currentMetric: float, epoch: int) -> str:
     # Evaluate whether to save checkpoint based on metric.
     # Determine if current metric represents improvement.
+    currentMetricRounded = round(currentMetric, 4)  # Round to avoid floating-point issues.
     shouldSave = False
     if (self.bestMetric is None):
       shouldSave = True
-    elif (self.mode == "min" and currentMetric < self.bestMetric - 1e-6):
+    elif (self.mode == "min" and currentMetricRounded < self.bestMetric - 1e-6):
       shouldSave = True
-    elif (self.mode == "max" and currentMetric > self.bestMetric + 1e-6):
+    elif (self.mode == "max" and currentMetricRounded > self.bestMetric + 1e-6):
       shouldSave = True
     # Save checkpoint if criteria met or not best-only mode.
     if (shouldSave or not self.saveBestOnly):
@@ -2087,19 +2262,20 @@ class CheckpointSaver:
       # Ensure save directory exists.
       os.makedirs(self.savePath, exist_ok=True)
       # Construct checkpoint filename with epoch and metric.
-      metricStr = f"{currentMetric:.4f}".replace(".", "_")
+      metricStr = f"{currentMetricRounded:.4f}".replace(".", "_")
       filename = f"CheckpointEpoch{epoch}_Metric_{metricStr}.pt"
       filepath = os.path.join(self.savePath, filename)
       # Save model state dictionary with metadata.
       checkpoint = {
         "epoch"           : epoch,
-        "metric"          : currentMetric,
+        "metric"          : currentMetricRounded,
         "model_state_dict": model.state_dict(),
       }
       torch.save(checkpoint, filepath)
       # Update best metric tracking if improvement.
       if (shouldSave):
-        self.bestMetric = currentMetric
+        self.bestMetric = currentMetricRounded
+        self.bestCheckpointPath = filepath
         if (self.verbose):
           print(f"CheckpointSaver: Saved best model to {filepath}")
       elif (self.verbose):
@@ -2107,6 +2283,16 @@ class CheckpointSaver:
       return filepath
     # Return None if no checkpoint was saved.
     return None
+
+  def GetBestCheckpointPath(self) -> str:
+    r'''
+    Get the path of the best checkpoint saved so far.
+
+    Returns:
+      str: Path to the best checkpoint file, or None if no best checkpoint exists.
+    '''
+
+    return self.bestCheckpointPath
 
 
 def PreparePredTensorToNumpy(

@@ -5,6 +5,7 @@ import pickle  # Pickle library for object serialization.
 import json  # JSON library for JSON file parsing.
 import csv  # CSV library for reading and writing CSV files.
 import numpy  # NumPy library for numerical operations.
+import logging  # Logging library for logging messages.
 
 
 def ReadProjectConfig(configFilePath):
@@ -95,7 +96,7 @@ def IsPointInsideContour(point, contour):
   cnt = np.array(contour, dtype=np.int32)
   if cnt.ndim == 2 and cnt.shape[1] == 2:
     cnt = cnt.reshape((-1, 1, 2))
-  # If 'point' is actually a polygon, compute convex intersection area>0 with contour
+  # If "point" is actually a polygon, compute convex intersection area>0 with contour
   if isinstance(point, (list, tuple, np.ndarray)) and not (
     len(point) == 2 and not isinstance(point[0], (list, tuple, np.ndarray))):
     poly = np.array(point, dtype=np.float32)
@@ -434,7 +435,7 @@ def SimpleSerializeForJson(obj):
   # for many ML/data types. `ConvertToJsonSerializable` preserves metadata
   # and adds type tags so data can be reconstructed or identified later;
   # it also tries many conversion strategies and falls back to string or
-  # None when conversion isn't possible.
+  # None when conversion is not possible.
 
   import numbers
   import numpy as np
@@ -629,7 +630,7 @@ def AppendOrCreateNewCSV(
   mode="a",  # Mode to open the file (default is append).
 ):
   r'''
-  Append data to a CSV file or create a new one if it doesn't exist.
+  Append data to a CSV file or create a new one if it does not exist.
 
   Parameters:
     fileName (str): Path to the CSV file.
@@ -638,7 +639,7 @@ def AppendOrCreateNewCSV(
     mode (str, Optional): Mode to open the file. Default is "a" (append). It can be changed to "w" (write) if needed.
   '''
 
-  # Append data to a CSV file or create a new one if it doesn't exist.
+  # Append data to a CSV file or create a new one if it does not exist.
   if (not os.path.exists(fileName)):
     # Create a new CSV file with the specified header.
     with open(fileName, "w", newline="") as f:
@@ -676,7 +677,7 @@ def AppendOrCreateNewDataFrameCSV(
   header=None,  # Header for the CSV file; required if creating a new file and data is not a DataFrame with columns.
 ):
   r'''
-  Append data to a CSV file or create a new one if it doesn't exist.
+  Append data to a CSV file or create a new one if it does not exist.
   Accepts data as either a pandas DataFrame or a list (of lists or dictionaries).
 
   Parameters:
@@ -725,10 +726,10 @@ def GroupImagesByClass(inputDir, imgExtensions=None):
   Collect image paths grouped by class directory.
 
   This implementation:
-  - walks the input directory recursively once
-  - accepts a wider set of image extensions (case-insensitive)
-  - groups images by the top-level directory under `inputDir` (so nested subfolders such as augmentation folders don't split a class into multiple keys)
-  - sorts file lists deterministically and prints counts per class
+    - walks the input directory recursively once
+    - accepts a wider set of image extensions (case-insensitive)
+    - groups images by the top-level directory under `inputDir` (so nested subfolders such as augmentation folders do not split a class into multiple keys)
+    - sorts file lists deterministically and prints counts per class
 
   Parameters:
     inputDir (str): Path to the input directory containing images.
@@ -879,7 +880,7 @@ def PrintHyperParamsList(hparamsFile, returnList=False):
     else:
       # For non-dictionary entries, use string representation as the name.
       name = str(hp)
-      # Mark as inactive since no 'active' key can exist.
+      # Mark as inactive since no "active" key can exist.
       active = False
 
     # Format the display string for this hyperparameter set.
@@ -1224,3 +1225,253 @@ class NumpyEncoder(json.JSONEncoder):
       return obj.item()
     # Fallback to the default encoder for other types.
     return super().default(obj)
+
+
+class Logger():
+  def __init__(self, format=None, doPrint=True, saveLogToFile=False, logFilePath=None):
+    r'''
+    Initialize the Logger class.
+    It configures the logging settings and creates a logger instance.
+
+    Parameters:
+      format (str, Optional): The logging format string. If None, a default format is used. The default format includes the timestamp, log level, and message.
+      doPrint (bool): Whether to also print the message to the console.
+      saveLogToFile (bool): Whether to save the log messages to a file.
+      logFilePath (str, Optional): The path to the log file. If None, a default path is used.
+    '''
+
+    # Check if the format parameter is None.
+    if (format is None):
+      # Assign the default log format string.
+      format = "%(asctime)s - %(levelname)s - %(message)s"
+
+    # Configure basic logging settings with the specified format.
+    logging.basicConfig(level=logging.INFO, format=format)
+    # Create the logger instance.
+    self.logger = logging.getLogger(__name__)
+
+    # Assign the doPrint parameter to the instance variable.
+    self.doPrint = doPrint
+    # Assign the saveLogToFile parameter to the instance variable.
+    self.saveLogToFile = saveLogToFile
+    # Assign the logFilePath parameter to the instance variable.
+    self.logFilePath = logFilePath
+
+    # Check if logging to a file is enabled.
+    if (self.saveLogToFile):
+      # Call the method to set up the file handler.
+      self.setupFileHandler()
+
+    # Define the alert system status icon.
+    self.alertIcon = "\u26A0\uFE0F "
+    # Define the information system status icon.
+    self.infoIcon = "\u2139\uFE0F "
+    # Define the success system status icon.
+    self.successIcon = "\u2705 "
+    # Define the error system status icon.
+    self.errorIcon = "\u274C "
+    # Define the critical system status icon.
+    self.criticalIcon = "\u203C\uFE0F "
+    # Define the question system status icon.
+    self.questionIcon = "\u2753 "
+
+  # Define the method to set up the file handler for logging.
+  def setupFileHandler(self):
+    # Check if the log file path is None.
+    if (self.logFilePath is None):
+      # Assign a default log file path.
+      self.logFilePath = "Default.log"
+
+    # Extract the directory path from the log file path.
+    logDir = os.path.dirname(self.logFilePath)
+    # Check if the directory exists and create it if it does not.
+    if (logDir and not os.path.exists(logDir)):
+      # Create the missing directories.
+      os.makedirs(logDir)
+
+    # Create a file handler instance.
+    fileHandler = logging.FileHandler(self.logFilePath)
+    # Create a formatter for the file handler.
+    fileFormatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    # Set the formatter for the file handler.
+    fileHandler.setFormatter(fileFormatter)
+    # Add the file handler to the logger.
+    self.logger.addHandler(fileHandler)
+
+  def info(self, msg):
+    r'''
+    Log an informational message.
+
+    Parameters:
+      msg (str): The message to log.
+    '''
+
+    # Log the message at the info level.
+    self.logger.info(msg)
+
+    # Check if printing to the console is enabled.
+    if (self.doPrint):
+      # Format the message with the info icon.
+      formattedMsgWithIcon = f"{self.infoIcon} {msg}"
+      # Print the formatted message to the console.
+      fprint(formattedMsgWithIcon)
+
+  def warning(self, msg):
+    r'''
+    Log a warning message.
+
+    Parameters:
+      msg (str): The message to log.
+    '''
+
+    # Log the message at the warning level.
+    self.logger.warning(msg)
+
+    # Check if printing to the console is enabled.
+    if (self.doPrint):
+      # Format the message with the alert icon.
+      formattedMsgWithIcon = f"{self.alertIcon} {msg}"
+      # Print the formatted message to the console.
+      fprint(formattedMsgWithIcon)
+
+  def error(self, msg):
+    r'''
+    Log an error message.
+
+    Parameters:
+      msg (str): The message to log.
+    '''
+
+    # Log the message at the error level.
+    self.logger.error(msg)
+
+    # Check if printing to the console is enabled.
+    if (self.doPrint):
+      # Format the message with the error icon.
+      formattedMsgWithIcon = f"{self.errorIcon} {msg}"
+      # Print the formatted message to the console.
+      fprint(formattedMsgWithIcon)
+
+  def critical(self, msg):
+    r'''
+    Log a critical error message.
+
+    Parameters:
+      msg (str): The message to log.
+    '''
+
+    # Log the message at the critical level.
+    self.logger.critical(msg)
+
+    # Check if printing to the console is enabled.
+    if (self.doPrint):
+      # Format the message with the critical icon.
+      formattedMsgWithIcon = f"{self.criticalIcon} {msg}"
+      # Print the formatted message to the console.
+      fprint(formattedMsgWithIcon)
+
+  def success(self, msg):
+    r'''
+    Log a success message.
+
+    Parameters:
+      msg (str): The message to log.
+    '''
+
+    # Log the message at the info level to represent success.
+    self.logger.info(msg)
+
+    # Check if printing to the console is enabled.
+    if (self.doPrint):
+      # Format the message with the success icon.
+      formattedMsgWithIcon = f"{self.successIcon} {msg}"
+      # Print the formatted message to the console.
+      fprint(formattedMsgWithIcon)
+
+  def question(self, msg):
+    r'''
+    Log a question message.
+
+    Parameters:
+      msg (str): The message to log.
+    '''
+
+    # Log the message at the info level to represent a question.
+    self.logger.info(msg)
+
+    # Check if printing to the console is enabled.
+    if (self.doPrint):
+      # Format the message with the question icon.
+      formattedMsgWithIcon = f"{self.questionIcon} {msg}"
+      # Print the formatted message to the console.
+      fprint(formattedMsgWithIcon)
+
+  def log(self, level, msg):
+    r'''
+    Log a message at a specified level.
+
+    Parameters:
+      level (str): The logging level ("info", "warning", "error", "critical", "success", "question").
+      msg (str): The message to log.
+    '''
+
+    # Convert the level string to lowercase for consistent comparison.
+    level = level.lower()
+
+    # Check if the level is info.
+    if (level == "info"):
+      # Call the info method.
+      self.info(msg)
+    # Check if the level is warning.
+    elif (level == "warning"):
+      # Call the warning method.
+      self.warning(msg)
+    # Check if the level is error.
+    elif (level == "error"):
+      # Call the error method.
+      self.error(msg)
+    # Check if the level is critical.
+    elif (level == "critical"):
+      # Call the critical method.
+      self.critical(msg)
+    # Check if the level is success.
+    elif (level == "success"):
+      # Call the success method.
+      self.success(msg)
+    # Check if the level is question.
+    elif (level == "question"):
+      # Call the question method.
+      self.question(msg)
+    # Handle any unrecognized logging level.
+    else:
+      # Log the message at the default info level.
+      self.logger.info(msg)
+      # Check if printing to the console is enabled.
+      if (self.doPrint):
+        # Print the message to the console.
+        fprint(msg)
+
+
+def ConvertToCamelCase(text):
+  r'''
+  Convert a string to CamelCase format.
+
+  Parameters:
+    text (str): The input string to convert. It can contain spaces or underscores as word delimiters.
+
+  Returns:
+    str: The converted string in CamelCase format. Each word's first letter is capitalized, and all words are concatenated without spaces or underscores.
+  '''
+
+  # Replace underscores with spaces to unify the delimiter.
+  normalizedText = text.replace("_", " ")
+  # Split the normalized text into individual words.
+  words = normalizedText.split()
+  # Check if the resulting list of words is empty.
+  if (not words):
+    # Return the original text if no words were found.
+    return text
+  # Capitalize the first letter of each word and join them together.
+  camelText = "".join(word.capitalize() for word in words)
+  # Return the newly formatted CamelCase string.
+  return camelText

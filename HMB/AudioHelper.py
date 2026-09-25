@@ -1242,6 +1242,7 @@ class AudiosHelper(object):
       - Parselmouth (Praat bindings) documentation: https://parselmouth.readthedocs.io/en/stable/
     '''
 
+    import parselmouth
     from parselmouth.praat import call
 
     # Create a parselmouth Sound object from the provided input.

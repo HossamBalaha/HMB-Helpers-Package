@@ -14,6 +14,73 @@ from HMB.DataAugmentationHelper import PerformDataAugmentation
 from HMB.PlotsHelper import PlotBarChart, PlotClassDistribution
 
 
+def FindCsvFile(inputDir: Path):
+  r'''
+  Recursively search for a CSV file in the given input directory.
+
+  Parameters:
+    inputDir (Path): The directory to search for a CSV file.
+
+  Returns:
+    Path: The path to the first found CSV file.
+  '''
+
+  # Convert input to Path object.
+  inputDir = Path(inputDir)
+  # Raise an error if the input directory does not exist.
+  if (not inputDir.exists()):
+    raise FileNotFoundError(f"Input directory not found: {inputDir}")
+
+  # Walk the directory tree to locate a CSV file.
+  for root, _, files in os.walk(inputDir):
+    # Iterate over files in the current directory.
+    for f in files:
+      # Check if the file has a CSV extension.
+      if (f.lower().endswith(".csv")):
+        # Build the candidate path.
+        candidate = Path(root) / f
+        # Return the first found CSV path.
+        return candidate
+
+  # Raise an error if no CSV file was found.
+  raise FileNotFoundError(f"No CSV file found in {inputDir}")
+
+
+def SafeReadCsv(path: Path, nrows=None):
+  r'''
+  Safely read a CSV file into a pandas DataFrame, handling potential `low_memory` issues.
+
+  Parameters:
+    path (Path): The path to the CSV file to read.
+    nrows (int|None): Optional number of rows to read from the CSV file.
+
+  Returns:
+    pandas.DataFrame: The DataFrame containing the CSV data.
+  '''
+
+  import pandas as pd
+  from pathlib import Path
+
+  # Resolve the provided path to an absolute path.
+  path = Path(path).resolve()
+
+  # Check if the file exists before attempting to read.
+  if (not path.exists()):
+    raise FileNotFoundError(f"CSV file not found: {path}")
+
+  # Try to read CSV with low_memory disabled.
+  try:
+    if (nrows is None):
+      return pd.read_csv(path, low_memory=False)
+    return pd.read_csv(path, low_memory=False, nrows=nrows)
+  # Handle exceptions and retry without low_memory argument.
+  except Exception as e:
+    if (nrows is None):
+      return pd.read_csv(path)
+    # Read CSV without the low_memory flag.
+    return pd.read_csv(path, nrows=nrows)
+
+
 class TabularPreprocessor:
   r'''
   Generic tabular data preprocessor for PyTorch classification pipelines.

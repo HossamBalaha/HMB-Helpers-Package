@@ -2137,6 +2137,24 @@ def ClusteringImageKMeans(sample, kmeans, noChannels=4):
 
   Returns:
     numpy.ndarray: Grayscale image where each pixel value corresponds to its cluster label.
+
+  .. note::
+    The function reshapes the input image into a 2D array of pixels, predicts cluster labels using the provided
+    KMeans model, and then maps these labels to grayscale values for visualization. The output image has the
+    same height and width as the input sample, with pixel values representing cluster assignments.
+
+  Examples
+  --------
+  .. code-block:: python
+
+    from HMB.ImagesHelper import ClusteringImageKMeans
+    from sklearn.cluster import KMeans
+
+    # Assuming "sample" is a NumPy array representing an image and "kmeans" is a pre-fitted KMeans model.
+    sample = ... # Load or define your image as a NumPy array (e.g., shape (H, W, 4) for RGBA).
+
+    kmeans = KMeans(n_clusters=3, random_state=42).fit(sample.reshape(-1, 3))  # Fit KMeans on the image data.
+    clusteredImage = ClusteringImageKMeans(sample, kmeans, noChannels=3)
   '''
 
   # Reshape the image to a 2D array of pixels and their color values, then predict cluster labels.
@@ -2334,7 +2352,7 @@ class MultiChannelFeatureExtractor():
         "CellsPerBlock"    : (3, 3),  # Default value for HOG feature extraction.
         "Orientations"     : 9,  # Default value for HOG feature extraction.
         "KMeansClusters"   : 4,  # Default number of clusters for K-Means clustering.
-        "LbpRadius"        : 3,  # Default radius for Local Binary Patterns (LBP) feature extraction.
+        "LbpRadius"        : 5,  # Default radius for Local Binary Patterns (LBP) feature extraction.
         "LbpPoints"        : 24,  # Default number of points for Local Binary Patterns (LBP) feature extraction.
         "GaborFrequency"   : 0.1,  # Default frequency for Gabor filter feature extraction.
         "GaborTheta"       : 0.0,  # Default orientation for Gabor filter feature extraction.
@@ -2511,13 +2529,12 @@ class MultiChannelFeatureExtractor():
       numpy.ndarray: The normalized LBP texture feature layer.
     '''
 
-    # Import the Local Binary Patterns function.
+    import cv2
     from skimage.feature import local_binary_pattern
-    # Import the RGB to grayscale conversion function.
-    from skimage.color import rgb2gray
+
 
     # Convert the RGB image to grayscale for texture analysis.
-    grayscaleImage = rgb2gray(inputRgbImage)
+    grayscaleImage = cv2.cvtColor(inputRgbImage, cv2.COLOR_RGB2GRAY)
     # Compute the Local Binary Patterns for the grayscale image.
     lbpImage = local_binary_pattern(
       grayscaleImage,

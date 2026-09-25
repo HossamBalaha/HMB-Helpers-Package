@@ -17,9 +17,9 @@ copyright = "2026, Hossam Magdy Balaha"
 author = "Hossam Magdy Balaha"
 
 # Define the default version string for fallback purposes.
-version = "0.3"
+version = "0.4"
 # Define the default release string for fallback purposes.
-release = "0.3.0"
+release = "0.4.0"
 # Construct the absolute path to the external version source file.
 versionFile = os.path.join(os.path.dirname(__file__), "..", "HMB", "version.py")
 # Check if the external version source file exists in the filesystem.

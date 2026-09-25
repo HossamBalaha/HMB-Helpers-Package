@@ -5,6 +5,167 @@ All notable changes to the **HMB Helpers Package** will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-09-25
+
+### Added
+
+- `requirements.txt`: Added `imagecodecs==2026.1.14` to the dependency list.
+- `Examples/Apply_Multi_Channel_Feature_Extractor_On_Dataset.py`: Added a new example script for applying the
+  multi-channel feature extractor to a dataset.
+- `HMB/DatasetsHelper.py` (`FindCsvFile`): Added a new utility function to recursively search for and return the path of
+  the first CSV file found within a given input directory.
+- `HMB/DatasetsHelper.py` (`SafeReadCsv`): Added a robust function to read a CSV file into a pandas DataFrame. The
+  function gracefully handles potential `low_memory` warnings by automatically retrying the read operation without the
+  flag if an exception occurs.
+- `HMB/PlotsHelper.py` (`EfficiencyPlotter`): Added a new comprehensive class for generating model efficiency profiling
+  visualizations. It includes methods to plot multi-metric Pareto fronts, parameter counts, latency comparisons, stacked
+  memory breakdowns, GFLOPs, throughput, and memory efficiency, all featuring automatic value labeling above bars for
+  enhanced readability.
+- `HMB/Utils.py` (`Logger`): Added a comprehensive `Logger` class for configurable logging. It supports console output
+  with distinct status icons for info, warning, error, critical, success, and question, and it supports optional file
+  logging with automatic directory creation.
+- `HMB/PyTorchHelper.py` (`CheckpointSaver.GetBestCheckpointPath`): Added a new method to retrieve the file path of the
+  best checkpoint saved so far.
+- `HMB/StatisticalAnalysisHelper.py` (`PlotMetrics`): Added `xLabelAlignment` (`str`, optional): Alignment of x-axis
+  labels (e.g., `"center"`, `"right"`, `"left"`). Updated all `plt.xticks` calls in this function to include
+  `rotation=xTicksRotation, ha=xLabelAlignment`.
+- `Examples/PhikonV2_Embeddings_Extraction.py`: Added a new example script for extracting Phikon V2 embeddings from a
+  dataset using `TransformersEmbeddingModel` and saving the results as Pickle and CSV files.
+- `HMB/Utils.py` (`ConvertToCamelCase`): Added a new utility function to convert a string to CamelCase format,
+  automatically handling spaces or underscores as word delimiters.
+- `HMB/ExplainabilityHelper.py` (`CAMExplainerPyTorch`): Added `ComputeAttentionRolloutSaliency`,
+  `ComputeHiResCamSaliency`, `ComputeViTGradCamSaliency`, `ComputeRISE`, `ComputeFeatureAblation`,
+  `ComputeViTXGradCamSaliency`, and `ComputeViTEigenCamSaliency` methods for generating Vision Transformer attention
+  rollouts, HiRes-CAM, ViT Grad-CAM, RISE, Feature Ablation, ViT XGrad-CAM, and ViT Eigen-CAM heatmaps. Added
+  `"hirescam"`, `"attentionrollout"`, `"rise"`, `"featureablation"`, `"vitgradcam"`, `"vitxgradcam"`, and
+  `"viteigencam"` to the supported techniques list.
+- `HMB/ExplainabilityHelper.py` (`CAMExplainerTensorFlow`): Added `ComputeAttentionRolloutSaliency`,
+  `ComputeHiResCamSaliency`, `ComputeViTGradCamSaliency`, `ComputeRISE`, `ComputeFeatureAblation`,
+  `ComputeViTXGradCamSaliency`, and `ComputeViTEigenCamSaliency` methods for generating attention rollouts, HiRes-CAM,
+  ViT Grad-CAM, RISE, Feature Ablation, ViT XGrad-CAM, and ViT Eigen-CAM heatmaps in TensorFlow models. Added
+  `"hirescam"`, `"attentionrollout"`, `"rise"`, `"featureablation"`, `"vitgradcam"`, `"vitxgradcam"`, and
+  `"viteigencam"` to the supported techniques list.
+- `HMB/ImagesToEmbeddings.py` (`ExtractEmbeddingsTransformers`): Added a new function to extract embeddings from a
+  dataset folder using the `TransformersEmbeddingModel`, featuring batch processing with progress bars, fallback
+  mechanisms, and automatic memory cleanup.
+- `HMB/ImagesToEmbeddings.py` (`TransformersEmbeddingModel.GetEmbedding`): Added `normalizeEmbedding` (bool) and
+  `usePatchTokens` (bool) parameters to support L2 normalization and concatenation of the CLS token with the mean of
+  patch tokens, respectively.
+- `HMB/ImagesToEmbeddings.py` (`ExtractEmbeddingsTimm`): Added `normalizeEmbedding`, `patchTokenStartIndex`,
+  `modelKwargs`, `customTransform`, `isPooledOutput`, and `autocastDtype` parameters to support diverse architectures (
+  e.g., `H-optimus-0`, `Virchow2`) and custom preprocessing pipelines.
+- `HMB/ImagesToEmbeddings.py`: Integrated `torch.autocast` for automatic mixed precision during inference in both
+  `TransformersEmbeddingModel` and `ExtractEmbeddingsTimm` to optimize memory and computation.
+- `HMB/ImagesToEmbeddings.py`: Added explicit memory management (`del` and `gc.collect()`) at the end of batch
+  extraction functions to prevent CUDA memory leaks.
+- `HMB/ImagesToEmbeddings.py`: Integrated `IMAGE_SUFFIXES` from `HMB.Initializations` for robust and centralized image
+  file extension validation.
+- `Examples/PyTorch_Tabular_CSV_Pipeline.py` (`GetArgs`): Added `--crossExperimentStats` and `--groupBy` command-line
+  arguments to enable and configure statistical analysis across different models or experiments.
+- `Examples/PyTorch_Tabular_CSV_Pipeline.py` (`RunCrossExperimentStatisticalAnalysis`): Added a new comprehensive
+  function to perform cross-experiment statistical analysis. It aggregates metrics across trials for different
+  models/datasets, generates comparative visualizations (e.g., Boxplots, Violin plots, Raincloud plots) using the
+  `PlotMetrics` helper, and performs pairwise statistical comparisons (e.g., t-tests with Cohen's d effect sizes)
+  between groups.
+- `HMB.WSIHelper`: Added `ColorDeconvolution` function to perform color deconvolution on RGB images, separating
+  Hematoxylin and Eosin stains into normalized intensity channels.
+- `HMB.WSIHelper`: Added `StainJitter` class (`torch.nn.Module`) to apply random jittering (brightness, contrast,
+  saturation, hue) to H&E stain channels, simulating laboratory variations for data augmentation.
+- `HMB.PyTorchClassificationLosses`: Added `FocalLossRobust` class, a Focal Loss implementation that supports automatic
+  class-balanced alpha calculation based on class counts, suitable for imbalanced histopathology datasets.
+- `HMB.PyTorchClassificationLosses`: Added `WassersteinTopologicalLoss` class, a composite loss module combining
+  Wasserstein contrastive loss against class prototypes and topological regularization using spatial priors.
+- `HMB.PyTorchHelper`: Added `SophiaG` optimizer class, a native PyTorch implementation of the Sophia-G optimizer to
+  avoid external package dependencies, featuring gradient clipping and adaptive moment updates.
+- `HMB.PyTorchClassificationModelsZoo`: Created new module containing a comprehensive zoo of advanced Vision Transformer
+  architectures, including:
+    - **KAN-based**: `VisionKANModel`, `KANLayer`.
+    - **Neural ODE**: `NeuralODEViTModel`.
+    - **Spiking Neural Networks**: `SpikingViTModel`, `LIFNeuron`.
+    - **Hypernetworks**: `HypernetworkViTModel`.
+    - **State Space Models**: `LiquidSSMViTModel`.
+    - **Test-Time Adaptation**: `TestTimeEvolvingViTModel`.
+    - **Tensor Networks**: `TensorNetworkEntangledViTModel`.
+    - **Energy-Based**: `DiffusionPriorEnergyViTModel`.
+    - **Fractal/Quantum/Holographic**: `FractalResonanceViTModel`, `TopologicalQuantumViTModel`,
+      `HolographicInterferenceViTModel`, `NeuromorphicLiquidStateViTModel`.
+    - **Standard/Hierarchical/T2T**: `StandardViT`, `HierarchicalViT`, `T2TViT`.
+    - **CLIP Integration**: `BuildCLIPModel`, `CLIPClassifier`.
+    - **Quantum-Classical Hybrid**: `BuildQuantumResNetModel`, `DressedQuantumNet`.
+- `HMB.PyTorchClassificationModelsZoo`: Added `BuildViTModel` factory function to instantiate any of the above models by
+  name, handling specific image size requirements and optional pretrained weight loading for custom architectures.
+- `docs/PyTorchClassificationModelsZoo.rst`: Added documentation file for the new classification models zoo.
+- `Examples/ModelsInferenceEfficiencyProfiling.py`: Added a comprehensive example script for profiling PyTorch model
+  inference efficiency. It demonstrates memory, latency, GFLOPs, and throughput profiling using
+  `PyTorchModelMemoryProfiler`, generates multi-metric visualizations (e.g., Pareto fronts, memory breakdowns) via
+  `EfficiencyPlotter`, and saves detailed model profiles to JSON.
+- `setup.py`: Added `"lion_pytorch>=0.2.4"`, `"prodigyopt>=1.1.2"`, and `"schedulefree>=1.4.1"` to the `"pytorch"` and
+  `"all"` dependency groups in the `extras_require` dictionary to support advanced optimizers.
+- `HMB/PyTorchTrainingPipeline.py`: Standardized the final model checkpoint dictionary keys to use `CamelCase` (e.g.,
+  `ModelStateDict`, `EmaStateDict`, `OptimizerStateDict`, `Epoch`, `ScalerStateDict`, `BestValLoss`, `BestValAccuracy`)
+  for consistency with the project's naming conventions.
+
+### Changed
+
+- `Examples/PyTorch_Tabular_CSV_Pipeline.py`, `Examples/PyTorch_UNet_Segmentation.py`,
+  `Examples/Timm_Statistics_Analysis_Ablations.py`, `Examples/Timm_FineTune_Classification.py`,
+  `Examples/Train_TF_Pretrained_Attention_Model_from_DataFrame.py`,
+  `Examples/Explain_TF_Pretrained_Attention_Model_from_DataFrame.py`: Refactored these example scripts to import and
+  utilize the `fprint` function from `HMB.Utils`, thereby eliminating redundant local print function declarations.
+- `Examples/README.md`: Enhanced the documentation to provide clearer guidance, better structure, and improved usability
+  for users running the example pipelines.
+- `HMB/PyTorchTrainingPipeline.py`: Optimized module imports for better performance and cleaner code structure.
+- `HMB/PyTorchTrainingPipeline.py` (`PyTorchClassificationTrainingPipeline.Inference`): Enhanced the inference function
+  for improved robustness and execution clarity.
+- `HMB/PyTorchTrainingPipeline.py` (`GenericTabularEvaluatePredictPlotSubset`): Added a new `dataLabelIsEncoded` boolean
+  parameter to specify whether the target labels in the CSV are already encoded as integers.
+- `HMB/ExplainabilityHelper.py` (`ExtractAttentionWeights`): Removed the `layerType` parameter and enhanced the
+  documentation and inline comments of the function for better clarity.
+- `HMB/PyTorchHelper.py` (`EvaluateModelOnPerturbations`): Updated the functions: `McePerPerturbation`, `EceHeatmap`,
+  `PlotBarChart`, and Reliability Diagram outputs to save both `.png` and `.pdf` files.
+- `Examples/Explain_TF_Pretrained_Attention_Model_from_DataFrame.py`: Updated the `camTypes` list to include
+  `"hirescam"`, `"attentionrollout"`, `"rise"`, `"featureablation"`, `"vitgradcam"`, `"vitxgradcam"`, and
+  `"viteigencam"`.
+- `HMB/ImagesToEmbeddings.py` (`TransformersEmbeddingModel.__init__`): Renamed the `device` parameter to `targetDevice`
+  for consistency with project coding style guidelines.
+- `HMB/ImagesToEmbeddings.py` (`ExtractEmbeddingsTimm`): Refactored the inference loop to conditionally handle pooled
+  outputs versus patch token concatenation based on the `isPooledOutput` flag.
+- `HMB/ImagesToEmbeddings.py` (`__main__`): Expanded the execution block with comprehensive, ready-to-use examples for
+  `Virchow2`, `Maira2`, `Phikon-v2`, `Nomic`, and `H-optimus-0`.
+- `HMB/ImagesToEmbeddings.py`: Updated all inline comments to strictly adhere to the project's formatting rules (e.g.,
+  ending with a period, describing every statement).
+- `Examples/PyTorch_Tabular_CSV_Pipeline.py`: Updated the main execution block and the `statistical` phase to optionally
+  invoke the cross-experiment statistical analysis when the `--crossExperimentStats` flag is active.
+- `HMB.PyTorchHelper`: Refactored imports and structure to support the new `SophiaG` optimizer and ensure compatibility
+  with the expanded model zoo.
+- `HMB/PyTorchHelper.py` (`GetOptimizer`): Extended the optimizer creation function to support additional optimizer
+  types, including `"radam"`, `"lion"`, `"prodigy"`, `"schedulefreeadamw"`, and `"sophia"`, incorporating dynamic
+  imports and specific default learning rates where applicable.
+
+### Fixed
+
+- `HMB/PyTorchTrainingPipeline.py` (`PyTorchUNetSegmentationTrainingPipeline._VisualizeImage`): Fixed an issue within
+  the image visualization function.
+- `HMB/PyTorchTrainingPipeline.py`: Fixed the imports for `LoadCheckpoint` and `SaveCheckpoint` to resolve reference
+  errors.
+- `HMB/ExplainabilityHelper.py` (`ShapSummaryPlot`): Fixed multi-class output handling by introducing a
+  `_NormalizeForPlot` helper function. This function extracts the first class to create a standard two-dimensional
+  Explanation object and ensures `base_values` is a scalar. This resolves ambiguous truth value errors in
+  `decision_plot` and warnings in other plotting functions, including beeswarm, bar, scatter, and decision, that expect
+  a single two-dimensional Explanation object. The documentation and inline comments were also enhanced.
+- `HMB/ImagesToEmbeddings.py` (`ExtractEmbeddingsTimm`): Fixed a critical indentation bug where the lookup table was
+  being serialized to the pickle file inside the inner image loop, causing redundant and inefficient file overwrites. It
+  is now correctly placed in the outer class loop.
+- `HMB/ImagesToEmbeddings.py` (`ExtractEmbeddingsTimm`): Fixed the placement of the `del` and `gc.collect()` statements
+  to ensure they execute only after all dataset iterations are complete, guaranteeing proper memory release.
+- `HMB/PyTorchHelper.py` (`LoadModel`): Fixed state dictionary loading errors caused by nested keys (e.g.,
+  `ModelStateDict`, `model_state_dict`) and unexpected `model.` prefixes in the saved state dictionary keys by
+  implementing an automatic key cleaning and extraction mechanism.
+- `HMB/PyTorchTrainingPipeline.py`: Fixed a critical bug where the final model checkpoint was not saved to disk if the
+  `CheckpointSaver` callback did not trigger an improvement on the final epoch. This previously caused a subsequent
+  `AttributeError: 'NoneType' object has no attribute 'eval'` during the evaluation phase. The final model is now saved
+  directly via `SavePyTorchDict` to guarantee file creation.
+
 ## [0.3.0] - 2026-07-15
 
 ### Added

@@ -21,7 +21,7 @@
   "ExplainSamples": 5000,
   "PlotHistoryPerEpoch": true,
   "PlotFontSize": 16,
-  "PlotDPI": 720,
+  "PlotDPI": 300,
   "FontSize": 15,
   "DisplayPlot": false,
   "PlotFigSize": [
