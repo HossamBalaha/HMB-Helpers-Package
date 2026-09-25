@@ -16,7 +16,7 @@
 [![Contributions](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package/blob/main/CONTRIBUTING.md)
 [![Maintenance](https://img.shields.io/badge/maintained-yes-green.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package)
 [![Release](https://img.shields.io/badge/release-v0.4.0-blue.svg)](https://github.com/HossamBalaha/HMB-Helpers-Package/releases)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21378674.svg)](https://doi.org/10.5281/zenodo.21378674)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22961799.svg)](https://doi.org/10.5281/zenodo.22961799)
 
 A comprehensive collection of helper modules for image processing, segmentation, deep learning workflows, text/PDF
 utilities, and scientific computing in PyTorch, TensorFlow, and beyond.
@@ -49,7 +49,7 @@ reproducibility in scientific projects.
 
 ### Minimal Install (Recommended)
 
-Install only core dependencies (`numpy`, `pillow`):
+Install only core dependencies (e.g., `numpy`, `pillow`, `pandas`, `scikit-learn`):
 
 ```bash
 pip install hmb-helpers
@@ -77,6 +77,15 @@ pip install "hmb-helpers[pdf]"
 # Keras and related runtime packages). Install those frameworks separately
 # using the dedicated extras below or via the framework's official installer.
 pip install "hmb-helpers[all]"
+
+# Install vision models and pretrained weights.
+pip install "hmb-helpers[timm,transformers,ultralytics]"
+
+# Computer vision & PyTorch.
+pip install "hmb-helpers[cv,pytorch]"
+
+# NLP & text processing.
+pip install "hmb-helpers[nlp]"
 ```
 
 ### Development Install
@@ -109,28 +118,28 @@ Or use the [official PyTorch installer](https://pytorch.org/get-started/locally/
 - `numpy>=1.26.4,<2`: Numerical computing
 - `pillow>=12.2.0`: Image I/O and basic processing
 - `pyyaml>=6.0.3`: YAML parsing for configuration and dataset helper utilities
-- `pandas>=3.0.2`: Tabular data handling used across multiple helpers
+- `pandas>=2.3.3`: Tabular data handling used across multiple helpers
 - `matplotlib>=3.9`: Basic plotting utilities used by helpers and examples
 - `tqdm>=4.67.3`: Progress bars used in many processing functions
-- `scikit-learn>=1.8.0`: Common ML utilities (encoders, imputers, scalers) used by preprocessors
+- `scikit-learn>=1.7.2`: Common ML utilities (encoders, imputers, scalers) used by preprocessors
 
 ### Optional Feature Groups
 
 Install only what you need via extras:
 
-| Feature              | Command        | Key Packages                              |
-|----------------------|----------------|-------------------------------------------|
-| **Scientific Stack** | `[scientific]` | scipy, pandas, scikit-learn, scikit-image |
-| **Computer Vision**  | `[cv]`         | opencv-python, imagehash, pyvips          |
-| **PyTorch**          | `[pytorch]`    | torch, torchvision, torchaudio            |
-| **TensorFlow**       | `[tensorflow]` | tensorflow, keras, tf-keras               |
-| **NLP**              | `[nlp]`        | nltk, spacy, transformers, gensim         |
-| **PDF**              | `[pdf]`        | PyMuPDF, PyPDF2, tabula-py                |
-| **Audio**            | `[audio]`      | librosa, spafe, praat-parselmouth         |
-| **Medical Imaging**  | `[medical]`    | pydicom, nibabel, openslide-python        |
-| **Classical ML**     | `[ml]`         | xgboost, catboost, lightgbm, optuna       |
-| **Visualization**    | `[plotting]`   | matplotlib, seaborn, plotly               |
-| **Utilities**        | `[utils]`      | tqdm, albumentations, shap, trimesh       |
+| Feature              | Command        | Key Packages                                                              |
+|----------------------|----------------|---------------------------------------------------------------------------|
+| **Scientific Stack** | `[scientific]` | scipy, scikit-image (Note: pandas and scikit-learn are core dependencies) |
+| **Computer Vision**  | `[cv]`         | opencv-python, imagehash, pyvips, simpleitk, PyWavelets                   |
+| **PyTorch**          | `[pytorch]`    | torch, torchvision, torchaudio, lion_pytorch, prodigyopt, schedulefree    |
+| **TensorFlow**       | `[tensorflow]` | tensorflow, keras, tf-keras, tensorboard                                  |
+| **NLP**              | `[nlp]`        | nltk, spacy, gensim, textblob, qalsadi                                    |
+| **PDF**              | `[pdf]`        | PyMuPDF, PyPDF2, tabula-py, jpype1                                        |
+| **Audio**            | `[audio]`      | librosa, spafe, praat-parselmouth                                         |
+| **Medical Imaging**  | `[medical]`    | pydicom, nibabel, openslide-python, openslide-bin                         |
+| **Classical ML**     | `[ml]`         | xgboost, catboost, lightgbm, optuna, imbalanced-learn                     |
+| **Visualization**    | `[plotting]`   | seaborn, plotly, kaleido, ptitprince, squarify                            |
+| **Utilities**        | `[utils]`      | albumentations, shap, trimesh, sympy, shapely, py7zr                      |
 
 See `requirements.txt` for exact version pins used in development. Note that
 `pip install "hmb-helpers[all]"` purposefully omits PyTorch/TensorFlow/Keras
@@ -167,6 +176,7 @@ explicitly (for example `pip install "hmb-helpers[pytorch]"`).
 1. **PerformanceMetrics**: Comprehensive performance metrics for classification and regression.
 1. **PlotsHelper**: Plotting and visualization helpers (wrappers around matplotlib/seaborn utilities).
 1. **PyTorchClassificationLosses**: Custom classification loss functions for PyTorch.
+1. **PyTorchClassificationModelsZoo**: Classification models and architectures for PyTorch.
 1. **PyTorchHelper**: PyTorch utilities for models, tensors, device management, and checkpointing.
 1. **PyTorchModelMemoryProfiler**: Utilities to profile PyTorch model memory usage.
 1. **PyTorchSegmentationLosses**: Custom segmentation losses (Dice, BCE, DiceBCE, Focal, Tversky, IoU).
@@ -307,25 +317,25 @@ If you use this package in your work, please:
 1. Include a copy of the LICENSE file with any distribution
 2. Credit the author in documentation or publications:
    ```bibtex
-   @software{balaha_hmb_helpers_2026_030,
+   @software{balaha_hmb_helpers_2026_040,
      author    = {Balaha, Hossam Magdy},
-     title     = {HMB-Helpers-Package: HMB-Helpers-Package v0.3.0},
+     title     = {HMB-Helpers-Package: HMB-Helpers-Package v0.4.0},
      year      = {2026},
      publisher = {GitHub},
-     month     = jul,
-     version   = {v0.3.0},
+     month     = sep,
+     version   = {v0.4.0},
      url       = {https://github.com/HossamBalaha/HMB-Helpers-Package}
    }
  
-   @software{hossam_magdy_balaha_2026_21378674,
+   @software{hossam_magdy_balaha_2026_22961799,
       author       = {Hossam Magdy Balaha},
-      title        = {HossamBalaha/HMB-Helpers-Package: HMB-Helpers-Package v0.3.0},
-      month        = jul,
+      title        = {HossamBalaha/HMB-Helpers-Package: HMB-Helpers-Package v0.4.0},
+      month        = sep,
       year         = 2026,
       publisher    = {Zenodo},
-      version      = {v.0.3.0},
-      doi          = {10.5281/zenodo.21378674},
-      url          = {https://doi.org/10.5281/zenodo.21378674},
+      version      = {v.0.4.0},
+      doi          = {10.5281/zenodo.22961799},
+      url          = {https://doi.org/10.5281/zenodo.22961799},
     }
     ```
 
